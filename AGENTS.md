@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read `README.md` for what tilde is, and `docs/architecture.md` (#2) for the
+Read `README.md` for what tilde is, and `docs/architecture.md` for the
 decisions every change builds on.
 
 ## Gates
@@ -114,9 +114,5 @@ costly to reverse.
 ## References
 
 Issues link Hyprland, aquamarine, hyprwayland-scanner and hy3 at pinned
-commits. When refreshing a link, pin the new commit too.
-
-- Hyprland, aquamarine, hyprwayland-scanner (BSD-3-Clause) and libwayland
-  (MIT): logic may be ported; ported code keeps its copyright notice and
-  licence in `THIRD_PARTY.md`.
-- hy3 (GPL-3.0): read it to pin down behaviour only. Never port its code.
+commits. When refreshing a link, pin the new commit too. What each licence
+allows is in `docs/architecture.md`; never port hy3 code.

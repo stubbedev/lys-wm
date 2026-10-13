@@ -22,11 +22,10 @@ the config, VR, HDR.
 
 ## Pure Go
 
-No cgo. The few C libraries with no reasonable alternative are loaded at
-runtime with [purego](https://github.com/ebitengine/purego): `libEGL`,
-`libGLESv2` and `libgbm` for the GPU, `libinput` for input devices.
-Everything else is Go: the wire protocol, DRM ioctls, logind, udev, xkb, X11
-and text. See `docs/architecture.md` (#2).
+No cgo. The few C libraries with no reasonable alternative (EGL, GLES2, GBM
+and libinput) are loaded at runtime with
+[purego](https://github.com/ebitengine/purego); everything else is Go. See
+[`docs/architecture.md`](docs/architecture.md).
 
 ## Roadmap
 
