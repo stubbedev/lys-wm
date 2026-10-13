@@ -27,6 +27,16 @@ test:
 build:
     go build -o /dev/null ./...
 
+# Regenerate the protocol bindings from the vendored XML.
+generate:
+    go generate ./internal/scanner
+
+# Download the protocol XML pinned in internal/protocol/protocols.json, then
+# regenerate the bindings.
+protocols-fetch:
+    go run ./internal/scanner -dir internal/protocol -fetch
+    go generate ./internal/scanner
+
 # Format every Go source in place with the formatters in .golangci.yml.
 fmt:
     golangci-lint fmt ./...

@@ -49,6 +49,10 @@ linters:
         linters:
           - gosec
         text: G115
+      - path: internal/scanner/
+        linters:
+          - gosec
+        text: G30[1246]
 
 issues:
   max-issues-per-linter: 0

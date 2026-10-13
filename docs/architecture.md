@@ -55,9 +55,9 @@ Everything lives under `internal/` except the commands.
 | --- | --- |
 | `cmd/tilde` | The compositor binary: builds the loop, backends, renderer and server, and runs them |
 | `cmd/tildectl` | The IPC client (#31) |
-| `wire` | The message codec and fd passing (#3); server and client side |
-| `scanner` | Generates `protocol/...` from protocol XML (#4) |
-| `protocol/...` | Generated bindings, one package per protocol; never edited by hand |
+| `wire` | The message codec and fd passing (#3), and the object runtime generated bindings build on (#4) |
+| `scanner` | Generates `protocol/{server,client}/...` from the XML pinned in `protocol/protocols.json` (#4) |
+| `protocol/...` | Generated bindings, one package per protocol and side; never edited by hand |
 | `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox (#5) |
 | `server` | Display socket, clients, object maps, globals (#6) |
 | `backend` | The backend interface: outputs, frames, input devices (#8) |
@@ -78,9 +78,28 @@ Everything lives under `internal/` except the commands.
 | `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42) |
 
 Dependencies point inward: `wm` imports nothing from tilde; `wire` and
-`loop` import nothing from tilde; `protocol/...` imports only `wire`;
+`loop` import nothing from tilde; `protocol/...` imports only `wire` and
+other protocol packages of the same side, since extensions name core
+interfaces;
 backends and renderers do not import `server`, `shell` or `wm`. `cmd/tilde`
 is the only place that knows every package.
+
+## Protocol bindings
+
+`internal/protocol/protocols.json` pins every protocol source and maps each
+XML file to a package. `go run ./internal/scanner -fetch` refreshes the
+vendored XML from it; `go generate ./internal/scanner` regenerates both
+sides, and a test fails when the committed tree is stale.
+
+Each interface becomes a type wrapping `wire.Object`. Incoming messages
+(requests on the server, events on the client) go to a per-interface
+`Handler` with one typed method each, the object first; object arguments
+are looked up and type-checked before the handler runs. A message that
+creates an object hands the new object to the handler, which returns that
+object's handler, so no object exists without one. Outgoing messages are
+typed methods, and sending one newer than the bound version is an error,
+never a silent drop. The server's client and the client-side display
+implement `wire.Peer`: the object map, id allocation and removal.
 
 ## Devices
 

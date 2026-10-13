@@ -1,0 +1,191 @@
+{
+  "sources": [
+    {
+      "name": "wayland",
+      "url": "https://gitlab.freedesktop.org/wayland/wayland/-/raw/{ref}/{path}",
+      "ref": "1.26.0"
+    },
+    {
+      "name": "wayland-protocols",
+      "url": "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/{ref}/{path}",
+      "ref": "1.49"
+    },
+    {
+      "name": "wlr-protocols",
+      "url": "https://gitlab.freedesktop.org/wlroots/wlr-protocols/-/raw/{ref}/{path}",
+      "ref": "bf4fc79abc359eea5a0edec0ac6d4a2b2955f82a"
+    },
+    {
+      "name": "wlroots",
+      "url": "https://gitlab.freedesktop.org/wlroots/wlroots/-/raw/{ref}/{path}",
+      "ref": "0.20.2"
+    }
+  ],
+  "protocols": [
+    {
+      "package": "wayland",
+      "source": "wayland",
+      "path": "protocol/wayland.xml"
+    },
+    {
+      "package": "xdgshell",
+      "source": "wayland-protocols",
+      "path": "stable/xdg-shell/xdg-shell.xml"
+    },
+    {
+      "package": "viewporter",
+      "source": "wayland-protocols",
+      "path": "stable/viewporter/viewporter.xml"
+    },
+    {
+      "package": "presentationtime",
+      "source": "wayland-protocols",
+      "path": "stable/presentation-time/presentation-time.xml"
+    },
+    {
+      "package": "linuxdmabuf",
+      "source": "wayland-protocols",
+      "path": "stable/linux-dmabuf/linux-dmabuf-v1.xml"
+    },
+    {
+      "package": "tablet",
+      "source": "wayland-protocols",
+      "path": "stable/tablet/tablet-v2.xml"
+    },
+    {
+      "package": "cursorshape",
+      "source": "wayland-protocols",
+      "path": "staging/cursor-shape/cursor-shape-v1.xml"
+    },
+    {
+      "package": "fractionalscale",
+      "source": "wayland-protocols",
+      "path": "staging/fractional-scale/fractional-scale-v1.xml"
+    },
+    {
+      "package": "singlepixelbuffer",
+      "source": "wayland-protocols",
+      "path": "staging/single-pixel-buffer/single-pixel-buffer-v1.xml"
+    },
+    {
+      "package": "xdgactivation",
+      "source": "wayland-protocols",
+      "path": "staging/xdg-activation/xdg-activation-v1.xml"
+    },
+    {
+      "package": "linuxdrmsyncobj",
+      "source": "wayland-protocols",
+      "path": "staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml"
+    },
+    {
+      "package": "extsessionlock",
+      "source": "wayland-protocols",
+      "path": "staging/ext-session-lock/ext-session-lock-v1.xml"
+    },
+    {
+      "package": "extidlenotify",
+      "source": "wayland-protocols",
+      "path": "staging/ext-idle-notify/ext-idle-notify-v1.xml"
+    },
+    {
+      "package": "extdatacontrol",
+      "source": "wayland-protocols",
+      "path": "staging/ext-data-control/ext-data-control-v1.xml"
+    },
+    {
+      "package": "extforeigntoplevellist",
+      "source": "wayland-protocols",
+      "path": "staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml"
+    },
+    {
+      "package": "extimagecapturesource",
+      "source": "wayland-protocols",
+      "path": "staging/ext-image-capture-source/ext-image-capture-source-v1.xml"
+    },
+    {
+      "package": "extimagecopycapture",
+      "source": "wayland-protocols",
+      "path": "staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml"
+    },
+    {
+      "package": "extworkspace",
+      "source": "wayland-protocols",
+      "path": "staging/ext-workspace/ext-workspace-v1.xml"
+    },
+    {
+      "package": "xwaylandshell",
+      "source": "wayland-protocols",
+      "path": "staging/xwayland-shell/xwayland-shell-v1.xml"
+    },
+    {
+      "package": "xdgdecoration",
+      "source": "wayland-protocols",
+      "path": "unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
+    },
+    {
+      "package": "xdgoutput",
+      "source": "wayland-protocols",
+      "path": "unstable/xdg-output/xdg-output-unstable-v1.xml"
+    },
+    {
+      "package": "primaryselection",
+      "source": "wayland-protocols",
+      "path": "unstable/primary-selection/primary-selection-unstable-v1.xml"
+    },
+    {
+      "package": "idleinhibit",
+      "source": "wayland-protocols",
+      "path": "unstable/idle-inhibit/idle-inhibit-unstable-v1.xml"
+    },
+    {
+      "package": "pointerconstraints",
+      "source": "wayland-protocols",
+      "path": "unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
+    },
+    {
+      "package": "relativepointer",
+      "source": "wayland-protocols",
+      "path": "unstable/relative-pointer/relative-pointer-unstable-v1.xml"
+    },
+    {
+      "package": "keyboardshortcutsinhibit",
+      "source": "wayland-protocols",
+      "path": "unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml"
+    },
+    {
+      "package": "wlrlayershell",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-layer-shell-unstable-v1.xml"
+    },
+    {
+      "package": "wlrdatacontrol",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-data-control-unstable-v1.xml"
+    },
+    {
+      "package": "wlrscreencopy",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-screencopy-unstable-v1.xml"
+    },
+    {
+      "package": "wlrforeigntoplevel",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-foreign-toplevel-management-unstable-v1.xml"
+    },
+    {
+      "package": "wlrvirtualpointer",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-virtual-pointer-unstable-v1.xml"
+    },
+    {
+      "package": "wlroutputpower",
+      "source": "wlr-protocols",
+      "path": "unstable/wlr-output-power-management-unstable-v1.xml"
+    },
+    {
+      "package": "virtualkeyboard",
+      "source": "wlroots",
+      "path": "protocol/virtual-keyboard-unstable-v1.xml"
+    }
+  ]
+}
