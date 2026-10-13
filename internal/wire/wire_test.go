@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -477,6 +478,9 @@ func TestBackPressure(t *testing.T) {
 	if !full {
 		t.Fatal("a peer that never reads did not fill the output buffer")
 	}
+	if !errors.Is(a.Err(), ErrOutputFull) {
+		t.Fatalf("Err = %v, want the connection marked broken with ErrOutputFull", a.Err())
+	}
 	if err := a.Flush(); !errors.Is(err, ErrWouldBlock) {
 		t.Fatalf("Flush = %v, want ErrWouldBlock", err)
 	}
@@ -502,6 +506,59 @@ func TestBackPressure(t *testing.T) {
 		if !errors.Is(err, ErrWouldBlock) {
 			t.Fatalf("Flush: %v", err)
 		}
+	}
+}
+
+func TestTracerSeesBothDirections(t *testing.T) {
+	a, b := pair(t)
+	type seen struct {
+		incoming bool
+		id       ObjectID
+		opcode   Opcode
+		body     string
+	}
+	var got []seen
+	record := func(incoming bool, id ObjectID, opcode Opcode, body []byte) {
+		got = append(got, seen{incoming, id, opcode, string(body)})
+	}
+	a.SetTracer(record)
+	b.SetTracer(record)
+	send(t, a, 4, 2, func(e *Encoder) { e.Uint(7) })
+	m := receive(t, b)
+	m.Uint()
+	finish(t, m)
+	want := []seen{{false, 4, 2, string(u32(7))}, {true, 4, 2, string(u32(7))}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("traced %v, want %v", got, want)
+	}
+}
+
+func TestAppendArgs(t *testing.T) {
+	args := []Arg{
+		{Name: "i", Type: ArgInt},
+		{Name: "u", Type: ArgUint},
+		{Name: "f", Type: ArgFixed},
+		{Name: "s", Type: ArgString},
+		{Name: "n", Type: ArgString, Nullable: true},
+		{Name: "o", Type: ArgObject, Interface: "wl_output"},
+		{Name: "z", Type: ArgObject, Interface: "wl_output", Nullable: true},
+		{Name: "id", Type: ArgNewID, Interface: "wl_callback"},
+		{Name: "any", Type: ArgNewID},
+		{Name: "a", Type: ArgArray},
+		{Name: "fd", Type: ArgFD},
+	}
+	body := bytes.Join([][]byte{
+		u32(uint32(0xffffffff)), u32(5), u32(384), u32(3), []byte("hi\x00\x00"), u32(0), u32(9), u32(0), u32(10),
+		u32(7), []byte("wl_seat\x00"), u32(2), u32(11), u32(3),
+		{1, 2, 3, 0},
+	}, nil)
+	got := string(AppendArgs(nil, args, body))
+	want := `-1, 5, 1.5, "hi", nil, wl_output@9, nil, new id wl_callback@10, new id wl_seat@11, array[3], fd`
+	if got != want {
+		t.Fatalf("AppendArgs =\n%s\nwant\n%s", got, want)
+	}
+	if got := string(AppendArgs(nil, args[:2], u32(1))); got != "1, <truncated>" {
+		t.Fatalf("truncated body formatted as %q", got)
 	}
 }
 

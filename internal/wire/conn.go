@@ -23,7 +23,25 @@ type Conn struct {
 	fdsOut []int
 	oobOut []byte
 	enc    Encoder
+	werr   error
+	tracer Tracer
 	closed bool
+}
+
+type Tracer func(incoming bool, id ObjectID, opcode Opcode, body []byte)
+
+func (c *Conn) SetTracer(t Tracer) {
+	c.tracer = t
+}
+
+func (c *Conn) Err() error {
+	return c.werr
+}
+
+func (c *Conn) broken(err error) {
+	if c.werr == nil {
+		c.werr = err
+	}
 }
 
 func NewConn(fd int) *Conn {
@@ -151,6 +169,9 @@ func (c *Conn) Next() (*Message, error) {
 		open:   true,
 	}
 	c.r += size
+	if c.tracer != nil {
+		c.tracer(true, object, opcode, c.msg.data[headerSize:])
+	}
 	return &c.msg, nil
 }
 
@@ -174,7 +195,9 @@ func (c *Conn) send(limit, fdLimit int) error {
 		case errors.Is(err, unix.EAGAIN):
 			return ErrWouldBlock
 		case err != nil:
-			return fmt.Errorf("wire: sendmsg on fd %d: %w", c.fd, err)
+			err = fmt.Errorf("wire: sendmsg on fd %d: %w", c.fd, err)
+			c.broken(err)
+			return err
 		}
 		if fdLimit > 0 {
 			c.dropFDsOut(fdLimit)

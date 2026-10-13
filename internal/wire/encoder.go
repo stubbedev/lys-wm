@@ -162,9 +162,13 @@ func (e *Encoder) End() error {
 		}
 		c.fdsOut = c.fdsOut[:e.fdStart]
 		c.out = c.out[:e.start]
+		c.broken(e.err)
 		return e.err
 	}
 	size := len(c.out) - e.start
 	binary.NativeEndian.PutUint32(c.out[e.start+4:], uint32(size)<<16|uint32(e.opcode))
+	if c.tracer != nil {
+		c.tracer(false, e.object, e.opcode, c.out[e.start+headerSize:])
+	}
 	return nil
 }
