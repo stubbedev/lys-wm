@@ -60,6 +60,7 @@ Everything lives under `internal/` except the commands.
 | `protocol/...` | Generated bindings, one package per protocol and side; never edited by hand |
 | `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox (#5) |
 | `server` | Display socket, clients, object maps, globals (#6) |
+| `wlclient` | The client side of a connection: object map, zombies and dispatch, for the nested backend and tests (#6, #9) |
 | `backend` | The backend interface: outputs, frames, input devices (#8) |
 | `backend/headless` | Virtual outputs and injected input, for tests (#8) |
 | `backend/nested` | Outputs as windows on a parent Wayland compositor (#9) |
