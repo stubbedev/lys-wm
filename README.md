@@ -48,11 +48,10 @@ criteria in its description.
 ## Development
 
 ```sh
-direnv allow   # or: nix develop
-just check     # vet, lint, test, build
-just fmt-check # formatting gate
-just vuln      # govulncheck
+devenv shell   # Go, gopls, golangci-lint, govulncheck, just
+just gates     # formatting, vet, lint, test, build, govulncheck
 ```
 
-The flake pins the Go toolchain to the version in `go.mod`, with
-`CGO_ENABLED=0` and `GOTOOLCHAIN=local`.
+`devenv.nix` is the whole development environment: Go pinned to the version
+`go.mod` declares, `CGO_ENABLED=0` and `GOTOOLCHAIN=local`. The flake only
+builds the package (`nix build`).

@@ -5,10 +5,10 @@ decisions every change builds on.
 
 ## Gates
 
-Run before every commit, from the flake's dev shell:
+Run before every commit:
 
 ```sh
-nix develop -c just fmt-check check vuln
+devenv test
 nix build -L
 ```
 

@@ -4,6 +4,10 @@
 default:
     @just --list
 
+# Every gate a commit must pass: formatting, the release gates and the
+# vulnerability scan. `devenv test` and CI run this.
+gates: fmt-check check vuln
+
 # Run every release gate in order: vet, lint, test, build.
 check: vet lint test build
 

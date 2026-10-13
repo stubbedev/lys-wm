@@ -21,11 +21,12 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Formatting gate
-        run: nix develop -c just fmt-check
-      - name: Release gates (vet, lint, test, build)
-        run: nix develop -c just check
-      - name: Vulnerability gate
-        run: nix develop -c just vuln
+      - uses: cachix/cachix-action@97e5ff84d02b3b4f9936339f767e17f03c9252ed # v16
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - name: Gates (formatting, vet, lint, test, build, govulncheck)
+        run: devenv test
       - name: Nix package
         run: nix build -L

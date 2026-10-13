@@ -29,35 +29,6 @@
           default = tilde;
         };
 
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            # Go toolchain. Pinned to the version go.mod declares: the
-            # default `go` attribute lags behind, and with GOTOOLCHAIN=auto
-            # it would silently download its own toolchain instead of
-            # failing. gopls and golangci-lint are built with the same
-            # nixpkgs Go, so they parse what the compiler accepts.
-            go_1_27
-
-            # Development tools
-            gopls # Go language server
-            golangci-lint # Linter behind `just lint`, config in .golangci.yml
-            delve # Go debugger
-            just # Task runner
-
-            # Development workflow
-            git # Version control
-            gh # GitHub CLI
-            govulncheck # Vulnerability gate behind `just vuln`
-          ];
-
-          shellHook = ''
-            # Keep accidental cgo out, and keep the compiler the flake
-            # provides: a module asking for a newer Go fails instead of
-            # downloading one at first use.
-            export CGO_ENABLED=0 GOTOOLCHAIN=local
-          '';
-        };
-
         formatter = pkgs.alejandra;
       }
     );
