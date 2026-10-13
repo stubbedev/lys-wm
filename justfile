@@ -35,3 +35,22 @@ fmt-check:
 # Fail when a reachable dependency has a known vulnerability.
 vuln:
     govulncheck ./...
+
+# Move an issue to In Progress on the tilde project board.
+start issue:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    issue={{quote(issue)}}
+    if [[ ! "$issue" =~ ^[0-9]+$ ]]; then
+        echo "start: issue must be a number, got '$issue'" >&2
+        exit 1
+    fi
+    item=$(gh project item-list 3 --owner stubbedev --limit 1000 --format json \
+        --jq ".items[] | select(.content.number == $issue) | .id")
+    if [[ -z "$item" ]]; then
+        echo "start: issue #$issue is not on the tilde board; add it with: gh project item-add 3 --owner stubbedev --url https://github.com/stubbedev/tilde/issues/$issue" >&2
+        exit 1
+    fi
+    gh project item-edit --project-id PVT_kwHOBU6Wkc4Bm521 --id "$item" \
+        --field-id PVTSSF_lAHOBU6Wkc4Bm521zhlg6Ew --single-select-option-id 47fc9ee4 >/dev/null
+    echo "#$issue is In Progress"
