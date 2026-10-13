@@ -1,0 +1,250 @@
+// Package soft is the CPU renderer over premultiplied ARGB8888 buffers.
+package soft
+
+import (
+	"errors"
+	"fmt"
+	"image"
+	"math"
+
+	"github.com/stubbedev/tilde/internal/render"
+)
+
+type Buffer struct {
+	Pix    []byte
+	Stride int
+	W, H   int
+}
+
+func NewBuffer(w, h int) *Buffer {
+	return &Buffer{Pix: make([]byte, w*h*4), Stride: w * 4, W: w, H: h}
+}
+
+func (b *Buffer) Size() image.Point {
+	return image.Pt(b.W, b.H)
+}
+
+func (b *Buffer) bounds() image.Rectangle {
+	return image.Rect(0, 0, b.W, b.H)
+}
+
+type texture struct {
+	owner  *Renderer
+	pix    []byte
+	stride int
+	size   image.Point
+	opaque bool
+}
+
+func (t *texture) Size() image.Point {
+	return t.size
+}
+
+func (t *texture) Destroy() {
+	t.pix = nil
+}
+
+type Renderer struct {
+	pass pass
+}
+
+func New() *Renderer {
+	r := &Renderer{}
+	r.pass.owner = r
+	return r
+}
+
+func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
+	if size.X <= 0 || size.Y <= 0 || stride < size.X*4 || len(data) < stride*(size.Y-1)+size.X*4 {
+		return nil, fmt.Errorf("soft: texture %v with stride %d does not fit %d bytes", size, stride, len(data))
+	}
+	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size}
+	for y := range size.Y {
+		copy(t.pix[y*t.stride:(y+1)*t.stride], data[y*stride:])
+	}
+	switch format {
+	case render.ARGB8888:
+	case render.XRGB8888:
+		t.opaque = true
+		for i := 3; i < len(t.pix); i += 4 {
+			t.pix[i] = 0xff
+		}
+	default:
+		return nil, fmt.Errorf("soft: unsupported texture format %d", format)
+	}
+	return t, nil
+}
+
+func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	buf, ok := target.(*Buffer)
+	if !ok {
+		return nil, fmt.Errorf("soft: cannot render into %T", target)
+	}
+	if r.pass.active {
+		return nil, errors.New("soft: Begin while a pass is active")
+	}
+	p := &r.pass
+	p.active, p.buf, p.err = true, buf, nil
+	p.damage = p.damage[:0]
+	for _, d := range damage {
+		if d = d.Intersect(buf.bounds()); !d.Empty() {
+			p.damage = append(p.damage, d)
+		}
+	}
+	return p, nil
+}
+
+type pass struct {
+	owner  *Renderer
+	active bool
+	buf    *Buffer
+	damage []image.Rectangle
+	err    error
+	cols   []int
+	rows   []int
+}
+
+func (p *pass) fail(err error) {
+	if p.err == nil {
+		p.err = err
+	}
+}
+
+func (p *pass) End() error {
+	if !p.active {
+		return errors.New("soft: End without an active pass")
+	}
+	p.active, p.buf = false, nil
+	return p.err
+}
+
+func over(dst []byte, b, g, r, a byte) {
+	if a == 0xff {
+		dst[0], dst[1], dst[2], dst[3] = b, g, r, a
+		return
+	}
+	inv := uint32(0xff - a)
+	dst[0] = b + byte((uint32(dst[0])*inv+127)/255)
+	dst[1] = g + byte((uint32(dst[1])*inv+127)/255)
+	dst[2] = r + byte((uint32(dst[2])*inv+127)/255)
+	dst[3] = a + byte((uint32(dst[3])*inv+127)/255)
+}
+
+func scale(c byte, a uint32) byte {
+	return byte((uint32(c)*a + 127) / 255)
+}
+
+func (p *pass) FillRect(r image.Rectangle, c render.Color) {
+	if !p.active {
+		p.fail(errors.New("soft: FillRect outside a pass"))
+		return
+	}
+	if c.R > c.A || c.G > c.A || c.B > c.A {
+		p.fail(fmt.Errorf("soft: color %+v is not premultiplied", c))
+		return
+	}
+	for _, d := range p.damage {
+		clip := r.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)
+			}
+		}
+	}
+}
+
+func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: DrawTexture outside a pass"))
+		return
+	case !ok || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
+		return
+	case tex.pix == nil:
+		p.fail(errors.New("soft: texture used after Destroy"))
+		return
+	case transform > render.Flipped270:
+		p.fail(fmt.Errorf("soft: invalid transform %d", transform))
+		return
+	case !(alpha >= 0 && alpha <= 1):
+		p.fail(fmt.Errorf("soft: alpha %v outside [0, 1]", alpha))
+		return
+	case !(src.W > 0 && src.H > 0 && src.X >= 0 && src.Y >= 0) || src.X+src.W > float64(tex.size.X) || src.Y+src.H > float64(tex.size.Y):
+		p.fail(fmt.Errorf("soft: source %+v outside texture %v", src, tex.size))
+		return
+	case dst.Empty():
+		return
+	}
+	a := uint32(math.Round(float64(alpha) * 255))
+	if a == 0 {
+		return
+	}
+	horizontal, vertical := axisMaps(transform)
+	p.cols = sampleMap(p.cols[:0], dst.Dx(), horizontal, src, tex.size)
+	p.rows = sampleMap(p.rows[:0], dst.Dy(), vertical, src, tex.size)
+	swap := transform.SwapsAxes()
+	for _, d := range p.damage {
+		clip := dst.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			out := p.buf.Pix[y*p.buf.Stride:]
+			row := p.rows[y-dst.Min.Y]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				col := p.cols[x-dst.Min.X]
+				sx, sy := col, row
+				if swap {
+					sx, sy = row, col
+				}
+				px := tex.pix[sy*tex.stride+sx*4:]
+				if a == 0xff {
+					over(out[x*4:x*4+4], px[0], px[1], px[2], px[3])
+				} else {
+					over(out[x*4:x*4+4], scale(px[0], a), scale(px[1], a), scale(px[2], a), scale(px[3], a))
+				}
+			}
+		}
+	}
+}
+
+type axis struct {
+	source   int
+	reversed bool
+}
+
+func axisMaps(t render.Transform) (horizontal, vertical axis) {
+	h, v := axis{0, false}, axis{1, false}
+	switch t &^ render.Flipped {
+	case render.Rotate90:
+		h, v = axis{1, false}, axis{0, true}
+	case render.Rotate180:
+		h, v = axis{0, true}, axis{1, true}
+	case render.Rotate270:
+		h, v = axis{1, true}, axis{0, false}
+	}
+	if t&render.Flipped != 0 {
+		if h.source == 0 {
+			h.reversed = !h.reversed
+		} else {
+			v.reversed = !v.reversed
+		}
+	}
+	return h, v
+}
+
+func sampleMap(out []int, n int, a axis, src render.FRect, size image.Point) []int {
+	origin, extent, limit := src.X, src.W, size.X
+	if a.source == 1 {
+		origin, extent, limit = src.Y, src.H, size.Y
+	}
+	for i := range n {
+		f := (float64(i) + 0.5) / float64(n)
+		if a.reversed {
+			f = 1 - f
+		}
+		s := int(math.Floor(origin + f*extent))
+		out = append(out, min(max(s, 0), limit-1))
+	}
+	return out
+}

@@ -45,7 +45,7 @@ linters:
           - errcheck
           - gosec
           - unparam
-      - path: internal/wire/
+      - path: internal/(wire|render/soft)/
         linters:
           - gosec
         text: G115
