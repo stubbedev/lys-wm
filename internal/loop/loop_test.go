@@ -240,6 +240,32 @@ func TestIdleRunsBeforeBlockingUntilEmpty(t *testing.T) {
 	}
 }
 
+func TestBeforeWaitRunsEveryIterationAfterIdle(t *testing.T) {
+	l := newLoop(t)
+	var got []string
+	l.Idle(func() error {
+		got = append(got, "idle")
+		return nil
+	})
+	l.BeforeWait(func() error {
+		got = append(got, "before")
+		if len(got) == 4 {
+			l.Stop()
+		}
+		return nil
+	})
+	if err := l.Post(func() error {
+		got = append(got, "posted")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	run(t, l)
+	if want := []string{"idle", "before", "posted", "before"}; !slices.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
 func TestHandlerErrorStopsRun(t *testing.T) {
 	l := newLoop(t)
 	boom := errors.New("boom")

@@ -48,6 +48,7 @@ type Loop struct {
 	events  []unix.EpollEvent
 	idle    []func() error
 	running []func() error
+	before  []func() error
 	stopped bool
 	closed  bool
 	wakeups int
@@ -291,6 +292,10 @@ func (l *Loop) runIdle() error {
 	return nil
 }
 
+func (l *Loop) BeforeWait(f func() error) {
+	l.before = append(l.before, f)
+}
+
 func (l *Loop) Stop() {
 	l.stopped = true
 }
@@ -303,6 +308,11 @@ func (l *Loop) Run() error {
 	for !l.stopped {
 		if err := l.runIdle(); err != nil {
 			return err
+		}
+		for _, f := range l.before {
+			if err := f(); err != nil {
+				return err
+			}
 		}
 		if l.stopped {
 			break
