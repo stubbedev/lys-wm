@@ -1,0 +1,5 @@
+/tilde
+/tildectl
+/result
+*.test
+.direnv/

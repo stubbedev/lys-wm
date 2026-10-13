@@ -1,0 +1,59 @@
+# tilde
+
+A tiling Wayland compositor in pure Go (`CGO_ENABLED=0`), built to replace a
+Hyprland + hy3 setup with something smaller.
+
+## Scope
+
+- **Tiling like hy3**: a tree of horizontal and vertical splits and tab
+  groups, autotile by container width, directional focus and move,
+  workspaces 1–10 per output, floating windows, window rules, submaps.
+- **Drawing**: client surfaces, 1px borders and tab bars. Nothing else.
+- **Desktop protocols** for a full session: layer-shell, session lock, idle
+  notify and inhibit, data control, screen capture, foreign toplevels,
+  workspaces, virtual input, XWayland.
+- **Hardware**: DRM/KMS through logind, libinput, NVIDIA (explicit sync) and
+  Mesa, fractional scaling, and multi-GPU.
+
+## Non-goals
+
+Animations, blur, shadows, rounded corners, plugins, a scripting language in
+the config, VR, HDR.
+
+## Pure Go
+
+No cgo. The few C libraries with no reasonable alternative are loaded at
+runtime with [purego](https://github.com/ebitengine/purego): `libEGL`,
+`libGLESv2` and `libgbm` for the GPU, `libinput` for input devices.
+Everything else is Go: the wire protocol, DRM ioctls, logind, udev, xkb, X11
+and text. See `docs/architecture.md` (#2).
+
+## Roadmap
+
+The plan lives in the issues, grouped by milestone. Each milestone has exit
+criteria in its description.
+
+| Milestone | Outcome |
+| --- | --- |
+| M0 Foundation | Wire codec, scanner, event loop, server core, headless and nested backends, test harness |
+| M1 Core protocols | Ordinary clients run nested on shm buffers |
+| M2 Tiling core | hy3-equivalent tiling, workspaces, floating, rules, binds |
+| M3 Config and IPC | One validated config file; `tildectl` and an event stream |
+| M4 GPU rendering | GLES via purego, dmabuf, explicit sync, damage tracking |
+| M5 Native session | KMS, libinput, logind, hotplug, lid, suspend/resume |
+| M6 XWayland | Steam and JetBrains IDEs work |
+| M7 Desktop parity | wayle, rofi, cliphist, hypridle, screen sharing |
+| M8 Daily driver | Packaged for NixOS; Hyprland removed |
+| M9 Multi-GPU | Outputs on any GPU, proven in a VM rig |
+
+## Development
+
+```sh
+direnv allow   # or: nix develop
+just check     # vet, lint, test, build
+just fmt-check # formatting gate
+just vuln      # govulncheck
+```
+
+The flake pins the Go toolchain to the version in `go.mod`, with
+`CGO_ENABLED=0` and `GOTOOLCHAIN=local`.
