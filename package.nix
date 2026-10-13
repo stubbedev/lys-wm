@@ -12,9 +12,9 @@ buildGo127Module {
 
   src = lib.cleanSource ./.;
 
-  # Empty while the module has no dependencies. Once go.mod grows one, run
-  # `nix build` and put the reported got: hash here.
-  vendorHash = null;
+  # Pins the module dependencies in go.sum. When they change, set this to
+  # lib.fakeHash, run `nix build` and put the reported got: hash here.
+  vendorHash = "sha256-pkGkS2zxFL/m5eOPkkOa9MyK3kCG9ysouXgHksKoV00=";
 
   subPackages = ["cmd/tilde"];
 

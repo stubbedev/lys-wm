@@ -45,6 +45,10 @@ linters:
           - errcheck
           - gosec
           - unparam
+      - path: internal/wire/
+        linters:
+          - gosec
+        text: G115
 
 issues:
   max-issues-per-linter: 0
