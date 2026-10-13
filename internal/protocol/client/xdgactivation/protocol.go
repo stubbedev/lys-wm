@@ -205,9 +205,9 @@ func (obj *XdgActivationTokenV1) SetSerial(serial uint32, seat *wayland.WlSeat) 
 	return nil
 }
 
-func (obj *XdgActivationTokenV1) SetAppId(appId string) error {
+func (obj *XdgActivationTokenV1) SetAppID(appID string) error {
 	enc := obj.object.Begin(1)
-	enc.Str(appId)
+	enc.Str(appID)
 	if err := enc.End(); err != nil {
 		return err
 	}

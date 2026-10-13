@@ -287,9 +287,9 @@ func (obj *ZwlrForeignToplevelHandleV1) SendTitle(title string) error {
 	return nil
 }
 
-func (obj *ZwlrForeignToplevelHandleV1) SendAppId(appId string) error {
+func (obj *ZwlrForeignToplevelHandleV1) SendAppID(appID string) error {
 	enc := obj.object.Begin(1)
-	enc.Str(appId)
+	enc.Str(appID)
 	if err := enc.End(); err != nil {
 		return err
 	}

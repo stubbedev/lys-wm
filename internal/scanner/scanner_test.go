@@ -56,14 +56,14 @@ func TestGeneratedTreeIsCurrent(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	cases := map[string]string{"wl_surface": "WlSurface", "set_buffer_scale": "SetBufferScale", "90": "90", "flipped_270": "Flipped270"}
+	cases := map[string]string{"wl_surface": "WlSurface", "set_buffer_scale": "SetBufferScale", "90": "90", "flipped_270": "Flipped270", "delete_id": "DeleteID", "get_fd": "GetFD"}
 	for in, want := range cases {
 		if got := camel(in); got != want {
 			t.Errorf("camel(%q) = %q, want %q", in, got, want)
 		}
 	}
 	imports := map[string]bool{"wayland": true}
-	args := map[string]string{"physical_width": "physicalWidth", "make": "makeArg", "interface": "interfaceArg", "wayland": "waylandArg", "obj": "objArg", "id": "id"}
+	args := map[string]string{"physical_width": "physicalWidth", "make": "makeArg", "interface": "interfaceArg", "wayland": "waylandArg", "obj": "objArg", "id": "id", "object_id": "objectID", "fd": "fd"}
 	for in, want := range args {
 		if got := argName(in, imports); got != want {
 			t.Errorf("argName(%q) = %q, want %q", in, got, want)

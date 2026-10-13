@@ -323,7 +323,7 @@ func (v ExtWorkspaceHandleV1WorkspaceCapabilities) Has(flag ExtWorkspaceHandleV1
 }
 
 type ExtWorkspaceHandleV1Handler interface {
-	Id(obj *ExtWorkspaceHandleV1, id string) error
+	ID(obj *ExtWorkspaceHandleV1, id string) error
 	Name(obj *ExtWorkspaceHandleV1, name string) error
 	Coordinates(obj *ExtWorkspaceHandleV1, coordinates []byte) error
 	State(obj *ExtWorkspaceHandleV1, state ExtWorkspaceHandleV1State) error
@@ -387,7 +387,7 @@ func (obj *ExtWorkspaceHandleV1) Dispatch(msg *wire.Message) error {
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.Id(obj, id)
+		return obj.handler.ID(obj, id)
 	case 1:
 		name := msg.Str()
 		if err := msg.Finish(); err != nil {

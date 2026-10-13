@@ -560,7 +560,7 @@ type XdgToplevelHandler interface {
 	Destroy(obj *XdgToplevel) error
 	SetParent(obj *XdgToplevel, parent *XdgToplevel) error
 	SetTitle(obj *XdgToplevel, title string) error
-	SetAppId(obj *XdgToplevel, appId string) error
+	SetAppID(obj *XdgToplevel, appID string) error
 	ShowWindowMenu(obj *XdgToplevel, seat *wayland.WlSeat, serial uint32, x int32, y int32) error
 	Move(obj *XdgToplevel, seat *wayland.WlSeat, serial uint32) error
 	Resize(obj *XdgToplevel, seat *wayland.WlSeat, serial uint32, edges XdgToplevelResizeEdge) error
@@ -641,11 +641,11 @@ func (obj *XdgToplevel) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.SetTitle(obj, title)
 	case 3:
-		appId := msg.Str()
+		appID := msg.Str()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.SetAppId(obj, appId)
+		return obj.handler.SetAppID(obj, appID)
 	case 4:
 		seat := wire.ObjectArg[*wayland.WlSeat](msg, obj.object.Peer(), false)
 		serial := msg.Uint()

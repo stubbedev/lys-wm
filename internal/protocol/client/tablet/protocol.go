@@ -275,7 +275,7 @@ const (
 type ZwpTabletToolV2Handler interface {
 	Type(obj *ZwpTabletToolV2, toolType ZwpTabletToolV2Type) error
 	HardwareSerial(obj *ZwpTabletToolV2, hardwareSerialHi uint32, hardwareSerialLo uint32) error
-	HardwareIdWacom(obj *ZwpTabletToolV2, hardwareIdHi uint32, hardwareIdLo uint32) error
+	HardwareIDWacom(obj *ZwpTabletToolV2, hardwareIDHi uint32, hardwareIDLo uint32) error
 	Capability(obj *ZwpTabletToolV2, capability ZwpTabletToolV2Capability) error
 	Done(obj *ZwpTabletToolV2) error
 	Removed(obj *ZwpTabletToolV2) error
@@ -359,12 +359,12 @@ func (obj *ZwpTabletToolV2) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.HardwareSerial(obj, hardwareSerialHi, hardwareSerialLo)
 	case 2:
-		hardwareIdHi := msg.Uint()
-		hardwareIdLo := msg.Uint()
+		hardwareIDHi := msg.Uint()
+		hardwareIDLo := msg.Uint()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.HardwareIdWacom(obj, hardwareIdHi, hardwareIdLo)
+		return obj.handler.HardwareIDWacom(obj, hardwareIDHi, hardwareIDLo)
 	case 3:
 		capability := ZwpTabletToolV2Capability(msg.Uint())
 		if err := msg.Finish(); err != nil {
@@ -528,7 +528,7 @@ const (
 
 type ZwpTabletV2Handler interface {
 	Name(obj *ZwpTabletV2, name string) error
-	Id(obj *ZwpTabletV2, vid uint32, pid uint32) error
+	ID(obj *ZwpTabletV2, vid uint32, pid uint32) error
 	Path(obj *ZwpTabletV2, path string) error
 	Done(obj *ZwpTabletV2) error
 	Removed(obj *ZwpTabletV2) error
@@ -598,7 +598,7 @@ func (obj *ZwpTabletV2) Dispatch(msg *wire.Message) error {
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.Id(obj, vid, pid)
+		return obj.handler.ID(obj, vid, pid)
 	case 2:
 		path := msg.Str()
 		if err := msg.Finish(); err != nil {

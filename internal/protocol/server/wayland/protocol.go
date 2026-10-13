@@ -103,15 +103,15 @@ func (obj *WlDisplay) Dispatch(msg *wire.Message) error {
 	return msg.Finish()
 }
 
-func (obj *WlDisplay) SendError(objectId wire.Resource, code uint32, message string) error {
-	if objectId == nil {
+func (obj *WlDisplay) SendError(objectID wire.Resource, code uint32, message string) error {
+	if objectID == nil {
 		return obj.object.NullArg("error", "object_id")
 	}
-	if err := obj.object.Owns(objectId); err != nil {
+	if err := obj.object.Owns(objectID); err != nil {
 		return err
 	}
 	enc := obj.object.Begin(0)
-	enc.Object(objectId.Base().ID())
+	enc.Object(objectID.Base().ID())
 	enc.Uint(code)
 	enc.Str(message)
 	if err := enc.End(); err != nil {
@@ -120,7 +120,7 @@ func (obj *WlDisplay) SendError(objectId wire.Resource, code uint32, message str
 	return nil
 }
 
-func (obj *WlDisplay) SendDeleteId(id uint32) error {
+func (obj *WlDisplay) SendDeleteID(id uint32) error {
 	enc := obj.object.Begin(1)
 	enc.Uint(id)
 	if err := enc.End(); err != nil {
@@ -498,7 +498,7 @@ type WlShmError uint32
 const (
 	WlShmErrorInvalidFormat WlShmError = 0
 	WlShmErrorInvalidStride WlShmError = 1
-	WlShmErrorInvalidFd     WlShmError = 2
+	WlShmErrorInvalidFD     WlShmError = 2
 )
 
 type WlShmFormat uint32

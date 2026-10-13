@@ -131,7 +131,7 @@ type ExtForeignToplevelHandleV1Handler interface {
 	Closed(obj *ExtForeignToplevelHandleV1) error
 	Done(obj *ExtForeignToplevelHandleV1) error
 	Title(obj *ExtForeignToplevelHandleV1, title string) error
-	AppId(obj *ExtForeignToplevelHandleV1, appId string) error
+	AppID(obj *ExtForeignToplevelHandleV1, appID string) error
 	Identifier(obj *ExtForeignToplevelHandleV1, identifier string) error
 }
 
@@ -203,11 +203,11 @@ func (obj *ExtForeignToplevelHandleV1) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.Title(obj, title)
 	case 3:
-		appId := msg.Str()
+		appID := msg.Str()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.AppId(obj, appId)
+		return obj.handler.AppID(obj, appID)
 	case 4:
 		identifier := msg.Str()
 		if err := msg.Finish(); err != nil {

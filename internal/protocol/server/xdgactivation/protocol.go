@@ -121,7 +121,7 @@ const (
 
 type XdgActivationTokenV1Handler interface {
 	SetSerial(obj *XdgActivationTokenV1, serial uint32, seat *wayland.WlSeat) error
-	SetAppId(obj *XdgActivationTokenV1, appId string) error
+	SetAppID(obj *XdgActivationTokenV1, appID string) error
 	SetSurface(obj *XdgActivationTokenV1, surface *wayland.WlSurface) error
 	Commit(obj *XdgActivationTokenV1) error
 	Destroy(obj *XdgActivationTokenV1) error
@@ -182,11 +182,11 @@ func (obj *XdgActivationTokenV1) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.SetSerial(obj, serial, seat)
 	case 1:
-		appId := msg.Str()
+		appID := msg.Str()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.SetAppId(obj, appId)
+		return obj.handler.SetAppID(obj, appID)
 	case 2:
 		surface := wire.ObjectArg[*wayland.WlSurface](msg, obj.object.Peer(), false)
 		if err := msg.Finish(); err != nil {

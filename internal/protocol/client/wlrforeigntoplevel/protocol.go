@@ -148,7 +148,7 @@ const (
 
 type ZwlrForeignToplevelHandleV1Handler interface {
 	Title(obj *ZwlrForeignToplevelHandleV1, title string) error
-	AppId(obj *ZwlrForeignToplevelHandleV1, appId string) error
+	AppID(obj *ZwlrForeignToplevelHandleV1, appID string) error
 	OutputEnter(obj *ZwlrForeignToplevelHandleV1, output *wayland.WlOutput) error
 	OutputLeave(obj *ZwlrForeignToplevelHandleV1, output *wayland.WlOutput) error
 	State(obj *ZwlrForeignToplevelHandleV1, state []byte) error
@@ -215,11 +215,11 @@ func (obj *ZwlrForeignToplevelHandleV1) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.Title(obj, title)
 	case 1:
-		appId := msg.Str()
+		appID := msg.Str()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.AppId(obj, appId)
+		return obj.handler.AppID(obj, appID)
 	case 2:
 		output := wire.ObjectArg[*wayland.WlOutput](msg, obj.object.Peer(), false)
 		if err := msg.Finish(); err != nil {

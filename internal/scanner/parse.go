@@ -136,24 +136,26 @@ var reservedArgNames = map[string]bool{
 	"childID": true, "v": true, "ok": true,
 }
 
+var initialisms = map[string]bool{"id": true, "fd": true, "url": true, "uuid": true}
+
 func camel(s string) string {
 	var b strings.Builder
 	for part := range strings.SplitSeq(s, "_") {
-		if part == "" {
-			continue
+		switch {
+		case part == "":
+		case initialisms[part]:
+			b.WriteString(strings.ToUpper(part))
+		default:
+			b.WriteString(strings.ToUpper(part[:1]))
+			b.WriteString(part[1:])
 		}
-		b.WriteString(strings.ToUpper(part[:1]))
-		b.WriteString(part[1:])
 	}
 	return b.String()
 }
 
 func lowerCamel(s string) string {
-	c := camel(s)
-	if c == "" {
-		return c
-	}
-	return strings.ToLower(c[:1]) + c[1:]
+	first, rest, _ := strings.Cut(s, "_")
+	return strings.ToLower(first) + camel(rest)
 }
 
 func argName(name string, imports map[string]bool) string {

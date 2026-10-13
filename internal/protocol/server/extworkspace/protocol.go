@@ -458,7 +458,7 @@ func (obj *ExtWorkspaceHandleV1) Dispatch(msg *wire.Message) error {
 	return msg.Finish()
 }
 
-func (obj *ExtWorkspaceHandleV1) SendId(id string) error {
+func (obj *ExtWorkspaceHandleV1) SendID(id string) error {
 	enc := obj.object.Begin(0)
 	enc.Str(id)
 	if err := enc.End(); err != nil {

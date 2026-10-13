@@ -29,8 +29,8 @@ const (
 )
 
 type WlDisplayHandler interface {
-	Error(obj *WlDisplay, objectId wire.Resource, code uint32, message string) error
-	DeleteId(obj *WlDisplay, id uint32) error
+	Error(obj *WlDisplay, objectID wire.Resource, code uint32, message string) error
+	DeleteID(obj *WlDisplay, id uint32) error
 }
 
 type WlDisplay struct {
@@ -85,19 +85,19 @@ func NewWlDisplay(p wire.Peer, version uint32, h WlDisplayHandler) (*WlDisplay, 
 func (obj *WlDisplay) Dispatch(msg *wire.Message) error {
 	switch obj.object.Expect(msg, WlDisplayInterface.Events) {
 	case 0:
-		objectId := wire.ObjectArg[wire.Resource](msg, obj.object.Peer(), false)
+		objectID := wire.ObjectArg[wire.Resource](msg, obj.object.Peer(), false)
 		code := msg.Uint()
 		message := msg.Str()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.Error(obj, objectId, code, message)
+		return obj.handler.Error(obj, objectID, code, message)
 	case 1:
 		id := msg.Uint()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.DeleteId(obj, id)
+		return obj.handler.DeleteID(obj, id)
 	}
 	return msg.Finish()
 }
@@ -544,7 +544,7 @@ type WlShmError uint32
 const (
 	WlShmErrorInvalidFormat WlShmError = 0
 	WlShmErrorInvalidStride WlShmError = 1
-	WlShmErrorInvalidFd     WlShmError = 2
+	WlShmErrorInvalidFD     WlShmError = 2
 )
 
 type WlShmFormat uint32

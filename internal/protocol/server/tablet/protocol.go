@@ -391,10 +391,10 @@ func (obj *ZwpTabletToolV2) SendHardwareSerial(hardwareSerialHi uint32, hardware
 	return nil
 }
 
-func (obj *ZwpTabletToolV2) SendHardwareIdWacom(hardwareIdHi uint32, hardwareIdLo uint32) error {
+func (obj *ZwpTabletToolV2) SendHardwareIDWacom(hardwareIDHi uint32, hardwareIDLo uint32) error {
 	enc := obj.object.Begin(2)
-	enc.Uint(hardwareIdHi)
-	enc.Uint(hardwareIdLo)
+	enc.Uint(hardwareIDHi)
+	enc.Uint(hardwareIDLo)
 	if err := enc.End(); err != nil {
 		return err
 	}
@@ -662,7 +662,7 @@ func (obj *ZwpTabletV2) SendName(name string) error {
 	return nil
 }
 
-func (obj *ZwpTabletV2) SendId(vid uint32, pid uint32) error {
+func (obj *ZwpTabletV2) SendID(vid uint32, pid uint32) error {
 	enc := obj.object.Begin(1)
 	enc.Uint(vid)
 	enc.Uint(pid)

@@ -760,9 +760,9 @@ func (obj *XdgToplevel) SetTitle(title string) error {
 	return nil
 }
 
-func (obj *XdgToplevel) SetAppId(appId string) error {
+func (obj *XdgToplevel) SetAppID(appID string) error {
 	enc := obj.object.Begin(3)
-	enc.Str(appId)
+	enc.Str(appID)
 	if err := enc.End(); err != nil {
 		return err
 	}

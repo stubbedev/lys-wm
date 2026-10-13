@@ -101,9 +101,9 @@ func (obj *WpPresentation) Dispatch(msg *wire.Message) error {
 	return msg.Finish()
 }
 
-func (obj *WpPresentation) SendClockId(clkId uint32) error {
+func (obj *WpPresentation) SendClockID(clkID uint32) error {
 	enc := obj.object.Begin(0)
-	enc.Uint(clkId)
+	enc.Uint(clkID)
 	if err := enc.End(); err != nil {
 		return err
 	}

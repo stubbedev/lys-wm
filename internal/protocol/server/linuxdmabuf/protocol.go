@@ -24,7 +24,7 @@ var ZwpLinuxDmabufV1Interface = &wire.Interface{
 
 type ZwpLinuxDmabufV1Handler interface {
 	Destroy(obj *ZwpLinuxDmabufV1) error
-	CreateParams(obj *ZwpLinuxDmabufV1, paramsId *ZwpLinuxBufferParamsV1) (ZwpLinuxBufferParamsV1Handler, error)
+	CreateParams(obj *ZwpLinuxDmabufV1, paramsID *ZwpLinuxBufferParamsV1) (ZwpLinuxBufferParamsV1Handler, error)
 	GetDefaultFeedback(obj *ZwpLinuxDmabufV1, id *ZwpLinuxDmabufFeedbackV1) (ZwpLinuxDmabufFeedbackV1Handler, error)
 	GetSurfaceFeedback(obj *ZwpLinuxDmabufV1, id *ZwpLinuxDmabufFeedbackV1, surface *wayland.WlSurface) (ZwpLinuxDmabufFeedbackV1Handler, error)
 }
@@ -85,12 +85,12 @@ func (obj *ZwpLinuxDmabufV1) Dispatch(msg *wire.Message) error {
 		}
 		return obj.object.Peer().Remove(obj.object.ID())
 	case 1:
-		paramsIdID := msg.NewID()
+		paramsIDID := msg.NewID()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		_, err := CreateZwpLinuxBufferParamsV1(obj.object.Peer(), paramsIdID, obj.object.Version(), func(paramsId *ZwpLinuxBufferParamsV1) (ZwpLinuxBufferParamsV1Handler, error) {
-			return obj.handler.CreateParams(obj, paramsId)
+		_, err := CreateZwpLinuxBufferParamsV1(obj.object.Peer(), paramsIDID, obj.object.Version(), func(paramsID *ZwpLinuxBufferParamsV1) (ZwpLinuxBufferParamsV1Handler, error) {
+			return obj.handler.CreateParams(obj, paramsID)
 		})
 		return err
 	case 2:
@@ -185,7 +185,7 @@ type ZwpLinuxBufferParamsV1Handler interface {
 	Destroy(obj *ZwpLinuxBufferParamsV1) error
 	Add(obj *ZwpLinuxBufferParamsV1, fd int, planeIdx uint32, offset uint32, stride uint32, modifierHi uint32, modifierLo uint32) error
 	Create(obj *ZwpLinuxBufferParamsV1, width int32, height int32, format uint32, flags ZwpLinuxBufferParamsV1Flags) error
-	CreateImmed(obj *ZwpLinuxBufferParamsV1, bufferId *wayland.WlBuffer, width int32, height int32, format uint32, flags ZwpLinuxBufferParamsV1Flags) (wayland.WlBufferHandler, error)
+	CreateImmed(obj *ZwpLinuxBufferParamsV1, bufferID *wayland.WlBuffer, width int32, height int32, format uint32, flags ZwpLinuxBufferParamsV1Flags) (wayland.WlBufferHandler, error)
 	SetSamplingDevice(obj *ZwpLinuxBufferParamsV1, device []byte) error
 }
 
@@ -265,7 +265,7 @@ func (obj *ZwpLinuxBufferParamsV1) Dispatch(msg *wire.Message) error {
 		}
 		return obj.handler.Create(obj, width, height, format, flags)
 	case 3:
-		bufferIdID := msg.NewID()
+		bufferIDID := msg.NewID()
 		width := msg.Int()
 		height := msg.Int()
 		format := msg.Uint()
@@ -273,8 +273,8 @@ func (obj *ZwpLinuxBufferParamsV1) Dispatch(msg *wire.Message) error {
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		_, err := wayland.CreateWlBuffer(obj.object.Peer(), bufferIdID, obj.object.Version(), func(bufferId *wayland.WlBuffer) (wayland.WlBufferHandler, error) {
-			return obj.handler.CreateImmed(obj, bufferId, width, height, format, flags)
+		_, err := wayland.CreateWlBuffer(obj.object.Peer(), bufferIDID, obj.object.Version(), func(bufferID *wayland.WlBuffer) (wayland.WlBufferHandler, error) {
+			return obj.handler.CreateImmed(obj, bufferID, width, height, format, flags)
 		})
 		return err
 	case 4:

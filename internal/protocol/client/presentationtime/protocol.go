@@ -27,7 +27,7 @@ const (
 )
 
 type WpPresentationHandler interface {
-	ClockId(obj *WpPresentation, clkId uint32) error
+	ClockID(obj *WpPresentation, clkID uint32) error
 }
 
 type WpPresentation struct {
@@ -82,11 +82,11 @@ func NewWpPresentation(p wire.Peer, version uint32, h WpPresentationHandler) (*W
 func (obj *WpPresentation) Dispatch(msg *wire.Message) error {
 	switch obj.object.Expect(msg, WpPresentationInterface.Events) {
 	case 0:
-		clkId := msg.Uint()
+		clkID := msg.Uint()
 		if err := msg.Finish(); err != nil {
 			return err
 		}
-		return obj.handler.ClockId(obj, clkId)
+		return obj.handler.ClockID(obj, clkID)
 	}
 	return msg.Finish()
 }

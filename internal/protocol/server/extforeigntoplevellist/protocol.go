@@ -221,9 +221,9 @@ func (obj *ExtForeignToplevelHandleV1) SendTitle(title string) error {
 	return nil
 }
 
-func (obj *ExtForeignToplevelHandleV1) SendAppId(appId string) error {
+func (obj *ExtForeignToplevelHandleV1) SendAppID(appID string) error {
 	enc := obj.object.Begin(3)
-	enc.Str(appId)
+	enc.Str(appID)
 	if err := enc.End(); err != nil {
 		return err
 	}
