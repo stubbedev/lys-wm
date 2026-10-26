@@ -59,6 +59,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Urgent:       w.urgent,
 			Unresponsive: w.hung,
 			Focused:      hasFocus && w.id == focused,
+			ContentType:  c.contentTypes.Of(w.top.Surface()),
 		})
 	}
 	return snap

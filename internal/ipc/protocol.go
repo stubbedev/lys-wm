@@ -129,6 +129,7 @@ type Window struct {
 	Urgent       bool           `json:"urgent"`
 	Unresponsive bool           `json:"unresponsive"`
 	Focused      bool           `json:"focused"`
+	ContentType  wm.ContentType `json:"content_type"`
 }
 
 type Layout struct {

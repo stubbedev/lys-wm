@@ -234,10 +234,11 @@ rules:
 
 Off by default. With `tearing: true`, a window that fills an output and
 scans out directly is presented with an async page flip, so frames show the
-moment they are ready and may tear, when it asks for that through
-`wp_tearing_control_v1` (Mesa's Vulkan `IMMEDIATE` present mode does) or a
-rule says `tearing: true`. A rule with `tearing: false` keeps a window on
-vblank whatever it asks. Drivers without atomic async flips (Linux before
+moment they are ready and may tear, when a rule says `tearing: true`, when it asks
+for that through `wp_tearing_control_v1` (Mesa's Vulkan `IMMEDIATE` present
+mode does), or when it says nothing there and tags its surface as a game
+through `wp_content_type_v1`. A rule with `tearing: false` keeps a window on
+vblank whatever it asks, and so does a vsync hint without a rule. Drivers without atomic async flips (Linux before
 6.8), and frames that change more than the buffer, flip at vblank as
 usual.
 

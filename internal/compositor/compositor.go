@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/committiming"
+	"github.com/stubbedev/lys-wm/internal/contenttype"
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/drm"
@@ -107,6 +108,7 @@ type Compositor struct {
 	fifo            *fifo.Manager
 	timing          *committiming.Manager
 	tearingHints    *tearingcontrol.Manager
+	contentTypes    *contenttype.Manager
 	tearing         bool
 	inputMethods    *inputmethod.Manager
 	outputOverrides map[string]OutputRule

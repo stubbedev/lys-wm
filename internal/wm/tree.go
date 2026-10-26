@@ -39,7 +39,7 @@ func enumName[E ~uint8](names []string, e E, kind string) string {
 
 func parseEnum[E ~uint8](names []string, s string) (E, bool) {
 	i := slices.Index(names, s)
-	return E(i), i > 0
+	return E(i), i >= 0 && names[i] != ""
 }
 
 type CollapsePolicy uint8

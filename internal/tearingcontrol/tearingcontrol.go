@@ -15,20 +15,28 @@ import (
 
 const version = 1
 
+type Hint uint8
+
+const (
+	Unset Hint = iota
+	Vsync
+	Async
+)
+
 type Manager struct {
-	async *surface.Latched[bool]
+	hints *surface.Latched[Hint]
 }
 
 func New(d *server.Display) (*Manager, error) {
-	m := &Manager{async: surface.NewLatched(false)}
+	m := &Manager{hints: surface.NewLatched(Unset)}
 	if _, err := d.AddGlobal(stc.WpTearingControlManagerV1Interface, version, m.bind); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (m *Manager) Async(s *surface.Surface) bool {
-	return m.async.Get(s)
+func (m *Manager) Hint(s *surface.Surface) Hint {
+	return m.hints.Get(s)
 }
 
 func (m *Manager) bind(c *server.Client, id wire.ObjectID, v uint32) error {
@@ -45,7 +53,7 @@ func (r requests) GetTearingControl(obj *stc.WpTearingControlManagerV1, res *stc
 	if err != nil {
 		return nil, err
 	}
-	v, ok := r.m.async.Attach(s)
+	v, ok := r.m.hints.Attach(s)
 	if !ok {
 		return nil, obj.ProtocolError(stc.WpTearingControlManagerV1ErrorTearingControlExists, "wl_surface@%d already has a tearing control", wl.Base().ID())
 	}
@@ -53,14 +61,18 @@ func (r requests) GetTearingControl(obj *stc.WpTearingControlManagerV1, res *stc
 	return hint{v}, nil
 }
 
-type hint struct{ v *surface.LatchedValue[bool] }
+type hint struct{ v *surface.LatchedValue[Hint] }
 
 func (hint) Destroy(*stc.WpTearingControlV1) error { return nil }
 
-func (h hint) SetPresentationHint(obj *stc.WpTearingControlV1, v stc.WpTearingControlV1PresentationHint) error {
-	if !v.Valid(obj.Base().Version()) {
+func (h hint) SetPresentationHint(_ *stc.WpTearingControlV1, v stc.WpTearingControlV1PresentationHint) error {
+	switch v {
+	case stc.WpTearingControlV1PresentationHintVsync:
+		h.v.Set(Vsync)
+	case stc.WpTearingControlV1PresentationHintAsync:
+		h.v.Set(Async)
+	default:
 		return fmt.Errorf("tearingcontrol: presentation hint %d is neither vsync nor async", v)
 	}
-	h.v.Set(v == stc.WpTearingControlV1PresentationHintAsync)
 	return nil
 }

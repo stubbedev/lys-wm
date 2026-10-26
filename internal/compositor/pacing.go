@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/committiming"
+	"github.com/stubbedev/lys-wm/internal/contenttype"
 	"github.com/stubbedev/lys-wm/internal/fifo"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -22,7 +23,10 @@ func (c *Compositor) addPacing(l *loop.Loop, display *server.Display) error {
 	if c.timing, err = committiming.New(display, l, committiming.Clock{Now: backend.Now, NextFlip: c.nextFlip}); err != nil {
 		return err
 	}
-	c.tearingHints, err = tearingcontrol.New(display)
+	if c.tearingHints, err = tearingcontrol.New(display); err != nil {
+		return err
+	}
+	c.contentTypes, err = contenttype.New(display)
 	return err
 }
 
@@ -40,7 +44,13 @@ func (c *Compositor) tears(s *surface.Surface) bool {
 	case wm.TearingDeny:
 		return false
 	}
-	return c.tearingHints.Async(s)
+	switch c.tearingHints.Hint(s) {
+	case tearingcontrol.Async:
+		return true
+	case tearingcontrol.Vsync:
+		return false
+	}
+	return c.contentTypes.Of(s) == wm.ContentGame
 }
 
 func (c *Compositor) showing(s *surface.Surface) bool {
