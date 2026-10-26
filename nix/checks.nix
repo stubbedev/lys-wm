@@ -41,7 +41,10 @@
         kernelModules = ["vkms"];
         outputs = ["Virtual-1" "Virtual-2"];
       };
-      vm-screencast = import ./screencast.nix {inherit pkgs module;};
+      vm-screencast = import ./screencast.nix {
+        inherit pkgs module;
+        seconds = 60;
+      };
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
       headless = pkgs.callPackage ./headless.nix {

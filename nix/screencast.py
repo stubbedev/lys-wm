@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 
@@ -8,9 +9,10 @@ from gi.repository import GLib
 SOURCES = {"monitor": 1, "window": 2}
 CURSOR_MODES = {"hidden": 1, "embedded": 2}
 BACKGROUND = bytes([0x2E, 0x1E, 0x1E])
+CURSOR_REACH = 64
 
 
-def main(source, cursor_mode, frames, frame_path):
+def start_cast(source, cursor_mode):
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     portal = bus.get_object("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop")
@@ -59,43 +61,93 @@ def main(source, cursor_mode, frames, frame_path):
         request("SelectSources", selected, outcome["session"], options)
 
     request("CreateSession", created, dbus.Dictionary({"session_handle_token": "lyswm"}, signature="sv"))
-    GLib.timeout_add_seconds(60, lambda: fail("the portal never answered"))
+    GLib.timeout_add_seconds(120, lambda: fail("the portal never answered"))
     loop.run()
     if "error" in outcome:
         sys.exit(f"screencast: {outcome['error']}")
-
     remote = screencast.OpenPipeWireRemote(outcome["session"], dbus.Dictionary({}, signature="sv")).take()
-    capture = subprocess.run(
-        ["pw-frames", str(remote), str(outcome["node"]), str(frames), frame_path],
+    return remote, outcome["node"]
+
+
+def read_frames(path):
+    with open(f"{path}.size") as f:
+        width, height, frames = (int(v) for v in f.read().split())
+    size = width * height * 4
+    with open(path, "rb") as f:
+        captured = f.read()
+    if size == 0 or len(captured) != frames * size:
+        sys.exit(f"screencast: {len(captured)} bytes in {path} for {frames} frames of {width}x{height}")
+    return width, height, [captured[at:at + size] for at in range(0, len(captured), size)]
+
+
+def capture(args):
+    remote, node = start_cast(args.source, args.cursor)
+    result = subprocess.run(
+        ["pw-frames", str(remote), str(node), str(args.frames), args.path],
         timeout=120,
         pass_fds=(remote,),
         capture_output=True,
         text=True,
     )
-    if capture.returncode != 0:
-        sys.exit(f"screencast: pw-frames exited {capture.returncode}: {capture.stderr}")
-    sizes = capture.stdout.split("\n")[0].split()
+    if result.returncode != 0:
+        sys.exit(f"screencast: pw-frames exited {result.returncode}: {result.stderr}")
+    sizes = result.stdout.split("\n")[0].split()
     if len(sizes) != 2:
-        sys.exit(f"screencast: pw-frames reported no size in {capture.stdout!r}")
-    width, height = (int(v) for v in sizes)
-    print(f"screencast: {source} stream node {outcome['node']}, {width}x{height}, cursor {cursor_mode}", flush=True)
-    with open(frame_path, "rb") as f:
-        captured = f.read()
-    size = width * height * 4
-    if size == 0 or len(captured) != frames * size:
-        sys.exit(f"screencast: {len(captured)} bytes for {frames} frames of a {width}x{height} stream")
-    distinct = len({captured[at:at + size] for at in range(0, len(captured), size)})
-    frame = captured[-size:]
-    background = sum(1 for at in range(0, size, 4) if frame[at:at + 3] == BACKGROUND)
-    share = background / (width * height)
-    print(f"screencast: {distinct} distinct frames of {frames}; {share:.3f} of the last is the desktop background", flush=True)
+        sys.exit(f"screencast: pw-frames reported no size in {result.stdout!r}")
+    with open(f"{args.path}.size", "w") as f:
+        f.write(f"{sizes[0]} {sizes[1]} {args.frames}\n")
+    width, height, frames = read_frames(args.path)
+    distinct = len(set(frames))
+    last = frames[-1]
+    background = sum(1 for at in range(0, len(last), 4) if last[at:at + 3] == BACKGROUND) / (width * height)
+    print(f"screencast: {args.source} stream node {node}, {width}x{height}, cursor {args.cursor}", flush=True)
+    print(f"screencast: {distinct} distinct frames of {len(frames)}; {background:.3f} of the last is the desktop background", flush=True)
     if distinct < 2:
         sys.exit("screencast: the stream shows no live content")
-    if source == "monitor" and not 0.1 <= share < 1:
-        sys.exit("screencast: the last frame does not show the desktop and its window")
-    if source == "window" and share > 0.01:
+    if args.source == "monitor" and not 0.1 <= background < 1:
+        sys.exit("screencast: the last frame does not show the desktop and its windows")
+    if args.source == "window" and background > 0.01:
         sys.exit("screencast: the last frame shows the desktop, not just the window")
 
 
+def cursor(args):
+    width, height, hidden = read_frames(args.hidden)
+    embedded_width, embedded_height, embedded = read_frames(args.embedded)
+    if (embedded_width, embedded_height) != (width, height):
+        sys.exit(f"screencast: the hidden stream is {width}x{height}, the embedded one {embedded_width}x{embedded_height}")
+    a, b = hidden[-1], embedded[-1]
+    x0, y0 = max(args.x, 0), max(args.y, 0)
+    x1, y1 = min(args.x + args.width, width), min(args.y + args.height, height)
+    changed = [(x, y) for y in range(y0, y1) for x in range(x0, x1) if a[(y * width + x) * 4:(y * width + x) * 4 + 3] != b[(y * width + x) * 4:(y * width + x) * 4 + 3]]
+    if not changed:
+        sys.exit(f"screencast: the embedded cursor drew nothing in {x1 - x0}x{y1 - y0}+{x0}+{y0}")
+    xs, ys = [x for x, _ in changed], [y for _, y in changed]
+    box = (min(xs), min(ys), max(xs), max(ys))
+    print(f"screencast: the embedded cursor changed {len(changed)} pixels in {box}, the pointer at {args.px},{args.py}", flush=True)
+    if box[2] - box[0] > CURSOR_REACH or box[3] - box[1] > CURSOR_REACH:
+        sys.exit("screencast: hidden and embedded frames differ by more than a cursor")
+    if not (box[0] - CURSOR_REACH <= args.px <= box[2] + CURSOR_REACH and box[1] - CURSOR_REACH <= args.py <= box[3] + CURSOR_REACH):
+        sys.exit("screencast: the embedded cursor is not where the pointer is")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(required=True)
+    cap = commands.add_parser("capture")
+    cap.add_argument("source", choices=SOURCES)
+    cap.add_argument("cursor", choices=CURSOR_MODES)
+    cap.add_argument("frames", type=int)
+    cap.add_argument("path")
+    cap.set_defaults(run=capture)
+    cur = commands.add_parser("cursor")
+    cur.add_argument("hidden")
+    cur.add_argument("embedded")
+    for name in ("x", "y", "width", "height", "px", "py"):
+        cur.add_argument(name, type=int)
+    cur.set_defaults(run=cursor)
+    args = parser.parse_args()
+    args.run(args)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4])
+    main()

@@ -3,32 +3,104 @@
 <head><meta charset="utf-8"><title>waiting</title></head>
 <body style="margin:0;height:100vh;background:#444">
 <script>
-const frames = 30;
+const seconds = Number(new URLSearchParams(location.search).get("seconds") ?? 0);
+const minFrames = 30;
+const stallMs = 5000;
+const background = [0x1e, 0x1e, 0x2e];
+const tolerance = 8;
+const surfaces = {m: "monitor", w: "window"};
+let busy = false;
 
-async function share() {
-  document.title = "sharing";
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
-    const video = document.createElement("video");
-    video.muted = true;
-    video.srcObject = stream;
-    await video.play();
-    let seen = 0;
-    const count = () => {
-      seen++;
-      if (seen < frames) {
+function sample(video) {
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext("2d", {willReadFrequently: true});
+  context.drawImage(video, 0, 0);
+  const {data} = context.getImageData(0, 0, canvas.width, canvas.height);
+  let matching = 0;
+  let hash = 0;
+  for (let at = 0; at < data.length; at += 4) {
+    if (background.every((c, i) => Math.abs(data[at + i] - c) <= tolerance)) {
+      matching++;
+    }
+    hash = (Math.imul(hash, 31) + data[at] + (data[at + 1] << 8) + (data[at + 2] << 16)) | 0;
+  }
+  return {background: matching / (data.length / 4), hash};
+}
+
+function watch(video, track) {
+  return new Promise((resolve, reject) => {
+    const started = performance.now();
+    const hashes = new Set();
+    let frames = 0;
+    let last = started;
+    let gap = 0;
+    let sampled = 0;
+    let latest;
+    const end = (settle, value) => {
+      clearInterval(watchdog);
+      track.onended = null;
+      settle(value);
+    };
+    const watchdog = setInterval(() => {
+      if (performance.now() - last > stallMs) {
+        end(reject, new Error(`stalled after ${frames} frames`));
+      }
+    }, 500);
+    track.onended = () => end(reject, new Error(`the stream ended after ${frames} frames`));
+    const count = (now) => {
+      frames++;
+      if (frames > 1) {
+        gap = Math.max(gap, now - last);
+      }
+      last = now;
+      const elapsed = now - started;
+      const done = frames >= minFrames && elapsed >= seconds * 1000;
+      if (frames === 1 || done || now - sampled >= 1000) {
+        latest = sample(video);
+        hashes.add(latest.hash);
+        sampled = now;
+      }
+      if (!done) {
         video.requestVideoFrameCallback(count);
         return;
       }
-      document.title = `shared ${video.videoWidth}x${video.videoHeight} after ${seen} frames`;
+      const fps = (frames / (elapsed / 1000)).toFixed(1);
+      end(resolve, `${video.videoWidth}x${video.videoHeight} frames ${frames} seconds ${(elapsed / 1000).toFixed(1)} fps ${fps} gap ${Math.round(gap)} distinct ${hashes.size} background ${latest.background.toFixed(3)}`);
     };
     video.requestVideoFrameCallback(count);
+  });
+}
+
+async function share(surface) {
+  const report = (text) => { document.title = text; };
+  report("sharing");
+  location.hash = surface;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({video: {displaySurface: surface}});
+    const [track] = stream.getVideoTracks();
+    const video = document.createElement("video");
+    video.muted = true;
+    video.srcObject = stream;
+    const [result] = await Promise.all([watch(video, track), video.play()]);
+    report(`shared ${result}`);
   } catch (e) {
-    document.title = `failed ${e.name}: ${e.message}`;
+    report(`failed: ${e.name}: ${e.message}`);
+  } finally {
+    stream?.getTracks().forEach((t) => t.stop());
   }
 }
 
-addEventListener("keydown", share, {once: true});
+addEventListener("keydown", async (e) => {
+  if (busy || !(e.key in surfaces)) {
+    return;
+  }
+  busy = true;
+  await share(surfaces[e.key]);
+  busy = false;
+});
 </script>
 </body>
 </html>
