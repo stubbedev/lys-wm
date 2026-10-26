@@ -29,7 +29,7 @@ type window struct {
 func (c *Compositor) windowOrigin(w *window) origin {
 	at := w.rect.Min.Sub(w.top.Geometry().Min)
 	if _, ok := w.top.(xToplevel); ok {
-		return origin{at: at, k: c.xScale(w.output)}
+		return origin{at: at, k: c.xScale(w.rect.Min)}
 	}
 	return flat(at)
 }

@@ -445,6 +445,34 @@ func TestXWindowsMapAcrossMixedScales(t *testing.T) {
 	})
 }
 
+func TestXWindowsMovedPartlyOffAnOutputKeepItsScale(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return c.SetOutputScale(b.Outputs()[0], 180)
+	})
+	xc := xDial(t, h)
+	h.Eventually("Xwayland's root in physical pixels", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.geometry(xc.root) == image.Rect(0, 0, 240, 150)
+	})
+	win := xc.window(image.Rect(0, 0, 60, 45), 0xff0000, false, map[string][]byte{
+		"WM_CLASS":            []byte("popup\x00XTest\x00"),
+		"_NET_WM_WINDOW_TYPE": xc.atom("_NET_WM_WINDOW_TYPE_DIALOG"),
+	})
+	h.Eventually("the dialog floating", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Floating
+	})
+	above := int32(-15)
+	mask := uint16(xproto.ConfigWindowX | xproto.ConfigWindowY | xproto.ConfigWindowWidth | xproto.ConfigWindowHeight)
+	if err := xproto.ConfigureWindowChecked(xc.x, win, mask, []uint32{30, uint32(above), 60, 45}).Check(); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the dialog above the output's top edge, in logical and in X pixels", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Rect == ipc.Rect{X: 20, Y: -10, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(30, -15, 90, 30)
+	})
+}
+
 func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)

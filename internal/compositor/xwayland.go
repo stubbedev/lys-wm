@@ -3,6 +3,7 @@ package compositor
 import (
 	"errors"
 	"image"
+	"math"
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -79,16 +80,32 @@ func (c *Compositor) ScaleXwayland(clients func(*server.Client) bool) error {
 	return errors.Join(c.layout.Physical(clients), c.reconcile())
 }
 
-func (c *Compositor) xScale(o *output.Output) output.Scale {
-	if c.xwaylandClients == nil || o == nil {
-		return output.Unit
+func (c *Compositor) xScale(at image.Point) output.Scale {
+	if o := c.xOutput(at, (*output.Output).Logical); o != nil {
+		return o.Scale()
 	}
-	return o.Scale()
+	return output.Unit
+}
+
+func (c *Compositor) xOutput(p image.Point, area func(*output.Output) image.Rectangle) *output.Output {
+	if c.xwaylandClients == nil {
+		return nil
+	}
+	var best *output.Output
+	nearest := math.Inf(1)
+	for _, o := range c.outputs {
+		r := area(o)
+		q := image.Pt(min(max(p.X, r.Min.X), r.Max.X-1), min(max(p.Y, r.Min.Y), r.Max.Y-1))
+		if d := math.Hypot(float64(q.X-p.X), float64(q.Y-p.Y)); d < nearest {
+			best, nearest = o, d
+		}
+	}
+	return best
 }
 
 func (c *Compositor) toX(r image.Rectangle) image.Rectangle {
-	o := c.outputAtRect(r)
-	if c.xwaylandClients == nil || o == nil {
+	o := c.xOutput(r.Min, (*output.Output).Logical)
+	if o == nil {
 		return r
 	}
 	k := o.Scale()
@@ -97,18 +114,13 @@ func (c *Compositor) toX(r image.Rectangle) image.Rectangle {
 }
 
 func (c *Compositor) fromX(r image.Rectangle) (image.Rectangle, output.Scale) {
-	if c.xwaylandClients == nil {
+	o := c.xOutput(r.Min, (*output.Output).XRect)
+	if o == nil {
 		return r, output.Unit
 	}
-	for _, o := range c.outputs {
-		if !r.Min.In(o.XRect()) {
-			continue
-		}
-		k := o.Scale()
-		at := o.Position().Add(k.LogicalPoint(r.Min.Sub(o.XPosition())))
-		return image.Rectangle{Min: at, Max: at.Add(k.LogicalPoint(r.Size()))}, k
-	}
-	return r, output.Unit
+	k := o.Scale()
+	at := o.Position().Add(k.LogicalPoint(r.Min.Sub(o.XPosition())))
+	return image.Rectangle{Min: at, Max: at.Add(k.LogicalPoint(r.Size()))}, k
 }
 
 func (c *Compositor) unmanagedOrigin(w *xwayland.Window) origin {
