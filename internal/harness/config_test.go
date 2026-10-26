@@ -147,6 +147,33 @@ func layout(b *headless.Backend, c *compositor.Compositor) []placed {
 	return out
 }
 
+func TestAFallbackOutputRuleCoversTheOutputsNoRuleNames(t *testing.T) {
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Outputs = compositor.OutputRules{
+			Named:    []compositor.OutputRule{{Name: "HEADLESS-1", Scale: 2 * output.Unit}},
+			Fallback: compositor.OutputRule{Mode: compositor.ExactMode{Size: medium.Size}},
+		}
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		for range 2 {
+			if _, err := b.AddOutput(big, medium); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	want := []placed{
+		{"HEADLESS-1", image.Point{}, 2 * output.Unit, big.Size, true, true},
+		{"HEADLESS-2", image.Pt(160, 0), output.Unit, medium.Size, true, true},
+	}
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		if got := layout(b, c); !slices.Equal(got, want) {
+			t.Errorf("outputs\n got %+v\nwant %+v", got, want)
+		}
+		return nil
+	})
+}
+
 func TestOutputRules(t *testing.T) {
 	at := image.Pt(1000, 50)
 	wanted := compositor.ExactMode{Size: image.Pt(240, 150)}
@@ -155,11 +182,11 @@ func TestOutputRules(t *testing.T) {
 	var cfg compositor.Config
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report
-		c.Outputs = []compositor.OutputRule{
+		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{
 			{Name: "HEADLESS-1", Mode: wanted, Scale: 2 * output.Unit, Position: &at},
 			{Description: "Headless output HEADLESS-2", Disabled: true},
 			{Name: "HEADLESS-4", Mode: missing},
-		}
+		}}
 		cfg = *c
 	})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -192,7 +219,7 @@ func TestOutputRules(t *testing.T) {
 		t.Fatalf("reports %v", errs)
 	}
 
-	cfg.Outputs = []compositor.OutputRule{{Name: "HEADLESS-3", Disabled: true}}
+	cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "HEADLESS-3", Disabled: true}}}
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		if err := c.Reconfigure(cfg); err != nil {
 			return err
@@ -239,7 +266,7 @@ func TestRepeatingBindsWithRepeatOff(t *testing.T) {
 
 func TestClosingTheLidDisablesTheInternalPanel(t *testing.T) {
 	h := StartWith(t, func(c *compositor.Config) {
-		c.Outputs = []compositor.OutputRule{{Name: "eDP-1", Scale: 2 * output.Unit}}
+		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "eDP-1", Scale: 2 * output.Unit}}}
 	})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		_, err := b.AddNamedOutput("eDP-1", small)
@@ -336,14 +363,14 @@ func TestAReenabledOutputComesBackPoweredOn(t *testing.T) {
 	}
 	h.Eventually("the output powered off", lit(false))
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
-		cfg.Outputs = []compositor.OutputRule{{Name: "HEADLESS-1", Disabled: true}}
+		cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "HEADLESS-1", Disabled: true}}}
 		if err := c.Reconfigure(cfg); err != nil {
 			return err
 		}
 		if s := b.Outputs()[0].State(); s.Power != backend.Disabled {
 			return fmt.Errorf("a disabled output is in power state %d", s.Power)
 		}
-		cfg.Outputs = nil
+		cfg.Outputs = compositor.OutputRules{}
 		return c.Reconfigure(cfg)
 	})
 	h.Eventually("the re-enabled output lit", lit(true))

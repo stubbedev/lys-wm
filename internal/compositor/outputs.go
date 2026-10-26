@@ -24,6 +24,18 @@ type OutputRule struct {
 
 const refreshToleranceMHz = 1000
 
+type OutputRules struct {
+	Named    []OutputRule
+	Fallback OutputRule
+}
+
+func (rs OutputRules) For(b backend.Output) OutputRule {
+	if i := slices.IndexFunc(rs.Named, func(r OutputRule) bool { return r.matches(b) }); i >= 0 {
+		return rs.Named[i]
+	}
+	return rs.Fallback
+}
+
 func (r OutputRule) matches(b backend.Output) bool {
 	if r.Description != "" {
 		return strings.HasPrefix(b.Description(), r.Description)
@@ -46,10 +58,7 @@ func (c *Compositor) configuredRule(b backend.Output) OutputRule {
 	if rule, ok := c.outputOverrides[b.Name()]; ok {
 		return rule
 	}
-	if i := slices.IndexFunc(c.outputRules, func(r OutputRule) bool { return r.matches(b) }); i >= 0 {
-		return c.outputRules[i]
-	}
-	return OutputRule{}
+	return c.outputRules.For(b)
 }
 
 func (c *Compositor) outputRule(b backend.Output) OutputRule {

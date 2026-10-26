@@ -59,7 +59,7 @@ type Config struct {
 	Font     *gtext.Typeface
 	Icons    *icontheme.Theme
 	Rules    []wm.Rule
-	Outputs  []OutputRule
+	Outputs  OutputRules
 	Reload   func() error
 	Exit     func() error
 	SwitchVT func(vt uint32) error
@@ -137,7 +137,7 @@ type Compositor struct {
 	repeat          repeat
 	report          func(error)
 	seatConfig      seat.Config
-	outputRules     []OutputRule
+	outputRules     OutputRules
 	disabled        []backend.Output
 	reload          func() error
 	exit            func() error

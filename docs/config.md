@@ -21,11 +21,13 @@ Every section is optional. An empty file gives the defaults.
 
 ## outputs
 
-A list of rules. Each output takes the first rule that matches it.
+A list of rules. Each output takes the first rule that matches it, or the
+rule with `match: "*"` when none does; without one, it runs at its preferred
+mode and scale 1. Only one rule can use `"*"`.
 
 | Key | Value |
 | --- | --- |
-| `match` | A connector name (`DP-1`), or `desc:` and the start of the output's description: its EDID make, model and serial, as in `desc:Samsung Electric Company LC32G5xT` |
+| `match` | A connector name (`DP-1`), `desc:` and the start of the output's description: its EDID make, model and serial, as in `desc:Samsung Electric Company LC32G5xT`, or `"*"` for every output no other rule names |
 | `mode` | `preferred` (the default), `highres` (the largest mode, then the fastest), `<width>x<height>`, or `<width>x<height>@<hz>`. Without a rate, the fastest mode of that size; with one, the closest within 1 Hz |
 | `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |

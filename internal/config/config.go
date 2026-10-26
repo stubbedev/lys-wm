@@ -239,7 +239,7 @@ type Config struct {
 	RepeatRate  int32
 	RepeatDelay int32
 	Input       session.InputConfig
-	Outputs     []compositor.OutputRule
+	Outputs     compositor.OutputRules
 	Decor       compositor.Decor
 	Font        string
 	IconTheme   string
@@ -385,12 +385,15 @@ func (p *parser) mode(a *At[string], key string) compositor.ModePolicy {
 	return compositor.ExactMode{Size: dims, RefreshMHz: int32(math.Round(hz * 1000))}
 }
 
+const outputFallback = "*"
+
 func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 	key := fmt.Sprintf("outputs[%d]", i)
 	rule := compositor.OutputRule{Disabled: r.Disabled}
 	switch desc, isDesc := strings.CutPrefix(r.Match.V, "desc:"); {
 	case r.Match.V == "":
-		p.fail(r.Match.Line, key+".match", "needs a connector name or desc:<description>")
+		p.fail(r.Match.Line, key+".match", "needs a connector name, desc:<description> or %q", outputFallback)
+	case r.Match.V == outputFallback:
 	case isDesc:
 		rule.Description = desc
 	default:
@@ -628,8 +631,17 @@ func Parse(file string, data []byte) (Config, error) {
 	}
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
+	fallback := false
 	for i, o := range raw.Outputs {
-		cfg.Outputs = append(cfg.Outputs, p.output(i, o.V))
+		rule := p.output(i, o.V)
+		if o.V.Match.V != outputFallback {
+			cfg.Outputs.Named = append(cfg.Outputs.Named, rule)
+			continue
+		}
+		if fallback {
+			p.fail(o.V.Match.Line, fmt.Sprintf("outputs[%d].match", i), "a second %q rule; only one rule can cover the outputs no other rule names", outputFallback)
+		}
+		fallback, cfg.Outputs.Fallback = true, rule
 	}
 	for i, b := range raw.Binds {
 		cfg.Binds = append(cfg.Binds, p.bind("", i, b, raw.Submaps))
