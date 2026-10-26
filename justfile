@@ -38,8 +38,8 @@ hardware min_fps="57":
     go build -o "$dir/lys-wm" ./cmd/lys-wm
     printf 'xwayland:\n  enabled: false\n' > "$dir/config.yaml"
     XDG_RUNTIME_DIR="$dir/run" WAYLAND_DISPLAY= "$dir/lys-wm" -backend headless -renderer gles -config "$dir/config.yaml" 2> "$dir/lys-wm.log" &
-    lys-wm=$!
-    trap 'kill "$lys-wm" 2>/dev/null || true; wait "$lys-wm" 2>/dev/null || true; rm -rf "$dir"' EXIT
+    compositor=$!
+    trap 'kill "$compositor" 2>/dev/null || true; wait "$compositor" 2>/dev/null || true; rm -rf "$dir"' EXIT
     for _ in $(seq 50); do
         socket=$(find "$dir/run" -maxdepth 1 -name 'wayland-*' ! -name '*.lock' -printf '%f\n' | head -1)
         [[ -n "$socket" ]] && break
@@ -62,7 +62,8 @@ hardware min_fps="57":
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and
-# NVIDIA's device nodes, and the host's GPU drivers: no DRM card nodes, no
+# NVIDIA's device nodes, and the host's GPU drivers and EGL external platforms
+# (NVIDIA's GBM and Wayland support): no DRM card nodes, no
 # host runtime dir, no session bus and no display sockets, so nothing it runs
 # reaches the desktop session. The container user has a passwd entry, which
 # Xwayland's local-user access check needs. `just docker hardware` renders on
@@ -85,6 +86,9 @@ docker recipe="gates" memory="10g":
     done
     if [[ -e /run/opengl-driver ]]; then
         gpu+=(-v /run/opengl-driver:/run/opengl-driver:ro)
+    fi
+    if [[ -d /etc/egl/egl_external_platform.d ]]; then
+        gpu+=(-v "$(readlink -f /etc/egl/egl_external_platform.d):/etc/egl/egl_external_platform.d:ro")
     fi
     docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${gpu[@]}" \
         --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 --shm-size 1g \
