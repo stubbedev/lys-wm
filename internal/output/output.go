@@ -60,6 +60,14 @@ func (s Scale) ToLogical(px int) int {
 	return floorDiv(2*px*int(Unit)+int(s), 2*int(s))
 }
 
+func (s Scale) DeviceAt(logical, px int, of Scale) int {
+	return floorDiv(2*(logical*int(of)+px*int(Unit))*int(s)+int(of)*int(Unit), 2*int(of)*int(Unit))
+}
+
+func (s Scale) DevicePointAt(logical, px image.Point, of Scale) image.Point {
+	return image.Pt(s.DeviceAt(logical.X, px.X, of), s.DeviceAt(logical.Y, px.Y, of))
+}
+
 func (s Scale) DevicePoint(p image.Point) image.Point {
 	return image.Pt(s.ToDevice(p.X), s.ToDevice(p.Y))
 }

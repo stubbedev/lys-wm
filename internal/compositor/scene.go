@@ -210,8 +210,7 @@ func (c *Compositor) drawTree(pass *frame, o *output.Output, s *surface.Surface,
 		if tex == nil {
 			continue
 		}
-		logical := image.Rectangle{Min: org.at, Max: org.at.Add(org.size(s.Size()))}.Sub(o.Position())
-		pass.drawSurface(s, tex, s.BufferSource(), o.Scale().Rect(logical), s.Transform().Invert(), c.alpha.Alpha(s))
+		pass.drawSurface(s, tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s))
 		shown = append(shown, s)
 	}
 	return shown

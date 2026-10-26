@@ -24,7 +24,7 @@ func (xToplevel) Popups() []*shell.Popup {
 }
 
 func (t xToplevel) Geometry() image.Rectangle {
-	r, _ := t.c.fromX(t.Rect())
+	r := t.c.fromX(t.Rect())
 	return image.Rectangle{Max: r.Size()}
 }
 
@@ -85,11 +85,12 @@ func (c *Compositor) ScaleXwayland(clients func(*server.Client) bool) error {
 	return errors.Join(c.layout.Physical(clients), c.reconcile())
 }
 
-func (c *Compositor) xScale(at image.Point) output.Scale {
-	if o := c.xOutput(at, (*output.Output).Logical); o != nil {
-		return o.Scale()
+func (c *Compositor) xOrigin(at image.Point) origin {
+	o := c.xOutput(at, (*output.Output).XRect)
+	if o == nil {
+		return flat(at)
 	}
-	return output.Unit
+	return origin{base: o.Position(), px: at.Sub(o.XPosition()), k: o.Scale()}
 }
 
 func (c *Compositor) xOutput(p image.Point, area func(*output.Output) image.Rectangle) *output.Output {
@@ -118,19 +119,18 @@ func (c *Compositor) toX(r image.Rectangle) image.Rectangle {
 	return image.Rectangle{Min: at, Max: at.Add(k.DevicePoint(r.Size()))}
 }
 
-func (c *Compositor) fromX(r image.Rectangle) (image.Rectangle, output.Scale) {
+func (c *Compositor) fromX(r image.Rectangle) image.Rectangle {
 	o := c.xOutput(r.Min, (*output.Output).XRect)
 	if o == nil {
-		return r, output.Unit
+		return r
 	}
 	k := o.Scale()
 	at := o.Position().Add(k.LogicalPoint(r.Min.Sub(o.XPosition())))
-	return image.Rectangle{Min: at, Max: at.Add(k.LogicalPoint(r.Size()))}, k
+	return image.Rectangle{Min: at, Max: at.Add(k.LogicalPoint(r.Size()))}
 }
 
 func (c *Compositor) unmanagedOrigin(w *xwayland.Window) origin {
-	r, k := c.fromX(w.Rect())
-	return origin{at: r.Min, k: k}
+	return c.xOrigin(w.Rect().Min)
 }
 
 func (t xToplevel) close() error {
@@ -193,7 +193,7 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 		if !c.wm.Floats(win.id) {
 			return nil
 		}
-		rect, _ := c.fromX(r.Rect)
+		rect := c.fromX(r.Rect)
 		return c.update(c.wm.SetFloatingRect(win.id, rect.Inset(-c.decor.BorderWidth)))
 	}
 	return nil
@@ -201,7 +201,7 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 
 func (c *Compositor) drawUnmanaged(pass *frame, o *output.Output, shown []*surface.Surface) []*surface.Surface {
 	for _, w := range c.unmanaged {
-		if r, _ := c.fromX(w.Rect()); r.Overlaps(o.Logical()) {
+		if c.fromX(w.Rect()).Overlaps(o.Logical()) {
 			shown = c.drawTree(pass, o, w.Surface(), c.unmanagedOrigin(w), shown)
 		}
 	}

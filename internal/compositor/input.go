@@ -30,31 +30,36 @@ func (p point) sub(o image.Point) point {
 }
 
 type origin struct {
-	at image.Point
-	k  output.Scale
+	base image.Point
+	px   image.Point
+	k    output.Scale
 }
 
 func flat(at image.Point) origin {
-	return origin{at: at, k: output.Unit}
-}
-
-func (r origin) size(surface image.Point) image.Point {
-	return r.k.LogicalPoint(surface)
+	return origin{base: at, k: output.Unit}
 }
 
 func (r origin) child(offset image.Point) origin {
-	return origin{at: r.at.Add(r.k.LogicalPoint(offset)), k: r.k}
+	return origin{base: r.base, px: r.px.Add(offset), k: r.k}
+}
+
+func (r origin) at() point {
+	return r.global(point{})
 }
 
 func (r origin) local(p point) point {
-	l := p.sub(r.at)
-	f := float64(r.k) / float64(output.Unit)
-	return point{l.X * f, l.Y * f}
+	f := r.k.Float()
+	return point{(p.X-float64(r.base.X))*f - float64(r.px.X), (p.Y-float64(r.base.Y))*f - float64(r.px.Y)}
 }
 
 func (r origin) global(l point) point {
-	f := float64(r.k) / float64(output.Unit)
-	return point{float64(r.at.X) + l.X/f, float64(r.at.Y) + l.Y/f}
+	f := r.k.Float()
+	return point{float64(r.base.X) + (float64(r.px.X)+l.X)/f, float64(r.base.Y) + (float64(r.px.Y)+l.Y)/f}
+}
+
+func (r origin) device(o *output.Output, surface image.Point) image.Rectangle {
+	base, s := r.base.Sub(o.Position()), o.Scale()
+	return image.Rectangle{Min: s.DevicePointAt(base, r.px, r.k), Max: s.DevicePointAt(base, r.px.Add(surface), r.k)}
 }
 
 func wlCaps(c backend.Capability) sw.WlSeatCapability {

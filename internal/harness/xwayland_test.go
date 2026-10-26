@@ -501,6 +501,53 @@ func TestFixedSizeXWindowsKeepTheirSizeOnFractionalScales(t *testing.T) {
 	})
 }
 
+func TestXWindowsLandPixelForPixelAtOddLogicalPositions(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return c.SetOutputScale(b.Outputs()[0], 180)
+	})
+	xc := xDial(t, h)
+	xc.intern("WM_NORMAL_HINTS")
+	h.Eventually("Xwayland's root in physical pixels", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.geometry(xc.root) == image.Rect(0, 0, 240, 150)
+	})
+	hints := make([]uint32, 18)
+	hints[0], hints[5], hints[6], hints[7], hints[8] = 1<<4|1<<5, 40, 40, 40, 40
+	var raw []byte
+	for _, v := range hints {
+		raw = binary.LittleEndian.AppendUint32(raw, v)
+	}
+	win := xc.window(image.Rect(0, 0, 40, 40), 0xff0000, false, map[string][]byte{
+		"WM_CLASS":        []byte("odd\x00XTest\x00"),
+		"WM_NORMAL_HINTS": raw,
+	})
+	var at image.Rectangle
+	h.Eventually("the window floating away from the origin", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		at = xc.geometry(win)
+		return len(ws) == 1 && ws[0].Floating && at.Min != (image.Point{})
+	})
+	gc, err := xproto.NewGcontextId(xc.x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	column := []xproto.Rectangle{{X: 20, Y: 0, Width: 1, Height: 40}}
+	for _, ck := range []interface{ Check() error }{
+		xproto.CreateGCChecked(xc.x, gc, xproto.Drawable(win), xproto.GcForeground, []uint32{0x0000ff}),
+		xproto.PolyFillRectangleChecked(xc.x, xproto.Drawable(win), gc, column),
+	} {
+		if err := ck.Check(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	red, blue := [3]byte{0xff, 0, 0}, [3]byte{0, 0, 0xff}
+	h.Eventually("the column and the edges unblended at the X position", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		snap, y := primary(b.Outputs()[0]), at.Min.Y+20
+		return pixel(snap, at.Min.X, y) == red && pixel(snap, at.Min.X+19, y) == red && pixel(snap, at.Min.X+20, y) == blue &&
+			pixel(snap, at.Min.X+21, y) == red && pixel(snap, at.Max.X-1, y) == red && pixel(snap, at.Max.X, y) != red
+	})
+}
+
 func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)

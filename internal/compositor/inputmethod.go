@@ -46,7 +46,7 @@ func (c *Compositor) inputPopups() []placedInputPopup {
 		if !ok || p.Surface.Buffer() == nil {
 			continue
 		}
-		cursor := image.Rectangle{Min: org.child(p.Cursor.Min).at, Max: org.child(p.Cursor.Max).at}
+		cursor := image.Rectangle{Min: org.child(p.Cursor.Min).at().pixel(), Max: org.child(p.Cursor.Max).at().pixel()}
 		below := image.Pt(cursor.Min.X, cursor.Max.Y)
 		at := image.Rectangle{Min: below, Max: below.Add(p.Surface.Size())}
 		if out := c.outputAt(point{float64(cursor.Min.X), float64(cursor.Min.Y)}); out != nil {

@@ -41,6 +41,23 @@ func TestScaleConversions(t *testing.T) {
 	}
 }
 
+func TestDeviceAtPlacesPixelsOfAnotherScale(t *testing.T) {
+	rng := rand.New(rand.NewPCG(5, 6))
+	for range 1000 {
+		s, logical := Scale(120+rng.IntN(240)), rng.IntN(1000)-500
+		if got := s.DeviceAt(logical, 0, Unit); got != s.ToDevice(logical) {
+			t.Fatalf("scale %d: logical %d lands on %d, want %d as ToDevice", s, logical, got, s.ToDevice(logical))
+		}
+		px := rng.IntN(2000) - 1000
+		if got := s.DeviceAt(0, px, s); got != px {
+			t.Fatalf("scale %d: %d pixels of the same scale land on %d", s, px, got)
+		}
+	}
+	if got := Scale(120).DevicePointAt(image.Pt(10, 4), image.Pt(3, 6), 180); got != image.Pt(12, 8) {
+		t.Fatalf("3,6 pixels at 1.5 past 10,4 land on %v at scale 1, want 12,8", got)
+	}
+}
+
 func TestAdjacentRectsStayAdjacent(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3, 4))
 	for range 1000 {
