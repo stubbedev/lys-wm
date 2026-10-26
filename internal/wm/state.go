@@ -11,10 +11,11 @@ import (
 type WorkspaceID int
 
 type Output struct {
-	Name   string
-	Full   image.Rectangle
-	Area   image.Rectangle
-	Active WorkspaceID
+	Name     string
+	Full     image.Rectangle
+	Area     image.Rectangle
+	Active   WorkspaceID
+	previous WorkspaceID
 }
 
 type Floating struct {
@@ -225,6 +226,7 @@ func (s *State) activate(id WorkspaceID) {
 	o.Active = id
 	s.focused = o.Name
 	if prev != id {
+		o.previous = prev
 		s.dropIfIdle(prev)
 	}
 }
@@ -444,6 +446,17 @@ func (s State) relative(offset int) (WorkspaceID, error) {
 	at := slices.IndexFunc(s.workspaces, func(w Workspace) bool { return w.ID == o.Active })
 	n := len(s.workspaces)
 	return s.workspaces[((at+offset)%n+n)%n].ID, nil
+}
+
+func (s State) previous() (WorkspaceID, error) {
+	o := s.output(s.focused)
+	if o == nil {
+		return 0, fmt.Errorf("go back to the previous workspace: %w", ErrUnknownOutput)
+	}
+	if o.previous == 0 {
+		return o.Active, nil
+	}
+	return o.previous, nil
 }
 
 func (s State) AssignWorkspace(id WorkspaceID, output string) (State, error) {

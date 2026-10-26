@@ -58,6 +58,8 @@ type WorkspaceTarget interface {
 
 type RelativeWorkspace int
 
+type PreviousWorkspace struct{}
+
 func (id WorkspaceID) String() string {
 	return strconv.Itoa(int(id))
 }
@@ -72,6 +74,12 @@ func (r RelativeWorkspace) String() string {
 
 func (r RelativeWorkspace) resolve(s State) (WorkspaceID, error) {
 	return s.relative(int(r))
+}
+
+func (PreviousWorkspace) String() string { return "previous" }
+
+func (PreviousWorkspace) resolve(s State) (WorkspaceID, error) {
+	return s.previous()
 }
 
 type (
@@ -308,6 +316,9 @@ func parseDirection(s string) (Direction, bool) {
 }
 
 func parseWorkspace(s string) (WorkspaceTarget, bool) {
+	if s == (PreviousWorkspace{}).String() {
+		return PreviousWorkspace{}, true
+	}
 	if rest, ok := strings.CutPrefix(s, "e"); ok && len(rest) > 1 && (rest[0] == '+' || rest[0] == '-') {
 		n, err := strconv.Atoi(rest)
 		return RelativeWorkspace(n), err == nil && n != 0
@@ -378,12 +389,12 @@ var Actions = []ActionSpec{
 		parse:   directional(func(d Direction) Action { return MoveAction{Dir: d} }),
 	},
 	{
-		Name: "workspace", Args: "<n|e+n|e-n>",
-		Summary: "Show workspace n, or the n-th open workspace after or before the current one.",
+		Name: "workspace", Args: "<n|e+n|e-n|previous>",
+		Summary: "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it.",
 		parse:   workspaced(func(w WorkspaceTarget) Action { return WorkspaceAction{Target: w} }),
 	},
 	{
-		Name: "movetoworkspace", Args: "<n|e+n|e-n>",
+		Name: "movetoworkspace", Args: "<n|e+n|e-n|previous>",
 		Summary: "Move the focused window to a workspace without following it.",
 		parse:   workspaced(func(w WorkspaceTarget) Action { return MoveToWorkspaceAction{Target: w} }),
 	},

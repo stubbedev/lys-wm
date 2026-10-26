@@ -248,6 +248,23 @@ func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
 	}
 }
 
+func TestWorkspacePreviousThroughIPC(t *testing.T) {
+	h := Start(t, desktop)
+	lines := h.watch()
+	for _, step := range []struct {
+		action string
+		shows  wm.WorkspaceID
+	}{{"workspace 3", 3}, {"workspace previous", 1}, {"workspace previous", 3}} {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: step.action}); err != nil {
+			t.Fatalf("%s: %v", step.action, err)
+		}
+		expectEvent(t, lines, fmt.Sprintf(`{"event":"workspace","output":"HEADLESS-1","workspace":%d}`, step.shows))
+		if o := query[[]ipc.Output](h, ipc.KindOutputs); o[0].Workspace != step.shows {
+			t.Fatalf("after %s the output shows workspace %d, want %d", step.action, o[0].Workspace, step.shows)
+		}
+	}
+}
+
 func (h *Harness) expectActive(c *Client) {
 	h.t.Helper()
 	deadline := time.Now().Add(clientTimeout)

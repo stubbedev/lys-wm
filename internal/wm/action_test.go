@@ -20,6 +20,8 @@ var everyAction = []Action{
 	WorkspaceAction{Target: WorkspaceID(3)},
 	WorkspaceAction{Target: RelativeWorkspace(1)},
 	WorkspaceAction{Target: RelativeWorkspace(-2)},
+	WorkspaceAction{Target: PreviousWorkspace{}},
+	MoveToWorkspaceAction{Target: PreviousWorkspace{}},
 	MoveToWorkspaceAction{Target: WorkspaceID(10)},
 	MoveToWorkspaceAction{Target: RelativeWorkspace(-1)},
 	KillAction{},
@@ -69,8 +71,9 @@ func TestBadActionsFailPrecisely(t *testing.T) {
 		"teleport":                `unknown action "teleport"`,
 		"focus":                   "focus <left|right|up|down>: takes 1 argument(s), got 0",
 		"focus sideways":          `focus <left|right|up|down>: unknown direction "sideways"`,
-		"workspace 0":             `workspace <n|e+n|e-n>: unknown workspace "0"`,
-		"workspace e+0":           `workspace <n|e+n|e-n>: unknown workspace "e+0"`,
+		"workspace 0":             `workspace <n|e+n|e-n|previous>: unknown workspace "0"`,
+		"workspace e+0":           `workspace <n|e+n|e-n|previous>: unknown workspace "e+0"`,
+		"workspace back":          `workspace <n|e+n|e-n|previous>: unknown workspace "back"`,
 		"kill now":                "kill: takes 0 argument(s), got 1",
 		"focuswindow":             "focuswindow <id>: takes 1 argument(s), got 0",
 		"focuswindow 0":           `focuswindow <id>: window ID "0" is not a positive number`,
@@ -188,6 +191,44 @@ func TestFocusAndCloseAWindowByID(t *testing.T) {
 		if _, _, err := Dispatch(s, a, Settings{}); !errors.Is(err, ErrUnknownWindow) || !strings.Contains(err.Error(), "window 9") {
 			t.Errorf("%s: %v", a, err)
 		}
+	}
+}
+
+func TestWorkspacePreviousGoesBackOnTheFocusedOutput(t *testing.T) {
+	s := ok(t)(State{}.AddOutput("DP-1", left, left))
+	s = ok(t)(s.AddOutput("DP-2", right, right))
+	run := func(a Action) {
+		t.Helper()
+		next, _, err := Dispatch(s, a, Settings{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s = next
+	}
+	back := WorkspaceAction{Target: PreviousWorkspace{}}
+	run(back)
+	if got := active(s); !slices.Equal(got, []WorkspaceID{1, 2}) {
+		t.Fatalf("with no previous workspace, previous showed %v", got)
+	}
+	s = ok(t)(s.MapWindow(1, Autotile{}))
+	run(WorkspaceAction{Target: WorkspaceID(3)})
+	run(back)
+	if got := active(s); !slices.Equal(got, []WorkspaceID{1, 2}) {
+		t.Fatalf("previous after workspace 3 showed %v", got)
+	}
+	run(back)
+	if got := active(s); !slices.Equal(got, []WorkspaceID{3, 2}) {
+		t.Fatalf("previous twice did not toggle back to 3: %v", got)
+	}
+	run(back)
+	run(MoveToWorkspaceAction{Target: PreviousWorkspace{}})
+	if w, _ := s.WorkspaceOf(1); w != 3 || !slices.Equal(active(s), []WorkspaceID{1, 2}) {
+		t.Fatalf("movetoworkspace previous put window 1 on %d, showing %v", w, active(s))
+	}
+	s = ok(t)(s.FocusOutput("DP-2"))
+	run(back)
+	if got := active(s); !slices.Equal(got, []WorkspaceID{1, 2}) || s.FocusedOutput() != "DP-2" {
+		t.Fatalf("previous on an output that showed nothing else showed %v on %s", got, s.FocusedOutput())
 	}
 }
 

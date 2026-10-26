@@ -6,8 +6,8 @@ Every keybind and `lys-wmctl dispatch` takes one of these. This file is generate
 | --- | --- | --- |
 | `focus` | `<left\|right\|up\|down>` | Move focus to the neighbouring window, or to the next output at the edge. |
 | `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge nothing happens. |
-| `workspace` | `<n\|e+n\|e-n>` | Show workspace n, or the n-th open workspace after or before the current one. |
-| `movetoworkspace` | `<n\|e+n\|e-n>` | Move the focused window to a workspace without following it. |
+| `workspace` | `<n\|e+n\|e-n\|previous>` | Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it. |
+| `movetoworkspace` | `<n\|e+n\|e-n\|previous>` | Move the focused window to a workspace without following it. |
 | `kill` |  | Ask the focused window to close. |
 | `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped. |
 | `closewindow` | `<id>` | Ask the window with this IPC ID to close. |
