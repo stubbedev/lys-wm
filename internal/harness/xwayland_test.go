@@ -501,6 +501,33 @@ func TestFixedSizeXWindowsKeepTheirSizeOnFractionalScales(t *testing.T) {
 	})
 }
 
+func TestFloatingXWindowsMapAtLeastAtTheirMinimumSize(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return c.SetOutputScale(b.Outputs()[0], 180)
+	})
+	xc := xDial(t, h)
+	xc.intern("WM_NORMAL_HINTS")
+	h.Eventually("Xwayland's root in physical pixels", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.geometry(xc.root) == image.Rect(0, 0, 240, 150)
+	})
+	hints := make([]uint32, 18)
+	hints[0], hints[5], hints[6] = 1<<4, 60, 45
+	var raw []byte
+	for _, v := range hints {
+		raw = binary.LittleEndian.AppendUint32(raw, v)
+	}
+	win := xc.window(image.Rect(0, 0, 1, 1), 0xff0000, false, map[string][]byte{
+		"WM_CLASS":            []byte("tour\x00XTest\x00"),
+		"_NET_WM_WINDOW_TYPE": xc.atom("_NET_WM_WINDOW_TYPE_DIALOG"),
+		"WM_NORMAL_HINTS":     raw,
+	})
+	h.Eventually("the dialog floating centred at its minimum size", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Floating && ws[0].Rect == ipc.Rect{X: 60, Y: 35, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(90, 53, 150, 98)
+	})
+}
+
 func TestXWindowsLandPixelForPixelAtOddLogicalPositions(t *testing.T) {
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
