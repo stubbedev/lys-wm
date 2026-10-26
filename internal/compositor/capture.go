@@ -206,7 +206,7 @@ func errOutputGone(o *output.Output) error {
 
 func (c *Compositor) cancelCapture(k *capture) {
 	if k.read != nil {
-		k.read.cancelled = true
+		k.read.cancel()
 	}
 	pending := slices.DeleteFunc(c.captures[k.output], func(x *capture) bool { return x == k })
 	if len(pending) == 0 {

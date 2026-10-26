@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"sync"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -68,8 +69,15 @@ type asyncRead struct {
 	pending   render.PendingRead
 	dst       *shm.Mapping
 	finish    func(error) error
+	mu        sync.Mutex
 	cancelled bool
 	ended     bool
+}
+
+func (r *asyncRead) cancel() {
+	r.mu.Lock()
+	r.cancelled = true
+	r.mu.Unlock()
 }
 
 func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *captureScratch, k *capture, finish func(error) error) error {
@@ -111,6 +119,11 @@ func (r *asyncRead) waited(err error) error {
 	size, dst := r.k.size, r.dst
 	r.dst = nil
 	r.c.offLoop(func() error {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.cancelled {
+			return dst.Close()
+		}
 		err := dst.Write(func(data []byte, stride int) error {
 			row := size.X * 4
 			for y := range size.Y {
@@ -155,7 +168,7 @@ func (c *Compositor) endReads() error {
 	c.offLoopWork.Wait()
 	var errs []error
 	for r := range c.reads {
-		r.cancelled = true
+		r.cancel()
 		errs = append(errs, r.end(nil))
 	}
 	return errors.Join(errs...)
