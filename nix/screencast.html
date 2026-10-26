@@ -5,7 +5,7 @@
 <script>
 const seconds = Number(new URLSearchParams(location.search).get("seconds") ?? 0);
 const minFrames = 30;
-const stallMs = 5000;
+const stallMs = 30000;
 const background = [0x1e, 0x1e, 0x2e];
 const tolerance = 8;
 const surfaces = {m: "monitor", w: "window"};
