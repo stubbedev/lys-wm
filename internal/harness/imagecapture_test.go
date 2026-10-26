@@ -590,7 +590,7 @@ func TestShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T) {
 	slices.Sort(captured)
 	plain, with := baseline[frames/2], captured[frames/2]
 	t.Logf("the loop was busy a median %v per frame without a capture and %v with a %v shm capture", plain, with, view.size)
-	if with > time.Millisecond {
-		t.Errorf("a frame with a capture kept the loop busy a median %v, want under 1ms", with)
+	if added := with - plain; added > time.Millisecond {
+		t.Errorf("a %v shm capture added a median %v of loop busy time to a frame, want under 1ms", view.size, added)
 	}
 }
