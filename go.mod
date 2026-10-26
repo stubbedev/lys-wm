@@ -3,7 +3,7 @@ module github.com/stubbedev/lys-wm
 go 1.27.3
 
 require (
-	github.com/ebitengine/purego v0.11.1
+	github.com/ebitengine/purego v0.11.2
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
 	github.com/stubbedev/lys-ui v0.0.0-20261024131436-b4ed4d0aa4f9
