@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -269,6 +270,31 @@ func TestClientsLeavingABacklogDoNotStopTheCompositor(t *testing.T) {
 	}
 	survives(t, h)
 	h.Eventually("the leaving client's window gone", mappedToplevels(1))
+}
+
+func TestAClientLeavingWithAnOlderWindowFocusedDoesNotStopTheCompositor(t *testing.T) {
+	h := Start(t, small)
+	gone := testclient.Connect(t, h.Socket())
+	for _, name := range []string{"older", "newer"} {
+		w := gone.Window(name, quadrants)
+		gone.DispatchUntil(name+" to map", w.Mapped)
+	}
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "focus left"}); err != nil {
+		t.Fatal(err)
+	}
+	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "older" {
+		t.Fatalf("focus left made %q active", w.Title)
+	}
+	for range 2 {
+		if err := gone.Display.Roundtrip(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := gone.Display.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the leaving client's windows gone", func(_ *headless.Backend, c *compositor.Compositor) bool { return len(c.Toplevels()) == 0 })
+	survives(t, h)
 }
 
 type deaf struct{}

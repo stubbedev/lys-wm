@@ -145,6 +145,7 @@ type wmBase struct {
 	ping       uint32
 	timer      *loop.Timer
 	responsive bool
+	destroyed  bool
 }
 
 func (sh *Shell) bind(c *server.Client, id wire.ObjectID, version uint32) error {
@@ -155,6 +156,7 @@ func (sh *Shell) bind(c *server.Client, id wire.ObjectID, version uint32) error 
 	}
 	b.resource = res
 	server.OnDestroy(res, func() error {
+		b.destroyed = true
 		if b.timer == nil {
 			return nil
 		}
@@ -186,7 +188,7 @@ func (b *wmBase) Pong(_ *sxdg.XdgWmBase, serial uint32) error {
 }
 
 func (b *wmBase) Ping() error {
-	if b.ping != 0 {
+	if b.destroyed || b.ping != 0 {
 		return nil
 	}
 	if b.timer == nil {
