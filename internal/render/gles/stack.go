@@ -54,8 +54,5 @@ func (s *Stack) Close() error {
 	if s.gbmLib != nil {
 		errs = append(errs, s.gbmLib.Close())
 	}
-	if s.eglLib != nil {
-		errs = append(errs, s.eglLib.Close())
-	}
 	return errors.Join(errs...)
 }

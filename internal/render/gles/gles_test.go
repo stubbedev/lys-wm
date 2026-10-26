@@ -230,7 +230,6 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lib.Close()
 	dev, err := lib.Open(fd)
 	if err != nil {
 		t.Fatal(err)
@@ -502,7 +501,6 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lib.Close()
 	dev, err := lib.Open(fd)
 	if err != nil {
 		t.Fatal(err)

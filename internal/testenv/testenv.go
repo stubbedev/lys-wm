@@ -45,11 +45,6 @@ func GPU(t testing.TB) *gpu.Library {
 	if err != nil {
 		missing(t, "%v", err)
 	}
-	t.Cleanup(func() {
-		if err := l.Close(); err != nil {
-			t.Error(err)
-		}
-	})
 	return l
 }
 

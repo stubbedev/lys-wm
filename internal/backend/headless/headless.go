@@ -43,13 +43,12 @@ func New(l *loop.Loop) *Backend {
 }
 
 type gpuRenderer struct {
-	lib     *gpu.Library
 	display *gpu.Display
 	gles    *gles.Renderer
 }
 
 func (g *gpuRenderer) close() error {
-	return errors.Join(g.gles.Close(), g.display.Close(), g.lib.Close())
+	return errors.Join(g.gles.Close(), g.display.Close())
 }
 
 func NewGLES(l *loop.Loop, paths gpu.Paths) (*Backend, error) {
@@ -59,14 +58,14 @@ func NewGLES(l *loop.Loop, paths gpu.Paths) (*Backend, error) {
 	}
 	d, err := lib.Surfaceless()
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("headless: %w", err), lib.Close())
+		return nil, fmt.Errorf("headless: %w", err)
 	}
 	r, err := gles.New(d)
 	if err != nil {
-		return nil, errors.Join(err, d.Close(), lib.Close())
+		return nil, errors.Join(err, d.Close())
 	}
 	b := New(l)
-	b.renderer, b.gpu = r, &gpuRenderer{lib: lib, display: d, gles: r}
+	b.renderer, b.gpu = r, &gpuRenderer{display: d, gles: r}
 	return b, nil
 }
 

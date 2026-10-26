@@ -127,7 +127,7 @@ func Load(paths Paths) (*Library, error) {
 	}
 	glesLib, err := open(paths.GLESv2, GLESv2Env)
 	if err != nil {
-		return nil, errors.Join(err, purego.Dlclose(eglLib))
+		return nil, err
 	}
 	l := &Library{eglLib: eglLib, glesLib: glesLib}
 	e := &l.egl
@@ -143,7 +143,7 @@ func Load(paths Paths) (*Library, error) {
 		{&e.makeCurrent, "eglMakeCurrent"},
 		{&e.getCurrentContext, "eglGetCurrentContext"},
 	}); err != nil {
-		return nil, errors.Join(err, l.Close())
+		return nil, err
 	}
 	for _, x := range []symbol{
 		{&e.getPlatformDisplay, "eglGetPlatformDisplayEXT"},
@@ -161,15 +161,15 @@ func Load(paths Paths) (*Library, error) {
 		{&e.clientWaitSync, "eglClientWaitSyncKHR"},
 	} {
 		if err := l.proc(x); err != nil {
-			return nil, errors.Join(err, l.Close())
+			return nil, err
 		}
 	}
 	if err := l.gl.load(l, paths.GLESv2); err != nil {
-		return nil, errors.Join(err, l.Close())
+		return nil, err
 	}
 	l.clientExts = strings.Fields(e.queryString(0, eglExtensions))
 	if !slices.Contains(l.clientExts, "EGL_EXT_platform_base") {
-		return nil, errors.Join(fmt.Errorf("gpu: %s lacks EGL_EXT_platform_base", paths.EGL), l.Close())
+		return nil, fmt.Errorf("gpu: %s lacks EGL_EXT_platform_base", paths.EGL)
 	}
 	return l, nil
 }
@@ -181,10 +181,6 @@ func (l *Library) proc(s symbol) error {
 	}
 	purego.RegisterFunc(s.fn, p)
 	return nil
-}
-
-func (l *Library) Close() error {
-	return errors.Join(purego.Dlclose(l.glesLib), purego.Dlclose(l.eglLib))
 }
 
 func (l *Library) fail(op string) error {
