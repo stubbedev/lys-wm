@@ -13,7 +13,9 @@ import (
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	chgs "github.com/stubbedev/lys-wm/internal/protocol/client/hyprlandglobalshortcuts"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 func query[T any](h *Harness, kind ipc.Kind) T {
@@ -142,6 +144,41 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	want := []ipc.Workspace{{ID: 1, Output: "HEADLESS-1", Windows: 2, Visible: true, Focused: true}, {ID: 3, Output: "HEADLESS-1", Windows: 1}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("workspaces\n got %+v\nwant %+v", got, want)
+	}
+}
+
+func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
+	dk, err := testenv.XKBLibrary(t).Compile(xkb.Names{Layout: "dk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = dk.Close() })
+	var comp *compositor.Compositor
+	h := StartWith(t, func(cfg *compositor.Config) {
+		next := compositor.DefaultConfig(dk, cfg.Font)
+		next.Report = cfg.Report
+		cfg.Reload = func() error { return comp.Reconfigure(next) }
+	}, small)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		comp = c
+		return nil
+	})
+	if got := query[string](h, ipc.KindSubmap); got != "" {
+		t.Fatalf("a fresh lys-wm is in submap %q", got)
+	}
+	if got := query[ipc.Layout](h, ipc.KindLayout); got.Index != 0 || got.Name == "" {
+		t.Fatalf("a fresh lys-wm has layout %+v", got)
+	}
+	for _, a := range []string{"reload", "submap resize"} {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err != nil {
+			t.Fatalf("%s: %v", a, err)
+		}
+	}
+	if got := query[string](h, ipc.KindSubmap); got != "resize" {
+		t.Fatalf("after submap resize the submap is %q", got)
+	}
+	if got := query[ipc.Layout](h, ipc.KindLayout); got != (ipc.Layout{Name: "Danish"}) {
+		t.Fatalf("after reloading a Danish keymap the layout is %+v", got)
 	}
 }
 

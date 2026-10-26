@@ -170,6 +170,24 @@ func TestQueriesAndDispatch(t *testing.T) {
 	}
 }
 
+func TestSubmapAndLayoutAreQueries(t *testing.T) {
+	r := start(t)
+	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`} {
+		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
+			t.Fatalf("%s before any change: %s, %v; want %s", kind, got, err, want)
+		}
+	}
+	r.do(func(f *fake) {
+		f.snap.Submap = "resize"
+		f.snap.Layout = Layout{Index: 1, Name: "Danish"}
+	})
+	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`} {
+		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
+			t.Fatalf("%s: %s, %v; want %s", kind, got, err, want)
+		}
+	}
+}
+
 func watch(t *testing.T, path string) (<-chan string, func()) {
 	t.Helper()
 	lines := make(chan string, 1024)

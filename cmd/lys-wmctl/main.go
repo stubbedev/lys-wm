@@ -25,6 +25,8 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   workspaces                   print the open workspaces as JSON
   windows                      print the mapped windows as JSON
   activewindow                 print the focused window as JSON, or null
+  submap                       print the bind submap as JSON, "" for the default binds
+  layout                       print the keyboard layout group as JSON
   version                      print the IPC protocol version
   watch                        print events as JSON lines until lys-wm exits
   icon <window> <size>         print a window's icon buffer closest to size pixels
@@ -43,7 +45,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindVersion, ipc.KindWatch}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindVersion, ipc.KindWatch}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {

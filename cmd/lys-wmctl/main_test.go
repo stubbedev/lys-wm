@@ -21,6 +21,8 @@ func TestParseArgs(t *testing.T) {
 		"reload":                     {Request: ipc.KindDispatch, Action: "reload"},
 		"windows":                    {Request: ipc.KindWindows},
 		"activewindow":               {Request: ipc.KindActiveWindow},
+		"submap":                     {Request: ipc.KindSubmap},
+		"layout":                     {Request: ipc.KindLayout},
 		"watch":                      {Request: ipc.KindWatch},
 		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {
@@ -28,7 +30,7 @@ func TestParseArgs(t *testing.T) {
 			t.Errorf("%q: %+v, %v; want %+v", args, got, err, want)
 		}
 	}
-	for _, args := range []string{"", "dispatch", "windows 2", "reload now", "teleport", "icon", "icon 7", "icon 0 64", "icon 7 0", "icon x 64", "icon 7 64 1"} {
+	for _, args := range []string{"", "dispatch", "windows 2", "submap resize", "layout 1", "reload now", "teleport", "icon", "icon 7", "icon 0 64", "icon 7 0", "icon x 64", "icon 7 64 1"} {
 		if _, err := parseArgs(strings.Fields(args)); !errors.Is(err, errUsage) {
 			t.Errorf("%q: %v", args, err)
 		}
@@ -38,7 +40,7 @@ func TestParseArgs(t *testing.T) {
 type handler struct{ dispatched []wm.Action }
 
 func (h *handler) Snapshot() ipc.Snapshot {
-	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}}
+	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize"}
 }
 
 func (h *handler) Dispatch(a wm.Action) error {
@@ -84,6 +86,10 @@ func TestRunAgainstASocket(t *testing.T) {
 	}
 	if !strings.HasPrefix(out.String(), "{\n  \"id\": 3,\n  \"app_id\": \"foot\",") {
 		t.Fatalf("activewindow printed %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"submap"}, getenv, &out); err != nil || out.String() != "\"resize\"\n" {
+		t.Fatalf("submap printed %q, %v", out.String(), err)
 	}
 	out.Reset()
 	if err := run([]string{"--socket", path, "reload"}, func(string) string { return "" }, &out); err != nil || out.Len() != 0 {

@@ -20,7 +20,13 @@ func TestParseRequest(t *testing.T) {
 	if r, err := parseRequest([]byte(`{"request":"icon","window":7,"size":32}`)); err != nil || r.kind != KindIcon || r.icon != (iconRequest{window: 7, size: 32}) {
 		t.Fatalf("icon parsed to %+v, %v", r, err)
 	}
+	for _, kind := range []Kind{KindSubmap, KindLayout} {
+		if r, err := parseRequest([]byte(`{"request":"` + string(kind) + `"}`)); err != nil || r.kind != kind {
+			t.Fatalf("%s parsed to %+v, %v", kind, r, err)
+		}
+	}
 	for text, want := range map[string]string{
+		`{"request":"submap","action":"resize"}`:   "only dispatch takes an action",
 		`{"request":"teleport"}`:                   `unknown request "teleport" (known: version, outputs,`,
 		`{"request":"windows","action":"kill"}`:    "only dispatch takes an action",
 		`{"request":"dispatch"}`:                   "only dispatch takes an action",

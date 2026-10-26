@@ -10,7 +10,7 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 ```sh
 lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
-lys-wmctl outputs | workspaces | windows | activewindow | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
 ```
@@ -28,7 +28,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `dispatch` (which needs `action`), `icon` (which needs
+`activewindow`, `submap`, `layout`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`) and `watch`. Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
@@ -75,6 +75,15 @@ it set none and the app ID's own icon applies. `name` is an icon theme name
 and `sizes` lists the edges, in pixels, of the square buffers it gave; either
 may be missing. `serial` changes whenever the icon does, so a client can cache
 icons by it. X11 windows have no icon here yet.
+
+`submap`: the active bind submap's name, `""` for the default binds.
+
+`layout`: the active keyboard layout group, as
+`{"index":0,"name":"English (US)"}`. `index` counts the configured layouts
+from 0; `name` is the layout's description from the keymap.
+
+These two answer at any time what the `submap` and `layout` events report
+when they change, so a client that starts later knows them at once.
 
 `icon`: the window's icon buffer whose edge is the smallest at or above
 `size` pixels, or else the largest, as
