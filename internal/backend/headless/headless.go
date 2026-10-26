@@ -553,7 +553,7 @@ func (p *Pointer) Move(dx, dy float64) error {
 	return p.backend.emit(p, backend.PointerMotion{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
 }
 
-func (p *Pointer) MoveTo(o *Output, x, y float64) error {
+func (p *Pointer) MoveTo(o backend.Output, x, y float64) error {
 	return p.backend.emit(p, backend.PointerMotionAbsolute{Time: now(), Output: o, X: x, Y: y})
 }
 
@@ -601,7 +601,7 @@ func (b *Backend) Touch() *Touch {
 	return b.touch
 }
 
-func (t *Touch) Down(id int32, o *Output, x, y float64) error {
+func (t *Touch) Down(id int32, o backend.Output, x, y float64) error {
 	return t.backend.emit(t, backend.TouchDown{Time: now(), ID: id, Output: o, X: x, Y: y})
 }
 

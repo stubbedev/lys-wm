@@ -124,14 +124,11 @@ func (v *virtualPointer) MotionAbsolute(_ *svp.ZwlrVirtualPointerV1, ms, x, y, x
 	if xExtent == 0 || yExtent == 0 {
 		return nil
 	}
-	fx, fy := float64(x)/float64(xExtent), float64(y)/float64(yExtent)
+	var o backend.Output
 	if v.output != nil {
-		return v.input(backend.PointerMotionAbsolute{Time: millis(ms), Output: v.output.Backend(), X: fx, Y: fy})
+		o = v.output.Backend()
 	}
-	if err := v.c.idle.Activity(); err != nil {
-		return err
-	}
-	return v.c.moveCursor(millis(ms), v.c.clampToOutputs(denormalize(v.c.layoutBounds(), fx, fy)))
+	return v.input(backend.PointerMotionAbsolute{Time: millis(ms), Output: o, X: float64(x) / float64(xExtent), Y: float64(y) / float64(yExtent)})
 }
 
 func (v *virtualPointer) Button(_ *svp.ZwlrVirtualPointerV1, ms, button uint32, state sw.WlPointerButtonState) error {

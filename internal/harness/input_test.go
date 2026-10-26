@@ -175,6 +175,23 @@ func TestTouchGoesToTheSurfaceUnderThePoint(t *testing.T) {
 	r.expect("up 1", "touch_frame", "cancel")
 }
 
+func TestAbsoluteDevicesWithoutAnOutputSpanTheLayout(t *testing.T) {
+	r := inputOn(t, Start(t, small, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Pointer().MoveTo(nil, 0.125, 0.25), b.Pointer().Frame())
+	})
+	r.expect("motion 40,25", "frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Down(1, nil, 0.25, 0.5), b.Touch().Frame())
+	})
+	r.expect("down 1 win 80,50", "touch_frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Motion(1, 0.375, 0.5), b.Touch().Frame())
+	})
+	r.expect("touch_motion 1 120,50", "touch_frame")
+}
+
 func TestLeavingToTheDesktopEndsThePointerFrame(t *testing.T) {
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())

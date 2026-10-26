@@ -110,12 +110,19 @@ func (c *Compositor) clampToOutputs(p point) point {
 	return best
 }
 
-func (c *Compositor) onOutput(o backend.Output, x, y float64) (point, *output.Output, bool) {
+func (c *Compositor) absoluteArea(o backend.Output) (image.Rectangle, bool) {
+	if o == nil {
+		return c.layoutBounds(), len(c.outputs) > 0
+	}
 	out := c.output(o)
 	if out == nil {
-		return point{}, nil, false
+		return image.Rectangle{}, false
 	}
-	return denormalize(out.Logical(), x, y), out, true
+	return out.Logical(), true
+}
+
+func (c *Compositor) inArea(area image.Rectangle, x, y float64) point {
+	return c.clampToOutputs(denormalize(area, x, y))
 }
 
 func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
@@ -136,11 +143,11 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		}
 		return c.moveCursor(e.Time, c.clampToOutputs(point{X: c.cursor.X + e.DX, Y: c.cursor.Y + e.DY}))
 	case backend.PointerMotionAbsolute:
-		p, _, ok := c.onOutput(e.Output, e.X, e.Y)
+		area, ok := c.absoluteArea(e.Output)
 		if !ok {
 			return nil
 		}
-		return c.moveCursor(e.Time, p)
+		return c.moveCursor(e.Time, c.inArea(area, e.X, e.Y))
 	case backend.PointerButton:
 		if c.pointerDrag() {
 			if e.Pressed {
@@ -198,10 +205,11 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 	case backend.GestureEnd:
 		return c.seat.GestureEnd(e.Time, e.Gesture, e.Cancelled)
 	case backend.TouchDown:
-		p, out, ok := c.onOutput(e.Output, e.X, e.Y)
+		area, ok := c.absoluteArea(e.Output)
 		if !ok {
 			return nil
 		}
+		p := c.inArea(area, e.X, e.Y)
 		s, local, _ := c.surfaceAt(p)
 		if c.outsideGrab(s) {
 			return c.shell.DismissGrab()
@@ -209,14 +217,14 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		if s == nil {
 			return nil
 		}
-		c.touches[e.ID] = touchAt{output: out, at: p}
+		c.touches[e.ID] = touchAt{area: area, at: p}
 		return c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
 	case backend.TouchMotion:
 		t, ok := c.touches[e.ID]
 		if !ok {
 			return nil
 		}
-		t.at = denormalize(t.output.Logical(), e.X, e.Y)
+		t.at = c.inArea(t.area, e.X, e.Y)
 		c.touches[e.ID] = t
 		if c.touchDrag(e.ID) {
 			return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
