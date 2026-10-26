@@ -8,15 +8,20 @@ decisions every change builds on.
 Run before every commit:
 
 ```sh
-nix develop -c just gates
+just docker gates
 nix build -L
 ```
+
+Every test runs in a container (`just docker <recipe>`) or a NixOS VM
+(`nix build .#checks...`), never against the desktop session on the host.
+The container gets KVM, the GPUs' render nodes and the host's drivers, but no
+DRM card node, runtime dir, session bus or display socket.
 
 After every push, watch CI until it is green (`gh run watch`). A red `main`
 is fixed before anything else lands.
 
 The dev shell runs the GPU tests on Mesa's llvmpipe. On a machine with a GPU,
-run `just hardware` after changes to rendering, DRM, dmabuf, capture or frame
+run `just docker hardware` after changes to rendering, DRM, dmabuf, capture or frame
 pacing: it runs the GPU, DRM-without-master and GLES harness tests on the
 host's own EGL driver, then measures es2gears against headless GLES lys-wm in a
 private runtime dir (Xwayland off) and fails below `min_fps` (57 by default,

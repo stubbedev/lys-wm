@@ -60,6 +60,37 @@ hardware min_fps="57":
     echo "pacing: $fps fps on headless GLES lys-wm at 60 Hz"
     awk -v fps="$fps" -v min="{{min_fps}}" 'BEGIN { exit !(fps >= min) }' || { echo "hardware: $fps fps is below {{min_fps}}" >&2; exit 1; }
 
+# Run a recipe in a container that sees only the dev shell's store paths,
+# the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and
+# NVIDIA's device nodes, and the host's GPU drivers: no DRM card nodes, no
+# host runtime dir, no session bus and no display sockets, so nothing it runs
+# reaches the desktop session. The container user has a passwd entry, which
+# Xwayland's local-user access check needs. `just docker hardware` renders on
+# the host's GPU. Memory is capped, as the race suite runs many binaries.
+docker recipe="gates" memory="10g":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    nix print-dev-env > "$dir/env.sh"
+    printf 'root:x:0:0::/root:/bin/sh\nlys-wm:x:%s:%s::/go/home:/bin/sh\n' "$(id -u)" "$(id -g)" > "$dir/passwd"
+    printf 'root:x:0:\nlys-wm:x:%s:\n' "$(id -g)" > "$dir/group"
+    bash=$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#bash^out)/bin/bash
+    certs=$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#cacert^out)/etc/ssl/certs/ca-bundle.crt
+    docker volume create lys-wm-go > /dev/null
+    docker run --rm -v lys-wm-go:/go debian:trixie-slim chown "$(id -u):$(id -g)" /go
+    gpu=()
+    for node in /dev/dri/renderD* /dev/nvidia*; do
+        [[ -c "$node" ]] && gpu+=(--device "$node" --group-add "$(stat -c %g "$node")")
+    done
+    if [[ -e /run/opengl-driver ]]; then
+        gpu+=(-v /run/opengl-driver:/run/opengl-driver:ro)
+    fi
+    docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${gpu[@]}" \
+        --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 --shm-size 1g \
+        -v /nix/store:/nix/store:ro -v "$dir/env.sh:/env.sh:ro" -v "$dir/passwd:/etc/passwd:ro" -v "$dir/group:/etc/group:ro" -v "$PWD:/src" -v lys-wm-go:/go -w /src -e SSL_CERT_FILE="$certs" \
+        debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker {{quote(recipe)}}
+
 # Fuzz the compositor with raw clients that bind every global and send
 # requests with valid headers and arbitrary arguments. The gates run only the
 # seed corpus; this explores for as long as asked.
