@@ -128,6 +128,7 @@ type Compositor struct {
 	icons           *icontheme.Theme
 	labels          map[*output.Output]map[labelKey]*label
 	scenes          map[*output.Output]*scene
+	dropped         map[*output.Output]int
 	outputResources []*sw.WlOutput
 	tabBars         []wm.TabBar
 	binds           binds.Map
@@ -233,6 +234,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		touches:       map[int32]touchAt{},
 		labels:        map[*output.Output]map[labelKey]*label{},
 		scenes:        map[*output.Output]*scene{},
+		dropped:       map[*output.Output]int{},
 		loop:          l,
 		display:       display,
 		pointers:      map[cursorKey]*cursorTexture{},
