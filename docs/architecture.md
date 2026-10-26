@@ -255,7 +255,14 @@ largest output scale, so outputs never overlap in X space whatever their
 scales. A window's X geometry is its layout rectangle mapped through the
 output it is on, and its surface tree is drawn and hit at that output's
 scale, so the X buffer lands pixel for pixel and pointer coordinates reach
-Xwayland in X pixels.
+Xwayland in X pixels. The output is the one nearest the window's corner, so a
+window partly off the layout keeps its scale (#163). A surface tree's origin
+is a logical point plus an offset in the tree's own pixels; an X window's is
+its output's position plus its X position less the output's X origin, so on
+that output its buffer covers exactly its X rectangle (#165). Logical sizes
+are whole pixels and cannot hold every X size at a fractional scale, so a
+floating X window floats within its `WM_NORMAL_HINTS` limits converted to
+logical pixels (#167) and is configured within them in X pixels (#164).
 
 `CLIPBOARD` and `PRIMARY` are bridged both ways (#46). When a Wayland client
 sets a selection, the window manager takes the X selection with targets
