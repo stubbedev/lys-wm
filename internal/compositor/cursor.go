@@ -206,7 +206,7 @@ func (c *Compositor) dropPointers() error {
 	c.cursorGen++
 	var errs []error
 	for _, ct := range c.pointers {
-		errs = append(errs, ct.tex.Destroy())
+		errs = append(errs, c.destroyTexture(ct.tex))
 	}
 	clear(c.pointers)
 	return errors.Join(errs...)

@@ -433,6 +433,31 @@ func TestADestroyedWaitingFrameLeavesTheDamageToTheNext(t *testing.T) {
 	})
 }
 
+func TestAnOutputCaptureNeverDrawsATextureReplacedSinceTheLastFrame(t *testing.T) {
+	onEachRenderer(t, func(t *testing.T, start starter) {
+		h := start(t, small)
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("captured", quadrants)
+		c.DispatchUntil("the window to map", w.Mapped)
+		quiesce(t, h, c, w)
+		r := newCaptureRig(t, h, c)
+		session, view := r.outputSession(0)
+
+		half := w.Logical.Div(2)
+		if err := errors.Join(w.Surface.Attach(c.Buffer(half, 1, quadrants), 0, 0), w.Surface.Damage(0, 0, int32(half.X), int32(half.Y)), w.Surface.Commit()); err != nil {
+			t.Fatal(err)
+		}
+		f, _, pix := grab(t, c, session, view.size)
+		c.DispatchUntil("the frame after the texture changed", func() bool { return f.ready || f.failed })
+		if f.failed {
+			t.Fatalf("the capture failed with %v", f.reason)
+		}
+		if got := rgbAt(pix, 160*4, 60, 20); got != [3]byte{0, 0xff, 0} {
+			t.Fatalf("the frame shows %v where the new buffer is green", got)
+		}
+	})
+}
+
 func TestAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T) {
 	h := StartGLES(t, func(*compositor.Config) {}, small)
 	async := false

@@ -128,7 +128,7 @@ func (c *Compositor) dropTexture(s *surface.Surface) error {
 	if t, ok := t.(imported); ok {
 		return c.releaseBuffer(t.buffer, s.Client())
 	}
-	if err := t.texture().Destroy(); err != nil {
+	if err := c.destroyTexture(t.texture()); err != nil {
 		return fmt.Errorf("compositor: destroy the texture of wl_surface@%d: %w", s.Resource().Base().ID(), err)
 	}
 	return nil
@@ -146,7 +146,7 @@ func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
 	var errs []error
 	if tex, ok := c.imported[b]; ok {
 		delete(c.imported, b)
-		errs = append(errs, tex.Destroy())
+		errs = append(errs, c.destroyTexture(tex))
 	}
 	if shown {
 		errs = append(errs, c.scheduleAll())
@@ -177,4 +177,18 @@ func (c *Compositor) Destroyed(s *surface.Surface) error {
 	c.entered = slices.DeleteFunc(c.entered, func(e *entered) bool { return e.s == s })
 	maps.DeleteFunc(c.filled, func(_ *output.Output, f filling) bool { return f.surface == s })
 	return nil
+}
+
+func (c *Compositor) destroyTexture(t render.Texture) error {
+	var errs []error
+	for o, sc := range c.scenes {
+		if sc.stale || !sc.draws(t) {
+			continue
+		}
+		sc.stale = true
+		if c.outputLive(o) {
+			errs = append(errs, c.schedule(o))
+		}
+	}
+	return errors.Join(append(errs, t.Destroy())...)
 }

@@ -144,7 +144,7 @@ func (c *Compositor) evictLabels(o *output.Output) error {
 	var errs []error
 	for key, l := range c.labels[o] {
 		if !l.used {
-			errs = append(errs, l.tex.Destroy())
+			errs = append(errs, c.destroyTexture(l.tex))
 			delete(c.labels[o], key)
 			continue
 		}
@@ -218,7 +218,7 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 func (c *Compositor) dropLabels(o *output.Output) error {
 	var errs []error
 	for _, l := range c.labels[o] {
-		errs = append(errs, l.tex.Destroy())
+		errs = append(errs, c.destroyTexture(l.tex))
 	}
 	delete(c.labels, o)
 	return errors.Join(errs...)

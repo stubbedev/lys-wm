@@ -141,7 +141,7 @@ func (c *Compositor) queueCapture(k *capture, waitForDamage bool) error {
 	if !c.outputLive(k.output) {
 		return k.done(0, errOutputGone(k.output))
 	}
-	if c.sceneOf(k.output).drawn && !waitForDamage {
+	if c.sceneOf(k.output).replayable() && !waitForDamage {
 		return c.runCapture(k)
 	}
 	c.captures[k.output] = append(c.captures[k.output], k)
@@ -157,7 +157,7 @@ func (c *Compositor) runCaptures(o *output.Output) error {
 }
 
 func (c *Compositor) wakeCaptures(o *output.Output) error {
-	if !c.outputLive(o) || !c.sceneOf(o).drawn {
+	if !c.outputLive(o) || !c.sceneOf(o).replayable() {
 		return nil
 	}
 	return c.flushCaptures(o, &region.Set{})

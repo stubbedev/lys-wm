@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"image"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/region"
@@ -71,6 +72,7 @@ type scene struct {
 	history   [maxBufferAge]region.Set
 	head      int
 	drawn     bool
+	stale     bool
 	last      backend.Presentation
 }
 
@@ -145,7 +147,15 @@ func (sc *scene) presented() {
 	sc.head = (sc.head + maxBufferAge - 1) % maxBufferAge
 	sc.history[sc.head].CopyFrom(&sc.damage)
 	sc.prev, sc.cur = sc.cur, sc.prev
-	sc.drawn = true
+	sc.drawn, sc.stale = true, false
+}
+
+func (sc *scene) replayable() bool {
+	return sc.drawn && !sc.stale
+}
+
+func (sc *scene) draws(t render.Texture) bool {
+	return slices.ContainsFunc(sc.prev.ops, func(op drawOp) bool { return op.tex == t })
 }
 
 func (sc *scene) begin() *frame {
