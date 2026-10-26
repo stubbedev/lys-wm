@@ -8,6 +8,7 @@
   unplug ? null,
   lysWMConfig ? null,
   rendersOn ? "card0",
+  framedCursors ? [],
   machineConfig ? {},
   extraTest ? _: "",
 }: let
@@ -77,8 +78,11 @@ in
         except Exception:
             print(machine.execute("journalctl -b --no-pager -t lys-wm -t greetd")[1])
             raise
-        print(machine.succeed("journalctl -b --no-pager -t lys-wm"))
-        machine.fail("journalctl -b --no-pager -t lys-wm | grep 'drawing the cursor in the frame'")
+        import re
+        journal = machine.succeed("journalctl -b --no-pager -t lys-wm")
+        print(journal)
+        framed = sorted(set(re.findall(r"drawing the cursor in the frame on ([^:]+):", journal)))
+        assert framed == sorted(${builtins.toJSON framedCursors}), f"the cursor is drawn in the frame on {framed}"
         machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'rendering on ${rendersOn},'")
         got = sorted(machine.succeed("${run "lys-wmctl outputs"} | jq -r '.[].name'").split())
         assert got == sorted(want), f"outputs {got}, want {want}"

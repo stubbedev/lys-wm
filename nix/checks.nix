@@ -43,6 +43,7 @@
       };
       vm-screencast = import ./screencast.nix {inherit pkgs module;};
       vm-apps = import ./apps.nix {inherit pkgs module;};
+      vm-cursor = import ./cursor.nix {inherit pkgs module;};
       headless = pkgs.callPackage ./headless.nix {
         inherit (self'.packages) lys-wm;
         inherit (inputs'.lys-ui.packages) lys-ui;
