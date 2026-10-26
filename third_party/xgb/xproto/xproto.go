@@ -149,7 +149,7 @@ func ArcRead(buf []byte, v *Arc) int {
 // ArcReadList reads a byte slice into a list of Arc values.
 func ArcReadList(buf []byte, dest []Arc) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Arc{}
 		b += ArcRead(buf[b:], &dest[i])
 	}
@@ -589,7 +589,7 @@ func Char2bRead(buf []byte, v *Char2b) int {
 // Char2bReadList reads a byte slice into a list of Char2b values.
 func Char2bReadList(buf []byte, dest []Char2b) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Char2b{}
 		b += Char2bRead(buf[b:], &dest[i])
 	}
@@ -659,7 +659,7 @@ func CharinfoRead(buf []byte, v *Charinfo) int {
 // CharinfoReadList reads a byte slice into a list of Charinfo values.
 func CharinfoReadList(buf []byte, dest []Charinfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Charinfo{}
 		b += CharinfoRead(buf[b:], &dest[i])
 	}
@@ -919,7 +919,7 @@ func init() {
 	xgb.NewEventFuncs[33] = ClientMessageEventNew
 }
 
-// ClientMessageDataUnion is a represention of the ClientMessageDataUnion union type.
+// ClientMessageDataUnion is a representing of the ClientMessageDataUnion union type.
 // Note that to *create* a Union, you should *never* create
 // this struct directly (unless you know what you're doing).
 // Instead use one of the following constructors for 'ClientMessageDataUnion':
@@ -953,14 +953,14 @@ func ClientMessageDataUnionData8New(Data8 []byte) ClientMessageDataUnion {
 
 	b = 0 // always read the same bytes
 	v.Data16 = make([]uint16, 10)
-	for i := 0; i < int(10); i++ {
+	for i := range int(10) {
 		v.Data16[i] = xgb.Get16(buf[b:])
 		b += 2
 	}
 
 	b = 0 // always read the same bytes
 	v.Data32 = make([]uint32, 5)
-	for i := 0; i < int(5); i++ {
+	for i := range int(5) {
 		v.Data32[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -973,7 +973,7 @@ func ClientMessageDataUnionData16New(Data16 []uint16) ClientMessageDataUnion {
 	var b int
 	buf := make([]byte, 20)
 
-	for i := 0; i < int(10); i++ {
+	for i := range int(10) {
 		xgb.Put16(buf[b:], Data16[i])
 		b += 2
 	}
@@ -990,14 +990,14 @@ func ClientMessageDataUnionData16New(Data16 []uint16) ClientMessageDataUnion {
 
 	b = 0 // always read the same bytes
 	v.Data16 = make([]uint16, 10)
-	for i := 0; i < int(10); i++ {
+	for i := range int(10) {
 		v.Data16[i] = xgb.Get16(buf[b:])
 		b += 2
 	}
 
 	b = 0 // always read the same bytes
 	v.Data32 = make([]uint32, 5)
-	for i := 0; i < int(5); i++ {
+	for i := range int(5) {
 		v.Data32[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -1010,7 +1010,7 @@ func ClientMessageDataUnionData32New(Data32 []uint32) ClientMessageDataUnion {
 	var b int
 	buf := make([]byte, 20)
 
-	for i := 0; i < int(5); i++ {
+	for i := range int(5) {
 		xgb.Put32(buf[b:], Data32[i])
 		b += 4
 	}
@@ -1027,14 +1027,14 @@ func ClientMessageDataUnionData32New(Data32 []uint32) ClientMessageDataUnion {
 
 	b = 0 // always read the same bytes
 	v.Data16 = make([]uint16, 10)
-	for i := 0; i < int(10); i++ {
+	for i := range int(10) {
 		v.Data16[i] = xgb.Get16(buf[b:])
 		b += 2
 	}
 
 	b = 0 // always read the same bytes
 	v.Data32 = make([]uint32, 5)
-	for i := 0; i < int(5); i++ {
+	for i := range int(5) {
 		v.Data32[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -1053,14 +1053,14 @@ func ClientMessageDataUnionRead(buf []byte, v *ClientMessageDataUnion) int {
 
 	b = 0 // re-read the same bytes
 	v.Data16 = make([]uint16, 10)
-	for i := 0; i < int(10); i++ {
+	for i := range int(10) {
 		v.Data16[i] = xgb.Get16(buf[b:])
 		b += 2
 	}
 
 	b = 0 // re-read the same bytes
 	v.Data32 = make([]uint32, 5)
-	for i := 0; i < int(5); i++ {
+	for i := range int(5) {
 		v.Data32[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -1071,7 +1071,7 @@ func ClientMessageDataUnionRead(buf []byte, v *ClientMessageDataUnion) int {
 // ClientMessageDataUnionReadList reads a byte slice into a list of ClientMessageDataUnion values.
 func ClientMessageDataUnionReadList(buf []byte, dest []ClientMessageDataUnion) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = ClientMessageDataUnion{}
 		b += ClientMessageDataUnionRead(buf[b:], &dest[i])
 	}
@@ -1157,7 +1157,7 @@ func ColoritemRead(buf []byte, v *Coloritem) int {
 // ColoritemReadList reads a byte slice into a list of Coloritem values.
 func ColoritemReadList(buf []byte, dest []Coloritem) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Coloritem{}
 		b += ColoritemRead(buf[b:], &dest[i])
 	}
@@ -1881,7 +1881,7 @@ func DepthInfoRead(buf []byte, v *DepthInfo) int {
 // DepthInfoReadList reads a byte slice into a list of DepthInfo values.
 func DepthInfoReadList(buf []byte, dest []DepthInfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = DepthInfo{}
 		b += DepthInfoRead(buf[b:], &dest[i])
 	}
@@ -2561,7 +2561,7 @@ func FontpropRead(buf []byte, v *Fontprop) int {
 // FontpropReadList reads a byte slice into a list of Fontprop values.
 func FontpropReadList(buf []byte, dest []Fontprop) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Fontprop{}
 		b += FontpropRead(buf[b:], &dest[i])
 	}
@@ -2622,7 +2622,7 @@ func FormatRead(buf []byte, v *Format) int {
 // FormatReadList reads a byte slice into a list of Format values.
 func FormatReadList(buf []byte, dest []Format) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Format{}
 		b += FormatRead(buf[b:], &dest[i])
 	}
@@ -3082,7 +3082,7 @@ func HostRead(buf []byte, v *Host) int {
 // HostReadList reads a byte slice into a list of Host values.
 func HostReadList(buf []byte, dest []Host) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Host{}
 		b += HostRead(buf[b:], &dest[i])
 	}
@@ -4315,7 +4315,7 @@ func PointRead(buf []byte, v *Point) int {
 // PointReadList reads a byte slice into a list of Point values.
 func PointReadList(buf []byte, dest []Point) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Point{}
 		b += PointRead(buf[b:], &dest[i])
 	}
@@ -4492,7 +4492,7 @@ func RectangleRead(buf []byte, v *Rectangle) int {
 // RectangleReadList reads a byte slice into a list of Rectangle values.
 func RectangleReadList(buf []byte, dest []Rectangle) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Rectangle{}
 		b += RectangleRead(buf[b:], &dest[i])
 	}
@@ -4818,7 +4818,7 @@ func RgbRead(buf []byte, v *Rgb) int {
 // RgbReadList reads a byte slice into a list of Rgb values.
 func RgbReadList(buf []byte, dest []Rgb) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Rgb{}
 		b += RgbRead(buf[b:], &dest[i])
 	}
@@ -4941,7 +4941,7 @@ func ScreenInfoRead(buf []byte, v *ScreenInfo) int {
 // ScreenInfoReadList reads a byte slice into a list of ScreenInfo values.
 func ScreenInfoReadList(buf []byte, dest []ScreenInfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = ScreenInfo{}
 		b += ScreenInfoRead(buf[b:], &dest[i])
 	}
@@ -5065,7 +5065,7 @@ func SegmentRead(buf []byte, v *Segment) int {
 // SegmentReadList reads a byte slice into a list of Segment values.
 func SegmentReadList(buf []byte, dest []Segment) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Segment{}
 		b += SegmentRead(buf[b:], &dest[i])
 	}
@@ -5423,7 +5423,7 @@ func SetupAuthenticateRead(buf []byte, v *SetupAuthenticate) int {
 // SetupAuthenticateReadList reads a byte slice into a list of SetupAuthenticate values.
 func SetupAuthenticateReadList(buf []byte, dest []SetupAuthenticate) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = SetupAuthenticate{}
 		b += SetupAuthenticateRead(buf[b:], &dest[i])
 	}
@@ -5511,7 +5511,7 @@ func SetupFailedRead(buf []byte, v *SetupFailed) int {
 // SetupFailedReadList reads a byte slice into a list of SetupFailed values.
 func SetupFailedReadList(buf []byte, dest []SetupFailed) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = SetupFailed{}
 		b += SetupFailedRead(buf[b:], &dest[i])
 	}
@@ -5675,7 +5675,7 @@ func SetupInfoRead(buf []byte, v *SetupInfo) int {
 // SetupInfoReadList reads a byte slice into a list of SetupInfo values.
 func SetupInfoReadList(buf []byte, dest []SetupInfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = SetupInfo{}
 		b += SetupInfoRead(buf[b:], &dest[i])
 	}
@@ -5839,7 +5839,7 @@ func SetupRequestRead(buf []byte, v *SetupRequest) int {
 // SetupRequestReadList reads a byte slice into a list of SetupRequest values.
 func SetupRequestReadList(buf []byte, dest []SetupRequest) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = SetupRequest{}
 		b += SetupRequestRead(buf[b:], &dest[i])
 	}
@@ -5937,7 +5937,7 @@ func StrRead(buf []byte, v *Str) int {
 // StrReadList reads a byte slice into a list of Str values.
 func StrReadList(buf []byte, dest []Str) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Str{}
 		b += StrRead(buf[b:], &dest[i])
 	}
@@ -6013,7 +6013,7 @@ func TimecoordRead(buf []byte, v *Timecoord) int {
 // TimecoordReadList reads a byte slice into a list of Timecoord values.
 func TimecoordReadList(buf []byte, dest []Timecoord) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Timecoord{}
 		b += TimecoordRead(buf[b:], &dest[i])
 	}
@@ -6342,7 +6342,7 @@ func VisualInfoRead(buf []byte, v *VisualInfo) int {
 // VisualInfoReadList reads a byte slice into a list of VisualInfo values.
 func VisualInfoReadList(buf []byte, dest []VisualInfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = VisualInfo{}
 		b += VisualInfoRead(buf[b:], &dest[i])
 	}
@@ -12461,7 +12461,7 @@ func polyText16Request(c *xgb.Conn, Drawable Drawable, Gc Gcontext, X int16, Y i
 	xgb.Put16(buf[b:], uint16(Y))
 	b += 2
 
-	copy(buf[b:], Items[:len(Items)])
+	copy(buf[b:], Items[:])
 	b += int(len(Items))
 
 	return buf
@@ -12521,7 +12521,7 @@ func polyText8Request(c *xgb.Conn, Drawable Drawable, Gc Gcontext, X int16, Y in
 	xgb.Put16(buf[b:], uint16(Y))
 	b += 2
 
-	copy(buf[b:], Items[:len(Items)])
+	copy(buf[b:], Items[:])
 	b += int(len(Items))
 
 	return buf
@@ -12596,7 +12596,7 @@ func putImageRequest(c *xgb.Conn, Format byte, Drawable Drawable, Gc Gcontext, W
 
 	b += 2 // padding
 
-	copy(buf[b:], Data[:len(Data)])
+	copy(buf[b:], Data[:])
 	b += int(len(Data))
 
 	return buf

@@ -22,13 +22,13 @@ func StringsJoin(ss []string, sep string) string {
 }
 
 // Sprintf is so we don't need to import 'fmt' in the generated Go files.
-func Sprintf(format string, v ...interface{}) string {
+func Sprintf(format string, v ...any) string {
 	return fmt.Sprintf(format, v...)
 }
 
 // Errorf is just a wrapper for fmt.Errorf. Exists for the same reason
 // that 'stringsJoin' and 'sprintf' exists.
-func Errorf(format string, v ...interface{}) error {
+func Errorf(format string, v ...any) error {
 	return fmt.Errorf(format, v...)
 }
 
@@ -41,7 +41,7 @@ func Pad(n int) int {
 func PopCount(mask0 int) int {
 	mask := uint32(mask0)
 	n := 0
-	for i := uint32(0); i < 32; i++ {
+	for i := range uint32(32) {
 		if mask&(1<<i) != 0 {
 			n++
 		}

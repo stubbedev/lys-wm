@@ -5,7 +5,6 @@ package render
 
 import (
 	"github.com/jezek/xgb"
-
 	"github.com/jezek/xgb/xproto"
 )
 
@@ -49,7 +48,7 @@ func AnimcursoreltRead(buf []byte, v *Animcursorelt) int {
 // AnimcursoreltReadList reads a byte slice into a list of Animcursorelt values.
 func AnimcursoreltReadList(buf []byte, dest []Animcursorelt) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Animcursorelt{}
 		b += AnimcursoreltRead(buf[b:], &dest[i])
 	}
@@ -111,7 +110,7 @@ func ColorRead(buf []byte, v *Color) int {
 // ColorReadList reads a byte slice into a list of Color values.
 func ColorReadList(buf []byte, dest []Color) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Color{}
 		b += ColorRead(buf[b:], &dest[i])
 	}
@@ -211,7 +210,7 @@ func DirectformatRead(buf []byte, v *Directformat) int {
 // DirectformatReadList reads a byte slice into a list of Directformat values.
 func DirectformatReadList(buf []byte, dest []Directformat) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Directformat{}
 		b += DirectformatRead(buf[b:], &dest[i])
 	}
@@ -395,7 +394,7 @@ func GlyphinfoRead(buf []byte, v *Glyphinfo) int {
 // GlyphinfoReadList reads a byte slice into a list of Glyphinfo values.
 func GlyphinfoReadList(buf []byte, dest []Glyphinfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Glyphinfo{}
 		b += GlyphinfoRead(buf[b:], &dest[i])
 	}
@@ -483,7 +482,7 @@ func IndexvalueRead(buf []byte, v *Indexvalue) int {
 // IndexvalueReadList reads a byte slice into a list of Indexvalue values.
 func IndexvalueReadList(buf []byte, dest []Indexvalue) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Indexvalue{}
 		b += IndexvalueRead(buf[b:], &dest[i])
 	}
@@ -546,7 +545,7 @@ func LinefixRead(buf []byte, v *Linefix) int {
 // LinefixReadList reads a byte slice into a list of Linefix values.
 func LinefixReadList(buf []byte, dest []Linefix) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Linefix{}
 		b += LinefixRead(buf[b:], &dest[i])
 	}
@@ -769,7 +768,7 @@ func PictdepthRead(buf []byte, v *Pictdepth) int {
 // PictdepthReadList reads a byte slice into a list of Pictdepth values.
 func PictdepthReadList(buf []byte, dest []Pictdepth) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Pictdepth{}
 		b += PictdepthRead(buf[b:], &dest[i])
 	}
@@ -863,7 +862,7 @@ func PictforminfoRead(buf []byte, v *Pictforminfo) int {
 // PictforminfoReadList reads a byte slice into a list of Pictforminfo values.
 func PictforminfoReadList(buf []byte, dest []Pictforminfo) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Pictforminfo{}
 		b += PictforminfoRead(buf[b:], &dest[i])
 	}
@@ -935,7 +934,7 @@ func PictscreenRead(buf []byte, v *Pictscreen) int {
 // PictscreenReadList reads a byte slice into a list of Pictscreen values.
 func PictscreenReadList(buf []byte, dest []Pictscreen) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Pictscreen{}
 		b += PictscreenRead(buf[b:], &dest[i])
 	}
@@ -1060,7 +1059,7 @@ func PictvisualRead(buf []byte, v *Pictvisual) int {
 // PictvisualReadList reads a byte slice into a list of Pictvisual values.
 func PictvisualReadList(buf []byte, dest []Pictvisual) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Pictvisual{}
 		b += PictvisualRead(buf[b:], &dest[i])
 	}
@@ -1114,7 +1113,7 @@ func PointfixRead(buf []byte, v *Pointfix) int {
 // PointfixReadList reads a byte slice into a list of Pointfix values.
 func PointfixReadList(buf []byte, dest []Pointfix) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Pointfix{}
 		b += PointfixRead(buf[b:], &dest[i])
 	}
@@ -1189,7 +1188,7 @@ func SpanfixRead(buf []byte, v *Spanfix) int {
 // SpanfixReadList reads a byte slice into a list of Spanfix values.
 func SpanfixReadList(buf []byte, dest []Spanfix) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Spanfix{}
 		b += SpanfixRead(buf[b:], &dest[i])
 	}
@@ -1283,7 +1282,7 @@ func TransformRead(buf []byte, v *Transform) int {
 // TransformReadList reads a byte slice into a list of Transform values.
 func TransformReadList(buf []byte, dest []Transform) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Transform{}
 		b += TransformRead(buf[b:], &dest[i])
 	}
@@ -1358,7 +1357,7 @@ func TrapRead(buf []byte, v *Trap) int {
 // TrapReadList reads a byte slice into a list of Trap values.
 func TrapReadList(buf []byte, dest []Trap) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Trap{}
 		b += TrapRead(buf[b:], &dest[i])
 	}
@@ -1426,7 +1425,7 @@ func TrapezoidRead(buf []byte, v *Trapezoid) int {
 // TrapezoidReadList reads a byte slice into a list of Trapezoid values.
 func TrapezoidReadList(buf []byte, dest []Trapezoid) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Trapezoid{}
 		b += TrapezoidRead(buf[b:], &dest[i])
 	}
@@ -1496,7 +1495,7 @@ func TriangleRead(buf []byte, v *Triangle) int {
 // TriangleReadList reads a byte slice into a list of Triangle values.
 func TriangleReadList(buf []byte, dest []Triangle) int {
 	b := 0
-	for i := 0; i < len(dest); i++ {
+	for i := range dest {
 		dest[i] = Triangle{}
 		b += TriangleRead(buf[b:], &dest[i])
 	}
@@ -1626,14 +1625,14 @@ func addGlyphsRequest(c *xgb.Conn, Glyphset Glyphset, GlyphsLen uint32, Glyphids
 	xgb.Put32(buf[b:], GlyphsLen)
 	b += 4
 
-	for i := 0; i < int(GlyphsLen); i++ {
+	for i := range GlyphsLen {
 		xgb.Put32(buf[b:], Glyphids[i])
 		b += 4
 	}
 
 	b += GlyphinfoListBytes(buf[b:], Glyphs)
 
-	copy(buf[b:], Data[:len(Data)])
+	copy(buf[b:], Data[:])
 	b += int(len(Data))
 
 	return buf
@@ -1952,7 +1951,7 @@ func compositeGlyphs16Request(c *xgb.Conn, Op byte, Src Picture, Dst Picture, Ma
 	xgb.Put16(buf[b:], uint16(SrcY))
 	b += 2
 
-	copy(buf[b:], Glyphcmds[:len(Glyphcmds)])
+	copy(buf[b:], Glyphcmds[:])
 	b += int(len(Glyphcmds))
 
 	return buf
@@ -2036,7 +2035,7 @@ func compositeGlyphs32Request(c *xgb.Conn, Op byte, Src Picture, Dst Picture, Ma
 	xgb.Put16(buf[b:], uint16(SrcY))
 	b += 2
 
-	copy(buf[b:], Glyphcmds[:len(Glyphcmds)])
+	copy(buf[b:], Glyphcmds[:])
 	b += int(len(Glyphcmds))
 
 	return buf
@@ -2120,7 +2119,7 @@ func compositeGlyphs8Request(c *xgb.Conn, Op byte, Src Picture, Dst Picture, Mas
 	xgb.Put16(buf[b:], uint16(SrcY))
 	b += 2
 
-	copy(buf[b:], Glyphcmds[:len(Glyphcmds)])
+	copy(buf[b:], Glyphcmds[:])
 	b += int(len(Glyphcmds))
 
 	return buf
@@ -2259,7 +2258,7 @@ func createConicalGradientRequest(c *xgb.Conn, Picture Picture, Center Pointfix,
 	xgb.Put32(buf[b:], NumStops)
 	b += 4
 
-	for i := 0; i < int(NumStops); i++ {
+	for i := range NumStops {
 		xgb.Put32(buf[b:], uint32(Stops[i]))
 		b += 4
 	}
@@ -2476,7 +2475,7 @@ func createLinearGradientRequest(c *xgb.Conn, Picture Picture, P1 Pointfix, P2 P
 	xgb.Put32(buf[b:], NumStops)
 	b += 4
 
-	for i := 0; i < int(NumStops); i++ {
+	for i := range NumStops {
 		xgb.Put32(buf[b:], uint32(Stops[i]))
 		b += 4
 	}
@@ -2641,7 +2640,7 @@ func createRadialGradientRequest(c *xgb.Conn, Picture Picture, Inner Pointfix, O
 	xgb.Put32(buf[b:], NumStops)
 	b += 4
 
-	for i := 0; i < int(NumStops); i++ {
+	for i := range NumStops {
 		xgb.Put32(buf[b:], uint32(Stops[i]))
 		b += 4
 	}
@@ -2911,7 +2910,7 @@ func freeGlyphsRequest(c *xgb.Conn, Glyphset Glyphset, Glyphs []Glyph) []byte {
 	xgb.Put32(buf[b:], uint32(Glyphset))
 	b += 4
 
-	for i := 0; i < int(len(Glyphs)); i++ {
+	for i := range len(Glyphs) {
 		xgb.Put32(buf[b:], uint32(Glyphs[i]))
 		b += 4
 	}
@@ -3057,7 +3056,7 @@ func queryFiltersReply(buf []byte) *QueryFiltersReply {
 	b += 16 // padding
 
 	v.Aliases = make([]uint16, v.NumAliases)
-	for i := 0; i < int(v.NumAliases); i++ {
+	for i := range v.NumAliases {
 		v.Aliases[i] = xgb.Get16(buf[b:])
 		b += 2
 	}
@@ -3188,7 +3187,7 @@ func queryPictFormatsReply(buf []byte) *QueryPictFormatsReply {
 	b += PictscreenReadList(buf[b:], v.Screens)
 
 	v.Subpixels = make([]uint32, v.NumSubpixel)
-	for i := 0; i < int(v.NumSubpixel); i++ {
+	for i := range v.NumSubpixel {
 		v.Subpixels[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -3623,7 +3622,7 @@ func setPictureFilterRequest(c *xgb.Conn, Picture Picture, FilterLen uint16, Fil
 
 	b = (b + 3) & ^3 // alignment gap
 
-	for i := 0; i < int(len(Values)); i++ {
+	for i := range len(Values) {
 		xgb.Put32(buf[b:], uint32(Values[i]))
 		b += 4
 	}

@@ -5,7 +5,6 @@ package xfixes
 
 import (
 	"github.com/jezek/xgb"
-
 	"github.com/jezek/xgb/render"
 	"github.com/jezek/xgb/shape"
 	"github.com/jezek/xgb/xproto"
@@ -719,7 +718,7 @@ func createPointerBarrierRequest(c *xgb.Conn, Barrier Barrier, Window xproto.Win
 	xgb.Put16(buf[b:], NumDevices)
 	b += 2
 
-	for i := 0; i < int(NumDevices); i++ {
+	for i := range NumDevices {
 		xgb.Put16(buf[b:], Devices[i])
 		b += 2
 	}
@@ -1540,7 +1539,7 @@ func getCursorImageReply(buf []byte) *GetCursorImageReply {
 	b += 8 // padding
 
 	v.CursorImage = make([]uint32, (int(v.Width) * int(v.Height)))
-	for i := 0; i < int((int(v.Width) * int(v.Height))); i++ {
+	for i := range int(v.Width) * int(v.Height) {
 		v.CursorImage[i] = xgb.Get32(buf[b:])
 		b += 4
 	}
@@ -1674,7 +1673,7 @@ func getCursorImageAndNameReply(buf []byte) *GetCursorImageAndNameReply {
 	b += 2 // padding
 
 	v.CursorImage = make([]uint32, (int(v.Width) * int(v.Height)))
-	for i := 0; i < int((int(v.Width) * int(v.Height))); i++ {
+	for i := range int(v.Width) * int(v.Height) {
 		v.CursorImage[i] = xgb.Get32(buf[b:])
 		b += 4
 	}

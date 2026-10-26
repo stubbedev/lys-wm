@@ -19,8 +19,8 @@ import (
 // If hostname == "" or hostname == "localhost",
 // then use the system's hostname (as returned by os.Hostname) instead.
 func readAuthority(hostname, display string) (
-	name string, data []byte, err error) {
-
+	name string, data []byte, err error,
+) {
 	// b is a scratch buffer to use and should be at least 256 bytes long
 	// (i.e. it should be able to hold a hostname).
 	b := make([]byte, 256)
@@ -99,7 +99,7 @@ func readAuthorityFromCookieHex(cookieHex string) (name string, data []byte, err
 
 	authData, err := hex.DecodeString(cookieHex)
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid cookie hex: %v", err)
+		return "", nil, fmt.Errorf("invalid cookie hex: %w", err)
 	}
 
 	if len(authData) != 16 {

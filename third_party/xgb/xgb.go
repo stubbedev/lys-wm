@@ -9,11 +9,9 @@ import (
 	"sync"
 )
 
-var (
-	// Where to log error-messages. Defaults to stderr.
-	// To disable logging, just set this to log.New(ioutil.Discard, "", 0)
-	Logger = log.New(os.Stderr, "XGB: ", log.Lshortfile)
-)
+// Where to log error-messages. Defaults to stderr.
+// To disable logging, just set this to log.New(ioutil.Discard, "", 0)
+var Logger = log.New(os.Stderr, "XGB: ", log.Lshortfile)
 
 const (
 	// cookieBuffer represents the queue size of cookies existing at any
@@ -116,7 +114,6 @@ func NewConnNet(netConn net.Conn) (*Conn, error) {
 	// First connect. This reads authority, checks DISPLAY environment
 	// variable, and loads the initial Setup info.
 	err := c.connectNet(netConn)
-
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +131,6 @@ func NewConnNetWithCookieHex(netConn net.Conn, cookieHex string) (*Conn, error) 
 	// Connect using the provided network connection and hex-encoded authentication,
 	// then load the initial Setup info.
 	err := c.connectNetWithCookieHex(netConn, cookieHex)
-
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +258,7 @@ func newErrorFunc(errNum int) (NewErrorFun, bool) {
 
 // eventOrError corresponds to values that can be either an event or an
 // error.
-type eventOrError interface{}
+type eventOrError any
 
 // NewId generates a new unused ID for use with requests like CreateWindow.
 // If no new ids can be generated, the id returned is 0 and error is non-nil.
