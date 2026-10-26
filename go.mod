@@ -7,6 +7,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
 	github.com/stubbedev/lys-lib v0.1.1-0.20261026161449-64b52f3cbc62
+	github.com/stubbedev/lys-ui v0.0.0-20261026164622-40a8bda79ea4
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sys v0.49.0
 )

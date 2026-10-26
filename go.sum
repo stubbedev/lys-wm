@@ -14,6 +14,8 @@ github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef h1:Ch6Q+AZUxDBCVqd
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef/go.mod h1:nXTWP6+gD5+LUJ8krVhhoeHjvHTutPxMYl5SvkcnJNE=
 github.com/stubbedev/lys-lib v0.1.1-0.20261026161449-64b52f3cbc62 h1:3L1uU5hQL1Fa6BXzbnuMGwdknvcJMU1wKXWRQ01wlRU=
 github.com/stubbedev/lys-lib v0.1.1-0.20261026161449-64b52f3cbc62/go.mod h1:/5L/FaNpjEQ/oxO950F+5HMIzbBDH79Tdxkt61pIZek=
+github.com/stubbedev/lys-ui v0.0.0-20261026164622-40a8bda79ea4 h1:zeaimsvpfk6NAO2Pumm9tdSrcqsxh7irgF2xiEsIUlM=
+github.com/stubbedev/lys-ui v0.0.0-20261026164622-40a8bda79ea4/go.mod h1:PdpmcEU+HR/aDx6Ctk2omCYjnbx0jplnbIiTVXlaoT0=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
 golang.org/x/image v0.46.0 h1:b1+oYj0Jbp6K5MDT4i4/eZpYlk3V8SJhhDKh6LBHAyQ=

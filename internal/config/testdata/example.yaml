@@ -36,6 +36,7 @@ borders:
 tabs:
   height: 18
   font: /usr/share/fonts/DejaVuSans.ttf
+  icon_theme: Papirus
   urgent:
     background: red
     text: "#000000ff"

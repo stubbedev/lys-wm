@@ -79,6 +79,9 @@ func TestExampleConfig(t *testing.T) {
 	if !slices.Equal(cfg.Env, [][2]string{{"XDG_CURRENT_DESKTOP", "Hyprland"}, {"XDG_SESSION_TYPE", "wayland"}}) || !slices.Equal(cfg.Autostart, []string{"waybar"}) || cfg.Font != "/usr/share/fonts/DejaVuSans.ttf" {
 		t.Errorf("env %v autostart %v font %q", cfg.Env, cfg.Autostart, cfg.Font)
 	}
+	if cfg.IconTheme != "Papirus" {
+		t.Errorf("tabs.icon_theme parsed to %q, want Papirus", cfg.IconTheme)
+	}
 }
 
 func TestEmptyConfigIsTheDefaults(t *testing.T) {

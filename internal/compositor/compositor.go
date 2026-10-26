@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -56,6 +57,7 @@ type Config struct {
 	Report   func(error)
 	Decor    Decor
 	Font     *gtext.Typeface
+	Icons    *icontheme.Theme
 	Rules    []wm.Rule
 	Outputs  []OutputRule
 	Reload   func() error
@@ -86,6 +88,7 @@ func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Report: func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
 		Decor:  DefaultDecor(),
 		Font:   font,
+		Icons:  icontheme.New("", nil),
 	}
 }
 
@@ -122,6 +125,7 @@ type Compositor struct {
 	rules           []wm.Rule
 	decor           Decor
 	font            *gtext.Typeface
+	icons           *icontheme.Theme
 	labels          map[*output.Output]map[labelKey]*label
 	scenes          map[*output.Output]*scene
 	outputResources []*sw.WlOutput
@@ -193,6 +197,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.Font == nil {
 		return binds.Map{}, errors.New("compositor: Config.Font is nil")
 	}
+	if cfg.Icons == nil {
+		return binds.Map{}, errors.New("compositor: Config.Icons is nil")
+	}
 	if cfg.Cursor.Size <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: cursor size %d is not positive", cfg.Cursor.Size)
 	}
@@ -210,7 +217,7 @@ func validate(cfg Config) (binds.Map, error) {
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.reload, c.exit, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, cfg.Reload, cfg.Exit, m
-	c.switchVT, c.tearing = cfg.SwitchVT, cfg.Tearing
+	c.switchVT, c.tearing, c.icons = cfg.SwitchVT, cfg.Tearing, cfg.Icons
 }
 
 func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (*Compositor, error) {

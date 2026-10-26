@@ -6,6 +6,7 @@ import (
 	"image"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -54,11 +55,15 @@ func (d Decor) reserved() int {
 	return d.Tab.Height + d.Tab.Padding
 }
 
-const tabIconRoom = 4
+const (
+	tabIconRoom = 4
+	iconScale   = 120
+)
 
 type labelKey struct {
 	text   string
 	icon   *shell.Icon
+	theme  *icontheme.Theme
 	size   image.Point
 	px     int
 	colors TabColors
@@ -89,7 +94,7 @@ func (c *Compositor) label(o *output.Output, key labelKey) (render.Texture, erro
 	cv.Clear(gtext.Rect{W: key.size.X, H: key.size.Y}, lysUIColor(key.colors.Background))
 	pad := o.Scale().ToDevice(c.decor.Tab.TextPadding)
 	box := gtext.Rect{X: pad, W: key.size.X - 2*pad, H: key.size.Y}
-	if side, err := drawTabIcon(cv, key, pad); err != nil {
+	if side, err := c.drawTabIcon(cv, key, pad); err != nil {
 		return nil, fmt.Errorf("compositor: tab icon of %q: %w", key.text, err)
 	} else if side > 0 {
 		box.X += side + pad
@@ -105,21 +110,34 @@ func (c *Compositor) label(o *output.Output, key labelKey) (render.Texture, erro
 	return tex, nil
 }
 
-func drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
+func (c *Compositor) drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
 	side := key.size.Y - 2*pad
-	if side <= 0 || key.size.X < tabIconRoom*side {
+	if side <= 0 || key.size.X < tabIconRoom*side || key.icon == nil {
 		return 0, nil
 	}
-	best, ok := key.icon.Best(side)
-	if !ok {
-		return 0, nil
-	}
-	ic, err := gtext.IconFromImage(best.Image, side, side)
-	if err != nil {
+	ic, err := c.tabIcon(key, side)
+	if err != nil || ic == nil {
 		return 0, err
 	}
 	ic.Draw(cv, pad, pad)
 	return side, nil
+}
+
+func (c *Compositor) tabIcon(key labelKey, side int) (*gtext.Icon, error) {
+	if key.icon.Name != "" {
+		ic, err := key.theme.Icon(key.icon.Name, side, iconScale)
+		if err == nil {
+			return ic, nil
+		}
+		if !errors.Is(err, icontheme.ErrNotFound) {
+			c.report(fmt.Errorf("compositor: tab icon %q from the icon theme: %w", key.icon.Name, err))
+		}
+	}
+	best, ok := key.icon.Best(side)
+	if !ok {
+		return nil, nil
+	}
+	return gtext.IconFromImage(best.Image, side, side)
 }
 
 func (c *Compositor) evictLabels(o *output.Output) error {
@@ -186,7 +204,7 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 			if w := c.windowByID(id); w != nil {
 				title, icon = w.top.Title(), w.top.Icon()
 			}
-			tex, err := c.label(o, labelKey{text: title, icon: icon, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, i == bar.Active)})
+			tex, err := c.label(o, labelKey{text: title, icon: icon, theme: c.icons, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, i == bar.Active)})
 			if err != nil {
 				return err
 			}

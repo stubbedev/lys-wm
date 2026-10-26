@@ -119,11 +119,13 @@ palette:
 | `text_height` | 8 |
 | `text_padding` | 3 |
 | `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |
+| `icon_theme` | The freedesktop icon theme tab icons named by windows resolve in, searched in the XDG data directories. Default: `Adwaita`, which falls back to `hicolor` |
 | `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `mauve`/`crust`, `surface0`/`text` and `red`/`crust` |
 
 A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
 the title, as a square as tall as the tab less `text_padding` on each side,
-when the tab is at least four icons wide.
+when the tab is at least four icons wide. An icon name that resolves in
+`icon_theme` wins; otherwise the window's own pixel buffers are drawn.
 
 ## autotile
 

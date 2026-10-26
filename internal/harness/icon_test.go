@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -130,6 +135,43 @@ func TestToplevelIconsReachIPCAndTheTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventuallyIcon(t, h, "iconic", func(i *ipc.Icon) bool { return i == nil })
+}
+
+func iconTheme(t *testing.T, icons map[string]string) *icontheme.Theme {
+	t.Helper()
+	base := filepath.Join(t.TempDir(), "icons")
+	dir := filepath.Join(base, "lys-test", "16x16", "apps")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	index := "[Icon Theme]\nName=lys-test\nDirectories=16x16/apps\n\n[16x16/apps]\nSize=16\nType=Scalable\nMinSize=1\nMaxSize=512\n"
+	if err := os.WriteFile(filepath.Join(base, "lys-test", "index.theme"), []byte(index), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, color := range icons {
+		svg := fmt.Appendf(nil, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="#%s"/></svg>`, color)
+		if err := os.WriteFile(filepath.Join(dir, name+".svg"), svg, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return icontheme.New("lys-test", []string{base})
+}
+
+func TestTabsDrawThemeIconsByNameAndBuffersWhenTheNameIsUnknown(t *testing.T) {
+	decor := compositor.DefaultDecor()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Decor, cfg.Icons = decor, iconTheme(t, map[string]string{"lys-wm-red": "ff0000"})
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	m := iconManager(t, c)
+	w := c.Window("iconic", testclient.Fill(0x60, 0x60, 0x60))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("makegroup tab")
+
+	setIcon(t, c, m, w, "lys-wm-red", 16)
+	h.Eventually("the theme's red icon in the tab, not the green buffer", showing(7, 7, [3]byte{0xff, 0, 0}))
+	setIcon(t, c, m, w, "lys-wm-no-such-icon", 16)
+	h.Eventually("the green buffer for a name the theme lacks", showing(7, 7, [3]byte{0, 0xff, 0}))
 }
 
 func TestAnEmptyIconResetsTheIcon(t *testing.T) {

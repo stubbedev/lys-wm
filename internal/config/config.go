@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-ui/icontheme"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/stubbedev/lys-wm/internal/binds"
@@ -181,6 +182,7 @@ type rawTabs struct {
 	TextHeight  *At[int]      `yaml:"text_height"`
 	TextPadding *At[int]      `yaml:"text_padding"`
 	Font        *At[string]   `yaml:"font"`
+	IconTheme   *At[string]   `yaml:"icon_theme"`
 	Active      *rawTabColors `yaml:"active"`
 	Inactive    *rawTabColors `yaml:"inactive"`
 	Urgent      *rawTabColors `yaml:"urgent"`
@@ -240,6 +242,7 @@ type Config struct {
 	Outputs     []compositor.OutputRule
 	Decor       compositor.Decor
 	Font        string
+	IconTheme   string
 	WM          wm.Settings
 	Binds       []Bind
 	Rules       []wm.Rule
@@ -610,6 +613,9 @@ func Parse(file string, data []byte) (Config, error) {
 	if raw.Tabs.Font != nil {
 		cfg.Font = raw.Tabs.Font.V
 	}
+	if raw.Tabs.IconTheme != nil {
+		cfg.IconTheme = raw.Tabs.IconTheme.V
+	}
 	if raw.GPU != nil {
 		cfg.GPU = p.card(*raw.GPU)
 	}
@@ -689,5 +695,6 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
+	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }
