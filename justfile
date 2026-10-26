@@ -95,6 +95,21 @@ docker recipe="gates" memory="10g":
         -v /nix/store:/nix/store:ro -v "$dir/env.sh:/env.sh:ro" -v "$dir/passwd:/etc/passwd:ro" -v "$dir/group:/etc/group:ro" -v "$PWD:/src" -v lys-wm-go:/go -w /src -e SSL_CERT_FILE="$certs" \
         debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker {{quote(recipe)}}
 
+# Run a NixOS VM test that needs the network, which the Nix build sandbox
+# does not give checks, in a container with /dev/kvm and its own network:
+# `just vm-online vm-steam` reaches Steam's sign-in window. QEMU shows
+# nothing on the desktop; screenshots land in the directory it prints.
+vm-online test memory="10g":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    driver=$(nix build --no-link --print-out-paths .#{{quote(test)}}.driver)
+    out=$(mktemp -d)
+    echo "vm-online: screenshots in $out"
+    docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm \
+        --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 \
+        -v /nix/store:/nix/store:ro -v "$out:/out" -e TMPDIR=/tmp -e HOME=/tmp \
+        debian:trixie-slim "$driver/bin/nixos-test-driver" -o /out
+
 # Fuzz the compositor with raw clients that bind every global and send
 # requests with valid headers and arbitrary arguments. The gates run only the
 # seed corpus; this explores for as long as asked.

@@ -18,7 +18,16 @@
         lysShell = inputs.lys-shell.nixosModules.default;
         seconds = 60;
       };
+    xwaylandApp = app:
+      import ./xwayland-apps.nix {
+        inherit module app;
+        pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.allowUnfreePredicate = p: builtins.elem (pkgs.lib.getName p) ["intellij-idea" "steam" "steam-unwrapped"];
+        };
+      };
   in {
+    legacyPackages.vm-steam = xwaylandApp "steam";
     checks = {
       vm = vm {
         name = "lys-wm-drm";
@@ -51,6 +60,8 @@
       vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
+      vm-xwayland = import ./xwayland.nix {inherit pkgs module;};
+      vm-xwayland-apps = xwaylandApp "idea";
       headless = pkgs.callPackage ./headless.nix {
         inherit (self'.packages) lys-wm;
         inherit (inputs'.lys-ui.packages) lys-ui;

@@ -27,6 +27,13 @@ host's own EGL driver, then measures es2gears against headless GLES lys-wm in a
 private runtime dir (Xwayland off) and fails below `min_fps` (57 by default,
 for the 60 Hz headless output).
 
+After changes to Xwayland, X11 window management or scaling, run the real X
+applications too. `nix build .#checks.x86_64-linux.vm-xwayland-apps` drives
+IntelliJ IDEA through its first run, dialogs, completion and floating windows
+on a 1.5 output; `just vm-online vm-steam` starts Steam up to its sign-in
+window, which needs the network the build sandbox lacks. Both are unfree and
+stay out of CI.
+
 ## The tracker
 
 GitHub is the only tracker. Nothing is planned in local files or chat.
