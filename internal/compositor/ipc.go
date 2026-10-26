@@ -1,8 +1,12 @@
 package compositor
 
 import (
+	"fmt"
+	"image"
+
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -60,9 +64,33 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Unresponsive: w.hung,
 			Focused:      hasFocus && w.id == focused,
 			ContentType:  c.contentTypes.Of(w.top.Surface()),
+			Icon:         ipcIcon(w.top.Icon()),
 		})
 	}
 	return snap
+}
+
+func ipcIcon(i *shell.Icon) *ipc.Icon {
+	if i == nil {
+		return nil
+	}
+	out := &ipc.Icon{Serial: i.Serial, Name: i.Name}
+	for _, img := range i.Images {
+		out.Sizes = append(out.Sizes, img.Pixels())
+	}
+	return out
+}
+
+func (c *Compositor) Icon(id wm.WindowID, size int) (*image.RGBA, int, error) {
+	w := c.windowByID(id)
+	if w == nil {
+		return nil, 0, fmt.Errorf("compositor: no window %d", id)
+	}
+	img, ok := w.top.Icon().Best(size)
+	if !ok {
+		return nil, 0, fmt.Errorf("compositor: window %d has no icon buffer", id)
+	}
+	return img.Image, img.Scale, nil
 }
 
 func (c *Compositor) keyboardLayout() ipc.Layout {

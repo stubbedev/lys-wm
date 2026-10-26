@@ -17,12 +17,20 @@ func TestParseRequest(t *testing.T) {
 	if r, err := parseRequest([]byte(`{"request":"windows"}` + "\n")); err != nil || r.kind != KindWindows {
 		t.Fatalf("windows parsed to %+v, %v", r, err)
 	}
+	if r, err := parseRequest([]byte(`{"request":"icon","window":7,"size":32}`)); err != nil || r.kind != KindIcon || r.icon != (iconRequest{window: 7, size: 32}) {
+		t.Fatalf("icon parsed to %+v, %v", r, err)
+	}
 	for text, want := range map[string]string{
 		`{"request":"teleport"}`:                   `unknown request "teleport" (known: version, outputs,`,
 		`{"request":"windows","action":"kill"}`:    "only dispatch takes an action",
 		`{"request":"dispatch"}`:                   "only dispatch takes an action",
 		`{"request":"dispatch","action":"fly up"}`: `unknown action "fly"`,
 		`{"request":"windows","verbose":true}`:     `unknown field "verbose"`,
+		`{"request":"icon","window":7}`:            "only icon takes a window and a size",
+		`{"request":"icon","window":7,"size":-1}`:  "only icon takes a window and a size",
+		`{"request":"icon","size":32}`:             "only icon takes a window and a size",
+		`{"request":"windows","window":7}`:         "only icon takes a window and a size",
+		`{"request":"windows","size":7}`:           "only icon takes a window and a size",
 		`not json`:                                 "invalid character",
 	} {
 		_, err := parseRequest([]byte(text))
@@ -78,6 +86,7 @@ func TestDiff(t *testing.T) {
 	a2, b2 := a, b
 	a2.Focused, a2.Title, a2.Workspace = false, "a!", 3
 	b2.Urgent = true
+	b2.Icon = &Icon{Serial: 4, Name: "foot", Sizes: []int{16, 32}}
 	c := Window{ID: 3, AppID: "mpv", Workspace: 3, Output: "HDMI-A-1", Focused: true}
 	next.Windows = []Window{b2, a2, c}
 	next.Submap = "resize"
@@ -86,10 +95,11 @@ func TestDiff(t *testing.T) {
 		`{"event":"output","change":"changed","output":{"name":"DP-1","description":"","rect":{"x":0,"y":0,"width":100,"height":50},"scale":2,"mode":{"width":0,"height":0,"refresh_mhz":0},"workspace":1,"focused":false,"powered":false}}`,
 		`{"event":"workspace","output":"HDMI-A-1","workspace":3}`,
 		`{"event":"focusedoutput","output":"HDMI-A-1"}`,
+		`{"event":"icon","window":2,"icon":{"serial":4,"name":"foot","sizes":[16,32]}}`,
 		`{"event":"urgent","window":2,"urgent":true}`,
 		`{"event":"move","window":1,"workspace":3}`,
 		`{"event":"title","window":1,"title":"a!"}`,
-		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"urgent":false,"unresponsive":false,"focused":true,"content_type":"none"}}`,
+		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"urgent":false,"unresponsive":false,"focused":true,"content_type":"none","icon":null}}`,
 		`{"event":"focus","window":3}`,
 		`{"event":"submap","submap":"resize"}`,
 		`{"event":"layout","layout":{"index":1,"name":"Danish"}}`,

@@ -27,22 +27,25 @@ func (s State) Has(st ToplevelState) bool {
 }
 
 type Toplevel struct {
-	xs         *XdgSurface
-	resource   *sxdg.XdgToplevel
-	title      string
-	appID      string
-	parent     *Toplevel
-	min, max   image.Point
-	pendingMin image.Point
-	pendingMax image.Point
-	minSet     bool
-	maxSet     bool
-	current    State
-	configures configures[State]
-	decoration *sxd.ZxdgToplevelDecorationV1
-	dialog     bool
-	modal      bool
-	destroyed  bool
+	xs          *XdgSurface
+	resource    *sxdg.XdgToplevel
+	title       string
+	appID       string
+	parent      *Toplevel
+	min, max    image.Point
+	pendingMin  image.Point
+	pendingMax  image.Point
+	minSet      bool
+	maxSet      bool
+	current     State
+	configures  configures[State]
+	decoration  *sxd.ZxdgToplevelDecorationV1
+	dialog      bool
+	modal       bool
+	icon        *Icon
+	pendingIcon *Icon
+	iconSet     bool
+	destroyed   bool
 }
 
 func (t *Toplevel) Surface() *surface.Surface {
@@ -63,6 +66,10 @@ func (t *Toplevel) Title() string {
 
 func (t *Toplevel) AppID() string {
 	return t.appID
+}
+
+func (t *Toplevel) Icon() *Icon {
+	return t.icon
 }
 
 func (t *Toplevel) Parent() *Toplevel {
@@ -144,7 +151,15 @@ func (t *Toplevel) applyPending() error {
 	if s, ok := t.configures.take(); ok {
 		t.current = s
 	}
-	return nil
+	if !t.iconSet {
+		return nil
+	}
+	changed := t.icon != t.pendingIcon
+	t.icon, t.pendingIcon, t.iconSet = t.pendingIcon, nil, false
+	if !changed {
+		return nil
+	}
+	return t.xs.base.shell.listener.ToplevelChanged(t, ChangedIcon)
 }
 
 func (t *Toplevel) ack(serial uint32) bool {

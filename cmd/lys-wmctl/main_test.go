@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"image"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,12 +22,13 @@ func TestParseArgs(t *testing.T) {
 		"windows":                    {Request: ipc.KindWindows},
 		"activewindow":               {Request: ipc.KindActiveWindow},
 		"watch":                      {Request: ipc.KindWatch},
+		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {
 		if got, err := parseArgs(strings.Fields(args)); err != nil || got != want {
 			t.Errorf("%q: %+v, %v; want %+v", args, got, err, want)
 		}
 	}
-	for _, args := range []string{"", "dispatch", "windows 2", "reload now", "teleport"} {
+	for _, args := range []string{"", "dispatch", "windows 2", "reload now", "teleport", "icon", "icon 7", "icon 0 64", "icon 7 0", "icon x 64", "icon 7 64 1"} {
 		if _, err := parseArgs(strings.Fields(args)); !errors.Is(err, errUsage) {
 			t.Errorf("%q: %v", args, err)
 		}
@@ -42,6 +44,10 @@ func (h *handler) Snapshot() ipc.Snapshot {
 func (h *handler) Dispatch(a wm.Action) error {
 	h.dispatched = append(h.dispatched, a)
 	return nil
+}
+
+func (h *handler) Icon(wm.WindowID, int) (*image.RGBA, int, error) {
+	return nil, 0, errors.New("no icons")
 }
 
 func TestRunAgainstASocket(t *testing.T) {

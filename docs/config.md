@@ -121,6 +121,10 @@ palette:
 | `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |
 | `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `mauve`/`crust`, `surface0`/`text` and `red`/`crust` |
 
+A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
+the title, as a square as tall as the tab less `text_padding` on each side,
+when the tab is at least four icons wide.
+
 ## autotile
 
 | Key | Default |

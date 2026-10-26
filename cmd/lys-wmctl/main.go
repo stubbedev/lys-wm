@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -26,6 +27,8 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   activewindow                 print the focused window as JSON, or null
   version                      print the IPC protocol version
   watch                        print events as JSON lines until lys-wm exits
+  icon <window> <size>         print a window's icon buffer closest to size pixels
+                               as JSON, the PNG base64-encoded
 
 The socket is --socket, else $LYS_WM_SOCKET, else the only socket in
 $XDG_RUNTIME_DIR/lys-wm.
@@ -54,6 +57,8 @@ func parseArgs(args []string) (ipc.Request, error) {
 			return ipc.Request{}, fmt.Errorf("%w: dispatch needs an action", errUsage)
 		}
 		return ipc.Request{Request: ipc.KindDispatch, Action: strings.Join(rest, " ")}, nil
+	case kind == ipc.KindIcon:
+		return parseIcon(rest)
 	case cmd == "reload":
 		req = ipc.Request{Request: ipc.KindDispatch, Action: wm.ReloadAction{}.String()}
 	case slices.Contains(queries, kind):
@@ -65,6 +70,21 @@ func parseArgs(args []string) (ipc.Request, error) {
 		return ipc.Request{}, fmt.Errorf("%w: %s takes no arguments", errUsage, cmd)
 	}
 	return req, nil
+}
+
+func parseIcon(args []string) (ipc.Request, error) {
+	if len(args) != 2 {
+		return ipc.Request{}, fmt.Errorf("%w: icon takes a window ID and a size", errUsage)
+	}
+	id, err := strconv.ParseUint(args[0], 10, 64)
+	if err != nil || id == 0 {
+		return ipc.Request{}, fmt.Errorf("%w: window ID %q is not a positive number", errUsage, args[0])
+	}
+	size, err := strconv.Atoi(args[1])
+	if err != nil || size <= 0 {
+		return ipc.Request{}, fmt.Errorf("%w: icon size %q is not a positive number", errUsage, args[1])
+	}
+	return ipc.Request{Request: ipc.KindIcon, Window: wm.WindowID(id), Size: size}, nil
 }
 
 func watch(path string, out io.Writer) (err error) {

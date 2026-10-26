@@ -337,8 +337,11 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 }
 
 func (c *Compositor) ToplevelChanged(_ *shell.Toplevel, change shell.Change) error {
-	if change == shell.ChangedModal {
+	switch change {
+	case shell.ChangedModal:
 		return errors.Join(c.reconcile(), c.syncForeign())
+	case shell.ChangedIcon:
+		return c.scheduleAll()
 	}
 	return c.syncForeign()
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -53,8 +54,11 @@ func (d Decor) reserved() int {
 	return d.Tab.Height + d.Tab.Padding
 }
 
+const tabIconRoom = 4
+
 type labelKey struct {
 	text   string
+	icon   *shell.Icon
 	size   image.Point
 	px     int
 	colors TabColors
@@ -85,6 +89,12 @@ func (c *Compositor) label(o *output.Output, key labelKey) (render.Texture, erro
 	cv.Clear(gtext.Rect{W: key.size.X, H: key.size.Y}, lysUIColor(key.colors.Background))
 	pad := o.Scale().ToDevice(c.decor.Tab.TextPadding)
 	box := gtext.Rect{X: pad, W: key.size.X - 2*pad, H: key.size.Y}
+	if side, err := drawTabIcon(cv, key, pad); err != nil {
+		return nil, fmt.Errorf("compositor: tab icon of %q: %w", key.text, err)
+	} else if side > 0 {
+		box.X += side + pad
+		box.W -= side + pad
+	}
 	text := c.font.Ellipsize(key.text, float64(box.W), float64(key.px))
 	c.font.DrawAligned(cv, text, box, float64(key.px), lysUIColor(key.colors.Text), gtext.AlignStart)
 	tex, err := c.renderer.NewTexture(render.ARGB8888, key.size, stride, pix)
@@ -93,6 +103,23 @@ func (c *Compositor) label(o *output.Output, key labelKey) (render.Texture, erro
 	}
 	cache[key] = &label{tex: tex, used: true}
 	return tex, nil
+}
+
+func drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
+	side := key.size.Y - 2*pad
+	if side <= 0 || key.size.X < tabIconRoom*side {
+		return 0, nil
+	}
+	best, ok := key.icon.Best(side)
+	if !ok {
+		return 0, nil
+	}
+	ic, err := gtext.IconFromImage(best.Image, side, side)
+	if err != nil {
+		return 0, err
+	}
+	ic.Draw(cv, pad, pad)
+	return side, nil
 }
 
 func (c *Compositor) evictLabels(o *output.Output) error {
@@ -155,10 +182,11 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 				continue
 			}
 			title := ""
+			var icon *shell.Icon
 			if w := c.windowByID(id); w != nil {
-				title = w.top.Title()
+				title, icon = w.top.Title(), w.top.Icon()
 			}
-			tex, err := c.label(o, labelKey{text: title, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, i == bar.Active)})
+			tex, err := c.label(o, labelKey{text: title, icon: icon, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, i == bar.Active)})
 			if err != nil {
 				return err
 			}

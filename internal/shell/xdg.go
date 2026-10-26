@@ -19,6 +19,7 @@ import (
 	sxf1 "github.com/stubbedev/lys-wm/internal/protocol/server/xdgforeignv1"
 	sxf2 "github.com/stubbedev/lys-wm/internal/protocol/server/xdgforeignv2"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
+	sxti "github.com/stubbedev/lys-wm/internal/protocol/server/xdgtoplevelicon"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -63,6 +64,7 @@ const (
 	ChangedAppID
 	ChangedParent
 	ChangedModal
+	ChangedIcon
 )
 
 type Listener interface {
@@ -96,6 +98,7 @@ type Shell struct {
 	locked      bool
 	exports     map[string]*export
 	toplevels   []*Toplevel
+	iconSerial  uint64
 }
 
 func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
@@ -125,6 +128,7 @@ func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
 		{sxf2.ZxdgExporterV2Interface, foreignVersion, sh.bindExporterV2},
 		{sxf2.ZxdgImporterV2Interface, foreignVersion, sh.bindImporterV2},
 		{sxdd.XdgWmDialogV1Interface, dialogVersion, sh.bindDialog},
+		{sxti.XdgToplevelIconManagerV1Interface, iconVersion, sh.bindIcons},
 	} {
 		if _, err := d.AddGlobal(g.iface, g.version, g.bind); err != nil {
 			return nil, err

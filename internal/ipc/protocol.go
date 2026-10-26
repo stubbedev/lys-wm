@@ -26,13 +26,16 @@ const (
 	KindActiveWindow Kind = "activewindow"
 	KindDispatch     Kind = "dispatch"
 	KindWatch        Kind = "watch"
+	KindIcon         Kind = "icon"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindDispatch, KindWatch}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindDispatch, KindWatch, KindIcon}
 
 type Request struct {
-	Request Kind   `json:"request"`
-	Action  string `json:"action,omitempty"`
+	Request Kind        `json:"request"`
+	Action  string      `json:"action,omitempty"`
+	Window  wm.WindowID `json:"window,omitempty"`
+	Size    int         `json:"size,omitempty"`
 }
 
 type Response struct {
@@ -43,9 +46,15 @@ type Response struct {
 
 var ErrBadRequest = errors.New("ipc: bad request")
 
+type iconRequest struct {
+	window wm.WindowID
+	size   int
+}
+
 type request struct {
 	kind   Kind
 	action wm.Action
+	icon   iconRequest
 }
 
 func parseRequest(line []byte) (request, error) {
@@ -61,7 +70,11 @@ func parseRequest(line []byte) (request, error) {
 	if (raw.Request == KindDispatch) != (raw.Action != "") {
 		return request{}, fmt.Errorf("%w: only dispatch takes an action, and it needs one", ErrBadRequest)
 	}
-	r := request{kind: raw.Request}
+	icon := raw.Window != 0 && raw.Size > 0
+	if raw.Request == KindIcon && !icon || raw.Request != KindIcon && (raw.Window != 0 || raw.Size != 0) {
+		return request{}, fmt.Errorf("%w: only icon takes a window and a size, and it needs both, the size above 0", ErrBadRequest)
+	}
+	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}}
 	if raw.Request == KindDispatch {
 		a, err := wm.ParseAction(raw.Action)
 		if err != nil {
@@ -130,6 +143,26 @@ type Window struct {
 	Unresponsive bool           `json:"unresponsive"`
 	Focused      bool           `json:"focused"`
 	ContentType  wm.ContentType `json:"content_type"`
+	Icon         *Icon          `json:"icon"`
+}
+
+type Icon struct {
+	Serial uint64 `json:"serial"`
+	Name   string `json:"name,omitempty"`
+	Sizes  []int  `json:"sizes,omitempty"`
+}
+
+func (i *Icon) serial() uint64 {
+	if i == nil {
+		return 0
+	}
+	return i.Serial
+}
+
+type IconImage struct {
+	Size  int    `json:"size"`
+	Scale int    `json:"scale"`
+	PNG   []byte `json:"png"`
 }
 
 type Layout struct {

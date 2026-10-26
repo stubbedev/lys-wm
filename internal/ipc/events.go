@@ -46,6 +46,10 @@ type (
 		Window wm.WindowID `json:"window"`
 		Title  string      `json:"title"`
 	}
+	IconEvent struct {
+		Window wm.WindowID `json:"window"`
+		Icon   *Icon       `json:"icon"`
+	}
 	UrgentEvent struct {
 		Window wm.WindowID `json:"window"`
 		Urgent bool        `json:"urgent"`
@@ -75,6 +79,7 @@ func (OpenEvent) Name() string          { return "open" }
 func (CloseEvent) Name() string         { return "close" }
 func (MoveEvent) Name() string          { return "move" }
 func (TitleEvent) Name() string         { return "title" }
+func (IconEvent) Name() string          { return "icon" }
 func (UrgentEvent) Name() string        { return "urgent" }
 func (UnresponsiveEvent) Name() string  { return "unresponsive" }
 func (FocusEvent) Name() string         { return "focus" }
@@ -157,6 +162,9 @@ func Diff(prev, next Snapshot) []Event {
 		}
 		if p.Title != w.Title {
 			out = append(out, TitleEvent{Window: w.ID, Title: w.Title})
+		}
+		if p.Icon.serial() != w.Icon.serial() {
+			out = append(out, IconEvent{Window: w.ID, Icon: w.Icon})
 		}
 		if p.Urgent != w.Urgent {
 			out = append(out, UrgentEvent{Window: w.ID, Urgent: w.Urgent})

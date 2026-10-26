@@ -2,9 +2,12 @@ package ipc
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"io/fs"
 	"net"
@@ -38,6 +41,7 @@ func SocketPath(runtimeDir, display string) (string, error) {
 type Handler interface {
 	Snapshot() Snapshot
 	Dispatch(a wm.Action) error
+	Icon(w wm.WindowID, size int) (*image.RGBA, int, error)
 }
 
 type watcher struct {
@@ -182,18 +186,19 @@ func (s *Server) reply(conn *net.UnixConn, result any, failure error) {
 	_ = write(conn, append(line, '\n'))
 }
 
-func (s *Server) onLoop(f func() (any, error)) (any, error) {
+func onLoop[T any](s *Server, f func() (T, error)) (T, error) {
 	type outcome struct {
-		v   any
+		v   T
 		err error
 	}
 	ch := make(chan outcome, 1)
+	var zero T
 	if err := s.loop.Post(func() error {
 		v, err := f()
 		ch <- outcome{v, err}
 		return nil
 	}); err != nil {
-		return nil, ErrShutdown
+		return zero, ErrShutdown
 	}
 	select {
 	case o := <-ch:
@@ -204,7 +209,7 @@ func (s *Server) onLoop(f func() (any, error)) (any, error) {
 	case o := <-ch:
 		return o.v, o.err
 	default:
-		return nil, ErrShutdown
+		return zero, ErrShutdown
 	}
 }
 
@@ -226,7 +231,12 @@ func (s *Server) serve(conn *net.UnixConn) {
 		s.watch(conn)
 		return
 	}
-	result, err := s.onLoop(func() (any, error) {
+	if req.kind == KindIcon {
+		result, err := s.icon(req.icon)
+		s.reply(conn, result, err)
+		return
+	}
+	result, err := onLoop(s, func() (any, error) {
 		if req.kind == KindDispatch {
 			return nil, s.handler.Dispatch(req.action)
 		}
@@ -235,14 +245,34 @@ func (s *Server) serve(conn *net.UnixConn) {
 	s.reply(conn, result, err)
 }
 
+type iconPixels struct {
+	img   *image.RGBA
+	scale int
+}
+
+func (s *Server) icon(req iconRequest) (any, error) {
+	px, err := onLoop(s, func() (iconPixels, error) {
+		img, scale, err := s.handler.Icon(req.window, req.size)
+		return iconPixels{img, scale}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, px.img); err != nil {
+		return nil, fmt.Errorf("ipc: encode the icon of window %d: %w", req.window, err)
+	}
+	return IconImage{Size: px.img.Bounds().Dx(), Scale: px.scale, PNG: buf.Bytes()}, nil
+}
+
 func (s *Server) watch(conn *net.UnixConn) {
 	w := &watcher{lines: make(chan []byte, watchBacklog)}
-	if _, err := s.onLoop(func() (any, error) {
+	if _, err := onLoop(s, func() (struct{}, error) {
 		if len(s.watchers) == 0 {
 			s.last, s.pending = s.handler.Snapshot(), nil
 		}
 		s.watchers = append(s.watchers, w)
-		return nil, nil
+		return struct{}{}, nil
 	}); err != nil {
 		s.reply(conn, nil, err)
 		return

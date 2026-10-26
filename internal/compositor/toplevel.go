@@ -23,6 +23,7 @@ type toplevel interface {
 	Geometry() image.Rectangle
 	AppID() string
 	Title() string
+	Icon() *shell.Icon
 	pid() int32
 	parent() toplevel
 	modal() bool

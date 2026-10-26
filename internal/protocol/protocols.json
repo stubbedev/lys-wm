@@ -276,6 +276,11 @@
       "package": "contenttype",
       "source": "wayland-protocols",
       "path": "staging/content-type/content-type-v1.xml"
+    },
+    {
+      "package": "xdgtoplevelicon",
+      "source": "wayland-protocols",
+      "path": "staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml"
     }
   ]
 }

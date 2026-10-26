@@ -2,8 +2,13 @@ package ipc
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net"
 	"path/filepath"
 	"runtime"
@@ -19,7 +24,16 @@ import (
 type fake struct {
 	snap       Snapshot
 	dispatched []wm.Action
+	icons      map[wm.WindowID]*image.RGBA
 	server     *Server
+}
+
+func (f *fake) Icon(id wm.WindowID, _ int) (*image.RGBA, int, error) {
+	img, ok := f.icons[id]
+	if !ok {
+		return nil, 0, fmt.Errorf("no icon for window %d", id)
+	}
+	return img, 1, nil
 }
 
 func (f *fake) Snapshot() Snapshot {
@@ -198,6 +212,31 @@ func next(t *testing.T, lines <-chan string) string {
 	return ""
 }
 
+func TestIconsArePNGs(t *testing.T) {
+	r := start(t)
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(1, 0, color.RGBA{R: 0x80, A: 0x80})
+	r.do(func(f *fake) { f.icons = map[wm.WindowID]*image.RGBA{7: img} })
+	got, err := Do(r.path, Request{Request: KindIcon, Window: 7, Size: 64})
+	var icon IconImage
+	if err != nil || json.Unmarshal(got, &icon) != nil {
+		t.Fatalf("icon %s, %v", got, err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(icon.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if icon.Size != 2 || icon.Scale != 1 || decoded.Bounds() != img.Bounds() {
+		t.Fatalf("icon of size %d at scale %d decoded to %v", icon.Size, icon.Scale, decoded.Bounds())
+	}
+	if r, _, _, a := decoded.At(1, 0).RGBA(); r != 0x8080 || a != 0x8080 {
+		t.Fatalf("the half-transparent red pixel came back as %v", decoded.At(1, 0))
+	}
+	if _, err := Do(r.path, Request{Request: KindIcon, Window: 8, Size: 64}); err == nil || err.Error() != "lys-wm: no icon for window 8" {
+		t.Fatalf("a window without an icon: %v", err)
+	}
+}
+
 func TestWatchStreamsDiffsAndDispatches(t *testing.T) {
 	r := start(t)
 	r.do(func(f *fake) { f.snap.Submap = "resize" })
@@ -212,7 +251,7 @@ func TestWatchStreamsDiffsAndDispatches(t *testing.T) {
 	})
 	for _, want := range []string{
 		`{"event":"dispatch","action":"submap reset"}`,
-		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"urgent":false,"unresponsive":false,"focused":false,"content_type":"none"}}`,
+		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"urgent":false,"unresponsive":false,"focused":false,"content_type":"none","icon":null}}`,
 		`{"event":"submap","submap":""}`,
 	} {
 		if got := next(t, lines); got != want {
