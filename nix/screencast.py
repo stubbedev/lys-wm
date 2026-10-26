@@ -10,6 +10,7 @@ SOURCES = {"monitor": 1, "window": 2}
 CURSOR_MODES = {"hidden": 1, "embedded": 2}
 BACKGROUND = bytes([0x2E, 0x1E, 0x1E])
 CURSOR_REACH = 64
+COLOR_TOLERANCE = 3
 
 
 def start_cast(source, cursor_mode):
@@ -130,6 +131,30 @@ def cursor(args):
         sys.exit("screencast: the embedded cursor is not where the pointer is")
 
 
+def read_ppm(data):
+    fields = data.split(maxsplit=4)
+    if len(fields) != 5 or fields[0] != b"P6" or fields[3] != b"255":
+        sys.exit(f"screencast: not an 8-bit PPM: {data[:20]!r}")
+    width, height = int(fields[1]), int(fields[2])
+    pixels = fields[4]
+    if len(pixels) != width * height * 3:
+        sys.exit(f"screencast: {len(pixels)} bytes of pixels for a {width}x{height} PPM")
+    return width, height, pixels
+
+
+def locate(args):
+    width, height, pixels = read_ppm(sys.stdin.buffer.read())
+    color = bytes.fromhex(args.color)
+    found = [
+        (at // 3 % width, at // 3 // width)
+        for at in range(0, len(pixels), 3)
+        if all(abs(pixels[at + i] - color[i]) <= COLOR_TOLERANCE for i in range(3))
+    ]
+    if not found:
+        sys.exit(f"screencast: no #{args.color} in {width}x{height}")
+    print(sum(x for x, _ in found) // len(found), sum(y for _, y in found) // len(found), len(found))
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(required=True)
@@ -145,6 +170,9 @@ def main():
     for name in ("x", "y", "width", "height", "px", "py"):
         cur.add_argument(name, type=int)
     cur.set_defaults(run=cursor)
+    loc = commands.add_parser("locate")
+    loc.add_argument("color")
+    loc.set_defaults(run=locate)
     args = parser.parse_args()
     args.run(args)
 

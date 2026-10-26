@@ -12,6 +12,12 @@
   }: let
     module = self.nixosModules.default;
     vm = args: import ./vm.nix ({inherit pkgs module;} // args);
+    screencast = portal:
+      import ./screencast.nix {
+        inherit pkgs module portal;
+        lysShell = inputs.lys-shell.nixosModules.default;
+        seconds = 60;
+      };
   in {
     checks = {
       vm = vm {
@@ -41,10 +47,8 @@
         kernelModules = ["vkms"];
         outputs = ["Virtual-1" "Virtual-2"];
       };
-      vm-screencast = import ./screencast.nix {
-        inherit pkgs module;
-        seconds = 60;
-      };
+      vm-screencast = screencast "wlr";
+      vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
       headless = pkgs.callPackage ./headless.nix {

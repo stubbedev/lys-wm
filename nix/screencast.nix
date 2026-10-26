@@ -1,6 +1,8 @@
 {
   pkgs,
   module,
+  lysShell,
+  portal,
   seconds,
 }: let
   firefoxPrefs = pkgs.writeText "user.js" ''
@@ -19,10 +21,62 @@
     nativeBuildInputs = [pkgs.pkg-config];
     buildInputs = [pkgs.pipewire];
   } "mkdir -p $out/bin && $CC -std=gnu11 -O2 -Wall -Wextra -Werror -o $out/bin/pw-frames ${./pw-frames.c} $(pkg-config --cflags --libs libpipewire-0.3)";
-  chooser = pkgs.writeShellScript "share-pick" ''
+  background = pkgs.writeShellScript "background" ''
     set -euo pipefail
-    ${pkgs.gnugrep}/bin/grep -m1 -F -- "$(${pkgs.coreutils}/bin/cat /tmp/share-pick)"
+    name=$1
+    shift
+    ${pkgs.util-linux}/bin/setsid -f ${pkgs.bash}/bin/bash -c '"$@" > "/tmp/$0.log" 2>&1; echo $? > "/tmp/$0.status"' "$name" "$@" < /dev/null > /dev/null 2>&1
   '';
+  portals = {
+    wlr = {
+      name = "lys-wm-screencast";
+      log = "xdg-desktop-portal-wlr";
+      chooserRan = "wlroots: chooser called";
+      machineConfig = {config, ...}: let
+        chooser = pkgs.writeShellScript "share-pick" ''
+          set -euo pipefail
+          ${pkgs.gnugrep}/bin/grep -m1 -F -- "$(${pkgs.coreutils}/bin/cat /tmp/share-pick)"
+        '';
+      in {
+        xdg.portal.wlr.settings.screencast = {
+          chooser_type = "dmenu";
+          chooser_cmd = "${chooser}";
+        };
+        systemd.user.services.xdg-desktop-portal-wlr.serviceConfig.ExecStart = pkgs.lib.mkForce [
+          ""
+          "${pkgs.xdg-desktop-portal-wlr}/libexec/xdg-desktop-portal-wlr --loglevel=DEBUG --config=${(pkgs.formats.ini {}).generate "xdg-desktop-portal-wlr.ini" config.xdg.portal.wlr.settings}"
+        ];
+      };
+    };
+    lys-shell = {
+      name = "lys-wm-screencast-lys-shell";
+      log = "lys-shell";
+      chooserRan = null;
+      machineConfig = let
+        wallpaper = pkgs.runCommand "desktop.png" {nativeBuildInputs = [pkgs.imagemagick];} "magick -size 64x64 xc:'#1e1e2e' png24:$out";
+        shellConfig = (pkgs.formats.yaml {}).generate "config.yaml" {
+          wallpaper = {
+            inherit wallpaper;
+            fit-mode = "fill";
+          };
+        };
+      in {
+        imports = [lysShell];
+        programs.lys-shell = {
+          enable = true;
+          systemd.enable = true;
+        };
+        systemd.user.services.lys-shell.environment.LYS_UI_RENDERER = "cpu";
+        systemd.tmpfiles.rules = [
+          "d /home/alice/.config 0755 alice users -"
+          "d /home/alice/.config/lys-shell 0755 alice users -"
+          "L+ /home/alice/.config/lys-shell/config.yaml - - - - ${shellConfig}"
+        ];
+        fonts.packages = [pkgs.inter];
+      };
+    };
+  };
+  chosen = portals.${portal};
   launchers = builtins.mapAttrs launch {
     animation = "${pkgs.weston}/bin/weston-presentation-shm";
     firefox = "${pkgs.firefox}/bin/firefox --no-remote --profile /tmp/firefox '${page}'";
@@ -32,31 +86,25 @@
 in
   import ./vm.nix {
     inherit pkgs module;
-    name = "lys-wm-screencast";
+    inherit (chosen) name;
     devices = ["virtio-gpu-pci"];
     outputs = ["Virtual-1"];
-    machineConfig = {config, ...}: {
+    machineConfig = {
+      imports = [chosen.machineConfig];
       services.pipewire.enable = true;
       virtualisation.memorySize = pkgs.lib.mkForce 4096;
       environment.systemPackages = [python frames];
-      xdg.portal.wlr.settings.screencast = {
-        chooser_type = "dmenu";
-        chooser_cmd = "${chooser}";
-      };
-      systemd.user.services.xdg-desktop-portal-wlr.serviceConfig.ExecStart = pkgs.lib.mkForce [
-        ""
-        "${pkgs.xdg-desktop-portal-wlr}/libexec/xdg-desktop-portal-wlr --loglevel=DEBUG --config=${(pkgs.formats.ini {}).generate "xdg-desktop-portal-wlr.ini" config.xdg.portal.wlr.settings}"
-      ];
     };
     extraTest = run: let
       params = builtins.toJSON {
         as_alice = run "{}";
         screencast = "${python}/bin/python3 ${./screencast.py}";
         firefox_prefs = "${firefoxPrefs}";
-        portal_log = "xdg-desktop-portal-wlr";
-        chooser_ran = "wlroots: chooser called";
+        portal_log = chosen.log;
+        chooser_ran = chosen.chooserRan;
         max_gap_ms = 2000;
-        inherit launchers seconds;
+        background = "${background}";
+        inherit launchers portal seconds;
       };
     in ''
       import json

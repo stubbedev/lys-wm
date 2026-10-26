@@ -3,6 +3,7 @@ import re
 import shlex
 
 ANIMATION = "presentation-shm"
+ANIMATION_PREVIEW = "ff0000"
 OUTPUT = "Virtual-1"
 OUTPUT_PIXELS = (1280, 800)
 OUTPUT_SIZE = "x".join(map(str, OUTPUT_PIXELS))
@@ -11,6 +12,13 @@ WINDOW = f"Window: {ANIMATION}"
 KEYS = {MONITOR: "m", WINDOW: "w"}
 ABS_MAX = 0x7FFF
 CURSOR_BOX = 64
+PICKER_PANEL = "262638"
+PICKER_PROBE = (630, 630, 20, 10)
+PICKER_WIDE_PROBE = (5, 400, 1, 1)
+PICKER_PAGE = (0, 260, 1280, 330)
+PICKER_PAGE_CENTER = (640, 420)
+PICKER_OUTPUTS_TAB = (640, 228)
+PICKER_POLLS = 600
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
 
@@ -42,6 +50,8 @@ def chooser_runs():
 
 
 def choose(label):
+    if params["portal"] != "wlr":
+        return 0
     machine.succeed(f"printf '%s\\n' {shlex.quote(label)} > /tmp/share-pick")
     return chooser_runs()
 
@@ -58,11 +68,77 @@ def move_pointer(x, y):
     ])
 
 
+def press(down):
+    pointer_events([{"type": "btn", "data": {"down": down, "button": "left"}}])
+
+
+def click(x, y, then=None):
+    move_pointer(x, y)
+    machine.sleep(0.5)
+    press(True)
+    machine.sleep(0.2)
+    press(False)
+    if then is not None:
+        move_pointer(*then)
+    machine.sleep(0.2)
+
+
+def locate(color, x, y, width, height):
+    status, out = machine.execute(as_alice(f"WAYLAND_DISPLAY={display} grim -g \"{x},{y} {width}x{height}\" -t ppm - | {params['screencast']} locate {color}"))
+    if status != 0:
+        return None
+    cx, cy, count = map(int, out.split())
+    return x + cx, y + cy, count
+
+
+def picker_shown():
+    found = locate(PICKER_PANEL, *PICKER_PROBE)
+    return found is not None and found[2] == PICKER_PROBE[2] * PICKER_PROBE[3]
+
+
+def pick_in_picker(label):
+    if label == MONITOR:
+        if locate(PICKER_PANEL, *PICKER_WIDE_PROBE) is not None:
+            click(*PICKER_OUTPUTS_TAB)
+            machine.sleep(2)
+        click(*PICKER_PAGE_CENTER, then=POINTER_REST)
+        return
+    found = locate(ANIMATION_PREVIEW, *PICKER_PAGE)
+    assert found is not None, f"the share picker shows no card for {label}"
+    click(found[0], found[1], then=POINTER_REST)
+
+
+def answer(label, ran, done, confirm):
+    if params["portal"] == "wlr":
+        if confirm:
+            machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=120)
+            machine.sleep(3)
+            machine.send_key("ret")
+        return
+    answered = 0
+    for _ in range(PICKER_POLLS):
+        if done():
+            return
+        if picker_shown():
+            machine.sleep(2)
+            pick_in_picker(label)
+            answered += 1
+            if confirm and answered == 1:
+                machine.sleep(3)
+                machine.send_key("ret")
+        machine.sleep(1)
+
+
 def capture(name, source, cursor, label):
-    choose(label)
+    ran = choose(label)
+    machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}"))
     try:
-        print(machine.succeed(as_alice(f"{params['screencast']} capture {source} {cursor} 10 /tmp/{name}")))
+        answer(label, ran, lambda: machine.execute(f"test -s /tmp/{name}.status")[0] == 0, False)
+        machine.wait_until_succeeds(f"test -s /tmp/{name}.status", timeout=300)
+        print(machine.succeed(f"cat /tmp/{name}.log"))
+        machine.succeed(f"grep -qx 0 /tmp/{name}.status")
     except Exception:
+        print(machine.execute(f"cat /tmp/{name}.log")[1])
         dump("animation")
         raise
 
@@ -83,12 +159,10 @@ def share(app, label, confirm):
     [shown] = [w for w in windows() if w["id"] not in before]
     ran = choose(label)
     machine.send_key(KEYS[label])
-    if confirm:
-        machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=120)
-        machine.sleep(3)
-        machine.send_key("ret")
+    finished = as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'"
+    answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
     try:
-        machine.wait_until_succeeds(as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'", timeout=params["seconds"] + 300)
+        machine.wait_until_succeeds(finished, timeout=params["seconds"] + 300)
     finally:
         machine.screenshot(f"{app}-{KEYS[label]}")
     title = next(w for w in windows() if w["id"] == shown["id"])["title"]
