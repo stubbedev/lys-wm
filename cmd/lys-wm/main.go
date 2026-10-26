@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	gtext "github.com/stubbedev/lys-ui/render"
+	gtext "github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"

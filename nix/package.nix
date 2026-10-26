@@ -26,7 +26,7 @@
 
         # Pins the module dependencies in go.sum. When they change, set this to
         # lib.fakeHash, run `nix build` and put the reported got: hash here.
-        vendorHash = "sha256-BJTjl07R1cu4oo6pIh2jPKDN+iGK9JzweQ9ctW/+rKA=";
+        vendorHash = "sha256-DV5+TWfwXgFU6ziSKXyz3rDtYur7o3k6sWZ5zZf66h8=";
 
         subPackages = ["cmd/lys-wm" "cmd/lys-wmctl"];
 

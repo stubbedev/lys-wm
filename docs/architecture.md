@@ -20,7 +20,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | logind | [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus) |
 | udev | netlink, read directly (#39) |
 | X11 window manager | [`github.com/jezek/xgb`](https://github.com/jezek/xgb) (#45) |
-| Text | [`github.com/go-text/typesetting`](https://github.com/go-text/typesetting), through lys-ui's `render` |
+| Text | [`github.com/go-text/typesetting`](https://github.com/go-text/typesetting), through lys-lib's `render` |
 | Config file | [`go.yaml.in/yaml/v3`](https://github.com/yaml/go-yaml), strict, as lys-shell uses (#30) |
 
 Adding a purego library, or a dependency to this table, is a decision issue.
@@ -32,8 +32,9 @@ keymaps with libxkbcommon anyway, so the compositor compiles and serves
 them with it too. The purego libraries' paths are baked in at build time
 by the Nix package; `LYS_WM_LIBXKBCOMMON` overrides libxkbcommon's.
 
-Tab titles are drawn with lys-ui's public `render` package. lys-ui's font
-discovery is internal to it, so the tab font is baked in the same way:
+Tab titles are drawn with lys-lib's `render` package, which lys-ui moved
+there with everything else that is not UI (stubbedev/lys-ui#357). Font
+discovery is internal to lys-ui, so the tab font is baked in the same way:
 the Nix package sets DejaVu Sans as the default and `LYS_WM_FONT` overrides
 it, until the config (#30) names one.
 

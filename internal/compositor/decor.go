@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"image"
 
-	gtext "github.com/stubbedev/lys-ui/render"
+	gtext "github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
