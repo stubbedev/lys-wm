@@ -23,6 +23,8 @@ var everyAction = []Action{
 	MoveToWorkspaceAction{Target: WorkspaceID(10)},
 	MoveToWorkspaceAction{Target: RelativeWorkspace(-1)},
 	KillAction{},
+	FocusWindowAction{ID: 7},
+	CloseWindowAction{ID: 12},
 	ReloadAction{},
 	ExitAction{},
 	DPMSAction{Mode: PowerOff},
@@ -70,6 +72,10 @@ func TestBadActionsFailPrecisely(t *testing.T) {
 		"workspace 0":             `workspace <n|e+n|e-n>: unknown workspace "0"`,
 		"workspace e+0":           `workspace <n|e+n|e-n>: unknown workspace "e+0"`,
 		"kill now":                "kill: takes 0 argument(s), got 1",
+		"focuswindow":             "focuswindow <id>: takes 1 argument(s), got 0",
+		"focuswindow 0":           `focuswindow <id>: window ID "0" is not a positive number`,
+		"closewindow -3":          `closewindow <id>: window ID "-3" is not a positive number`,
+		"closewindow foot":        `closewindow <id>: window ID "foot" is not a positive number`,
 		"exec":                    "exec <command>: needs a command",
 		"global discord":          `global <app_id>:<id>: "discord" is not app_id:id`,
 		"global :ptt":             `global <app_id>:<id>: ":ptt" is not app_id:id`,
@@ -118,7 +124,7 @@ func TestDispatch(t *testing.T) {
 	if f, _ := s.Focused(); f != 1 || active(s)[0] != 2 {
 		t.Fatalf("workspace 2 shows %v, focus %d", active(s), f)
 	}
-	if effects := run("kill"); !slices.Equal(effects, []Effect{Close{ID: 1}}) {
+	if effects := run("kill"); !slices.Equal(effects, []Effect{CloseWindowAction{ID: 1}}) {
 		t.Fatalf("kill gave %v", effects)
 	}
 	if effects := run("reload"); !slices.Equal(effects, []Effect{ReloadAction{}}) {
@@ -139,6 +145,49 @@ func TestDispatch(t *testing.T) {
 	}
 	if _, _, err := Dispatch(State{}, WorkspaceAction{Target: RelativeWorkspace(1)}, settings); !errors.Is(err, ErrUnknownOutput) {
 		t.Fatalf("a relative workspace with no output: %v", err)
+	}
+}
+
+func TestFocusAndCloseAWindowByID(t *testing.T) {
+	s := ok(t)(State{}.AddOutput("DP-1", left, left))
+	s = ok(t)(s.AddOutput("DP-2", right, right))
+	s = ok(t)(s.MapWindow(1, Autotile{}))
+	s = ok(t)(s.SwitchWorkspace(3))
+	s = ok(t)(s.MapWindow(2, Autotile{}))
+	run := func(a Action) []Effect {
+		t.Helper()
+		next, effects, err := Dispatch(s, a, Settings{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s = next
+		return effects
+	}
+	run(MakeGroupAction{Layout: Tabbed})
+	s = ok(t)(s.MapWindow(3, Autotile{}))
+	s = ok(t)(s.FocusOutput("DP-2"))
+	run(FocusWindowAction{ID: 1})
+	if f, _ := s.Focused(); f != 1 || s.FocusedOutput() != "DP-1" || !slices.Equal(active(s), []WorkspaceID{1, 2}) {
+		t.Fatalf("focuswindow 1 focused %d on %s showing %v", f, s.FocusedOutput(), active(s))
+	}
+	run(FocusWindowAction{ID: 2})
+	if f, _ := s.Focused(); f != 2 || !slices.Equal(active(s), []WorkspaceID{3, 2}) {
+		t.Fatalf("focuswindow 2 focused %d showing %v", f, active(s))
+	}
+	if got := s.workspace(3).Tree.String(); got != "h[*tab[*2 3]]" {
+		t.Fatalf("the tab of window 2 is not raised: %s", got)
+	}
+	before := s
+	if effects := run(CloseWindowAction{ID: 3}); !slices.Equal(effects, []Effect{CloseWindowAction{ID: 3}}) {
+		t.Fatalf("closewindow 3 gave %v", effects)
+	}
+	if f, _ := s.Focused(); f != 2 || s.workspace(3).Tree.String() != before.workspace(3).Tree.String() {
+		t.Fatalf("closewindow moved focus to %d", f)
+	}
+	for _, a := range []Action{FocusWindowAction{ID: 9}, CloseWindowAction{ID: 9}} {
+		if _, _, err := Dispatch(s, a, Settings{}); !errors.Is(err, ErrUnknownWindow) || !strings.Contains(err.Error(), "window 9") {
+			t.Errorf("%s: %v", a, err)
+		}
 	}
 }
 

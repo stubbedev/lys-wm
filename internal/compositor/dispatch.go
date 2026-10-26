@@ -37,7 +37,7 @@ func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger) error {
 
 func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 	switch e := e.(type) {
-	case wm.Close:
+	case wm.CloseWindowAction:
 		w := c.windowByID(e.ID)
 		if w == nil {
 			return fmt.Errorf("close unknown window %d", e.ID)

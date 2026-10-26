@@ -9,6 +9,8 @@ Every keybind and `lys-wmctl dispatch` takes one of these. This file is generate
 | `workspace` | `<n\|e+n\|e-n>` | Show workspace n, or the n-th open workspace after or before the current one. |
 | `movetoworkspace` | `<n\|e+n\|e-n>` | Move the focused window to a workspace without following it. |
 | `kill` |  | Ask the focused window to close. |
+| `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped. |
+| `closewindow` | `<id>` | Ask the window with this IPC ID to close. |
 | `dpms` | `<on\|off\|toggle> [output]` | Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on. |
 | `reload` |  | Read the config file again; a bad file keeps the running config and reports the error. |
 | `exit` |  | End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM. |

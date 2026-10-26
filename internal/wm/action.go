@@ -23,8 +23,6 @@ const (
 	DragResize
 )
 
-type Close struct{ ID WindowID }
-
 type PowerMode uint8
 
 const (
@@ -35,14 +33,14 @@ const (
 
 var powerModes = []string{PowerOn: "on", PowerOff: "off", PowerToggle: "toggle"}
 
-func (Close) isEffect()        {}
-func (ExecAction) isEffect()   {}
-func (SubmapAction) isEffect() {}
-func (DragAction) isEffect()   {}
-func (ReloadAction) isEffect() {}
-func (ExitAction) isEffect()   {}
-func (GlobalAction) isEffect() {}
-func (DPMSAction) isEffect()   {}
+func (CloseWindowAction) isEffect() {}
+func (ExecAction) isEffect()        {}
+func (SubmapAction) isEffect()      {}
+func (DragAction) isEffect()        {}
+func (ReloadAction) isEffect()      {}
+func (ExitAction) isEffect()        {}
+func (GlobalAction) isEffect()      {}
+func (DPMSAction) isEffect()        {}
 
 func emit(s State, e Effect) (State, []Effect, error) {
 	return s, []Effect{e}, nil
@@ -82,6 +80,8 @@ type (
 	WorkspaceAction       struct{ Target WorkspaceTarget }
 	MoveToWorkspaceAction struct{ Target WorkspaceTarget }
 	KillAction            struct{}
+	FocusWindowAction     struct{ ID WindowID }
+	CloseWindowAction     struct{ ID WindowID }
 	ExecAction            struct{ Command string }
 	MakeGroupAction       struct {
 		Layout    Layout
@@ -170,7 +170,14 @@ func (a WorkspaceAction) String() string { return "workspace " + a.Target.String
 func (a MoveToWorkspaceAction) String() string {
 	return "movetoworkspace " + a.Target.String()
 }
-func (KillAction) String() string   { return "kill" }
+func (KillAction) String() string { return "kill" }
+func (a FocusWindowAction) String() string {
+	return "focuswindow " + strconv.FormatUint(uint64(a.ID), 10)
+}
+
+func (a CloseWindowAction) String() string {
+	return "closewindow " + strconv.FormatUint(uint64(a.ID), 10)
+}
 func (a ExecAction) String() string { return "exec " + a.Command }
 func (a MakeGroupAction) String() string {
 	if a.Ephemeral {
@@ -223,7 +230,19 @@ func (KillAction) apply(s State, _ Settings) (State, []Effect, error) {
 	if !ok {
 		return s, nil, nil
 	}
-	return s, []Effect{Close{ID: id}}, nil
+	return s, []Effect{CloseWindowAction{ID: id}}, nil
+}
+
+func (a FocusWindowAction) apply(s State, _ Settings) (State, []Effect, error) {
+	next, err := s.FocusWindow(a.ID)
+	return next, nil, err
+}
+
+func (a CloseWindowAction) apply(s State, _ Settings) (State, []Effect, error) {
+	if _, ok := s.WorkspaceOf(a.ID); !ok {
+		return State{}, nil, fmt.Errorf("close window %d: %w", a.ID, ErrUnknownWindow)
+	}
+	return emit(s, a)
 }
 
 func (a ExecAction) apply(s State, _ Settings) (State, []Effect, error) {
@@ -334,6 +353,19 @@ func workspaced(build func(WorkspaceTarget) Action) func(ActionSpec, []string, s
 	}
 }
 
+func windowed(build func(WindowID) Action) func(ActionSpec, []string, string) (Action, error) {
+	return func(spec ActionSpec, args []string, _ string) (Action, error) {
+		if err := exactly(spec, args, 1); err != nil {
+			return nil, err
+		}
+		id, err := strconv.ParseUint(args[0], 10, 64)
+		if err != nil || id == 0 {
+			return nil, badArgs(spec, "window ID %q is not a positive number", args[0])
+		}
+		return build(WindowID(id)), nil
+	}
+}
+
 var Actions = []ActionSpec{
 	{
 		Name: "focus", Args: "<left|right|up|down>",
@@ -359,6 +391,16 @@ var Actions = []ActionSpec{
 		Name:    "kill",
 		Summary: "Ask the focused window to close.",
 		parse:   bare(KillAction{}),
+	},
+	{
+		Name: "focuswindow", Args: "<id>",
+		Summary: "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped.",
+		parse:   windowed(func(id WindowID) Action { return FocusWindowAction{ID: id} }),
+	},
+	{
+		Name: "closewindow", Args: "<id>",
+		Summary: "Ask the window with this IPC ID to close.",
+		parse:   windowed(func(id WindowID) Action { return CloseWindowAction{ID: id} }),
 	},
 	{
 		Name: "dpms", Args: "<on|off|toggle> [output]",
