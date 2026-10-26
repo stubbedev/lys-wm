@@ -66,7 +66,6 @@
           enable = true;
           systemd.enable = true;
         };
-        systemd.user.services.lys-shell.environment.LYS_UI_RENDERER = "cpu";
         systemd.tmpfiles.rules = [
           "d /home/alice/.config 0755 alice users -"
           "d /home/alice/.config/lys-shell 0755 alice users -"
