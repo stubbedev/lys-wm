@@ -135,6 +135,8 @@ func (c *xclient) window(rect image.Rectangle, pixel uint32, override bool, prop
 			typ, format = xproto.Atom(xproto.AtomAtom), 32
 		case "WM_TRANSIENT_FOR":
 			typ, format = xproto.Atom(xproto.AtomWindow), 32
+		case "WM_NORMAL_HINTS":
+			typ, format = xproto.Atom(xproto.AtomWmSizeHints), 32
 		}
 		checks = append(checks, xproto.ChangePropertyChecked(c.x, xproto.PropModeReplace, win, c.atoms[name], typ, format, uint32(len(value))/uint32(format/8), value))
 	}
@@ -470,6 +472,32 @@ func TestXWindowsMovedPartlyOffAnOutputKeepItsScale(t *testing.T) {
 	h.Eventually("the dialog above the output's top edge, in logical and in X pixels", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
 		return len(ws) == 1 && ws[0].Rect == ipc.Rect{X: 20, Y: -10, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(30, -15, 90, 30)
+	})
+}
+
+func TestFixedSizeXWindowsKeepTheirSizeOnFractionalScales(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return c.SetOutputScale(b.Outputs()[0], 180)
+	})
+	xc := xDial(t, h)
+	xc.intern("WM_NORMAL_HINTS")
+	h.Eventually("Xwayland's root in physical pixels", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.geometry(xc.root) == image.Rect(0, 0, 240, 150)
+	})
+	hints := make([]uint32, 18)
+	hints[0], hints[5], hints[6], hints[7], hints[8] = 1<<4|1<<5, 61, 45, 61, 45
+	var raw []byte
+	for _, v := range hints {
+		raw = binary.LittleEndian.AppendUint32(raw, v)
+	}
+	win := xc.window(image.Rect(0, 0, 61, 45), 0xff0000, false, map[string][]byte{
+		"WM_CLASS":        []byte("fixed\x00XTest\x00"),
+		"WM_NORMAL_HINTS": raw,
+	})
+	h.Eventually("the fixed-size window centred, at its own size", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws, g := windowsOf(c), xc.geometry(win)
+		return len(ws) == 1 && ws[0].Floating && g.Min != (image.Point{}) && g.Size() == image.Pt(61, 45)
 	})
 }
 

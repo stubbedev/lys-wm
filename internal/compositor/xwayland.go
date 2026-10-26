@@ -64,7 +64,12 @@ func (xToplevel) scaled() bool {
 }
 
 func (t xToplevel) state(w want) xwayland.State {
-	return xwayland.State{Rect: t.c.toX(w.rect), Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen}
+	r := t.c.toX(w.rect)
+	if w.layer == wm.LayerFloating {
+		h := t.SizeHints()
+		r.Max = r.Min.Add(clampSize(r.Size(), h.Min, h.Max))
+	}
+	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen}
 }
 
 func (t xToplevel) settled(w want) bool {

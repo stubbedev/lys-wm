@@ -170,6 +170,10 @@ func (w *Window) PrefersFloating() bool {
 		w.has(w.props.types, atomNetWMWindowTypeDialog, atomNetWMWindowTypeUtility, atomNetWMWindowTypeSplash, atomNetWMWindowTypeToolbar)
 }
 
+func (w *Window) SizeHints() SizeHints {
+	return w.props.size
+}
+
 func (w *Window) Modal() bool {
 	return w.has(w.props.states, atomNetWMStateModal)
 }
