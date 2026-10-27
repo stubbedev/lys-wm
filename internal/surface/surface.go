@@ -198,28 +198,29 @@ func (dst *state) merge(src *state) {
 }
 
 type Surface struct {
-	manager      *Manager
-	client       *server.Client
-	resource     *sw.WlSurface
-	pending      state
-	cache        *Update
-	queue        []*Update
-	current      state
-	latched      []*spt.WpPresentationFeedback
-	damage       region.Region
-	bufferDamage region.Region
-	attached     bool
-	offset       image.Point
-	role         Role
-	roleName     string
-	sub          *Subsurface
-	order        []*Surface
-	pendingOrder []*Surface
-	viewport     *viewport
-	fractional   *fractional
-	preferred    uint32
-	destroyed    bool
-	hooks        []*Hooks
+	manager          *Manager
+	client           *server.Client
+	resource         *sw.WlSurface
+	pending          state
+	cache            *Update
+	queue            []*Update
+	current          state
+	latched          []*spt.WpPresentationFeedback
+	damage           region.Region
+	bufferDamage     region.Region
+	attached         bool
+	offset           image.Point
+	role             Role
+	roleName         string
+	sub              *Subsurface
+	order            []*Surface
+	pendingOrder     []*Surface
+	viewport         *viewport
+	fractional       *fractional
+	preferred        uint32
+	destroyed        bool
+	hooks            []*Hooks
+	unappliedScratch []*state
 }
 
 type Hooks struct {
@@ -265,11 +266,11 @@ func (u *Update) absorb(later *Update) {
 }
 
 func (s *Surface) AddHooks(h *Hooks) {
-	s.hooks = append(s.hooks, h)
+	s.hooks = append(slices.Clip(s.hooks), h)
 }
 
 func (s *Surface) RemoveHooks(h *Hooks) {
-	s.hooks = slices.DeleteFunc(s.hooks, func(x *Hooks) bool { return x == h })
+	s.hooks = slices.DeleteFunc(slices.Clone(s.hooks), func(x *Hooks) bool { return x == h })
 }
 
 func (s *Surface) HasBuffer() bool {
@@ -474,14 +475,15 @@ func (s *Surface) protocolError(code sw.WlSurfaceError, format string, args ...a
 }
 
 func (s *Surface) unapplied() []*state {
-	states := make([]*state, 0, len(s.queue)+2)
+	states := s.unappliedScratch[:0]
 	for _, u := range s.queue {
 		states = append(states, &u.state)
 	}
 	if s.cache != nil {
 		states = append(states, &s.cache.state)
 	}
-	return append(states, &s.pending)
+	s.unappliedScratch = append(states, &s.pending)
+	return s.unappliedScratch
 }
 
 func (s *Surface) checkSize() error {
@@ -503,7 +505,7 @@ func (s *Surface) commit() error {
 		return err
 	}
 	u := &Update{s: s}
-	for _, h := range slices.Clone(s.hooks) {
+	for _, h := range s.hooks {
 		if h.Commit != nil {
 			if err := h.Commit(u); err != nil {
 				return err
@@ -559,7 +561,7 @@ func (s *Surface) apply(u *Update) error {
 	}
 	s.current.merge(st)
 	s.current.set = 0
-	s.order = slices.Clone(s.pendingOrder)
+	s.order = append(s.order[:0], s.pendingOrder...)
 	for _, child := range s.order {
 		if child != s {
 			child.sub.position = child.sub.pendingPosition
@@ -578,14 +580,14 @@ func (s *Surface) apply(u *Update) error {
 			return err
 		}
 	}
-	for _, h := range slices.Clone(s.hooks) {
+	for _, h := range s.hooks {
 		if h.Applied != nil {
 			if err := h.Applied(); err != nil {
 				return err
 			}
 		}
 	}
-	for _, child := range slices.Clone(s.order) {
+	for _, child := range s.order {
 		if child != s && child.synchronized() {
 			if err := child.flush(); err != nil {
 				return err
