@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 	sel "github.com/stubbedev/lys-wm/internal/protocol/server/extsessionlock"
+	skd "github.com/stubbedev/lys-wm/internal/protocol/server/kdeserverdecoration"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	swlr "github.com/stubbedev/lys-wm/internal/protocol/server/wlrlayershell"
 	sxa "github.com/stubbedev/lys-wm/internal/protocol/server/xdgactivation"
@@ -129,6 +130,7 @@ func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
 		{sxf2.ZxdgImporterV2Interface, foreignVersion, sh.bindImporterV2},
 		{sxdd.XdgWmDialogV1Interface, dialogVersion, sh.bindDialog},
 		{sxti.XdgToplevelIconManagerV1Interface, iconVersion, sh.bindIcons},
+		{skd.OrgKdeKwinServerDecorationManagerInterface, kdeDecorationVersion, bindKDEDecoration},
 	} {
 		if _, err := d.AddGlobal(g.iface, g.version, g.bind); err != nil {
 			return nil, err

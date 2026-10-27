@@ -3,13 +3,18 @@ package shell
 import (
 	"fmt"
 
+	skd "github.com/stubbedev/lys-wm/internal/protocol/server/kdeserverdecoration"
+	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxd "github.com/stubbedev/lys-wm/internal/protocol/server/xdgdecoration"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
-const decorationVersion = 1
+const (
+	decorationVersion    = 1
+	kdeDecorationVersion = 1
+)
 
 func (sh *Shell) bindDecoration(c *server.Client, id wire.ObjectID, version uint32) error {
 	_, err := sxd.NewZxdgDecorationManagerV1(c, id, version, decorationManager{})
@@ -69,4 +74,26 @@ func (d decoration) SetMode(obj *sxd.ZxdgToplevelDecorationV1, mode sxd.ZxdgTopl
 
 func (d decoration) UnsetMode(*sxd.ZxdgToplevelDecorationV1) error {
 	return d.configure()
+}
+
+func bindKDEDecoration(c *server.Client, id wire.ObjectID, version uint32) error {
+	res, err := skd.NewOrgKdeKwinServerDecorationManager(c, id, version, kdeDecorationManager{})
+	if err != nil {
+		return err
+	}
+	return res.SendDefaultMode(uint32(skd.OrgKdeKwinServerDecorationManagerModeServer))
+}
+
+type kdeDecorationManager struct{}
+
+func (kdeDecorationManager) Create(_ *skd.OrgKdeKwinServerDecorationManager, res *skd.OrgKdeKwinServerDecoration, _ *sw.WlSurface) (skd.OrgKdeKwinServerDecorationHandler, error) {
+	return kdeDecoration{}, res.SendMode(uint32(skd.OrgKdeKwinServerDecorationModeServer))
+}
+
+type kdeDecoration struct{}
+
+func (kdeDecoration) Release(*skd.OrgKdeKwinServerDecoration) error { return nil }
+
+func (kdeDecoration) RequestMode(obj *skd.OrgKdeKwinServerDecoration, _ uint32) error {
+	return obj.SendMode(uint32(skd.OrgKdeKwinServerDecorationModeServer))
 }

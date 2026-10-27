@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	ckd "github.com/stubbedev/lys-wm/internal/protocol/client/kdeserverdecoration"
 	cxd "github.com/stubbedev/lys-wm/internal/protocol/client/xdgdecoration"
 	sxd "github.com/stubbedev/lys-wm/internal/protocol/server/xdgdecoration"
 )
@@ -72,5 +73,43 @@ func TestDecorationProtocolErrors(t *testing.T) {
 			tc.do(c)
 			c.protocolError(tc.code)
 		})
+	}
+}
+
+type kdeManagerEvents struct{ defaults []uint32 }
+
+func (k *kdeManagerEvents) DefaultMode(_ *ckd.OrgKdeKwinServerDecorationManager, mode uint32) error {
+	k.defaults = append(k.defaults, mode)
+	return nil
+}
+
+type kdeDecorationEvents struct{ modes []uint32 }
+
+func (k *kdeDecorationEvents) Mode(_ *ckd.OrgKdeKwinServerDecoration, mode uint32) error {
+	k.modes = append(k.modes, mode)
+	return nil
+}
+
+func TestKDEDecorationsAreAlwaysServerSide(t *testing.T) {
+	c := setup(t).connect(6)
+	globals := registry{}
+	reg, err := c.d.WlDisplay().GetRegistry(globals)
+	must(t, err)
+	c.roundtrip()
+	mev := &kdeManagerEvents{}
+	m, err := ckd.NewOrgKdeKwinServerDecorationManager(c.d, 1, mev)
+	must(t, err, reg.Bind(globals["org_kde_kwin_server_decoration_manager"], m))
+	c.roundtrip()
+	server := uint32(ckd.OrgKdeKwinServerDecorationManagerModeServer)
+	if !slices.Equal(mev.defaults, []uint32{server}) {
+		t.Fatalf("default modes %v, want server-side", mev.defaults)
+	}
+	w := c.window()
+	dev := &kdeDecorationEvents{}
+	deco, err := m.Create(dev, w.surf)
+	must(t, err, deco.RequestMode(uint32(ckd.OrgKdeKwinServerDecorationModeClient)))
+	c.roundtrip()
+	if !slices.Equal(dev.modes, []uint32{server, server}) {
+		t.Fatalf("modes %v, want server-side on creation and after asking for client-side", dev.modes)
 	}
 }

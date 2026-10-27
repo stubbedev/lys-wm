@@ -354,7 +354,7 @@ Everything lives under `internal/` except the commands.
 | `data` | `wl_data_device_manager` and `zwp_primary_selection_device_manager_v1`: the clipboard and primary selection offered to the keyboard focus, and drag and drop (#18) |
 | `xcursor` | Xcursor files and theme lookup through `XCURSOR_PATH` and `Inherits`, and the built-in arrow (#14) |
 | `xkb` | Keymap compilation, sealed keymap fds and modifier state through libxkbcommon (#13) |
-| `shell` | xdg-shell and layer-shell glue between clients and `wm`: toplevels, popups placed by their positioner, explicit popup grabs, server-side decorations, activation tokens, and xdg-foreign handles that make another client's toplevel, such as a portal dialog, a child of the exported window, and xdg-dialog's modal hint; focus that would land on a window with a mapped modal dialog goes to the dialog, for X windows with `_NET_WM_STATE_MODAL` too (#15, #16, #17, #20, #48, #110, #111); `xdg_toplevel_icon_v1` icons, copied out of their shm buffers when assigned and latched with the toplevel's commit, for IPC and the tab bar (#154) |
+| `shell` | xdg-shell and layer-shell glue between clients and `wm`: toplevels, popups placed by their positioner, explicit popup grabs, server-side decorations (xdg-decoration, and KDE's server-decoration for GTK3 clients, both always server-side; #180), activation tokens, and xdg-foreign handles that make another client's toplevel, such as a portal dialog, a child of the exported window, and xdg-dialog's modal hint; focus that would land on a window with a mapped modal dialog goes to the dialog, for X windows with `_NET_WM_STATE_MODAL` too (#15, #16, #17, #20, #48, #110, #111); `xdg_toplevel_icon_v1` icons, copied out of their shm buffers when assigned and latched with the toplevel's commit, for IPC and the tab bar (#154) |
 | `wm` | The pure core and the dispatcher (#21, #66) |
 | `binds` | Typed chords (modifiers with a keycode from the first layout, a button or a scroll direction), submaps and bind flags, matched to `wm` actions (#29) |
 | `xwm` | The X11 window manager for XWayland (#45) |
@@ -425,3 +425,6 @@ Licences decide how they may be used:
   copyright notice and licence in `THIRD_PARTY.md`.
 - hy3 is GPL-3.0. Read it to pin down behaviour (collapse policy, autotile,
   move semantics); never port its code.
+- KDE's `server-decoration` protocol XML is LGPL-2.1-or-later. It is vendored
+  unchanged with its licence header and only describes the wire interface,
+  as wlroots, sway and Hyprland ship it; no KDE code is ported.

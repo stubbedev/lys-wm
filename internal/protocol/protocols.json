@@ -228,6 +228,11 @@
       "path": "unstable/wlr-output-management-unstable-v1.xml"
     },
     {
+      "package": "kdeserverdecoration",
+      "source": "wlroots",
+      "path": "protocol/server-decoration.xml"
+    },
+    {
       "package": "virtualkeyboard",
       "source": "wlroots",
       "path": "protocol/virtual-keyboard-unstable-v1.xml"
