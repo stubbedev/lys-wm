@@ -174,6 +174,24 @@ func TestTabsDrawThemeIconsByNameAndBuffersWhenTheNameIsUnknown(t *testing.T) {
 	h.Eventually("the green buffer for a name the theme lacks", showing(7, 7, [3]byte{0, 0xff, 0}))
 }
 
+func TestIconsKeepNoBufferLargerThanAnythingDrawsThem(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	m := iconManager(t, c)
+	w := c.Window("iconic", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	setIcon(t, c, m, w, "", 16, 256, 512)
+	first := eventuallyIcon(t, h, "iconic", func(i *ipc.Icon) bool { return i != nil })
+	if !slices.Equal(first.Sizes, []int{16, 256}) {
+		t.Fatalf("kept sizes %v, want 16 and 256 without the 512 px buffer", first.Sizes)
+	}
+	setIcon(t, c, m, w, "", 1024, 512)
+	only := eventuallyIcon(t, h, "iconic", func(i *ipc.Icon) bool { return i != nil && i.Serial != first.Serial })
+	if !slices.Equal(only.Sizes, []int{512}) {
+		t.Fatalf("kept sizes %v, want the smallest buffer when all are large", only.Sizes)
+	}
+}
+
 func TestAnEmptyIconResetsTheIcon(t *testing.T) {
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())

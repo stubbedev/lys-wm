@@ -72,8 +72,9 @@ the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 
 `icon` is what the window set through `xdg_toplevel_icon_v1`, or `null` when
 it set none and the app ID's own icon applies. `name` is an icon theme name
-and `sizes` lists the edges, in pixels, of the square buffers it gave; either
-may be missing. `serial` changes whenever the icon does, so a client can cache
+and `sizes` lists the edges, in pixels, of the square buffers it gave that
+lys-wm keeps: those up to 256 pixels, or only the smallest when every buffer
+is larger. Either may be missing. `serial` changes whenever the icon does, so a client can cache
 icons by it. X11 windows have no icon here yet.
 
 `submap`: the active bind submap's name, `""` for the default binds.

@@ -160,8 +160,9 @@ func (b *iconBuilder) seal(serial *uint64) (*Icon, error) {
 		return nil, nil
 	}
 	*serial++
-	icon := &Icon{Serial: *serial, Name: b.name, Images: make([]IconImage, 0, len(b.buffers))}
-	for _, ib := range b.buffers {
+	kept := keptIconBuffers(b.buffers)
+	icon := &Icon{Serial: *serial, Name: b.name, Images: make([]IconImage, 0, len(kept))}
+	for _, ib := range kept {
 		img, err := copyIcon(ib.buffer)
 		if err != nil {
 			return nil, fmt.Errorf("shell: read icon buffer: %w", err)
@@ -170,6 +171,19 @@ func (b *iconBuilder) seal(serial *uint64) (*Icon, error) {
 	}
 	b.sealed = icon
 	return icon, nil
+}
+
+func maxKeptIconEdge() int {
+	return 4 * int(slices.Max(IconSizes))
+}
+
+func keptIconBuffers(buffers []iconBuffer) []iconBuffer {
+	limit := maxKeptIconEdge()
+	kept := slices.DeleteFunc(slices.Clone(buffers), func(ib iconBuffer) bool { return ib.buffer.Size().X > limit })
+	if len(kept) > 0 || len(buffers) == 0 {
+		return kept
+	}
+	return []iconBuffer{slices.MinFunc(buffers, func(a, b iconBuffer) int { return a.buffer.Size().X - b.buffer.Size().X })}
 }
 
 func copyIcon(b *shm.Buffer) (*image.RGBA, error) {
