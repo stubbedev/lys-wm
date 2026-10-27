@@ -131,17 +131,19 @@ type opened struct {
 	backend.Backend
 	switchVT       func(vt uint32) error
 	configureInput func(session.InputConfig) error
+	lid            compositor.LidPolicy
+	onPower        func(changed func() error)
 }
 
 func hostInput(session.InputConfig) error { return nil }
 
-func openBackend(kind backendKind, renderer rendererKind, l *loop.Loop, input session.InputConfig, gpu string, report func(error)) (opened, error) {
+func openBackend(kind backendKind, renderer rendererKind, l *loop.Loop, opts nativeOptions, report func(error)) (opened, error) {
 	if kind == drmBackend {
-		n, err := openNative(l, os.Getenv, input, gpu, report)
+		n, err := openNative(l, os.Getenv, opts, report)
 		if err != nil {
 			return opened{}, err
 		}
-		return opened{Backend: n, switchVT: n.logind.SwitchTo, configureInput: n.input.Reconfigure}, nil
+		return opened{Backend: n, switchVT: n.logind.SwitchTo, configureInput: n.input.Reconfigure, lid: n.lidPolicy(), onPower: n.onPower}, nil
 	}
 	b, err := openOther(kind, renderer, l)
 	return opened{Backend: b, configureInput: hostInput}, err
@@ -237,10 +239,9 @@ type loaded struct {
 	keymap    *xkb.Keymap
 	env       [][2]string
 	autostart []string
-	input     session.InputConfig
 	xwayland  bool
 	zero      bool
-	gpu       string
+	native    nativeOptions
 }
 
 func (s source) load() (loaded, error) {
@@ -268,7 +269,7 @@ func (s source) load() (loaded, error) {
 	if err != nil {
 		return loaded{}, errors.Join(err, keymap.Close())
 	}
-	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, input: file.Input, xwayland: file.Xwayland, zero: file.ZeroScaling, gpu: file.GPU}, nil
+	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}}, nil
 }
 
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
@@ -301,7 +302,7 @@ func (s *reloader) reload() error {
 	}
 	old := s.keymap
 	s.keymap = next.keymap
-	return errors.Join(old.Close(), s.configureInput(next.input))
+	return errors.Join(old.Close(), s.configureInput(next.native.input))
 }
 
 func withEnv(env [][2]string, getenv func(string) string) func(string) string {
@@ -410,11 +411,11 @@ func run(args []string) (err error) {
 	}, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP); err != nil {
 		return err
 	}
-	b, err := openBackend(kind, renderer, l, first.input, first.gpu, cfg.Report)
+	b, err := openBackend(kind, renderer, l, first.native, cfg.Report)
 	if err != nil {
 		return err
 	}
-	cfg.Hooks.SwitchVT, s.configureInput = b.switchVT, b.configureInput
+	cfg.Hooks.SwitchVT, cfg.Hooks.Lid, s.configureInput = b.switchVT, b.lid, b.configureInput
 	defer func() { err = errors.Join(err, b.Close()) }()
 	display, err := server.New(l, server.Options{RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"), Trace: trace, Report: cfg.Report})
 	if err != nil {
@@ -435,6 +436,9 @@ func run(args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, srv.Close()) }()
 	s.comp.OnDispatch(srv.Dispatched)
+	if b.onPower != nil {
+		b.onPower(s.comp.PowerChanged)
+	}
 	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {ipc.SocketEnv, socket}}
 	if first.xwayland {
 		var xw *xwayland.Server

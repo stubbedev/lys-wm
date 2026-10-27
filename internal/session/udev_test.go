@@ -163,6 +163,13 @@ func TestMonitorDeliversTrustedSeatEvents(t *testing.T) {
 	}
 }
 
+func TestPowerSupplyEventsNeedNoDeviceNode(t *testing.T) {
+	ev, err := parseUdevMessage(udevMessage("ACTION=change", "SUBSYSTEM=power_supply", "DEVPATH=/devices/ac/power_supply/AC", "POWER_SUPPLY_ONLINE=0"), "/sys")
+	if err != nil || ev.Subsystem != PowerSupply || ev.Action != Change || ev.Syspath != "/sys/devices/ac/power_supply/AC" {
+		t.Fatalf("a power_supply change parsed to %+v, %v", ev, err)
+	}
+}
+
 func TestWatchBindsTheUdevGroup(t *testing.T) {
 	l, err := loop.New()
 	if err != nil {

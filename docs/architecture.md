@@ -360,7 +360,7 @@ Everything lives under `internal/` except the commands.
 | `xwm` | The X11 window manager for XWayland (#45) |
 | `config` | The typed config, its validation and reload (#30) |
 | `ipc` | The IPC socket and event stream (#31) |
-| `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42) |
+| `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42); the `handle-lid-switch` inhibitor, logind's Suspend, and the power supplies' AC state for the lid policy (#179) |
 | `harness` | The compositor-in-the-loop harness (#10) |
 | `testclient` | A scripted Wayland client that maps toplevels and animates shm frames, for integration tests |
 | `testenv` | Whether a test skips or fails when a dev-shell tool or library is missing |
@@ -417,6 +417,16 @@ generates its protocol bindings; the wire format still comes from
 libwayland-server. Hyprland's `hyprtester` is its compositor-in-the-loop
 suite and the reference for #10. Issues link the relevant files at pinned
 commits under a **Reference** heading.
+
+lys-wm owns the lid (#179). logind acts only on the lid switch's edge
+(systemd#7690), so undocking or unplugging the charger with the lid already
+closed never suspended, and a script had to watch udev to do it. lys-wm already
+tracks the lid and the outputs, so it holds logind's `handle-lid-switch`
+inhibitor in block mode, as GNOME's power daemon does, and applies one policy
+on every relevant change: suspend when the lid is closed, no external output
+is connected and the machine is on battery. The alternative, leaving the edge
+to logind and only re-checking afterwards, split one policy between two owners
+whose settings could disagree. `lid_suspend: false` hands the lid back.
 
 Licences decide how they may be used:
 

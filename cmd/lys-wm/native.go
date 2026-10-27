@@ -13,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	drmbackend "github.com/stubbedev/lys-wm/internal/backend/drm"
+	"github.com/stubbedev/lys-wm/internal/compositor"
 	kdrm "github.com/stubbedev/lys-wm/internal/drm"
 	"github.com/stubbedev/lys-wm/internal/edid"
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -45,6 +46,14 @@ type native struct {
 	handler backend.Handler
 	cards   []*card
 	report  func(error)
+	lid     *os.File
+	power   func() error
+}
+
+type nativeOptions struct {
+	input      session.InputConfig
+	gpu        string
+	lidSuspend bool
 }
 
 func choosePrimary(cards []gpuCard, configured string) (int, string, error) {
@@ -95,7 +104,7 @@ func (n *native) gpuCards() ([]gpuCard, error) {
 	return cards, nil
 }
 
-func openNative(l *loop.Loop, getenv func(string) string, input session.InputConfig, configured string, report func(error)) (n *native, err error) {
+func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, report func(error)) (n *native, err error) {
 	n = &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report}
 	if n.logind, err = session.Open(l, session.SystemBus(getenv), getenv, n); err != nil {
 		return nil, err
@@ -112,7 +121,7 @@ func openNative(l *loop.Loop, getenv func(string) string, input session.InputCon
 	if err != nil {
 		return nil, err
 	}
-	primary, why, err := choosePrimary(cards, configured)
+	primary, why, err := choosePrimary(cards, opts.gpu)
 	if err != nil {
 		return nil, err
 	}
@@ -125,13 +134,41 @@ func openNative(l *loop.Loop, getenv func(string) string, input session.InputCon
 			n.addSecondary(c)
 		}
 	}
-	if n.input, err = session.OpenLibinput(l, session.LibinputPath(getenv), n.logind, input, report); err != nil {
+	if n.input, err = session.OpenLibinput(l, session.LibinputPath(getenv), n.logind, opts.input, report); err != nil {
 		return nil, err
 	}
-	if n.monitor, err = session.Watch(l, n.logind.Seat(), []session.Subsystem{session.DRM, session.Input}, n.udev); err != nil {
+	subsystems := []session.Subsystem{session.DRM, session.Input}
+	if opts.lidSuspend {
+		if n.lid, err = n.logind.InhibitLidSwitch(); err != nil {
+			return nil, err
+		}
+		subsystems = append(subsystems, session.PowerSupply)
+	}
+	if n.monitor, err = session.Watch(l, n.logind.Seat(), subsystems, n.udev); err != nil {
 		return nil, err
 	}
 	return n, nil
+}
+
+func (n *native) lidPolicy() compositor.LidPolicy {
+	if n.lid == nil {
+		return compositor.LidPolicy{}
+	}
+	return compositor.LidPolicy{
+		Suspend:   n.logind.Suspend,
+		OnBattery: func() (bool, error) { return session.OnBattery(session.SystemRoots) },
+	}
+}
+
+func (n *native) onPower(changed func() error) {
+	n.power = changed
+}
+
+func (n *native) powerChanged() error {
+	if n.power == nil {
+		return nil
+	}
+	return n.power()
 }
 
 func (n *native) primary() *card {
@@ -298,7 +335,9 @@ func (n *native) ActiveChanged(active bool) error {
 func (n *native) udev(ev session.UdevEvent) error {
 	switch {
 	case ev.Action == session.Overflow:
-		return errors.Join(n.addInputs(), n.syncCards())
+		return errors.Join(n.addInputs(), n.syncCards(), n.powerChanged())
+	case ev.Subsystem == session.PowerSupply:
+		return n.powerChanged()
 	case ev.Subsystem == session.Input && ev.Action == session.Add:
 		if err := n.input.Add(ev.Devnode); err != nil {
 			n.report(err)
@@ -372,6 +411,9 @@ func (n *native) Close() error {
 	}
 	for _, c := range slices.Backward(n.cards) {
 		errs = append(errs, c.backend.Close(), c.dev.Close(), n.logind.ReleaseDevice(c.device))
+	}
+	if n.lid != nil {
+		errs = append(errs, n.lid.Close())
 	}
 	if n.logind != nil {
 		errs = append(errs, n.logind.Close())

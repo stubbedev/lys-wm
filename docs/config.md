@@ -250,6 +250,23 @@ vblank whatever it asks, and so does a vsync hint without a rule. Drivers withou
 6.8), and frames that change more than the buffer, flip at vblank as
 usual.
 
+## lid_suspend
+
+```yaml
+lid_suspend: false
+```
+
+On by default with the drm backend: lys-wm takes logind's
+`handle-lid-switch` inhibitor and decides itself what the lid does, so
+logind's `HandleLidSwitch*` settings do not apply while lys-wm runs. It
+suspends through logind when the lid is closed, no output other than an
+internal panel (`eDP-*`) is connected, and the machine runs on battery: a
+`Mains` or `USB` power supply exists and none is online. It checks when the
+lid closes, when an output is unplugged and when a power supply changes, so
+undocking or unplugging the charger with the lid already closed suspends too,
+which logind alone never does. A machine without such a power supply never
+counts as on battery. `false` leaves the lid to logind. Read at startup only.
+
 ## gpu
 
 ```yaml

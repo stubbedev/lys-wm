@@ -30,8 +30,9 @@ const (
 type Subsystem string
 
 const (
-	DRM   Subsystem = "drm"
-	Input Subsystem = "input"
+	DRM         Subsystem = "drm"
+	Input       Subsystem = "input"
+	PowerSupply Subsystem = "power_supply"
 )
 
 type UdevDevice struct {
@@ -73,6 +74,9 @@ func parseProperties(lines [][]byte, sep byte, props map[string]string) {
 }
 
 func device(subsystem Subsystem, syspath string, props map[string]string) (UdevDevice, bool, error) {
+	if subsystem == PowerSupply {
+		return UdevDevice{Subsystem: subsystem, Syspath: syspath, Properties: props}, true, nil
+	}
 	name, ok := props["DEVNAME"]
 	if !ok {
 		return UdevDevice{}, false, nil
@@ -271,7 +275,7 @@ func (m *Monitor) read(loop.Events) error {
 		if err != nil {
 			return err
 		}
-		if !slices.Contains(m.subs, ev.Subsystem) || ev.Seat() != m.seat {
+		if !slices.Contains(m.subs, ev.Subsystem) || ev.Subsystem != PowerSupply && ev.Seat() != m.seat {
 			continue
 		}
 		if err := m.handle(ev); err != nil {

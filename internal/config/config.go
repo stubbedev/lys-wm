@@ -106,20 +106,21 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 }
 
 type rawConfig struct {
-	Outputs   []At[rawOutput]       `yaml:"outputs"`
-	Input     rawInput              `yaml:"input"`
-	Palette   map[string]At[string] `yaml:"palette"`
-	Borders   rawBorders            `yaml:"borders"`
-	Tabs      rawTabs               `yaml:"tabs"`
-	Autotile  rawAutotile           `yaml:"autotile"`
-	Binds     []rawBind             `yaml:"binds"`
-	Submaps   map[string][]rawBind  `yaml:"submaps"`
-	Rules     []At[rawRule]         `yaml:"rules"`
-	Env       map[string]At[string] `yaml:"env"`
-	Autostart []At[string]          `yaml:"autostart"`
-	Xwayland  rawXwayland           `yaml:"xwayland"`
-	GPU       *At[string]           `yaml:"gpu"`
-	Tearing   bool                  `yaml:"tearing"`
+	Outputs    []At[rawOutput]       `yaml:"outputs"`
+	Input      rawInput              `yaml:"input"`
+	Palette    map[string]At[string] `yaml:"palette"`
+	Borders    rawBorders            `yaml:"borders"`
+	Tabs       rawTabs               `yaml:"tabs"`
+	Autotile   rawAutotile           `yaml:"autotile"`
+	Binds      []rawBind             `yaml:"binds"`
+	Submaps    map[string][]rawBind  `yaml:"submaps"`
+	Rules      []At[rawRule]         `yaml:"rules"`
+	Env        map[string]At[string] `yaml:"env"`
+	Autostart  []At[string]          `yaml:"autostart"`
+	Xwayland   rawXwayland           `yaml:"xwayland"`
+	GPU        *At[string]           `yaml:"gpu"`
+	Tearing    bool                  `yaml:"tearing"`
+	LidSuspend *bool                 `yaml:"lid_suspend"`
 }
 
 type rawXwayland struct {
@@ -252,6 +253,7 @@ type Config struct {
 	ZeroScaling bool
 	GPU         string
 	Tearing     bool
+	LidSuspend  bool
 }
 
 var mocha = map[string]render.Color{
@@ -612,6 +614,7 @@ func Parse(file string, data []byte) (Config, error) {
 		Xwayland:    raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,
 		ZeroScaling: raw.Xwayland.ZeroScaling == nil || *raw.Xwayland.ZeroScaling,
 		Tearing:     raw.Tearing,
+		LidSuspend:  raw.LidSuspend == nil || *raw.LidSuspend,
 	}
 	if raw.Tabs.Font != nil {
 		cfg.Font = raw.Tabs.Font.V

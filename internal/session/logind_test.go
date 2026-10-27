@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"sync"
@@ -46,6 +47,20 @@ func (m manager) GetSession(id string) (dbus.ObjectPath, *dbus.Error) {
 func (m manager) GetSessionByPID(uint32) (dbus.ObjectPath, *dbus.Error) {
 	m.f.note("GetSessionByPID")
 	return sessionPath, nil
+}
+
+func (m manager) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Error) {
+	m.f.note("Inhibit " + what + " " + mode)
+	fd, err := os.Open(os.DevNull)
+	if err != nil {
+		return 0, dbus.MakeFailedError(err)
+	}
+	return dbus.UnixFD(fd.Fd()), nil
+}
+
+func (m manager) Suspend(interactive bool) *dbus.Error {
+	m.f.note(fmt.Sprintf("Suspend %v", interactive))
+	return nil
 }
 
 type session struct{ f *fakeLogind }
@@ -212,6 +227,13 @@ func TestLogindSession(t *testing.T) {
 	if err := errors.Join(lg.ReleaseDevice(dev), lg.SwitchTo(2)); err != nil {
 		t.Fatal(err)
 	}
+	inhibitor, err := lg.InhibitLidSwitch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(inhibitor.Close(), lg.Suspend()); err != nil {
+		t.Fatal(err)
+	}
 	if err := lg.SwitchTo(0); err == nil {
 		t.Fatal("a refused VT switch succeeded")
 	}
@@ -256,7 +278,7 @@ func TestLogindSession(t *testing.T) {
 	if err := lg.Close(); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"GetSession 1", "TakeControl", "TakeDevice", "ReleaseDevice", "SwitchTo", "SwitchTo", "PauseDeviceComplete", "ReleaseControl"}
+	want := []string{"GetSession 1", "TakeControl", "TakeDevice", "ReleaseDevice", "SwitchTo", "Inhibit handle-lid-switch block", "Suspend false", "SwitchTo", "PauseDeviceComplete", "ReleaseControl"}
 	if got := f.seen(); !slices.Equal(got, want) {
 		t.Fatalf("logind saw %v, want %v", got, want)
 	}

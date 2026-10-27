@@ -54,6 +54,7 @@ type Listener interface {
 
 type Logind struct {
 	conn     *dbus.Conn
+	manager  dbus.BusObject
 	session  dbus.BusObject
 	seat     dbus.BusObject
 	listener Listener
@@ -92,12 +93,12 @@ func Open(l *loop.Loop, address string, getenv func(string) string, listener Lis
 	if err := call(conn.BusObject(), "org.freedesktop.DBus.GetNameOwner", login1).Store(&lg.owner); err != nil {
 		return nil, fmt.Errorf("session: find the owner of %s: %w", login1, err)
 	}
-	manager := conn.Object(login1, managerPath)
+	lg.manager = conn.Object(login1, managerPath)
 	var path dbus.ObjectPath
 	if id := getenv("XDG_SESSION_ID"); id != "" {
-		err = call(manager, managerIface+".GetSession", id).Store(&path)
+		err = call(lg.manager, managerIface+".GetSession", id).Store(&path)
 	} else {
-		err = call(manager, managerIface+".GetSessionByPID", uint32(os.Getpid())).Store(&path) //nolint:gosec // process IDs fit a uint32
+		err = call(lg.manager, managerIface+".GetSessionByPID", uint32(os.Getpid())).Store(&path) //nolint:gosec // process IDs fit a uint32
 	}
 	if err != nil {
 		return nil, fmt.Errorf("session: find this process's logind session: %w", err)
@@ -240,6 +241,21 @@ func (lg *Logind) TakeDevice(path string) (int, Device, error) {
 func (lg *Logind) ReleaseDevice(d Device) error {
 	if err := call(lg.session, sessionIface+".ReleaseDevice", d.Major, d.Minor).Err; err != nil {
 		return fmt.Errorf("session: release device %d:%d: %w", d.Major, d.Minor, err)
+	}
+	return nil
+}
+
+func (lg *Logind) InhibitLidSwitch() (*os.File, error) {
+	var fd dbus.UnixFD
+	if err := call(lg.manager, managerIface+".Inhibit", "handle-lid-switch", "lys-wm", "lys-wm applies the lid policy itself", "block").Store(&fd); err != nil {
+		return nil, fmt.Errorf("session: take the handle-lid-switch inhibitor: %w", err)
+	}
+	return os.NewFile(uintptr(int(fd)), "logind-lid-inhibitor"), nil
+}
+
+func (lg *Logind) Suspend() error {
+	if err := call(lg.manager, managerIface+".Suspend", false).Err; err != nil {
+		return fmt.Errorf("session: suspend: %w", err)
 	}
 	return nil
 }

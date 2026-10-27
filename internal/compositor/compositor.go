@@ -69,6 +69,12 @@ type Hooks struct {
 	Reload   func() error
 	Exit     func() error
 	SwitchVT func(vt uint32) error
+	Lid      LidPolicy
+}
+
+type LidPolicy struct {
+	Suspend   func() error
+	OnBattery func() (bool, error)
 }
 
 type CursorConfig struct {

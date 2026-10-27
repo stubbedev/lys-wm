@@ -243,13 +243,13 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 func (c *Compositor) OutputRemoved(b backend.Output) error {
 	if i := slices.Index(c.disabled, b); i >= 0 {
 		c.disabled = slices.Delete(c.disabled, i, i+1)
-		return c.outputConfig.Changed()
+		return errors.Join(c.outputConfig.Changed(), c.applyLidPolicy())
 	}
 	o, err := c.knownOutput(b, "removal of")
 	if err != nil {
 		return err
 	}
-	return c.disable(o)
+	return errors.Join(c.disable(o), c.applyLidPolicy())
 }
 
 func (c *Compositor) disable(o *output.Output) error {
