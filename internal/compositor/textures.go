@@ -19,6 +19,7 @@ import (
 
 type texture interface {
 	texture() render.Texture
+	opaque() bool
 }
 
 type uploaded struct {
@@ -33,7 +34,11 @@ type imported struct {
 
 func (t uploaded) texture() render.Texture { return t.tex }
 
+func (t uploaded) opaque() bool { return t.format == render.XRGB8888 }
+
 func (t imported) texture() render.Texture { return t.tex }
+
+func (t imported) opaque() bool { return slices.Contains(opaqueFormats, t.buffer.DMABUF().Format) }
 
 type dmabufRenderer interface {
 	dmabuf.Importer
@@ -195,6 +200,11 @@ func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
 		errs = append(errs, c.scheduleAll())
 	}
 	return errors.Join(errs...)
+}
+
+func (c *Compositor) opaque(s *surface.Surface) bool {
+	t, ok := c.textures[s]
+	return ok && t.opaque() || s.Opaque().Covers(image.Rectangle{Max: s.Size()})
 }
 
 func (c *Compositor) textureOf(s *surface.Surface) render.Texture {

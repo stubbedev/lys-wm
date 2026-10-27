@@ -41,6 +41,23 @@ func (g Region) Area() int {
 	return area(g.rects)
 }
 
+func (g Region) Covers(r image.Rectangle) bool {
+	return covers(g.rects, r)
+}
+
+func covers(rects []image.Rectangle, r image.Rectangle) bool {
+	want := r.Dx() * r.Dy()
+	if want == 0 {
+		return true
+	}
+	got := 0
+	for _, c := range rects {
+		i := c.Intersect(r)
+		got += i.Dx() * i.Dy()
+	}
+	return got == want
+}
+
 func area(rects []image.Rectangle) int {
 	n := 0
 	for _, r := range rects {

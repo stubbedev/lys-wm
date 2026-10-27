@@ -22,6 +22,7 @@ type drawOp struct {
 	alpha     float32
 	surface   *surface.Surface
 	size      image.Point
+	opaque    bool
 }
 
 type frame struct {
@@ -30,15 +31,34 @@ type frame struct {
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
-	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r})
+	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, opaque: c.A == 0xff})
 }
 
 func (f *frame) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha})
 }
 
-func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
-	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size()})
+func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool) {
+	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1})
+}
+
+func (f *frame) cull(covered *region.Set) {
+	covered.Reset()
+	scene := f.ops[:f.cursorFrom]
+	kept := len(scene)
+	for _, op := range slices.Backward(scene) {
+		if covered.Covers(op.dst) {
+			continue
+		}
+		if op.opaque {
+			covered.Add(op.dst)
+		}
+		kept--
+		scene[kept] = op
+	}
+	n := copy(f.ops, scene[kept:])
+	n += copy(f.ops[n:], f.ops[f.cursorFrom:])
+	f.ops, f.cursorFrom = f.ops[:n], f.cursorFrom-kept
 }
 
 func (f *frame) replay(p render.Pass) {
@@ -65,6 +85,7 @@ func (f *frame) bounds() image.Rectangle {
 
 type scene struct {
 	prev, cur frame
+	covered   region.Set
 	shown     []*surface.Surface
 	content   map[*surface.Surface]*region.Set
 	damage    region.Set

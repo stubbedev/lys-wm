@@ -18,6 +18,10 @@ func (s *Set) Rects() []image.Rectangle {
 	return s.rects
 }
 
+func (s *Set) Covers(r image.Rectangle) bool {
+	return covers(s.rects, r)
+}
+
 func (s *Set) Area() int {
 	return area(s.rects)
 }

@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -116,5 +117,37 @@ func TestFloatingSizesKeepTheClientsLimits(t *testing.T) {
 		if got := clampSize(c.size, c.minimum, c.maximum); got != c.want {
 			t.Errorf("clampSize(%v, %v, %v) = %v, want %v", c.size, c.minimum, c.maximum, got, c.want)
 		}
+	}
+}
+
+func TestCullingDropsOpsHiddenBehindOpaqueOnes(t *testing.T) {
+	bounds := image.Rect(0, 0, 100, 100)
+	bg := drawOp{fill: true, color: render.Color{A: 0xff}, dst: bounds, opaque: true}
+	wallpaper := drawOp{dst: bounds, alpha: 1, opaque: true}
+	bar := drawOp{dst: image.Rect(0, 0, 100, 20), alpha: 1, opaque: true}
+	translucent := drawOp{dst: image.Rect(10, 10, 30, 30), alpha: 1}
+	game := drawOp{dst: bounds, alpha: 1, opaque: true}
+	cursor := drawOp{dst: image.Rect(50, 50, 60, 60), alpha: 1}
+
+	f := frame{ops: []drawOp{bg, wallpaper, bar, game, translucent, cursor}, cursorFrom: 5}
+	var covered region.Set
+	f.cull(&covered)
+	if want := []drawOp{game, translucent, cursor}; !slices.Equal(f.ops, want) || f.cursorFrom != 2 {
+		t.Fatalf("culled to %+v with the cursor from %d, want the game, what is above it and the cursor from 2", f.ops, f.cursorFrom)
+	}
+
+	faded := game
+	faded.opaque = false
+	f = frame{ops: []drawOp{bg, bar, faded}, cursorFrom: 3}
+	f.cull(&covered)
+	if want := []drawOp{bg, bar, faded}; !slices.Equal(f.ops, want) {
+		t.Fatalf("a translucent cover culled %+v", f.ops)
+	}
+
+	half := drawOp{dst: image.Rect(0, 0, 50, 100), alpha: 1, opaque: true}
+	f = frame{ops: []drawOp{bg, bar, half}, cursorFrom: 3}
+	f.cull(&covered)
+	if want := []drawOp{bg, bar, half}; !slices.Equal(f.ops, want) {
+		t.Fatalf("a partial cover culled %+v", f.ops)
 	}
 }

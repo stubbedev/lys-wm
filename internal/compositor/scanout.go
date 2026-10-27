@@ -60,10 +60,10 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 }
 
 func fills(ops []drawOp, bounds image.Rectangle) (drawOp, bool) {
-	if len(ops) != 2 || !ops[0].fill {
+	if len(ops) != 1 {
 		return drawOp{}, false
 	}
-	op := ops[1]
+	op := ops[0]
 	if op.surface == nil || op.dst != bounds || op.transform != render.Normal || op.alpha != 1 {
 		return drawOp{}, false
 	}

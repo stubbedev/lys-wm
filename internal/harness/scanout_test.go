@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
@@ -93,6 +94,18 @@ func TestFullscreenDMABUFsScanOutDirectly(t *testing.T) {
 	if n := scanouts(h); n != before {
 		t.Fatalf("a window sharing the output scanned out %d frames", n-before)
 	}
+}
+
+func TestAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T) {
+	s := fullscreenScanout(t, func(*compositor.Config) {})
+	shell := testclient.Connect(t, s.h.Socket())
+	wallpaper := shell.Layer(testclient.LayerSpec{
+		Layer:  cwlr.ZwlrLayerShellV1LayerBackground,
+		Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorBottom | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight,
+	}, testclient.Fill(0x20, 0x20, 0x20))
+	bar := shell.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	shell.DispatchUntil("the wallpaper and the bar to map", func() bool { return wallpaper.Mapped() && bar.Mapped() })
+	s.show(t, "a fullscreen dmabuf over the wallpaper and the bar", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff)))
 }
 
 func TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease(t *testing.T) {
