@@ -200,6 +200,10 @@ func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
 		delete(c.imported, b)
 		errs = append(errs, c.destroyTexture(tex))
 	}
+	if t, ok := c.captureTargets[b]; ok {
+		delete(c.captureTargets, b)
+		errs = append(errs, t.Destroy())
+	}
 	if shown {
 		errs = append(errs, c.scheduleAll())
 	}

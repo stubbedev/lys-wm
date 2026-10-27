@@ -117,6 +117,7 @@ type Compositor struct {
 	staged          []byte
 	stagedRects     []image.Rectangle
 	imported        map[*dmabuf.Buffer]render.Texture
+	captureTargets  map[*dmabuf.Buffer]render.ReadTarget
 	dmabuf          *dmabuf.Manager
 	importer        dmabufRenderer
 	power           *outputpower.Manager
@@ -241,28 +242,29 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		return nil, err
 	}
 	c := &Compositor{
-		renderer:      b.Renderer(),
-		textures:      map[*surface.Surface]texture{},
-		imported:      map[*dmabuf.Buffer]render.Texture{},
-		shown:         map[*output.Output][]*surface.Surface{},
-		touches:       map[int32]touchAt{},
-		labels:        map[*output.Output]map[labelKey]*label{},
-		scenes:        map[*output.Output]*scene{},
-		dropped:       map[*output.Output]int{},
-		loop:          l,
-		display:       display,
-		pointers:      map[cursorKey]*cursorTexture{},
-		hwCursors:     map[*output.Output]*hwCursor{},
-		blanked:       map[*output.Output]bool{},
-		captures:      map[*output.Output][]*capture{},
-		reads:         map[*asyncRead]struct{}{},
-		scannedOut:    map[*dmabuf.Buffer]*scannedOut{},
-		filled:        map[*output.Output]filling{},
-		constraints:   map[*surface.Surface]*constraint{},
-		keyInhibitors: map[*surface.Surface]*shortcutsInhibitor{},
-		usable:        map[*output.Output]image.Rectangle{},
-		nextWindow:    1,
-		hooks:         cfg.Hooks,
+		renderer:       b.Renderer(),
+		textures:       map[*surface.Surface]texture{},
+		imported:       map[*dmabuf.Buffer]render.Texture{},
+		captureTargets: map[*dmabuf.Buffer]render.ReadTarget{},
+		shown:          map[*output.Output][]*surface.Surface{},
+		touches:        map[int32]touchAt{},
+		labels:         map[*output.Output]map[labelKey]*label{},
+		scenes:         map[*output.Output]*scene{},
+		dropped:        map[*output.Output]int{},
+		loop:           l,
+		display:        display,
+		pointers:       map[cursorKey]*cursorTexture{},
+		hwCursors:      map[*output.Output]*hwCursor{},
+		blanked:        map[*output.Output]bool{},
+		captures:       map[*output.Output][]*capture{},
+		reads:          map[*asyncRead]struct{}{},
+		scannedOut:     map[*dmabuf.Buffer]*scannedOut{},
+		filled:         map[*output.Output]filling{},
+		constraints:    map[*surface.Surface]*constraint{},
+		keyInhibitors:  map[*surface.Surface]*shortcutsInhibitor{},
+		usable:         map[*output.Output]image.Rectangle{},
+		nextWindow:     1,
+		hooks:          cfg.Hooks,
 	}
 	c.adopt(cfg, m)
 	if err := c.setup(l, display, b, cfg); err != nil {
@@ -420,6 +422,10 @@ func (c *Compositor) Close() error {
 	for b, tex := range c.imported {
 		errs = append(errs, tex.Destroy())
 		delete(c.imported, b)
+	}
+	for b, t := range c.captureTargets {
+		errs = append(errs, t.Destroy())
+		delete(c.captureTargets, b)
 	}
 	if c.dmabuf != nil {
 		errs = append(errs, c.dmabuf.Close())

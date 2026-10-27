@@ -92,6 +92,34 @@ func TestFDSource(t *testing.T) {
 	}
 }
 
+func TestOnceFiresOnceAndClosesItsFD(t *testing.T) {
+	l := newLoop(t)
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC|unix.O_NONBLOCK); err != nil {
+		t.Fatal(err)
+	}
+	r, w := p[0], p[1]
+	t.Cleanup(func() { _ = unix.Close(w) })
+	fired := 0
+	if err := l.Once(r, func() error {
+		fired++
+		l.Stop()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Write(w, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	run(t, l)
+	if fired != 1 {
+		t.Fatalf("fired %d times, want once", fired)
+	}
+	if isOpen(r) {
+		t.Fatal("Once left its fd open after firing")
+	}
+}
+
 func TestWritableSource(t *testing.T) {
 	l := newLoop(t)
 	_, w := pipe(t)

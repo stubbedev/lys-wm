@@ -140,6 +140,18 @@ func (l *Loop) AddFD(fd int, events Events, handler func(Events) error) (*Source
 	return &Source{loop: l, token: t}, nil
 }
 
+func (l *Loop) Once(fd int, handler func() error) error {
+	var t token
+	var err error
+	t, err = l.add(fd, true, Readable, func(Events) error {
+		return errors.Join(l.remove(t), handler())
+	})
+	if err != nil {
+		return errors.Join(err, unix.Close(fd))
+	}
+	return nil
+}
+
 func (s *Source) Modify(events Events) error {
 	return s.loop.modify(s.token, events)
 }

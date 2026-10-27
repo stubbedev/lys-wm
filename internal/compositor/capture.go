@@ -28,6 +28,8 @@ type captureRenderer interface {
 	RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier, error)
 	MainDevice() (uint64, error)
 	Finish() error
+	NativeFences() bool
+	SyncFile() (int, error)
 }
 
 var opaque = render.Color{A: 0xff}
@@ -66,19 +68,30 @@ type dmabufCapture struct {
 }
 
 func (t dmabufCapture) fill(c *Compositor, k *capture, finish func(error) error) error {
-	return finish(t.draw(c, k))
+	target, err := c.captureTarget(t.r, t.b)
+	if err == nil {
+		err = paint(c.renderer, target, k)
+	}
+	if err != nil || !t.r.NativeFences() {
+		return finish(errors.Join(err, t.r.Finish()))
+	}
+	fd, err := t.r.SyncFile()
+	if err != nil {
+		return finish(err)
+	}
+	return c.loop.Once(fd, func() error { return finish(nil) })
 }
 
-func (t dmabufCapture) draw(c *Compositor, k *capture) (err error) {
-	target, err := t.r.ImportTarget(t.b.DMABUF())
+func (c *Compositor) captureTarget(r captureRenderer, b *dmabuf.Buffer) (render.ReadTarget, error) {
+	if t, ok := c.captureTargets[b]; ok {
+		return t, nil
+	}
+	t, err := r.ImportTarget(b.DMABUF())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { err = errors.Join(err, target.Destroy()) }()
-	if err := paint(c.renderer, target, k); err != nil {
-		return err
-	}
-	return t.r.Finish()
+	c.captureTargets[b] = t
+	return t, nil
 }
 
 func paint(r render.Renderer, target render.Target, k *capture) error {
