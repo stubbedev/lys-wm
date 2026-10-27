@@ -137,3 +137,36 @@ func TestTheLatchDeadlineIsHalfwayToTheNextVblank(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderBudget(t *testing.T) {
+	const interval = 16 * time.Millisecond
+	var b RenderBudget
+	if got := b.Budget(interval); got != interval/2 {
+		t.Fatalf("an empty budget is %v, want half the refresh", got)
+	}
+	for i := range 32 {
+		b.Sample(time.Duration(i%4) * time.Millisecond)
+	}
+	if got := b.Budget(interval); got != 3*time.Millisecond+1500*time.Microsecond {
+		t.Fatalf("the budget over renders up to 3 ms is %v, want the slowest plus the margin", got)
+	}
+	for range 32 {
+		b.Sample(20 * time.Millisecond)
+	}
+	if got := b.Budget(interval); got != interval/2 {
+		t.Fatalf("renders slower than half the refresh gave a budget of %v, want it capped at half", got)
+	}
+	for range 32 {
+		b.Sample(time.Millisecond)
+	}
+	b.Missed()
+	if got := b.Budget(interval); got != interval/2 {
+		t.Fatalf("right after a miss the budget is %v, want half the refresh", got)
+	}
+	for range 32 {
+		b.Sample(time.Millisecond)
+	}
+	if got := b.Budget(interval); got != 2500*time.Microsecond {
+		t.Fatalf("32 frames after a miss the budget is %v, want it measured again", got)
+	}
+}

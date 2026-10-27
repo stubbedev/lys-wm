@@ -426,6 +426,7 @@ func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }}); err != nil {
 		t.Fatal(err)
 	}
+	r.b.fenceTime = func(int) (time.Duration, bool, error) { return backend.Now(), true, nil }
 	if err := r.b.Start(r.rec); err != nil {
 		t.Fatal(err)
 	}
@@ -478,8 +479,8 @@ func TestFramesCommitAndFlip(t *testing.T) {
 	if len(fences) != 1 || r.dev.commits[0].values[[2]uint32{40, propInFence}] != uint64(fences[0]) || r.dev.commits[1].values[[2]uint32{40, propInFence}] != uint64(fences[0]) {
 		t.Fatalf("fences %v, committed %+v", fences, r.dev.commits[1].values)
 	}
-	if _, err := unix.FcntlInt(uintptr(fences[0]), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
-		t.Fatalf("the fence fd stayed open after the commit: %v", err)
+	if _, err := unix.FcntlInt(uintptr(fences[0]), unix.F_GETFD, 0); err != nil {
+		t.Fatalf("the fence fd was closed before its flip could be timed: %v", err)
 	}
 	test, real := r.dev.commits[0], r.dev.commits[1]
 	if test.flags != kdrm.AtomicTestOnly|kdrm.AtomicAllowModeset || real.flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent|kdrm.AtomicAllowModeset || real.userData != 10 {
@@ -506,6 +507,10 @@ func TestFramesCommitAndFlip(t *testing.T) {
 	r.settle()
 	if len(r.rec.presents) != 1 || r.rec.presents[0].Seq != 77 || r.rec.presents[0].Time == 0 {
 		t.Fatalf("presents %+v", r.rec.presents)
+	}
+	_, err := unix.FcntlInt(uintptr(fences[0]), unix.F_GETFD, 0)
+	if reused := slices.Contains(r.alloc.fences[1:], fences[0]); !errors.Is(err, unix.EBADF) && !reused {
+		t.Fatalf("the fence fd stayed open after its flip: %v", err)
 	}
 	if len(r.dev.commits) != 4 {
 		t.Fatalf("%d commits after the flip released the queued frame", len(r.dev.commits))
@@ -1462,5 +1467,32 @@ func TestAPlaneCommitOnAGoneDeviceEndsTheSession(t *testing.T) {
 	r := start(t)
 	if err := r.planesAfterAFlip(unix.ENODEV); !errors.Is(err, unix.ENODEV) {
 		t.Fatalf("the loop ended with %v, want ENODEV", err)
+	}
+}
+
+func TestTheLatchFollowsMeasuredRenderTimeAndBacksOffAfterAMiss(t *testing.T) {
+	r := start(t)
+	o := r.b.Outputs()[0]
+	interval := modeOf(o.mode).Interval()
+	o.lastFlip = backend.Now()
+	half := func() time.Duration {
+		next, _ := backend.NextVblank(o.lastFlip, backend.Now(), interval)
+		return next - o.latchDeadline(backend.Now())
+	}
+	if got := half(); got != interval/2 {
+		t.Fatalf("an output with no measurements latches %v before the vblank, want half a refresh %v", got, interval/2)
+	}
+	for range 32 {
+		o.budget.Sample(time.Millisecond)
+	}
+	if got, want := half(), time.Millisecond+1500*time.Microsecond; got != want {
+		t.Fatalf("after 1 ms renders the latch is %v before the vblank, want %v", got, want)
+	}
+	o.aimedAt = o.lastFlip
+	if err := o.timeFrame(o.lastFlip + interval); err != nil {
+		t.Fatal(err)
+	}
+	if got := half(); got != interval/2 {
+		t.Fatalf("after a missed vblank the latch is %v before the vblank, want back at half a refresh", got)
 	}
 }

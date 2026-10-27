@@ -10,6 +10,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
+	kdrm "github.com/stubbedev/lys-wm/internal/drm"
 	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -737,4 +739,32 @@ func TestASteadyPassDoesNotAllocate(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("a steady pass on a pinned thread allocated %v times", n)
 	}
+}
+
+func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
+	g, _ := hardware(t)
+	if !g.NativeFences() {
+		t.Skip("no native fences on this driver")
+	}
+	fb := framebuffer(t, g, target)
+	start := backend.Now()
+	paint(t, g, fb, render.Region{{Max: target}}, func(p render.Pass) {
+		p.FillRect(image.Rectangle{Max: target}, render.Color{G: 0xff, A: 0xff})
+	})
+	fd, err := g.SyncFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	done, ok, err := kdrm.SyncFileSignalTime(fd)
+	if err != nil || !ok {
+		t.Fatalf("a signalled frame fence: %v, %v", ok, err)
+	}
+	if done < start || done > backend.Now() {
+		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, backend.Now())
+	}
+	t.Logf("the GPU finished the frame %v after it started", done-start)
 }

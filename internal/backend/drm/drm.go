@@ -123,6 +123,7 @@ type Backend struct {
 	paused    bool
 	closed    bool
 	clientFBs map[backend.ScanoutKey]*clientFB
+	fenceTime func(fd int) (time.Duration, bool, error)
 }
 
 type clientFB struct {
@@ -170,7 +171,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if opts.Report == nil {
 		return nil, errors.New("drm: Options.Report is required")
 	}
-	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}}
+	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, fenceTime: kdrm.SyncFileSignalTime}
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support: %w", err)
@@ -405,7 +406,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
-	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p}
+	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Deadline: o.latchDeadline,
 		Wake:     func(after time.Duration) error { return o.latch.Arm(after) },
@@ -584,6 +585,11 @@ type Output struct {
 	latch         *loop.Timer
 	empties       int
 	idleAt        time.Duration
+	budget        backend.RenderBudget
+	frameStart    time.Duration
+	renderFence   int
+	aimedAt       time.Duration
+	untimed       bool
 	lastFlip      time.Duration
 	presented     uint64
 	color         colorBlobs
@@ -740,6 +746,7 @@ func (o *Output) frameReady() bool {
 }
 
 func (o *Output) runFrame() error {
+	o.frameStart = backend.Now()
 	o.framing = true
 	err := o.b.handler.Frame(o)
 	o.framing = false
@@ -819,12 +826,17 @@ func (o *Output) Present(render.Region) error {
 		flags |= kdrm.AtomicAllowModeset
 	}
 	err = o.submit(s, fence, flags)
-	if fence >= 0 {
-		err = errors.Join(err, unix.Close(fence))
-	}
 	if err != nil {
+		if fence >= 0 {
+			err = errors.Join(err, unix.Close(fence))
+		}
 		return err
 	}
+	if err := o.dropRenderFence(); err != nil {
+		return errors.Join(err, unix.Close(fence))
+	}
+	o.renderFence = fence
+	o.aimedAt, _ = backend.NextVblank(o.lastFlip, backend.Now(), modeOf(o.mode).Interval())
 	o.modeset, o.lit, o.flipping, o.torn = false, true, true, false
 	o.queued = s
 	return nil
@@ -946,7 +958,37 @@ func (o *Output) test(flags uint32) error {
 }
 
 func (o *Output) latchDeadline(now time.Duration) time.Duration {
-	return backend.LatchDeadline(o.lastFlip, now, modeOf(o.mode).Interval())
+	interval := modeOf(o.mode).Interval()
+	return backend.LatchDeadlineWithin(o.lastFlip, now, interval, o.budget.Budget(interval))
+}
+
+func (o *Output) dropRenderFence() error {
+	if o.renderFence < 0 {
+		return nil
+	}
+	fd := o.renderFence
+	o.renderFence = -1
+	return unix.Close(fd)
+}
+
+func (o *Output) timeFrame(flip time.Duration) error {
+	interval := modeOf(o.mode).Interval()
+	if o.aimedAt != 0 && flip > o.aimedAt+interval/2 {
+		o.budget.Missed()
+	}
+	o.aimedAt = 0
+	if o.renderFence < 0 || o.untimed {
+		return o.dropRenderFence()
+	}
+	done, ok, err := o.b.fenceTime(o.renderFence)
+	if err != nil {
+		o.untimed = true
+		o.b.report(fmt.Errorf("drm: %s renders on the half-refresh latch, its frame fences report no time: %w", o.Name(), err))
+	}
+	if ok && done > o.frameStart {
+		o.budget.Sample(done - o.frameStart)
+	}
+	return o.dropRenderFence()
 }
 
 func (o *Output) planesDue() error {
@@ -1015,11 +1057,12 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	}
 	o.flipping = false
 	o.lastFlip = time.Duration(e.Sec)*time.Second + time.Duration(e.Usec)*time.Microsecond
+	timing := o.timeFrame(o.lastFlip)
 	if c := o.cursor; c != nil && c.queued != nil {
 		c.front, c.queued = c.queued, nil
 	}
 	if o.queued == nil {
-		return errors.Join(o.clock.Kick(), o.flushPlanes())
+		return errors.Join(timing, o.clock.Kick(), o.flushPlanes())
 	}
 	var errs []error
 	if old := o.front; old != nil && old.client {
@@ -1029,7 +1072,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	o.presented++
 	o.front.presented = o.presented
 	errs = append(errs, o.b.handler.Presented(o, backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn}))
-	return errors.Join(append(errs, o.clock.Kick(), o.flushPlanes())...)
+	return errors.Join(append(errs, timing, o.clock.Kick(), o.flushPlanes())...)
 }
 
 func (o *Output) dropScanout(s *scanout) error {
@@ -1055,7 +1098,7 @@ func (o *Output) freeBuffers() error {
 }
 
 func (o *Output) release() error {
-	err := errors.Join(o.freeBuffers(), o.releaseColor())
+	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.dropRenderFence())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0

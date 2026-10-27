@@ -65,9 +65,47 @@ func (f *FrameClock) fire() error {
 }
 
 func LatchDeadline(last, now, interval time.Duration) time.Duration {
+	return LatchDeadlineWithin(last, now, interval, interval/2)
+}
+
+func LatchDeadlineWithin(last, now, interval, budget time.Duration) time.Duration {
 	if last == 0 || last > now {
 		return now
 	}
 	next, _ := NextVblank(last, now, interval)
-	return next - interval/2
+	return next - budget
+}
+
+const (
+	renderSamples = 32
+	renderMargin  = 1500 * time.Microsecond
+)
+
+type RenderBudget struct {
+	samples [renderSamples]time.Duration
+	n, next int
+	held    int
+}
+
+func (b *RenderBudget) Sample(took time.Duration) {
+	b.samples[b.next] = took
+	b.next = (b.next + 1) % renderSamples
+	b.n = min(b.n+1, renderSamples)
+	b.held = max(b.held-1, 0)
+}
+
+func (b *RenderBudget) Missed() {
+	b.held = renderSamples
+}
+
+func (b *RenderBudget) Budget(interval time.Duration) time.Duration {
+	ceiling := interval / 2
+	if b.held > 0 || b.n < renderSamples {
+		return ceiling
+	}
+	var slowest time.Duration
+	for _, s := range b.samples {
+		slowest = max(slowest, s)
+	}
+	return min(slowest+renderMargin, ceiling)
 }
