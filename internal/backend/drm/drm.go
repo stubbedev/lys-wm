@@ -20,6 +20,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
+var depthFormats = [...]fourcc.Format{backend.Depth8: fourcc.XRGB8888, backend.Depth10: fourcc.XRGB2101010}
+
 const (
 	scanoutFormat = fourcc.XRGB8888
 	cursorFormat  = fourcc.ARGB8888
@@ -97,8 +99,17 @@ type plane struct {
 	kind      planeKind
 	possible  uint32
 	modifiers []fourcc.Modifier
+	deep      []fourcc.Modifier
+	deepOK    bool
 	clients   []gpu.FormatModifier
 	taken     bool
+}
+
+func (p *plane) depth(d backend.BitDepth) ([]fourcc.Modifier, bool) {
+	if d == backend.Depth10 {
+		return p.deep, p.deepOK
+	}
+	return p.modifiers, true
 }
 
 var _ backend.Scanner = (*Output)(nil)
@@ -204,6 +215,10 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if err != nil {
 		return nil, err
 	}
+	deepRenderable, err := alloc.renderable(depthFormats[backend.Depth10])
+	if err != nil {
+		return nil, err
+	}
 	var size [2]uint64
 	for i, c := range []uint64{kdrm.CapCursorWidth, kdrm.CapCursorHeight} {
 		if size[i], err = dev.Cap(c); err != nil {
@@ -212,7 +227,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	}
 	b.cursor = image.Pt(int(size[0]), int(size[1])) //nolint:gosec // cursor sizes are a few hundred pixels
 	for _, id := range planes {
-		p, err := b.plane(id, renderable)
+		p, err := b.plane(id, renderable, deepRenderable)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +241,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	return b, nil
 }
 
-func (b *Backend) plane(id uint32, renderable []fourcc.Modifier) (*plane, error) {
+func (b *Backend) plane(id uint32, renderable, deepRenderable []fourcc.Modifier) (*plane, error) {
 	info, err := b.dev.Plane(id)
 	if err != nil {
 		return nil, err
@@ -267,8 +282,22 @@ func (b *Backend) plane(id uint32, renderable []fourcc.Modifier) (*plane, error)
 			return nil, fmt.Errorf("drm: formats of primary plane %d: %w", id, err)
 		}
 	}
+	deep := depthFormats[backend.Depth10]
 	if blob == nil {
+		p.deepOK = p.kind == primaryPlane && slices.Contains(info.Formats, deep)
 		return p, nil
+	}
+	if p.kind == primaryPlane && slices.Contains(info.Formats, deep) {
+		deepScanable, err := kdrm.Modifiers(blob, deep)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range deepScanable {
+			if slices.Contains(deepRenderable, m) {
+				p.deep = append(p.deep, m)
+			}
+		}
+		p.deepOK = len(p.deep) > 0
 	}
 	scanable, err := kdrm.Modifiers(blob, format)
 	if err != nil {
@@ -437,7 +466,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 		return errors.Join(err, o.release())
 	}
 	i := max(slices.IndexFunc(c.Modes, kdrm.Mode.Preferred), 0)
-	if err := o.setMode(c.Modes[i]); err != nil {
+	if err := o.setMode(c.Modes[i], backend.Depth8); err != nil {
 		return errors.Join(err, o.release())
 	}
 	b.outputs = append(b.outputs, o)
@@ -567,6 +596,7 @@ type Output struct {
 	primary       *plane
 	cursor        *cursor
 	mode          kdrm.Mode
+	depth         backend.BitDepth
 	modeBlob      uint32
 	enabled       bool
 	off           bool
@@ -637,10 +667,14 @@ func (o *Output) State() backend.OutputState {
 	case o.off:
 		power = backend.PoweredOff
 	}
-	return backend.OutputState{Power: power, Mode: modeOf(o.mode)}
+	return backend.OutputState{Power: power, Mode: modeOf(o.mode), Depth: o.depth}
 }
 
-func (o *Output) setMode(m kdrm.Mode) error {
+func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
+	modifiers, ok := o.primary.depth(d)
+	if !ok {
+		return fmt.Errorf("drm: the primary plane of %s scans out no %v the renderer can draw: %w", o.Name(), depthFormats[d], backend.ErrDepthUnsupported)
+	}
 	clear(o.tested)
 	blob, err := o.b.dev.CreateBlob(m.Bytes())
 	if err != nil {
@@ -651,8 +685,11 @@ func (o *Output) setMode(m kdrm.Mode) error {
 	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
 	for range buffersPerOut {
-		s, err := o.b.alloc.allocate(size, scanoutFormat, o.primary.modifiers)
+		s, err := o.b.alloc.allocate(size, depthFormats[d], modifiers)
 		if err != nil {
+			if d != backend.Depth8 {
+				err = fmt.Errorf("drm: %v buffers for %s: %w: %w", depthFormats[d], o.Name(), backend.ErrDepthUnsupported, err)
+			}
 			return errors.Join(err, o.b.dev.DestroyBlob(blob), o.freeBuffers())
 		}
 		o.buffers = append(o.buffers, s)
@@ -660,8 +697,15 @@ func (o *Output) setMode(m kdrm.Mode) error {
 	if o.modeBlob != 0 {
 		err = o.b.dev.DestroyBlob(o.modeBlob)
 	}
-	o.mode, o.modeBlob, o.enabled, o.modeset = m, blob, true, true
-	return err
+	o.mode, o.depth, o.modeBlob, o.enabled, o.modeset = m, d, blob, true, true
+	if err != nil || d == backend.Depth8 || o.b.paused {
+		return err
+	}
+	o.frame(o.buffers[0], -1)
+	if err := o.test(kdrm.AtomicAllowModeset); err != nil {
+		return fmt.Errorf("drm: %s refuses %v frames: %w: %w", o.Name(), depthFormats[d], backend.ErrDepthUnsupported, err)
+	}
+	return nil
 }
 
 func (o *Output) Commit(s backend.OutputState) error {
@@ -672,10 +716,10 @@ func (o *Output) Commit(s backend.OutputState) error {
 	if i < 0 {
 		return fmt.Errorf("drm: %s has no mode %+v", o.Name(), s.Mode)
 	}
-	if o.enabled && o.conn.Modes[i] == o.mode {
+	if o.enabled && o.conn.Modes[i] == o.mode && s.Depth == o.depth {
 		return o.setPower(s.Lit())
 	}
-	if err := o.setMode(o.conn.Modes[i]); err != nil {
+	if err := o.setMode(o.conn.Modes[i], s.Depth); err != nil {
 		return err
 	}
 	o.off = !s.Lit()

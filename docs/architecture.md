@@ -205,6 +205,14 @@ tranche (#64): the primary plane's opaque formats and modifiers that the
 renderer also imports, targeted at the plane's DRM device, so the client
 allocates buffers that plane can show.
 
+Composited frames are 8-bit XRGB8888 unless an output rule asks for
+`bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
+because XR30 primaries break screen sharing and some fullscreen games on
+some drivers, NVIDIA's among them. A 10-bit output allocates XR30 buffers
+with the primary plane's XR30 modifiers that the renderer draws, and
+test-commits the modeset first; a plane, allocator or kernel that refuses
+it leaves the output at 8 bits with the refusal logged.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

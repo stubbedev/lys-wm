@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -19,14 +20,14 @@ import (
 )
 
 func TestAFallbackOutputRuleIsKeptApart(t *testing.T) {
-	cfg, err := Parse("t.yaml", []byte("outputs:\n  - match: '*'\n    mode: highres\n    scale: 1.5\n  - match: DP-1\n    scale: 2\n"))
+	cfg, err := Parse("t.yaml", []byte("outputs:\n  - match: '*'\n    mode: highres\n    scale: 1.5\n  - match: DP-1\n    scale: 2\n    bitdepth: 10\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Outputs.Named) != 1 || cfg.Outputs.Named[0].Name != "DP-1" || cfg.Outputs.Named[0].Scale != 2*output.Unit {
-		t.Errorf("named rules %+v, want DP-1 at scale 2 alone", cfg.Outputs.Named)
+	if len(cfg.Outputs.Named) != 1 || cfg.Outputs.Named[0].Name != "DP-1" || cfg.Outputs.Named[0].Scale != 2*output.Unit || cfg.Outputs.Named[0].Depth != backend.Depth10 {
+		t.Errorf("named rules %+v, want DP-1 at scale 2 and 10 bits alone", cfg.Outputs.Named)
 	}
-	if f := cfg.Outputs.Fallback; f.Mode != (compositor.HighResMode{}) || f.Scale != output.Scale(180) || f.Name != "" || f.Description != "" {
+	if f := cfg.Outputs.Fallback; f.Mode != (compositor.HighResMode{}) || f.Scale != output.Scale(180) || f.Name != "" || f.Description != "" || f.Depth != backend.Depth8 {
 		t.Errorf("fallback %+v, want highres at scale 1.5 matching nothing by name", f)
 	}
 }
@@ -148,6 +149,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"outputs:\n  - match: '*'\n  - match: '*'\n":                `t.yaml:3: outputs[1].match: a second "*" rule`,
 		"outputs:\n  - match: DP-1\n    scale: 20\n":                "t.yaml:3: outputs[0].scale: output: scale 20 is outside",
 		"outputs:\n  - match: DP-1\n    scale: .nan\n":              "t.yaml:3: outputs[0].scale: output: scale NaN is outside",
+		"outputs:\n  - match: DP-1\n    bitdepth: 12\n":             "t.yaml:3: outputs[0].bitdepth: 12 is not 8 or 10",
 		"outputs:\n  - match: DP-1\n    mode: 1x1@nan\n":            `t.yaml:3: outputs[0].mode: "1x1@nan" is not`,
 		"outputs:\n  - match: DP-1\n    mode: 1x1@inf\n":            `t.yaml:3: outputs[0].mode: "1x1@inf" is not`,
 		"outputs:\n  - match: DP-1\n    mode: 1x1@1e12\n":           `t.yaml:3: outputs[0].mode: "1x1@1e12" is not`,

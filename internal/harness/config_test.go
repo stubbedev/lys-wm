@@ -381,3 +381,33 @@ func TestAReenabledOutputComesBackPoweredOn(t *testing.T) {
 		return nil
 	})
 }
+
+func TestTenBitOutputsFallBackToEightBitsWhenRefused(t *testing.T) {
+	var r reports
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Report = r.report
+		c.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{Depth: backend.Depth10}}
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, err := b.AddOutput(big)
+		if err != nil {
+			return err
+		}
+		if got := o.State(); got.Depth != backend.Depth10 || !got.Lit() {
+			t.Errorf("a 10-bit rule left %s at %+v", o.Name(), got)
+		}
+		b.RefuseDepth10()
+		refused, err := b.AddOutput(big)
+		if err != nil {
+			return err
+		}
+		if got := refused.State(); got.Depth != backend.Depth8 || !got.Lit() {
+			t.Errorf("an output refusing 10 bits is at %+v, want lit at 8 bits", got)
+		}
+		return nil
+	})
+	errs := r.take()
+	if len(errs) != 1 || !errors.Is(errs[0], backend.ErrDepthUnsupported) {
+		t.Fatalf("reports %v, want the one refused 10-bit output", errs)
+	}
+}

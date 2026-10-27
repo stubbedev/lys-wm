@@ -75,9 +75,17 @@ const (
 	PoweredOff
 )
 
+type BitDepth uint8
+
+const (
+	Depth8 BitDepth = iota
+	Depth10
+)
+
 type OutputState struct {
 	Power Power
 	Mode  Mode
+	Depth BitDepth
 }
 
 func (s OutputState) Enabled() bool {
@@ -105,6 +113,8 @@ type Presentation struct {
 const EmptyFramesPerRefresh = 2
 
 var ErrNoCursorPlanes = errors.New("backend: this backend draws the cursor in the frame")
+
+var ErrDepthUnsupported = errors.New("backend: the output cannot show frames at this bit depth")
 
 var (
 	ErrDeviceLost = errors.New("backend: the device is gone")

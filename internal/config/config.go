@@ -23,6 +23,7 @@ import (
 	"github.com/stubbedev/lys-ui/icontheme"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -133,6 +134,7 @@ type rawOutput struct {
 	Mode     *At[string]  `yaml:"mode"`
 	Position *At[string]  `yaml:"position"`
 	Scale    *At[float64] `yaml:"scale"`
+	BitDepth *At[int]     `yaml:"bitdepth"`
 	Disabled bool         `yaml:"disabled"`
 }
 
@@ -417,6 +419,16 @@ func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 			p.fail(r.Scale.Line, key+".scale", "%v", err)
 		} else {
 			rule.Scale = s
+		}
+	}
+	if r.BitDepth != nil {
+		switch r.BitDepth.V {
+		case 8:
+			rule.Depth = backend.Depth8
+		case 10:
+			rule.Depth = backend.Depth10
+		default:
+			p.fail(r.BitDepth.Line, key+".bitdepth", "%d is not 8 or 10", r.BitDepth.V)
 		}
 	}
 	return rule

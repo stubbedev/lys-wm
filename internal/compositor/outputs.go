@@ -19,6 +19,7 @@ type OutputRule struct {
 	Mode        ModePolicy
 	Position    *image.Point
 	Scale       output.Scale
+	Depth       backend.BitDepth
 	Disabled    bool
 }
 
@@ -152,12 +153,21 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 		if err != nil {
 			return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
 		}
-		next.Mode = m
+		next.Mode, next.Depth = m, rule.Depth
 	}
 	if next == current {
 		return false, nil
 	}
-	if err := b.Commit(next); err != nil {
+	err := b.Commit(next)
+	if errors.Is(err, backend.ErrDepthUnsupported) {
+		c.report(fmt.Errorf("compositor: output %s shows 8-bit frames instead: %w", b.Name(), err))
+		next.Depth = backend.Depth8
+		if next == current {
+			return false, nil
+		}
+		err = b.Commit(next)
+	}
+	if err != nil {
 		return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
 	}
 	return true, nil

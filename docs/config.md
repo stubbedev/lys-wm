@@ -31,6 +31,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `mode` | `preferred` (the default), `highres` (the largest mode, then the fastest), `<width>x<height>`, or `<width>x<height>@<hz>`. Without a rate, the fastest mode of that size; with one, the closest within 1 Hz |
 | `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
+| `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
 | `disabled` | `true` turns the output off |
 
 A mode the output does not have is reported, and the output keeps its current

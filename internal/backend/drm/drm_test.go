@@ -64,8 +64,10 @@ type fakeDevice struct {
 	refuseCursor   bool
 	refuseGamma    bool
 	noCTM          bool
+	deep           bool
 	refuseAsync    bool
 	refusePowerOff bool
+	refuseModesets bool
 	asyncFlips     bool
 	failCommits    error
 	commits        []commit
@@ -138,11 +140,14 @@ func (f *fakeDevice) Encoder(id uint32) (kdrm.Encoder, error) {
 func (f *fakeDevice) Planes() ([]uint32, error) { return []uint32{40, 41, 42, 43}, nil }
 
 func (f *fakeDevice) Plane(id uint32) (kdrm.Plane, error) {
-	format := scanoutFormat
-	if id == 43 {
-		format = cursorFormat
+	formats := []fourcc.Format{scanoutFormat}
+	switch {
+	case id == 43:
+		formats = []fourcc.Format{cursorFormat}
+	case f.deep:
+		formats = append(formats, fourcc.XRGB2101010)
 	}
-	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01}[id], Formats: []fourcc.Format{format}}, nil
+	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01}[id], Formats: formats}, nil
 }
 
 func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, error) {
@@ -189,14 +194,19 @@ func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 	if id != inFormatsBlob {
 		return nil, fmt.Errorf("no blob %d", id)
 	}
+	formats, mask := []uint32{uint32(scanoutFormat), 0}, uint64(1)
+	if f.deep {
+		formats, mask = []uint32{uint32(scanoutFormat), uint32(fourcc.XRGB2101010)}, 3
+	}
 	b := binary.NativeEndian.AppendUint32(nil, 1)
-	for _, v := range []uint32{0, 1, 24, 2, 32} {
+	for _, v := range []uint32{0, uint32(1 + mask/2), 24, 2, 32} {
 		b = binary.NativeEndian.AppendUint32(b, v)
 	}
-	b = binary.NativeEndian.AppendUint32(b, uint32(scanoutFormat))
-	b = binary.NativeEndian.AppendUint32(b, 0)
+	for _, v := range formats {
+		b = binary.NativeEndian.AppendUint32(b, v)
+	}
 	for _, m := range []uint64{0, 7} {
-		b = binary.NativeEndian.AppendUint64(b, 1)
+		b = binary.NativeEndian.AppendUint64(b, mask)
 		b = binary.NativeEndian.AppendUint64(b, 0)
 		b = binary.NativeEndian.AppendUint64(b, m)
 	}
@@ -279,7 +289,7 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
 	active, setsActive := c.values[[2]uint32{10, propActive}]
-	if f.refuseCursor && c.values[[2]uint32{43, propFB}] != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 {
+	if f.refuseCursor && c.values[[2]uint32{43, propFB}] != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 {
 		return unix.EINVAL
 	}
 	if flags&kdrm.AtomicTestOnly == 0 && f.failCommits != nil {
@@ -305,10 +315,11 @@ func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
 }
 
 type fakeAlloc struct {
-	next   uint32
-	freed  int
-	soft   *soft.Renderer
-	fences []int
+	formats []fourcc.Format
+	next    uint32
+	freed   int
+	soft    *soft.Renderer
+	fences  []int
 }
 
 func (a *fakeAlloc) renderer() render.Renderer { return a.soft }
@@ -317,10 +328,11 @@ func (a *fakeAlloc) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
 	return []fourcc.Modifier{0, 7, 9}, nil
 }
 
-func (a *fakeAlloc) allocate(size image.Point, _ fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
+func (a *fakeAlloc) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
 	if !slices.Equal(modifiers, []fourcc.Modifier{0, 7}) {
 		return nil, fmt.Errorf("allocated with modifiers %v", modifiers)
 	}
+	a.formats = append(a.formats, format)
 	a.next++
 	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, free: func() error { a.freed++; return nil }}, nil
 }
@@ -570,6 +582,35 @@ func TestAnEmptyFrameLetsTheNextRunAndReportsAnIdleRefresh(t *testing.T) {
 	}
 	if p := r.rec.presents[len(r.rec.presents)-1]; !p.Idle {
 		t.Fatalf("the refresh after empty frames was presented as %+v, want idle", p)
+	}
+}
+
+func TestTenBitFramesNeedAPlaneThatScansThemOut(t *testing.T) {
+	deep := backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[0]), Depth: backend.Depth10}
+	r := start(t)
+	o := r.b.Outputs()[0]
+	if err := o.Commit(deep); !errors.Is(err, backend.ErrDepthUnsupported) {
+		t.Fatalf("10-bit frames on an XRGB8888-only plane: %v", err)
+	}
+
+	r = boot(t, func(d *fakeDevice) allocator {
+		d.deep = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o = r.b.Outputs()[0]
+	allocated := len(r.alloc.formats)
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.alloc.formats[allocated:]; !slices.Equal(got, []fourcc.Format{fourcc.XRGB2101010, fourcc.XRGB2101010}) || o.State() != deep {
+		t.Fatalf("a 10-bit commit allocated %v and left state %+v", got, o.State())
+	}
+	if test := r.dev.commits[len(r.dev.commits)-1]; test.flags&kdrm.AtomicTestOnly == 0 || test.flags&kdrm.AtomicAllowModeset == 0 {
+		t.Fatalf("the 10-bit modeset was not tested first: %+v", test)
+	}
+	r.dev.refuseModesets = true
+	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[1]), Depth: backend.Depth10}); !errors.Is(err, backend.ErrDepthUnsupported) {
+		t.Fatalf("a 10-bit modeset the kernel refuses: %v", err)
 	}
 }
 

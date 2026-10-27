@@ -20,6 +20,7 @@ import (
 )
 
 type Backend struct {
+	shallow    bool
 	loop       *loop.Loop
 	renderer   render.Renderer
 	gpu        *gpuRenderer
@@ -322,6 +323,10 @@ func (o *Output) Modes() []backend.Mode {
 	return slices.Clone(o.modes)
 }
 
+func (b *Backend) RefuseDepth10() {
+	b.shallow = true
+}
+
 func (o *Output) State() backend.OutputState {
 	return o.state
 }
@@ -329,6 +334,9 @@ func (o *Output) State() backend.OutputState {
 func (o *Output) Commit(s backend.OutputState) error {
 	if o.removed {
 		return fmt.Errorf("headless: commit to removed output %s", o.name)
+	}
+	if s.Enabled() && s.Depth == backend.Depth10 && o.backend.shallow {
+		return fmt.Errorf("headless: %s: %w", o.name, backend.ErrDepthUnsupported)
 	}
 	if s.Enabled() {
 		if err := s.Mode.Valid(); err != nil {
