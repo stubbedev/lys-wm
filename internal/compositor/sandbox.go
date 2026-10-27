@@ -1,6 +1,7 @@
 package compositor
 
 import (
+	"github.com/stubbedev/lys-wm/internal/ctmcontrol"
 	"github.com/stubbedev/lys-wm/internal/gammacontrol"
 	"github.com/stubbedev/lys-wm/internal/inputmethod"
 	sedc "github.com/stubbedev/lys-wm/internal/protocol/server/extdatacontrol"
@@ -44,6 +45,7 @@ var privileged = []*wire.Interface{
 	sksi.ZwpKeyboardShortcutsInhibitManagerV1Interface,
 	securitycontext.Interface,
 	gammacontrol.Interface,
+	ctmcontrol.Interface,
 	inputmethod.Interface,
 }
 

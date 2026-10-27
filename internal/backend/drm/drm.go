@@ -537,7 +537,7 @@ type Output struct {
 	paced         bool
 	lastFlip      time.Duration
 	presented     uint64
-	gamma         gamma
+	color         colorBlobs
 	torn          bool
 	planesFailing bool
 }
@@ -806,11 +806,11 @@ func (o *Output) Scanout(d gpu.DMABUF, release func() error, tear bool) (bool, e
 	if torn {
 		return true, nil
 	}
-	return true, o.gammaSent()
+	return true, o.colorSent()
 }
 
 func (o *Output) tearable(fb uint32, flags uint32) bool {
-	if !o.b.async || o.front == nil || o.gamma.dirty || o.cursor != nil && o.cursor.dirty {
+	if !o.b.async || o.front == nil || o.color.dirty() || o.cursor != nil && o.cursor.dirty {
 		return false
 	}
 	r := &o.b.req
@@ -840,7 +840,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	if o.cursor != nil {
 		o.cursor.sent()
 	}
-	return o.gammaSent()
+	return o.colorSent()
 }
 
 func (o *Output) frame(s *scanout, fence int) {
@@ -855,7 +855,7 @@ func (o *Output) frame(s *scanout, fence int) {
 	if o.cursor != nil {
 		o.cursor.add()
 	}
-	o.addGamma()
+	o.addColor()
 }
 
 func (o *Output) place(p *plane, fb uint32, at image.Rectangle, fence int) {
@@ -886,7 +886,7 @@ func (o *Output) test(flags uint32) error {
 func (o *Output) flushPlanes() error {
 	c := o.cursor
 	cursor := c != nil && c.dirty
-	if !cursor && !o.gamma.dirty || !o.lit || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
+	if !cursor && !o.color.dirty() || !o.lit || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
 		return nil
 	}
 	r := &o.b.req
@@ -898,23 +898,23 @@ func (o *Output) flushPlanes() error {
 			c.refused, c.visible, cursor = err, false, false
 		}
 	}
-	if !cursor && !o.gamma.dirty {
+	if !cursor && !o.color.dirty() {
 		return nil
 	}
 	r.Reset()
 	if cursor {
 		c.add()
 	}
-	o.addGamma()
+	o.addColor()
 	if err := o.b.dev.Commit(r, flags, uint64(o.crtc.id)); err != nil {
-		return o.planesFailed(fmt.Errorf("drm: commit the cursor and gamma of %s: %w", o.Name(), err))
+		return o.planesFailed(fmt.Errorf("drm: commit the cursor and colour of %s: %w", o.Name(), err))
 	}
 	o.planesFailing = false
 	o.flipping = true
 	if cursor {
 		c.sent()
 	}
-	return o.gammaSent()
+	return o.colorSent()
 }
 
 func (o *Output) planesFailed(err error) error {
@@ -974,7 +974,7 @@ func (o *Output) freeBuffers() error {
 }
 
 func (o *Output) release() error {
-	err := errors.Join(o.freeBuffers(), o.releaseGamma())
+	err := errors.Join(o.freeBuffers(), o.releaseColor())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0

@@ -327,7 +327,7 @@ Everything lives under `internal/` except the commands.
 | `protocol/...` | Generated bindings, one package per protocol and side; never edited by hand |
 | `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox (#5) |
 | `server` | Display socket, clients, object maps, globals; sandbox sockets whose clients carry a security context and do not see restricted globals (#6, #118) |
-| `securitycontext` | `wp_security_context_manager_v1`: Flatpak and other sandbox engines register a socket for their apps; the compositor restricts screen capture, data control, foreign toplevels, output management, virtual input, session lock, layer shell, workspaces and global shortcuts, gamma control and input methods to unsandboxed clients (#118, #123, #124) |
+| `securitycontext` | `wp_security_context_manager_v1`: Flatpak and other sandbox engines register a socket for their apps; the compositor restricts screen capture, data control, foreign toplevels, output management, virtual input, session lock, layer shell, workspaces and global shortcuts, gamma and colour-matrix control and input methods to unsandboxed clients (#118, #123, #124, #176) |
 | `wlclient` | The client side of a connection: object map, zombies and dispatch, for the nested backend and tests (#6, #9) |
 | `backend` | The backend interface: outputs, frames, input devices (#8) |
 | `backend/headless` | Virtual outputs and injected input, for tests (#8) |
@@ -343,6 +343,7 @@ Everything lives under `internal/` except the commands.
 | `fifo` | `wp_fifo_manager_v1`: a barrier an update sets when it applies and the next latching deadline clears, which a later update can wait for (#117) |
 | `committiming` | `wp_commit_timing_manager_v1`: an update waits until the next refresh of an output showing it would not present it before its target time (#117) |
 | `gammacontrol` | `zwlr_gamma_control_manager_v1`: one client per output sets its gamma ramps, which the drm backend tests and writes to the CRTC's `GAMMA_LUT`; the identity returns when the client lets go (#123) |
+| `ctmcontrol` | `hyprland_ctm_control_manager_v1`: the first manager bound sets outputs' 3×3 colour transform matrices on commit, as hyprsunset does, written as S31.32 to the CRTC's `CTM`, which sits before `GAMMA_LUT` so both apply; later managers get `blocked`, and every output it changed returns to the identity when it goes. An output whose CRTC has no `CTM` keeps its colours and the request is reported (#176) |
 | `singlepixel` | `wp_single_pixel_buffer_manager_v1`: one-pixel buffers of a solid color (#20) |
 | `region` | Pixel regions as disjoint rectangles, for damage and input and opaque regions |
 | `output` | `wl_output` and `zxdg_output_v1`: each output's mode, logical position and scale in 120ths, with rounding that keeps logical edges adjacent in device pixels (#19) |

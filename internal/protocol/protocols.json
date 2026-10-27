@@ -238,6 +238,11 @@
       "path": "protocols/hyprland-global-shortcuts-v1.xml"
     },
     {
+      "package": "hyprlandctmcontrol",
+      "source": "hyprland-protocols",
+      "path": "protocols/hyprland-ctm-control-v1.xml"
+    },
+    {
       "package": "fifo",
       "source": "wayland-protocols",
       "path": "staging/fifo/fifo-v1.xml"

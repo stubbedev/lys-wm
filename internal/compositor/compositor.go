@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/committiming"
 	"github.com/stubbedev/lys-wm/internal/contenttype"
+	"github.com/stubbedev/lys-wm/internal/ctmcontrol"
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/drm"
@@ -106,6 +107,7 @@ type Compositor struct {
 	importer        dmabufRenderer
 	power           *outputpower.Manager
 	gamma           *gammacontrol.Manager
+	ctm             *ctmcontrol.Manager
 	outputConfig    *outputmanagement.Manager
 	alpha           *alphamodifier.Manager
 	fifo            *fifo.Manager
@@ -280,6 +282,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.gamma, err = gammacontrol.New(display, c, c.report); err != nil {
+		return err
+	}
+	if c.ctm, err = ctmcontrol.New(display, c, c.report); err != nil {
 		return err
 	}
 	if c.outputConfig, err = outputmanagement.New(display, c, c.report); err != nil {

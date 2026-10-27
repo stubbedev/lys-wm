@@ -42,6 +42,7 @@ const (
 	propHotspotY
 	propGammaLUT
 	propGammaSize
+	propCTM
 	propEDID
 	inFormatsBlob = 500
 	edidBlob      = 501
@@ -62,6 +63,7 @@ type fakeDevice struct {
 	badEDID        bool
 	refuseCursor   bool
 	refuseGamma    bool
+	noCTM          bool
 	refuseAsync    bool
 	refusePowerOff bool
 	asyncFlips     bool
@@ -161,7 +163,11 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		}
 		return props, nil
 	case kdrm.ObjectCRTC:
-		return map[string]kdrm.Property{"ACTIVE": {ID: propActive}, "MODE_ID": {ID: propModeID}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}}, nil
+		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive}, "MODE_ID": {ID: propModeID}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}}
+		if !f.noCTM {
+			props["CTM"] = kdrm.Property{ID: propCTM}
+		}
+		return props, nil
 	case kdrm.ObjectConnector:
 		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC}}
 		if f.badEDID {
@@ -1110,6 +1116,77 @@ func TestGammaLUTsReachTheCRTC(t *testing.T) {
 	}
 	if err := o.SetGamma([]uint16{1, 2, 3}); err == nil {
 		t.Fatal("ramps of the wrong size were accepted")
+	}
+}
+
+func ctmOf(c commit) (uint64, bool) {
+	v, ok := c.values[[2]uint32{10, propCTM}]
+	return v, ok
+}
+
+func TestColorTransformsReachTheCRTC(t *testing.T) {
+	r := start(t)
+	o := r.b.Outputs()[0]
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if m, ok := ctmOf(r.dev.commits[1]); !ok || m != 0 {
+		t.Fatal("the first modeset kept whatever CTM the CRTC had")
+	}
+	r.dev.flip(t, 10, 1)
+	r.settle()
+	r.dev.commits = nil
+	if !o.HasColorTransform() {
+		t.Fatal("a CRTC with a CTM property reports no colour transform")
+	}
+
+	if err := o.SetColorTransform(backend.Matrix{1, 0, 0, 0, 0.5, 0, 0, -0.25, 0.75}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.dev.commits) != 2 || r.dev.commits[1].flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent {
+		t.Fatalf("a CTM on an idle output committed %+v, want a test and a commit of its own", r.dev.commits)
+	}
+	blob, ok := ctmOf(r.dev.commits[1])
+	if !ok || blob == 0 {
+		t.Fatalf("the commit set CTM %d (%v)", blob, ok)
+	}
+	want := []uint64{1 << 32, 0, 0, 0, 1 << 31, 0, 0, 1<<63 | 1<<30, 3 << 30}
+	data := r.dev.blobData[uint32(blob)]
+	got := make([]uint64, len(data)/8)
+	for i := range got {
+		got[i] = binary.NativeEndian.Uint64(data[8*i:])
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("the CTM blob holds %#x, want S31.32 sign-magnitude %#x", got, want)
+	}
+
+	r.dev.flip(t, 10, 2)
+	r.settle()
+	if err := o.SetColorTransform(backend.Identity); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := ctmOf(r.dev.commits[len(r.dev.commits)-1]); !ok || m != 0 {
+		t.Fatalf("the identity committed CTM %d (%v), want no blob", m, ok)
+	}
+	r.dev.flip(t, 10, 3)
+	r.settle()
+	if !slices.Contains(r.dev.destroyed, uint32(blob)) {
+		t.Fatal("the replaced CTM blob was not destroyed")
+	}
+}
+
+func TestACRTCWithoutACTMRefusesOne(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.noCTM = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.b.Outputs()[0]
+	if o.HasColorTransform() {
+		t.Fatal("a CRTC without a CTM property reports a colour transform")
+	}
+	if err := o.SetColorTransform(backend.Matrix{1, 0, 0, 0, 1, 0, 0, 0, 0.5}); err == nil {
+		t.Fatal("a CTM was accepted for a CRTC without the property")
 	}
 }
 

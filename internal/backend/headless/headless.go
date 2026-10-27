@@ -169,6 +169,7 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 		name:    name,
 		modes:   slices.Clone(modes),
 		state:   backend.OutputState{Power: backend.PoweredOn, Mode: current},
+		ctm:     backend.Identity,
 	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Deadline: func(now time.Duration) time.Duration {
@@ -217,8 +218,9 @@ func (b *Backend) RemoveOutput(o *Output) error {
 }
 
 var (
-	_ backend.Scanner = (*Output)(nil)
-	_ backend.Gamma   = (*Output)(nil)
+	_ backend.Scanner        = (*Output)(nil)
+	_ backend.Gamma          = (*Output)(nil)
+	_ backend.ColorTransform = (*Output)(nil)
 )
 
 type Output struct {
@@ -251,6 +253,8 @@ type Output struct {
 	queuedRelease  func() error
 	gammaSize      int
 	gamma          []uint16
+	hasCTM         bool
+	ctm            backend.Matrix
 	queuedTorn     bool
 	torn           uint64
 	failPresents   error
@@ -274,6 +278,26 @@ func (o *Output) SetGamma(ramps []uint16) error {
 
 func (o *Output) Gamma() []uint16 {
 	return slices.Clone(o.gamma)
+}
+
+func (o *Output) EnableColorTransform() {
+	o.hasCTM = true
+}
+
+func (o *Output) HasColorTransform() bool {
+	return o.hasCTM
+}
+
+func (o *Output) SetColorTransform(m backend.Matrix) error {
+	if !o.hasCTM {
+		return fmt.Errorf("headless: %s has no colour transform", o.name)
+	}
+	o.ctm = m
+	return nil
+}
+
+func (o *Output) ColorTransform() backend.Matrix {
+	return o.ctm
 }
 
 func (o *Output) Name() string {

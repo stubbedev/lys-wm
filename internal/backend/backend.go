@@ -148,6 +148,15 @@ type Gamma interface {
 	SetGamma(ramps []uint16) error
 }
 
+type Matrix [9]float64
+
+var Identity = Matrix{1, 0, 0, 0, 1, 0, 0, 0, 1}
+
+type ColorTransform interface {
+	HasColorTransform() bool
+	SetColorTransform(m Matrix) error
+}
+
 type Capability uint8
 
 const (

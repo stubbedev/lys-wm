@@ -90,13 +90,31 @@ func gammaRamps(t *testing.T, o *Output) {
 	if err := o.SetGamma(ramps); err != nil {
 		t.Fatal(err)
 	}
-	if o.gamma.next == 0 || !o.gamma.dirty {
-		t.Fatalf("%s gamma: %+v", o.Name(), o.gamma)
+	if c := o.color[gammaLUT]; c.next == 0 || !c.dirty {
+		t.Fatalf("%s gamma: %+v", o.Name(), c)
 	}
 	if err := o.SetGamma(nil); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("%s gamma LUT of %d entries", o.Name(), size)
+}
+
+func colorTransform(t *testing.T, o *Output) {
+	t.Helper()
+	if !o.HasColorTransform() {
+		t.Logf("%s has no CTM", o.Name())
+		return
+	}
+	if err := o.SetColorTransform(backend.Matrix{1, 0, 0, 0, 0.8, 0, 0, 0, 0.6}); err != nil {
+		t.Fatal(err)
+	}
+	if c := o.color[colorMatrix]; c.next == 0 || !c.dirty {
+		t.Fatalf("%s CTM: %+v", o.Name(), c)
+	}
+	if err := o.SetColorTransform(backend.Identity); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%s takes a CTM", o.Name())
 }
 
 func TestStartOnThisCardWithoutMaster(t *testing.T) {
@@ -135,6 +153,7 @@ func TestStartOnThisCardWithoutMaster(t *testing.T) {
 		t.Logf("%s (%s) on CRTC %d and plane %d with modifiers %v, %+v", o.Name(), o.Description(), o.crtc.id, o.primary.id, o.primary.modifiers, o.State().Mode)
 		cursorImage(t, o)
 		gammaRamps(t, o)
+		colorTransform(t, o)
 	}
 	t.Logf("atomic async page flips: %v", b.async)
 	if err := b.Close(); err != nil {

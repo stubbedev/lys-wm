@@ -11,7 +11,7 @@ Hyprland + hy3 setup with something smaller.
 - **Drawing**: client surfaces, 1px borders and tab bars. Nothing else.
 - **Desktop protocols** for a full session: layer-shell, session lock, idle
   notify and inhibit, data control, screen capture, foreign toplevels,
-  workspaces, output management, gamma control, touchpad gestures, virtual
+  workspaces, output management, gamma and colour-matrix control, touchpad gestures, virtual
   input, input methods, sandboxed clients, XWayland.
 - **Games**: Vulkan FIFO pacing (fifo, commit timing), opt-in tearing, pointer
   warps and constraints.
