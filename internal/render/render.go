@@ -126,7 +126,17 @@ type Format uint8
 const (
 	ARGB8888 Format = iota + 1
 	XRGB8888
+	ABGR8888
+	XBGR8888
 )
+
+func (f Format) Opaque() bool {
+	return f == XRGB8888 || f == XBGR8888
+}
+
+func (f Format) RGBOrder() bool {
+	return f == ABGR8888 || f == XBGR8888
+}
 
 type Color struct {
 	R, G, B, A uint8

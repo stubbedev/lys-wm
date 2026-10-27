@@ -23,6 +23,8 @@ const shmVersion = 2
 var wireFormats = map[render.Format]sw.WlShmFormat{
 	render.ARGB8888: sw.WlShmFormatArgb8888,
 	render.XRGB8888: sw.WlShmFormatXrgb8888,
+	render.ABGR8888: sw.WlShmFormatAbgr8888,
+	render.XBGR8888: sw.WlShmFormatXbgr8888,
 }
 
 type Manager struct {

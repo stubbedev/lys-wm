@@ -34,7 +34,7 @@ type imported struct {
 
 func (t uploaded) texture() render.Texture { return t.tex }
 
-func (t uploaded) opaque() bool { return t.format == render.XRGB8888 }
+func (t uploaded) opaque() bool { return t.format.Opaque() }
 
 func (t imported) texture() render.Texture { return t.tex }
 

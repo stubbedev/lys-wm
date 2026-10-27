@@ -164,7 +164,14 @@ func (r *Renderer) Finish() error {
 }
 
 func (r *Renderer) Formats() []render.Format {
-	return []render.Format{render.ARGB8888, render.XRGB8888}
+	return []render.Format{render.ARGB8888, render.XRGB8888, render.ABGR8888, render.XBGR8888}
+}
+
+func glFormat(f render.Format) uint32 {
+	if f.RGBOrder() {
+		return gpu.RGBA
+	}
+	return gpu.BGRAExt
 }
 
 type texture struct {
@@ -175,6 +182,7 @@ type texture struct {
 	target uint32
 	img    *gpu.Image
 	filter int32
+	format uint32
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -187,13 +195,13 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := r.enter(); err != nil {
 		return nil, err
 	}
-	t := &texture{r: r, size: size, opaque: format == render.XRGB8888, target: gpu.Texture2D}
+	t := &texture{r: r, size: size, opaque: format.Opaque(), target: gpu.Texture2D, format: glFormat(format)}
 	r.gl.GenTextures(1, &t.id)
 	r.gl.BindTexture(gpu.Texture2D, t.id)
 	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
 	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
-	r.gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                    //nolint:gosec // bounded by CheckPixels
-	r.gl.TexImage2D(gpu.Texture2D, gpu.BGRAExt, int32(size.X), int32(size.Y), gpu.BGRAExt, data) //nolint:gosec // texture sizes fit GLsizei
+	r.gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                     //nolint:gosec // bounded by CheckPixels
+	r.gl.TexImage2D(gpu.Texture2D, int32(t.format), int32(size.X), int32(size.Y), t.format, data) //nolint:gosec // texture sizes fit GLsizei
 	r.gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
 	if err := r.leave("gles: new texture"); err != nil {
 		return nil, errors.Join(err, t.Destroy())
@@ -363,8 +371,8 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 		return err
 	}
 	gl.BindTexture(gpu.Texture2D, t.id)
-	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                                  //nolint:gosec // bounded by CheckUpdate
-	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), gpu.BGRAExt, data) //nolint:gosec // inside the texture
+	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                               //nolint:gosec // bounded by CheckUpdate
+	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), t.format, data) //nolint:gosec // inside the texture
 	gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
 	return t.r.leave("gles: update texture")
 }

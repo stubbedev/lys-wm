@@ -638,3 +638,64 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 		t.Fatalf("an unpinned thread made the context current %d times in two frames, want once per call", n)
 	}
 }
+
+func TestRGBOrderedTexturesMatchTheirBGRTwins(t *testing.T) {
+	for _, r := range []render.Renderer{renderer(t), soft.New()} {
+		for bgr, rgb := range map[render.Format]render.Format{render.ARGB8888: render.ABGR8888, render.XRGB8888: render.XBGR8888} {
+			bgra := []byte{0x30, 0x60, 0x90, 0xff}
+			rgba := []byte{0x90, 0x60, 0x30, 0xff}
+			a, err := r.NewTexture(bgr, image.Pt(1, 1), 4, bgra)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := r.NewTexture(rgb, image.Pt(1, 1), 4, rgba)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := b.Update(image.Rect(0, 0, 1, 1), 4, rgba); err != nil {
+				t.Fatal(err)
+			}
+			got := map[render.Format][4]byte{}
+			for f, tex := range map[render.Format]render.Texture{bgr: a, rgb: b} {
+				got[f] = drawn(t, r, tex)
+			}
+			if got[bgr] != got[rgb] || got[bgr] != [4]byte(bgra) {
+				t.Errorf("%T: %v drew %v and %v drew %v, want both %v", r, bgr, got[bgr], rgb, got[rgb], bgra)
+			}
+			if err := errors.Join(a.Destroy(), b.Destroy()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func drawn(t *testing.T, r render.Renderer, tex render.Texture) [4]byte {
+	t.Helper()
+	var target render.Target
+	var read func() [4]byte
+	switch r := r.(type) {
+	case *gles.Renderer:
+		fb := framebuffer(t, r, image.Pt(1, 1))
+		target = fb
+		read = func() [4]byte {
+			pix := make([]byte, 4)
+			if err := fb.Read(pix, 4); err != nil {
+				t.Fatal(err)
+			}
+			return [4]byte(pix)
+		}
+	case *soft.Renderer:
+		buf := soft.NewBuffer(1, 1)
+		target = buf
+		read = func() [4]byte { return [4]byte(buf.Pix) }
+	}
+	p, err := r.Begin(target, render.Region{image.Rect(0, 0, 1, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	return read()
+}
