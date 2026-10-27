@@ -587,11 +587,11 @@ func TestAStalledTransferToXIsDroppedOnTimeAndReleasesItsSource(t *testing.T) {
 	case <-time.After(XTransferTimeout + clientTimeout):
 		t.Fatalf("the source still writes %v after the X window stopped reading", XTransferTimeout+clientTimeout)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if !slices.ContainsFunc(reported, func(err error) bool { return strings.Contains(err.Error(), "took nothing of a selection") }) {
-		t.Fatalf("reports %v, want the dropped transfer", reported)
-	}
+	h.Eventually("the dropped transfer reported", func(*headless.Backend, *compositor.Compositor) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.ContainsFunc(reported, func(err error) bool { return strings.Contains(err.Error(), "took nothing of a selection") })
+	})
 }
 
 func TestStalledTransfersToXAreBoundedAndDieWithTheirWindow(t *testing.T) {
