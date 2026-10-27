@@ -355,6 +355,9 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		if m.stall, err = s.loop.AddTimer(m.stalled); err != nil {
 			return err
 		}
+		if m.reap, err = s.loop.AddTimer(m.reaped); err != nil {
+			return errors.Join(err, m.stall.Remove())
+		}
 		for _, k := range []data.Kind{data.Clipboard, data.Primary} {
 			m.selections[k] = &selection{kind: k, atom: c.atoms[[]atom{atomClipboard, atomPrimary}[k]]}
 		}

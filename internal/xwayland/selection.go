@@ -99,19 +99,76 @@ type outKey struct {
 }
 
 type outgoing struct {
-	target xproto.Atom
-	data   []byte
-	done   bool
-	since  time.Time
+	target  xproto.Atom
+	src     *os.File
+	pending []byte
+	total   int
+	reading bool
+	waiting bool
+	done    bool
+	since   time.Time
+}
+
+func (o *outgoing) close() error {
+	if o.src == nil {
+		return nil
+	}
+	err := o.src.Close()
+	o.src = nil
+	return err
 }
 
 func (m *wm) outgoingBusy() bool {
-	maps.DeleteFunc(m.outgoing, func(_ outKey, o *outgoing) bool { return time.Since(o.since) > m.transfer })
+	m.expireOutgoing()
 	return m.reading+len(m.outgoing) >= maxOutgoing
 }
 
+func (m *wm) expireOutgoing() {
+	m.dropOutgoing(func(k outKey, o *outgoing) bool {
+		if time.Since(o.since) <= m.transfer {
+			return false
+		}
+		m.report(fmt.Errorf("xwayland: the X window %d took nothing of a selection for %v; dropped the transfer", k.requestor, m.transfer))
+		return true
+	})
+}
+
+func (m *wm) reaped() error {
+	m.expireOutgoing()
+	m.armReap()
+	return nil
+}
+
+func (m *wm) armReap() {
+	if m.reap == nil {
+		return
+	}
+	var err error
+	if len(m.outgoing) == 0 {
+		err = m.reap.Disarm()
+	} else {
+		oldest := slices.MinFunc(slices.Collect(maps.Values(m.outgoing)), func(a, b *outgoing) int { return a.since.Compare(b.since) })
+		err = m.reap.Arm(max(time.Until(oldest.since.Add(m.transfer)), time.Millisecond))
+	}
+	if err != nil {
+		m.report(fmt.Errorf("xwayland: watch the selection transfers to X: %w", err))
+	}
+}
+
 func (m *wm) dropOutgoingTo(requestor xproto.Window) {
-	maps.DeleteFunc(m.outgoing, func(k outKey, _ *outgoing) bool { return k.requestor == requestor })
+	m.dropOutgoing(func(k outKey, _ *outgoing) bool { return k.requestor == requestor })
+}
+
+func (m *wm) dropOutgoing(drop func(outKey, *outgoing) bool) {
+	maps.DeleteFunc(m.outgoing, func(k outKey, o *outgoing) bool {
+		if !drop(k, o) {
+			return false
+		}
+		if err := o.close(); err != nil {
+			m.report(fmt.Errorf("xwayland: close a dropped selection transfer to X: %w", err))
+		}
+		return true
+	})
 }
 
 func (m *wm) selectionOf(atom xproto.Atom) *selection {
@@ -371,42 +428,46 @@ func (m *wm) requested(e xproto.SelectionRequestEvent) error {
 	}
 	m.reading++
 	go func() {
-		value, err := readSelection(in, m.transfer)
+		chunk, ended, err := readChunk(in, m.transfer)
 		m.post(func() error {
 			m.reading--
-			return m.sent(e, property, value, err)
+			return m.firstChunk(e, property, in, chunk, ended, err)
 		})
 	}()
 	return nil
 }
 
-func readSelection(in *os.File, timeout time.Duration) ([]byte, error) {
-	defer in.Close()
+func readChunk(in *os.File, timeout time.Duration) ([]byte, bool, error) {
 	if err := in.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	value, err := io.ReadAll(io.LimitReader(in, maxSelection+1))
-	if err == nil && len(value) > maxSelection {
-		err = fmt.Errorf("the selection is larger than %d bytes", maxSelection)
+	chunk := make([]byte, incrChunk)
+	n, err := io.ReadFull(in, chunk)
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return chunk[:n], true, nil
 	}
-	return value, err
+	return chunk, false, err
 }
 
-func (m *wm) sent(e xproto.SelectionRequestEvent, property xproto.Atom, value []byte, err error) error {
+func (m *wm) firstChunk(e xproto.SelectionRequestEvent, property xproto.Atom, in *os.File, chunk []byte, ended bool, err error) error {
 	if err != nil {
 		m.notifySelection(e, 0)
-		m.report(fmt.Errorf("xwayland: copy the Wayland selection to X: %w", err))
+		m.report(errors.Join(fmt.Errorf("xwayland: copy the Wayland selection to X: %w", err), in.Close()))
 		return nil
 	}
-	if len(value) <= incrChunk {
-		xproto.ChangeProperty(m.x, xproto.PropModeReplace, e.Requestor, property, e.Target, 8, uint32(len(value)), value) //nolint:gosec // at most one chunk
+	if ended {
+		xproto.ChangeProperty(m.x, xproto.PropModeReplace, e.Requestor, property, e.Target, 8, uint32(len(chunk)), chunk) //nolint:gosec // at most one chunk
 		m.notifySelection(e, property)
+		if err := in.Close(); err != nil {
+			m.report(fmt.Errorf("xwayland: close a selection transfer to X: %w", err))
+		}
 		return nil
 	}
 	xproto.ChangeWindowAttributes(m.x, e.Requestor, xproto.CwEventMask, []uint32{xproto.EventMaskPropertyChange})
-	size := binary.LittleEndian.AppendUint32(nil, uint32(len(value))) //nolint:gosec // bounded by maxSelection
-	xproto.ChangeProperty(m.x, xproto.PropModeReplace, e.Requestor, property, m.atoms[atomIncr], 32, 1, size)
-	m.outgoing[outKey{e.Requestor, property}] = &outgoing{target: e.Target, data: value, since: time.Now()}
+	lowerBound := binary.LittleEndian.AppendUint32(nil, incrChunk)
+	xproto.ChangeProperty(m.x, xproto.PropModeReplace, e.Requestor, property, m.atoms[atomIncr], 32, 1, lowerBound)
+	m.outgoing[outKey{e.Requestor, property}] = &outgoing{target: e.Target, src: in, pending: chunk, total: len(chunk), since: time.Now()}
+	m.armReap()
 	m.notifySelection(e, property)
 	return nil
 }
@@ -418,11 +479,55 @@ func (m *wm) propertyDeleted(win xproto.Window, property xproto.Atom) error {
 		return nil
 	}
 	if o.done {
-		delete(m.outgoing, key)
+		m.dropOutgoing(func(k outKey, _ *outgoing) bool { return k == key })
 		return nil
 	}
-	n := min(incrChunk, len(o.data))
-	xproto.ChangeProperty(m.x, xproto.PropModeReplace, win, property, o.target, 8, uint32(n), o.data[:n])
-	o.data, o.done, o.since = o.data[n:], n == 0, time.Now()
+	o.waiting = true
+	m.sendChunk(key, o)
 	return nil
+}
+
+func (m *wm) sendChunk(key outKey, o *outgoing) {
+	if !o.waiting || o.reading {
+		return
+	}
+	if len(o.pending) == 0 && o.src != nil {
+		m.readMore(key, o)
+		return
+	}
+	n := len(o.pending)
+	xproto.ChangeProperty(m.x, xproto.PropModeReplace, key.requestor, key.property, o.target, 8, uint32(n), o.pending) //nolint:gosec // at most one chunk
+	o.pending, o.waiting, o.done, o.since = nil, false, n == 0, time.Now()
+	m.armReap()
+}
+
+func (m *wm) readMore(key outKey, o *outgoing) {
+	o.reading = true
+	src := o.src
+	go func() {
+		chunk, ended, err := readChunk(src, m.transfer)
+		m.post(func() error {
+			o.reading = false
+			if m.outgoing[key] != o {
+				return nil
+			}
+			o.total += len(chunk)
+			if err == nil && o.total > maxSelection {
+				err = fmt.Errorf("the selection is larger than %d bytes", maxSelection)
+			}
+			if err != nil {
+				m.dropOutgoing(func(k outKey, _ *outgoing) bool { return k == key })
+				m.report(fmt.Errorf("xwayland: copy the Wayland selection to X: %w", err))
+				return nil
+			}
+			o.pending = chunk
+			if ended {
+				if err := o.close(); err != nil {
+					m.report(fmt.Errorf("xwayland: close a selection transfer to X: %w", err))
+				}
+			}
+			m.sendChunk(key, o)
+			return nil
+		})
+	}()
 }

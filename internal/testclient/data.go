@@ -124,6 +124,7 @@ type Source struct {
 	Data    *cw.WlDataSource
 	Primary *cps.ZwpPrimarySelectionSourceV1
 	Log     Log
+	Send    func(mime string, f *os.File)
 	content map[string]string
 	c       *Client
 }
@@ -163,9 +164,18 @@ func (c *Client) PrimarySource(content map[string]string) *Source {
 
 func (s *Source) send(mime string, fd int) error {
 	f := os.NewFile(uintptr(fd), "transfer")
-	_, werr := io.WriteString(f, s.content[mime])
+	if s.Send != nil {
+		s.Send(mime, f)
+		s.c.sends++
+		return s.Log.Note("send %s", mime)
+	}
+	content := s.content[mime]
+	go func() {
+		_, _ = io.WriteString(f, content)
+		_ = f.Close()
+	}()
 	s.c.sends++
-	return errors.Join(werr, f.Close(), s.Log.Note("send %s", mime))
+	return s.Log.Note("send %s", mime)
 }
 
 type dataSourceEvents struct{ s *Source }

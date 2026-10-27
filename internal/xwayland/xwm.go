@@ -102,6 +102,7 @@ type wm struct {
 	report     func(error)
 	transfer   time.Duration
 	stall      *loop.Timer
+	reap       *loop.Timer
 	focused    xproto.Window
 	clients    []xproto.Window
 	selections [2]*selection
@@ -555,10 +556,14 @@ func (m *wm) close() error {
 		errs = append(errs, in.out.Close())
 	}
 	m.incoming = nil
+	if m.reap != nil {
+		errs = append(errs, m.reap.Remove())
+		m.reap = nil
+	}
 	if m.stall != nil {
 		errs = append(errs, m.stall.Remove())
 		m.stall = nil
 	}
-	clear(m.outgoing)
+	m.dropOutgoing(func(outKey, *outgoing) bool { return true })
 	return errors.Join(errs...)
 }
