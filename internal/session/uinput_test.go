@@ -13,12 +13,14 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 const (
 	uiSetEvBit   = 0x40045564
 	uiSetKeyBit  = 0x40045565
 	uiSetRelBit  = 0x40045566
+	uiSetLEDBit  = 0x40045569
 	uiDevCreate  = 0x5501
 	uiDevDestroy = 0x5502
 	uiDevSetup   = 0x405c5503
@@ -26,6 +28,9 @@ const (
 	evSyn        = 0
 	evKey        = 1
 	evRel        = 2
+	evLED        = 0x11
+	keyCapsLock  = 58
+	ledCapsL     = 1
 	btnLeft      = 0x110
 	btnRight     = 0x111
 	relX         = 0
@@ -55,15 +60,13 @@ func ioctl(fd uintptr, req uintptr, arg uintptr) error {
 	return nil
 }
 
+const virtualKeyboard = "lys-wm virtual keyboard"
+
+type uinputBit struct{ req, v uintptr }
+
 func newVirtualMouse(t *testing.T) *virtualDevice {
 	t.Helper()
-	f, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
-	if err != nil {
-		t.Skipf("no uinput here: %v", err)
-	}
-	t.Cleanup(func() { _ = f.Close() })
-	fd := f.Fd()
-	for _, b := range []struct{ req, v uintptr }{
+	return newVirtualDevice(t, virtualMouse, []uinputBit{
 		{uiSetEvBit, evKey},
 		{uiSetEvBit, evRel},
 		{uiSetKeyBit, btnLeft},
@@ -72,13 +75,34 @@ func newVirtualMouse(t *testing.T) *virtualDevice {
 		{uiSetRelBit, relY},
 		{uiSetRelBit, relWheel},
 		{uiSetRelBit, relWheelHi},
-	} {
+	})
+}
+
+func newVirtualKeyboard(t *testing.T) *virtualDevice {
+	t.Helper()
+	return newVirtualDevice(t, virtualKeyboard, []uinputBit{
+		{uiSetEvBit, evKey},
+		{uiSetEvBit, evLED},
+		{uiSetKeyBit, keyCapsLock},
+		{uiSetLEDBit, ledCapsL},
+	})
+}
+
+func newVirtualDevice(t *testing.T, devName string, bits []uinputBit) *virtualDevice {
+	t.Helper()
+	f, err := os.OpenFile("/dev/uinput", os.O_RDWR|unix.O_NONBLOCK, 0)
+	if err != nil {
+		t.Skipf("no uinput here: %v", err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	fd := f.Fd()
+	for _, b := range bits {
 		if err := ioctl(fd, b.req, b.v); err != nil {
 			t.Fatalf("uinput bit %#x %d: %v", b.req, b.v, err)
 		}
 	}
 	setup := uinputSetup{bustype: busVirtual, vendor: 0x1234, product: 0x5678}
-	copy(setup.name[:], virtualMouse)
+	copy(setup.name[:], devName)
 	if err := ioctl(fd, uiDevSetup, uintptr(unsafe.Pointer(&setup))); err != nil {
 		t.Fatalf("uinput setup: %v", err)
 	}
@@ -110,6 +134,26 @@ func newVirtualMouse(t *testing.T) *virtualDevice {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func (v *virtualDevice) awaitLED(t *testing.T, code uint16, value int32) {
+	t.Helper()
+	buf := make([]byte, 24)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		n, err := unix.Read(int(v.f.Fd()), buf)
+		if errors.Is(err, unix.EAGAIN) {
+			time.Sleep(5 * time.Millisecond)
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n == len(buf) && binary.NativeEndian.Uint16(buf[16:]) == evLED && binary.NativeEndian.Uint16(buf[18:]) == code && int32(binary.NativeEndian.Uint32(buf[20:])) == value {
+			return
+		}
+	}
+	t.Fatalf("LED %d never became %d", code, value)
 }
 
 func (v *virtualDevice) emit(t *testing.T, events ...[3]int32) {
@@ -194,4 +238,25 @@ func TestLibinputAppliesAndReappliesPointerSettings(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `"`+virtualMouse+`" has no tap setting`) {
 		t.Fatalf("tapping on a mouse: %v", err)
 	}
+}
+
+func TestLibinputSetsKeyboardLEDs(t *testing.T) {
+	kbd := newVirtualKeyboard(t)
+	in := libinput(t, PlainOpener{})
+	rec := &inputRecorder{}
+	in.Start(rec)
+	if err := in.Add(kbd.node); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.devices) != 1 || rec.devices[0].Name() != virtualKeyboard {
+		t.Fatalf("added %v", rec.devices)
+	}
+	leds, ok := rec.devices[0].(backend.KeyboardLEDs)
+	if !ok {
+		t.Fatal("a libinput keyboard has no LEDs to set")
+	}
+	leds.SetLEDs(xkb.Locks{Caps: true})
+	kbd.awaitLED(t, ledCapsL, 1)
+	leds.SetLEDs(xkb.Locks{})
+	kbd.awaitLED(t, ledCapsL, 0)
 }

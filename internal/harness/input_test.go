@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 type inputRig struct {
@@ -216,4 +217,29 @@ func TestTheCursorStaysOnAnOutput(t *testing.T) {
 		at := image.Pt(int(math.Floor(x)), int(math.Floor(y)))
 		return slices.ContainsFunc(c.Outputs(), func(o *output.Output) bool { return at.In(o.Logical()) })
 	})
+}
+
+func TestKeyboardLEDsFollowTheLockKeys(t *testing.T) {
+	h := Start(t, small)
+	const capsLock = 58
+	leds := func() (l xkb.Locks) {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			l = b.Keyboard().LEDs()
+			return nil
+		})
+		return l
+	}
+	tap := func() {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return errors.Join(b.Keyboard().Key(capsLock, true), b.Keyboard().Key(capsLock, false))
+		})
+	}
+	tap()
+	if got := leds(); got != (xkb.Locks{Caps: true}) {
+		t.Fatalf("after Caps Lock the keyboard LEDs are %+v", got)
+	}
+	tap()
+	if got := leds(); got != (xkb.Locks{}) {
+		t.Fatalf("after a second Caps Lock the keyboard LEDs are %+v", got)
+	}
 }

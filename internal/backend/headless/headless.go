@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/gles"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 type Backend struct {
@@ -35,7 +36,7 @@ type Backend struct {
 
 func New(l *loop.Loop) *Backend {
 	b := &Backend{loop: l, renderer: soft.New()}
-	b.keyboard = &Keyboard{device{b, "headless-keyboard", backend.Keyboard}}
+	b.keyboard = &Keyboard{device: device{b, "headless-keyboard", backend.Keyboard}}
 	b.pointer = &Pointer{device{b, "headless-pointer", backend.Pointer}}
 	b.touch = &Touch{device{b, "headless-touch", backend.Touch}}
 	b.switches = &Switches{device{b, "headless-switches", 0}}
@@ -556,7 +557,20 @@ func now() time.Duration {
 	return backend.Now()
 }
 
-type Keyboard struct{ device }
+type Keyboard struct {
+	device
+	leds xkb.Locks
+}
+
+var _ backend.KeyboardLEDs = (*Keyboard)(nil)
+
+func (k *Keyboard) SetLEDs(l xkb.Locks) {
+	k.leds = l
+}
+
+func (k *Keyboard) LEDs() xkb.Locks {
+	return k.leds
+}
 
 func (b *Backend) Keyboard() *Keyboard {
 	return b.keyboard

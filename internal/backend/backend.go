@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/edid"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 func Now() time.Duration {
@@ -172,6 +173,10 @@ func (c Capability) Has(flag Capability) bool {
 type Device interface {
 	Name() string
 	Capabilities() Capability
+}
+
+type KeyboardLEDs interface {
+	SetLEDs(l xkb.Locks)
 }
 
 type Event interface {

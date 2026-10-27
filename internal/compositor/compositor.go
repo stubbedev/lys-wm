@@ -100,6 +100,8 @@ type Compositor struct {
 	surfaces        *surface.Manager
 	shm             *shm.Manager
 	seat            *seat.Seat
+	keyboards       []backend.KeyboardLEDs
+	leds            xkb.Locks
 	shell           *shell.Shell
 	textures        map[*surface.Surface]texture
 	imported        map[*dmabuf.Buffer]render.Texture
@@ -359,7 +361,9 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.adopt(cfg, m)
 	c.outputOverrides = nil
 	c.submap = ""
-	if err := errors.Join(c.dropDecor(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll()); err != nil {
+	err = errors.Join(c.dropDecor(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll())
+	c.syncLEDs()
+	if err != nil {
 		c.report(fmt.Errorf("compositor: apply the new config: %w", err))
 	}
 	return nil

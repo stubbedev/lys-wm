@@ -77,11 +77,27 @@ func wlCaps(c backend.Capability) sw.WlSeatCapability {
 }
 
 func (c *Compositor) DeviceAdded(d backend.Device) error {
+	if k, ok := d.(backend.KeyboardLEDs); ok && d.Capabilities().Has(backend.Keyboard) {
+		c.keyboards = append(c.keyboards, k)
+		k.SetLEDs(c.leds)
+	}
 	return c.seat.AddDevice(wlCaps(d.Capabilities()))
 }
 
 func (c *Compositor) DeviceRemoved(d backend.Device) error {
+	c.keyboards = slices.DeleteFunc(c.keyboards, func(k backend.KeyboardLEDs) bool { return any(k) == any(d) })
 	return c.seat.RemoveDevice(wlCaps(d.Capabilities()))
+}
+
+func (c *Compositor) syncLEDs() {
+	l := c.seat.Locks()
+	if l == c.leds {
+		return
+	}
+	c.leds = l
+	for _, k := range c.keyboards {
+		k.SetLEDs(l)
+	}
 }
 
 func (c *Compositor) Cursor() (float64, float64) {
@@ -141,7 +157,9 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		if bound, err := c.bindKey(e.Code, e.Pressed); bound || err != nil {
 			return err
 		}
-		return c.seat.Key(e.Code, e.Pressed, e.Time)
+		err := c.seat.Key(e.Code, e.Pressed, e.Time)
+		c.syncLEDs()
+		return err
 	case backend.PointerMotion:
 		if err := c.seat.RelativeMotion(e.Time, e.DX, e.DY, e.UnaccelDX, e.UnaccelDY); err != nil {
 			return err

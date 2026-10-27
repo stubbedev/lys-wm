@@ -13,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 const LibinputEnv = "LYS_WM_LIBINPUT"
@@ -76,6 +77,7 @@ type libinputFuncs struct {
 	suspend        func(li uintptr)
 	resume         func(li uintptr) int32
 	deviceName     func(dev uintptr) string
+	ledUpdate      func(dev uintptr, leds int32)
 	deviceHasCap   func(dev uintptr, capability int32) int32
 	deviceRef      func(dev uintptr) uintptr
 	deviceUnref    func(dev uintptr) uintptr
@@ -147,10 +149,32 @@ type InputDevice struct {
 	h            uintptr
 	touchpad     bool
 	scrollFactor float64
+	ledUpdate    func(dev uintptr, leds int32)
 }
+
+var _ backend.KeyboardLEDs = (*InputDevice)(nil)
 
 func (d *InputDevice) Name() string                     { return d.name }
 func (d *InputDevice) Capabilities() backend.Capability { return d.caps }
+
+const (
+	ledNumLock    = 1 << 0
+	ledCapsLock   = 1 << 1
+	ledScrollLock = 1 << 2
+)
+
+func (d *InputDevice) SetLEDs(l xkb.Locks) {
+	var leds int32
+	for _, led := range []struct {
+		on   bool
+		flag int32
+	}{{l.Num, ledNumLock}, {l.Caps, ledCapsLock}, {l.Scroll, ledScrollLock}} {
+		if led.on {
+			leds |= led.flag
+		}
+	}
+	d.ledUpdate(d.h, leds)
+}
 
 type Libinput struct {
 	fn      libinputFuncs
@@ -276,6 +300,7 @@ func (in *Libinput) bind(path string) error {
 		{&f.suspend, "libinput_suspend"},
 		{&f.resume, "libinput_resume"},
 		{&f.deviceName, "libinput_device_get_name"},
+		{&f.ledUpdate, "libinput_device_led_update"},
 		{&f.deviceHasCap, "libinput_device_has_capability"},
 		{&f.deviceRef, "libinput_device_ref"},
 		{&f.deviceUnref, "libinput_device_unref"},
@@ -424,7 +449,7 @@ func (in *Libinput) event(ev uintptr) error {
 	h := f.eventDevice(ev)
 	switch typ := f.eventType(ev); typ {
 	case evDeviceAdded:
-		d := &InputDevice{name: f.deviceName(h), h: f.deviceRef(h), touchpad: f.tapFingers(h) > 0, scrollFactor: 1}
+		d := &InputDevice{name: f.deviceName(h), h: f.deviceRef(h), touchpad: f.tapFingers(h) > 0, scrollFactor: 1, ledUpdate: f.ledUpdate}
 		for c, flag := range map[int32]backend.Capability{capKeyboard: backend.Keyboard, capPointer: backend.Pointer, capTouch: backend.Touch} {
 			if f.deviceHasCap(h, c) != 0 {
 				d.caps |= flag
