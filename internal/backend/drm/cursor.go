@@ -80,15 +80,47 @@ func (c *cursor) SetCursor(hotspot image.Point) error {
 		return fmt.Errorf("drm: SetCursor on %s without BeginCursor", c.o.Name())
 	}
 	c.drawing = false
+	b := c.idle()
+	if err := c.target.Read(b.dumb.Pix, int(b.dumb.Pitch)); err != nil {
+		return fmt.Errorf("drm: copy the cursor image of %s: %w", c.o.Name(), err)
+	}
+	return c.show(b, hotspot)
+}
+
+func (c *cursor) LoadCursor(pix []byte, stride int, size, hotspot image.Point) error {
+	switch {
+	case c.refused != nil:
+		return c.refused
+	case c.drawing:
+		return fmt.Errorf("drm: LoadCursor on %s during a cursor image in progress", c.o.Name())
+	case size.X > c.CursorSize().X || size.Y > c.CursorSize().Y:
+		return fmt.Errorf("drm: a %v cursor image does not fit the %v cursor plane of %s", size, c.CursorSize(), c.o.Name())
+	}
+	if err := render.CheckPixels(size, stride, len(pix)); err != nil {
+		return err
+	}
+	if err := c.allocate(); err != nil {
+		return err
+	}
+	b := c.idle()
+	pitch := int(b.dumb.Pitch)
+	clear(b.dumb.Pix)
+	for y := range size.Y {
+		copy(b.dumb.Pix[y*pitch:y*pitch+size.X*4], pix[y*stride:])
+	}
+	return c.show(b, hotspot)
+}
+
+func (c *cursor) idle() *cursorBuffer {
 	idle := func(b *cursorBuffer) bool { return b != c.front && b != c.queued }
 	i := slices.IndexFunc(c.buffers, func(b *cursorBuffer) bool { return idle(b) && b != c.pending })
 	if i < 0 {
 		i = slices.IndexFunc(c.buffers, idle)
 	}
-	b := c.buffers[i]
-	if err := c.target.Read(b.dumb.Pix, int(b.dumb.Pitch)); err != nil {
-		return fmt.Errorf("drm: copy the cursor image of %s: %w", c.o.Name(), err)
-	}
+	return c.buffers[i]
+}
+
+func (c *cursor) show(b *cursorBuffer, hotspot image.Point) error {
 	c.pending, c.hotspot, c.visible, c.dirty = b, hotspot, true, true
 	if err := c.test(); err != nil {
 		return err

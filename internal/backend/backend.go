@@ -125,6 +125,7 @@ type CursorPlane interface {
 	CursorSize() image.Point
 	BeginCursor() (Frame, error)
 	SetCursor(hotspot image.Point) error
+	LoadCursor(pix []byte, stride int, size, hotspot image.Point) error
 	MoveCursor(at image.Point) error
 	HideCursor() error
 }

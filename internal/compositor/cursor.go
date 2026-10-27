@@ -23,6 +23,7 @@ type cursorTexture struct {
 	tex     render.Texture
 	size    image.Point
 	hotspot image.Point
+	pixels  []byte
 }
 
 func (c *Compositor) cursorImage(name string, px int) (xcursor.Image, error) {
@@ -56,6 +57,9 @@ func (c *Compositor) cursorTexture(name string, scale output.Scale) (*cursorText
 		size:    image.Pt(img.Size.X*px/nominal, img.Size.Y*px/nominal),
 		hotspot: image.Pt(img.Hotspot.X*px/nominal, img.Hotspot.Y*px/nominal),
 	}
+	if ct.size == img.Size {
+		ct.pixels = img.Pixels
+	}
 	c.pointers[key] = ct
 	return ct, nil
 }
@@ -64,17 +68,14 @@ func (c *Compositor) drawCursor(pass *frame, o *output.Output, shown []*surface.
 	if !c.seat.HasPointer() || !c.cursor.pixel().In(o.Logical()) {
 		return shown, nil
 	}
-	name := "default"
 	switch cur := c.seat.Cursor().(type) {
 	case seat.SurfaceCursor:
 		at := c.cursor.pixel().Sub(cur.Hotspot)
 		return c.drawTree(pass, o, cur.Surface, flat(at), shown), nil
 	case seat.HiddenCursor:
 		return shown, nil
-	case seat.ShapeCursor:
-		name = cur.Shape
 	}
-	ct, err := c.cursorTexture(name, o.Scale())
+	ct, err := c.cursorTexture(c.cursorShape(), o.Scale())
 	if err != nil {
 		return shown, err
 	}
@@ -92,7 +93,8 @@ func (c *Compositor) cursorTip(o *output.Output) image.Point {
 
 type hwCursor struct {
 	plane   backend.CursorPlane
-	loaded  *cursorImage
+	loaded  cursorImage
+	holds   bool
 	inFrame bool
 }
 
@@ -132,11 +134,11 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 	if limit := hw.plane.CursorSize(); want.size.X > limit.X || want.size.Y > limit.Y {
 		return false, hw.plane.HideCursor()
 	}
-	if hw.loaded == nil || *hw.loaded != want {
-		if err := c.loadCursor(hw, box.Min, want.hotspot); err != nil {
+	if !hw.holds || hw.loaded != want {
+		if err := c.loadCursor(hw, o, box.Min, want.hotspot); err != nil {
 			return false, c.dropCursorPlane(o, err)
 		}
-		hw.loaded = &want
+		hw.loaded, hw.holds = want, true
 	}
 	if err := hw.plane.MoveCursor(tip); err != nil {
 		return false, c.dropCursorPlane(o, err)
@@ -144,7 +146,26 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 	return true, nil
 }
 
-func (c *Compositor) loadCursor(hw *hwCursor, origin, hotspot image.Point) error {
+func (c *Compositor) cursorShape() string {
+	if cur, ok := c.seat.Cursor().(seat.ShapeCursor); ok {
+		return cur.Shape
+	}
+	return "default"
+}
+
+func (c *Compositor) themePixels(o *output.Output) (*cursorTexture, bool) {
+	switch c.seat.Cursor().(type) {
+	case seat.SurfaceCursor, seat.HiddenCursor:
+		return nil, false
+	}
+	ct, err := c.cursorTexture(c.cursorShape(), o.Scale())
+	return ct, err == nil && ct.pixels != nil
+}
+
+func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, origin, hotspot image.Point) error {
+	if ct, ok := c.themePixels(o); ok {
+		return hw.plane.LoadCursor(ct.pixels, ct.size.X*4, ct.size, hotspot)
+	}
 	f, err := hw.plane.BeginCursor()
 	if err != nil {
 		return err

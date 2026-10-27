@@ -204,3 +204,32 @@ func TestARefusingCursorPlaneFallsBackToTheFrame(t *testing.T) {
 		return !b.Outputs()[0].Cursor().Visible() && arrowAt(image.Pt(16, 10))(b, nil)
 	})
 }
+
+func TestThemeCursorsCopyToThePlaneAndClientCursorsRender(t *testing.T) {
+	r := inputOn(t, StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	counts := func() (images, copies uint64) {
+		r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			cur := b.Outputs()[0].Cursor()
+			images, copies = cur.Images(), cur.Copies()
+			return nil
+		})
+		return images, copies
+	}
+	r.h.Eventually("the arrow on the plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return b.Outputs()[0].Cursor().Visible()
+	})
+	if images, copies := counts(); images == 0 || copies != images {
+		t.Fatalf("the theme arrow loaded %d images, %d of them copied without rendering", images, copies)
+	}
+	cursor := r.c.Surface()
+	if err := errors.Join(cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(0, 0, 0xff)), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit(), r.in.Pointer.SetCursor(r.in.Serial, cursor, 4, 4)); err != nil {
+		t.Fatal(err)
+	}
+	r.c.Sync()
+	_, before := counts()
+	r.h.Eventually("the client cursor on the plane", showing(77, 47, [3]byte{0xff, 0, 0}))
+	if _, copies := counts(); copies != before {
+		t.Fatalf("a client cursor surface was copied (%d copies, %d before) instead of rendered", copies, before)
+	}
+}

@@ -17,6 +17,7 @@ type Cursor struct {
 	hotspot, at      image.Point
 	visible, drawing bool
 	images, moves    uint64
+	copies           uint64
 	refused          error
 }
 
@@ -81,6 +82,31 @@ func (c *Cursor) SetCursor(hotspot image.Point) error {
 	c.image, c.hotspot, c.visible = img, hotspot, true
 	c.images++
 	return nil
+}
+
+func (c *Cursor) LoadCursor(pix []byte, stride int, size, hotspot image.Point) error {
+	if c.refused != nil {
+		return c.refused
+	}
+	if err := render.CheckPixels(size, stride, len(pix)); err != nil {
+		return err
+	}
+	plane := c.CursorSize()
+	if size.X > plane.X || size.Y > plane.Y {
+		return fmt.Errorf("headless: a %v cursor image does not fit the %v cursor plane of %s", size, plane, c.o.name)
+	}
+	img := soft.NewBuffer(plane.X, plane.Y)
+	for y := range size.Y {
+		copy(img.Pix[y*img.Stride:y*img.Stride+size.X*4], pix[y*stride:])
+	}
+	c.image, c.hotspot, c.visible = img, hotspot, true
+	c.images++
+	c.copies++
+	return nil
+}
+
+func (c *Cursor) Copies() uint64 {
+	return c.copies
 }
 
 func (c *Cursor) MoveCursor(at image.Point) error {
