@@ -1496,3 +1496,47 @@ func TestTheLatchFollowsMeasuredRenderTimeAndBacksOffAfterAMiss(t *testing.T) {
 		t.Fatalf("after a missed vblank the latch is %v before the vblank, want back at half a refresh", got)
 	}
 }
+
+func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	frame := func(seq uint32) {
+		t.Helper()
+		if err := o.ScheduleFrame(); err != nil {
+			t.Fatal(err)
+		}
+		r.settle()
+		r.dev.flip(t, 10, seq)
+		r.settle()
+	}
+	tests := func() int {
+		n := 0
+		for _, c := range r.dev.commits {
+			if c.flags&kdrm.AtomicTestOnly != 0 {
+				n++
+			}
+		}
+		return n
+	}
+	for seq := uint32(2); seq < 8; seq++ {
+		frame(seq)
+	}
+	r.dev.commits = nil
+	for seq := uint32(8); seq < 14; seq++ {
+		frame(seq)
+	}
+	if n := tests(); n != 0 {
+		t.Fatalf("%d test commits for frames on buffers that already passed, want none", n)
+	}
+	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	r.dev.flip(t, 10, 14)
+	r.settle()
+	r.dev.commits = nil
+	frame(15)
+	if n := tests(); n == 0 {
+		t.Fatal("a frame with a newly shown cursor went out without a test commit")
+	}
+}

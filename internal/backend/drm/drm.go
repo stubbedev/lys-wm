@@ -406,7 +406,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
-	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1}
+	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1, tested: map[planeKey]struct{}{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Deadline: o.latchDeadline,
 		Wake:     func(after time.Duration) error { return o.latch.Arm(after) },
@@ -586,6 +586,7 @@ type Output struct {
 	empties       int
 	idleAt        time.Duration
 	budget        backend.RenderBudget
+	tested        map[planeKey]struct{}
 	frameStart    time.Duration
 	renderFence   int
 	aimedAt       time.Duration
@@ -640,6 +641,7 @@ func (o *Output) State() backend.OutputState {
 }
 
 func (o *Output) setMode(m kdrm.Mode) error {
+	clear(o.tested)
 	blob, err := o.b.dev.CreateBlob(m.Bytes())
 	if err != nil {
 		return err
@@ -865,11 +867,12 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 		flags |= kdrm.AtomicPageFlipAsync
 	} else {
 		o.frame(s, -1)
-		if o.test(flags) != nil {
+		if o.verify(cf.fb, flags) != nil {
 			return false, nil
 		}
 	}
 	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
+		clear(o.tested)
 		return false, fmt.Errorf("drm: commit a client buffer on %s: %w", o.Name(), err)
 	}
 	cf.shown++
@@ -893,9 +896,41 @@ func (o *Output) tearable(fb uint32, flags uint32) bool {
 	return o.test(flags) == nil
 }
 
+type planeKey struct {
+	primary, cursor uint32
+	cursorAt        image.Point
+	hotspot         image.Point
+	flags           uint32
+}
+
+const testedPlaneStates = 16
+
+func (o *Output) planeKey(fb, flags uint32) planeKey {
+	k := planeKey{primary: fb, flags: flags}
+	if c := o.cursor; c != nil && c.visible {
+		k.cursor, k.cursorAt, k.hotspot = c.pending.fb, c.at, c.hotspot
+	}
+	return k
+}
+
+func (o *Output) verify(fb, flags uint32) error {
+	key := o.planeKey(fb, flags)
+	if _, ok := o.tested[key]; ok && !o.modeset && !o.color.dirty() {
+		return nil
+	}
+	if err := o.test(flags); err != nil {
+		return err
+	}
+	if len(o.tested) >= testedPlaneStates {
+		clear(o.tested)
+	}
+	o.tested[key] = struct{}{}
+	return nil
+}
+
 func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	o.frame(s, fence)
-	err := o.test(flags)
+	err := o.verify(s.fb, flags)
 	if c := o.cursor; err != nil && c != nil && c.visible {
 		c.visible = false
 		o.frame(s, fence)
@@ -909,6 +944,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 		return err
 	}
 	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
+		clear(o.tested)
 		return fmt.Errorf("drm: commit the frame for %s: %w", o.Name(), err)
 	}
 	if o.cursor != nil {
