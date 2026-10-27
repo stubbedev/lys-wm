@@ -72,6 +72,36 @@ type DMABUF struct {
 	Format   fourcc.Format
 	Modifier fourcc.Modifier
 	Planes   []Plane
+	YUV      YUVEncoding
+}
+
+type Coefficients uint8
+
+const (
+	CoefficientsUnspecified Coefficients = iota
+	BT601
+	BT709
+	BT2020
+)
+
+type Range uint8
+
+const (
+	RangeUnspecified Range = iota
+	LimitedRange
+	FullRange
+)
+
+type YUVEncoding struct {
+	Coefficients Coefficients
+	Range        Range
+}
+
+func DefaultYUV(size image.Point) YUVEncoding {
+	if size.Y >= 720 {
+		return YUVEncoding{BT709, LimitedRange}
+	}
+	return YUVEncoding{BT601, LimitedRange}
 }
 
 type FormatModifier struct {

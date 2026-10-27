@@ -82,7 +82,11 @@ func (c *Compositor) attach(s *surface.Surface) error {
 		tex, ok := c.imported[b]
 		if !ok {
 			var err error
-			if tex, err = c.importer.ImportTexture(b.DMABUF()); err != nil {
+			d := b.DMABUF()
+			if d.Format.YUV() {
+				d.YUV = gpu.DefaultYUV(d.Size)
+			}
+			if tex, err = c.importer.ImportTexture(d); err != nil {
 				return fmt.Errorf("compositor: import the dmabuf of wl_surface@%d: %w", s.Resource().Base().ID(), err)
 			}
 			c.imported[b] = tex

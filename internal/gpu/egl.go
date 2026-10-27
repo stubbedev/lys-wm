@@ -33,6 +33,13 @@ const (
 	eglHeight                  = 0x3056
 	eglLinuxDRMFourCC          = 0x3271
 	eglImagePreserved          = 0x30D2
+	eglYUVColorSpaceHint       = 0x327B
+	eglSampleRangeHint         = 0x327C
+	eglITURec601               = 0x327F
+	eglITURec709               = 0x3280
+	eglITURec2020              = 0x3281
+	eglYUVFullRange            = 0x3282
+	eglYUVNarrowRange          = 0x3283
 	eglTrue                    = 1
 	eglSyncNativeFence         = 0x3144
 	eglSyncFence               = 0x30F9
@@ -431,7 +438,7 @@ func (d *Display) ImportDMABUF(b DMABUF) (*Image, error) {
 	if withModifier && !d.Has("EGL_EXT_image_dma_buf_import_modifiers") {
 		return nil, fmt.Errorf("%w: EGL_EXT_image_dma_buf_import_modifiers for modifier %v", ErrUnsupported, b.Modifier)
 	}
-	attribs := make([]int32, 0, 7+len(b.Planes)*10+3)
+	attribs := make([]int32, 0, 7+len(b.Planes)*10+7)
 	attribs = append(attribs, eglWidth, int32(b.Size.X), eglHeight, int32(b.Size.Y), eglLinuxDRMFourCC, int32(b.Format)) //nolint:gosec // sizes and fourccs fit EGLint by the dmabuf protocol
 	for i, p := range b.Planes {
 		attribs = append(attribs, planeFD[i], int32(p.FD), planeOffset[i], int32(p.Offset), planePitch[i], int32(p.Stride)) //nolint:gosec // fds, offsets and strides fit EGLint by the dmabuf protocol
@@ -439,6 +446,7 @@ func (d *Display) ImportDMABUF(b DMABUF) (*Image, error) {
 			attribs = append(attribs, planeModLo[i], int32(uint32(b.Modifier)), planeModHi[i], int32(uint32(b.Modifier>>32))) //nolint:gosec // EGL splits the 64-bit modifier into two EGLint halves
 		}
 	}
+	attribs = appendYUVHints(attribs, b.Format, b.YUV)
 	attribs = append(attribs, eglImagePreserved, eglTrue, eglNone)
 	h := d.lib.egl.createImage(d.dpy, 0, eglLinuxDMABUF, 0, &attribs[0])
 	runtime.KeepAlive(attribs)
@@ -446,6 +454,27 @@ func (d *Display) ImportDMABUF(b DMABUF) (*Image, error) {
 		return nil, d.lib.fail("eglCreateImageKHR(dmabuf)")
 	}
 	return &Image{d: d, h: h}, nil
+}
+
+func appendYUVHints(attribs []int32, f fourcc.Format, e YUVEncoding) []int32 {
+	if !f.YUV() {
+		return attribs
+	}
+	switch e.Coefficients {
+	case BT601:
+		attribs = append(attribs, eglYUVColorSpaceHint, eglITURec601)
+	case BT709:
+		attribs = append(attribs, eglYUVColorSpaceHint, eglITURec709)
+	case BT2020:
+		attribs = append(attribs, eglYUVColorSpaceHint, eglITURec2020)
+	}
+	switch e.Range {
+	case LimitedRange:
+		attribs = append(attribs, eglSampleRangeHint, eglYUVNarrowRange)
+	case FullRange:
+		attribs = append(attribs, eglSampleRangeHint, eglYUVFullRange)
+	}
+	return attribs
 }
 
 func (i *Image) Destroy() error {

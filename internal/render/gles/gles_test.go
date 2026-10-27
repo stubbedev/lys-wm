@@ -490,8 +490,8 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	}
 }
 
-func TestExternalYUVTexturesOnHardware(t *testing.T) {
-	g, node := hardware(t)
+func sampleNV12(t *testing.T, g *gles.Renderer, node string, y, cb, cr byte, yuv gpu.YUVEncoding) [4]byte {
+	t.Helper()
 	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -512,9 +512,9 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	}
 	defer bo.Close()
 	for i, p := range bo.Planes {
-		rows, value := 16, byte(126)
+		rows := 16
 		if i == 1 {
-			rows, value = 8, 128
+			rows = 8
 		}
 		size := int(p.Offset) + rows*int(p.Stride)
 		m, err := unix.Mmap(p.FD, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
@@ -522,13 +522,22 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 			t.Skipf("map NV12 plane %d: %v", i, err)
 		}
 		for j := int(p.Offset); j < size; j++ {
-			m[j] = value
+			switch {
+			case i == 0:
+				m[j] = y
+			case (j-int(p.Offset))%2 == 0:
+				m[j] = cb
+			default:
+				m[j] = cr
+			}
 		}
 		if err := unix.Munmap(m); err != nil {
 			t.Fatal(err)
 		}
 	}
-	tex, err := g.ImportTexture(bo.DMABUF)
+	d := bo.DMABUF
+	d.YUV = yuv
+	tex, err := g.ImportTexture(d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,10 +550,31 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	if err := fb.Read(got, 64); err != nil {
 		t.Fatal(err)
 	}
-	px := got[8*64+8*4:][:4]
+	return [4]byte(got[8*64+8*4:])
+}
+
+func TestExternalYUVTexturesOnHardware(t *testing.T) {
+	g, node := hardware(t)
+	px := sampleNV12(t, g, node, 126, 128, 128, gpu.YUVEncoding{})
 	for c := range 3 {
 		if d := int(px[c]) - 128; d < -4 || d > 4 {
 			t.Fatalf("mid-gray NV12 sampled as %v", px)
+		}
+	}
+}
+
+func TestYUVHintsSelectTheConversionOnHardware(t *testing.T) {
+	g, node := hardware(t)
+	for _, c := range []struct {
+		yuv   gpu.YUVEncoding
+		green int
+	}{
+		{gpu.YUVEncoding{Coefficients: gpu.BT601, Range: gpu.LimitedRange}, 0},
+		{gpu.YUVEncoding{Coefficients: gpu.BT709, Range: gpu.LimitedRange}, 24},
+	} {
+		px := sampleNV12(t, g, node, 81, 90, 240, c.yuv)
+		if d := int(px[1]) - c.green; d < -6 || d > 6 || px[2] < 0xf0 {
+			t.Errorf("Y=81 Cb=90 Cr=240 tagged %+v sampled as %v, want green near %d and full red", c.yuv, px, c.green)
 		}
 	}
 }
