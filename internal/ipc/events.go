@@ -67,6 +67,9 @@ type (
 	LayoutEvent struct {
 		Layout Layout `json:"layout"`
 	}
+	LocksEvent struct {
+		Locks Locks `json:"locks"`
+	}
 	DispatchEvent struct {
 		Action string `json:"action"`
 	}
@@ -85,6 +88,7 @@ func (UnresponsiveEvent) Name() string  { return "unresponsive" }
 func (FocusEvent) Name() string         { return "focus" }
 func (SubmapEvent) Name() string        { return "submap" }
 func (LayoutEvent) Name() string        { return "layout" }
+func (LocksEvent) Name() string         { return "locks" }
 func (DispatchEvent) Name() string      { return "dispatch" }
 
 func Encode(e Event) ([]byte, error) {
@@ -187,6 +191,9 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	if prev.Layout != next.Layout {
 		out = append(out, LayoutEvent{Layout: next.Layout})
+	}
+	if prev.Locks != next.Locks {
+		out = append(out, LocksEvent{Locks: next.Locks})
 	}
 	return out
 }

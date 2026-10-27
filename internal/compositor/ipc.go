@@ -17,7 +17,12 @@ func (c *Compositor) OnDispatch(f func(wm.Action)) {
 func (c *Compositor) Snapshot() ipc.Snapshot {
 	s := c.wm
 	focusedOutput := s.FocusedOutput()
-	snap := ipc.Snapshot{Submap: c.submap, Layout: c.keyboardLayout()}
+	locks := c.seat.Locks()
+	snap := ipc.Snapshot{
+		Submap: c.submap,
+		Layout: c.keyboardLayout(),
+		Locks:  ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
+	}
 	for _, o := range c.outputs {
 		b := o.Backend()
 		mode := b.State().Mode

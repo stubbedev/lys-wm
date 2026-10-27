@@ -10,7 +10,7 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 ```sh
 lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
 ```
@@ -28,7 +28,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `dispatch` (which needs `action`), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`) and `watch`. Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
@@ -83,8 +83,12 @@ icons by it. X11 windows have no icon here yet.
 `{"index":0,"name":"English (US)"}`. `index` counts the configured layouts
 from 0; `name` is the layout's description from the keymap.
 
-These two answer at any time what the `submap` and `layout` events report
-when they change, so a client that starts later knows them at once.
+`locks`: the lock keys' state as the keymap's LEDs show it,
+`{"caps":true,"num":false,"scroll":false}`.
+
+These three answer at any time what the `submap`, `layout` and `locks`
+events report when they change, so a client that starts later knows them at
+once.
 
 `icon`: the window's icon buffer whose edge is the smallest at or above
 `size` pixels, or else the largest, as
@@ -99,7 +103,7 @@ the client.
 `watch` answers `{"version":1}`, then writes one JSON object per line. Each
 has an `event` field and the fields below. Events that happen together
 arrive in this order: dispatches, then each output with the workspace it
-shows, the focused output, windows, focus, submap and layout.
+shows, the focused output, windows, focus, submap, layout and locks.
 
 | `event` | Fields | When |
 | --- | --- | --- |
@@ -117,6 +121,7 @@ shows, the focused output, windows, focus, submap and layout.
 | `focus` | `window` (ID or `null`) | Keyboard focus moved to another window, or to none |
 | `submap` | `submap` (`""` for the default binds) | The bind submap changed |
 | `layout` | `layout` (`index`, `name`) | The keyboard layout group changed |
+| `locks` | `locks` (`caps`, `num`, `scroll`) | Caps, Num or Scroll Lock turned on or off |
 
 A watcher that falls 256 events behind is disconnected. Reconnect and
 re-query to resynchronise.

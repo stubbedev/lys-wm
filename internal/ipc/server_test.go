@@ -170,9 +170,9 @@ func TestQueriesAndDispatch(t *testing.T) {
 	}
 }
 
-func TestSubmapAndLayoutAreQueries(t *testing.T) {
+func TestSubmapLayoutAndLocksAreQueries(t *testing.T) {
 	r := start(t)
-	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`} {
+	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`, KindLocks: `{"caps":false,"num":false,"scroll":false}`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s before any change: %s, %v; want %s", kind, got, err, want)
 		}
@@ -180,8 +180,9 @@ func TestSubmapAndLayoutAreQueries(t *testing.T) {
 	r.do(func(f *fake) {
 		f.snap.Submap = "resize"
 		f.snap.Layout = Layout{Index: 1, Name: "Danish"}
+		f.snap.Locks = Locks{Num: true}
 	})
-	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`} {
+	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`, KindLocks: `{"caps":false,"num":true,"scroll":false}`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s: %s, %v; want %s", kind, got, err, want)
 		}

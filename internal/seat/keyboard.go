@@ -241,3 +241,7 @@ func (s *Seat) Keysym(code uint32) uint32 {
 func (s *Seat) Layout() uint32 {
 	return s.state.Modifiers().Group
 }
+
+func (s *Seat) Locks() xkb.Locks {
+	return s.state.Locks()
+}

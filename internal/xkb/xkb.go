@@ -100,6 +100,7 @@ type Library struct {
 	numLayouts      func(km uintptr) uint32
 	keyGetOneSym    func(st uintptr, key uint32) uint32
 	layoutName      func(km uintptr, idx uint32) unsafe.Pointer
+	ledActive       func(st uintptr, name *byte) int32
 }
 
 func Load(path string) (*Library, error) {
@@ -137,6 +138,7 @@ func Load(path string) (*Library, error) {
 		{handle, &l.numLayouts, "xkb_keymap_num_layouts"},
 		{handle, &l.keyGetOneSym, "xkb_state_key_get_one_sym"},
 		{handle, &l.layoutName, "xkb_keymap_layout_get_name"},
+		{handle, &l.ledActive, "xkb_state_led_name_is_active"},
 		{c, &l.strlen, "strlen"},
 		{c, &l.free, "free"},
 	} {
@@ -296,6 +298,16 @@ type Modifiers struct {
 	Depressed, Latched, Locked, Group uint32
 }
 
+type Locks struct {
+	Caps, Num, Scroll bool
+}
+
+var (
+	ledCaps   = cString("Caps Lock")
+	ledNum    = cString("Num Lock")
+	ledScroll = cString("Scroll Lock")
+)
+
 type State struct {
 	lib   *Library
 	state uintptr
@@ -324,6 +336,14 @@ func (s *State) Key(evdev uint32, pressed bool) bool {
 
 func (s *State) Keysym(evdev uint32) uint32 {
 	return s.lib.keyGetOneSym(s.state, evdev+evdevOffset)
+}
+
+func (s *State) Locks() Locks {
+	return Locks{
+		Caps:   s.lib.ledActive(s.state, ledCaps) == 1,
+		Num:    s.lib.ledActive(s.state, ledNum) == 1,
+		Scroll: s.lib.ledActive(s.state, ledScroll) == 1,
+	}
 }
 
 func (s *State) Modifiers() Modifiers {

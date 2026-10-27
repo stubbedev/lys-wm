@@ -26,12 +26,13 @@ const (
 	KindActiveWindow Kind = "activewindow"
 	KindSubmap       Kind = "submap"
 	KindLayout       Kind = "layout"
+	KindLocks        Kind = "locks"
 	KindDispatch     Kind = "dispatch"
 	KindWatch        Kind = "watch"
 	KindIcon         Kind = "icon"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindDispatch, KindWatch, KindIcon}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindDispatch, KindWatch, KindIcon}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -172,12 +173,19 @@ type Layout struct {
 	Name  string `json:"name"`
 }
 
+type Locks struct {
+	Caps   bool `json:"caps"`
+	Num    bool `json:"num"`
+	Scroll bool `json:"scroll"`
+}
+
 type Snapshot struct {
 	Outputs    []Output
 	Workspaces []Workspace
 	Windows    []Window
 	Submap     string
 	Layout     Layout
+	Locks      Locks
 }
 
 func (s Snapshot) active() (Window, bool) {
@@ -206,6 +214,8 @@ func (s Snapshot) answer(k Kind) any {
 		return s.Submap
 	case KindLayout:
 		return s.Layout
+	case KindLocks:
+		return s.Locks
 	}
 	return nil
 }

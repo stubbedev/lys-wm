@@ -2,6 +2,7 @@ package harness
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -289,5 +290,26 @@ func (h *Harness) expectActive(c *Client) {
 			h.t.Fatalf("IPC never showed %s (pid %d) as the active window; last %s", filepath.Base(c.cmd.Path), c.cmd.Process.Pid, raw)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCapsLockShowsInTheLocksQuery(t *testing.T) {
+	h := Start(t, small)
+	const capsLock = 58
+	tap := func() {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return errors.Join(b.Keyboard().Key(capsLock, true), b.Keyboard().Key(capsLock, false))
+		})
+	}
+	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{}) {
+		t.Fatalf("a fresh lys-wm has locks %+v", got)
+	}
+	tap()
+	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{Caps: true}) {
+		t.Fatalf("after Caps Lock the locks are %+v", got)
+	}
+	tap()
+	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{}) {
+		t.Fatalf("after a second Caps Lock the locks are %+v", got)
 	}
 }
