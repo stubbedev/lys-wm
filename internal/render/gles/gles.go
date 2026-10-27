@@ -56,6 +56,10 @@ type program struct {
 	id                 uint32
 	pos, texcoord      int32
 	size, color, alpha int32
+	sized              image.Point
+	alphaSet           float32
+	colorSet           render.Color
+	colored            bool
 }
 
 type Renderer struct {
@@ -122,6 +126,7 @@ func (r *Renderer) setup() error {
 			size:     r.gl.GetUniformLocation(id, "size"),
 			color:    r.gl.GetUniformLocation(id, "color"),
 			alpha:    r.gl.GetUniformLocation(id, "alpha"),
+			alphaSet: -1,
 		}
 		r.gl.UseProgram(id)
 		r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
@@ -169,6 +174,7 @@ type texture struct {
 	opaque bool
 	target uint32
 	img    *gpu.Image
+	filter int32
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -508,6 +514,7 @@ type pass struct {
 	fb     *Framebuffer
 	damage region.Set
 	err    error
+	prog   *program
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
@@ -524,7 +531,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, err
 	}
 	p := &r.pass
-	p.active, p.fb, p.err = true, fb, nil
+	p.active, p.fb, p.err, p.prog = true, fb, nil, nil
 	damage.ClipInto(&p.damage, image.Rectangle{Max: fb.size})
 	gl := r.gl
 	gl.BindFramebuffer(gpu.Framebuffer, fb.fbo)
@@ -556,23 +563,33 @@ func (p *pass) End() error {
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }
 
-func (p *pass) draw(prog program, dst image.Rectangle) {
+func (p *pass) use(prog *program) {
+	gl := p.owner.gl
+	if p.prog != prog {
+		p.prog = prog
+		gl.UseProgram(prog.id)
+		for _, a := range [2]struct {
+			loc    int32
+			offset uintptr
+		}{{prog.pos, 0}, {prog.texcoord, 8}} {
+			if a.loc >= 0 {
+				gl.VertexAttribPointer(uint32(a.loc), 2, gpu.Float, 0, 16, a.offset)
+				gl.EnableVertexAttribArray(uint32(a.loc))
+			}
+		}
+	}
+	if prog.sized != p.fb.size {
+		prog.sized = p.fb.size
+		gl.Uniform2f(prog.size, float32(p.fb.size.X), float32(p.fb.size.Y))
+	}
+}
+
+func (p *pass) draw(dst image.Rectangle) {
 	gl := p.owner.gl
 	v := &p.owner.verts
 	x0, y0, x1, y1 := float32(dst.Min.X), float32(dst.Min.Y), float32(dst.Max.X), float32(dst.Max.Y)
 	v[0], v[1], v[4], v[5], v[8], v[9], v[12], v[13] = x0, y0, x1, y0, x0, y1, x1, y1
-	gl.UseProgram(prog.id)
-	gl.Uniform2f(prog.size, float32(p.fb.size.X), float32(p.fb.size.Y))
 	gl.BufferData(gpu.ArrayBuffer, v[:], gpu.StreamDraw)
-	for _, a := range [2]struct {
-		loc    int32
-		offset uintptr
-	}{{prog.pos, 0}, {prog.texcoord, 8}} {
-		if a.loc >= 0 {
-			gl.VertexAttribPointer(uint32(a.loc), 2, gpu.Float, 0, 16, a.offset)
-			gl.EnableVertexAttribArray(uint32(a.loc))
-		}
-	}
 	for _, d := range p.damage.Rects() {
 		clip := dst.Intersect(d)
 		if clip.Empty() {
@@ -611,10 +628,13 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color) {
 	case r.Empty():
 		return
 	}
-	prog := p.owner.solid
-	p.owner.gl.UseProgram(prog.id)
-	p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
-	p.draw(prog, r)
+	prog := &p.owner.solid
+	p.use(prog)
+	if !prog.colored || prog.colorSet != c {
+		prog.colored, prog.colorSet = true, c
+		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+	}
+	p.draw(r)
 }
 
 func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
@@ -639,23 +659,29 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	if alpha == 0 {
 		return
 	}
-	prog := p.owner.rgba
+	prog := &p.owner.rgba
 	switch {
 	case tex.target == gpu.TextureExternalOES:
-		prog = p.owner.external
+		prog = &p.owner.external
 	case tex.opaque:
-		prog = p.owner.rgbx
+		prog = &p.owner.rgbx
 	}
 	gl := p.owner.gl
-	gl.UseProgram(prog.id)
-	gl.Uniform1f(prog.alpha, alpha)
+	p.use(prog)
+	if prog.alphaSet != alpha {
+		prog.alphaSet = alpha
+		gl.Uniform1f(prog.alpha, alpha)
+	}
 	gl.BindTexture(tex.target, tex.id)
 	filter := int32(gpu.Linear)
 	if transform.Size(image.Pt(int(src.W), int(src.H))) == dst.Size() && src.W == float64(int(src.W)) && src.H == float64(int(src.H)) {
 		filter = gpu.Nearest
 	}
-	gl.TexParameteri(tex.target, gpu.TextureMinFilter, filter)
-	gl.TexParameteri(tex.target, gpu.TextureMagFilter, filter)
+	if tex.filter != filter {
+		tex.filter = filter
+		gl.TexParameteri(tex.target, gpu.TextureMinFilter, filter)
+		gl.TexParameteri(tex.target, gpu.TextureMagFilter, filter)
+	}
 	h, v := transform.Axes()
 	verts := &p.owner.verts
 	for i, corner := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
@@ -665,7 +691,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		verts[i*4+2] = float32((src.X + s[0]*src.W) / float64(tex.size.X))
 		verts[i*4+3] = float32((src.Y + s[1]*src.H) / float64(tex.size.Y))
 	}
-	p.draw(prog, dst)
+	p.draw(dst)
 }
 
 func flip(f float64, reversed bool) float64 {
