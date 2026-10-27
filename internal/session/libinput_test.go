@@ -61,7 +61,7 @@ func TestLibinputAsksTheOpenerForDevices(t *testing.T) {
 	opener := &refusingOpener{}
 	in := libinput(t, opener)
 	err := in.Add(node)
-	if err == nil || !errors.Is(err, unix.EPERM) || !strings.Contains(err.Error(), node) {
+	if !errors.Is(err, unix.EPERM) || errors.Is(err, ErrDeclined) || !strings.Contains(err.Error(), node) {
 		t.Fatalf("a refused open: %v", err)
 	}
 	if !slices.Equal(opener.asked, []string{node}) {
@@ -78,11 +78,22 @@ func TestLibinputAsksTheOpenerForDevices(t *testing.T) {
 
 func TestLibinputRejectsNonInputDevices(t *testing.T) {
 	in := libinput(t, PlainOpener{})
-	if err := in.Add(os.DevNull); err == nil {
-		t.Fatal("/dev/null was added as an input device")
+	if err := in.Add(os.DevNull); !errors.Is(err, ErrDeclined) {
+		t.Fatalf("/dev/null as an input device: %v", err)
 	}
 	if _, err := OpenLibinput(nil, "/nonexistent/libinput.so.10", PlainOpener{}, InputConfig{}, nil); err == nil || !strings.Contains(err.Error(), LibinputEnv) {
 		t.Fatalf("a missing library: %v", err)
+	}
+}
+
+func TestLibinputDeclinesAHeadphoneJack(t *testing.T) {
+	jack := newVirtualDevice(t, "lys-wm virtual headphone jack", []uinputBit{
+		{uiSetEvBit, evSw},
+		{uiSetSwBit, swHeadphoneInsert},
+	})
+	in := libinput(t, PlainOpener{})
+	if err := in.Add(jack.node); !errors.Is(err, ErrDeclined) {
+		t.Fatalf("a headphone jack: %v", err)
 	}
 }
 

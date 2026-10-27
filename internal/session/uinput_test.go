@@ -17,27 +17,30 @@ import (
 )
 
 const (
-	uiSetEvBit   = 0x40045564
-	uiSetKeyBit  = 0x40045565
-	uiSetRelBit  = 0x40045566
-	uiSetLEDBit  = 0x40045569
-	uiDevCreate  = 0x5501
-	uiDevDestroy = 0x5502
-	uiDevSetup   = 0x405c5503
-	uiGetSysname = 0x8040552c
-	evSyn        = 0
-	evKey        = 1
-	evRel        = 2
-	evLED        = 0x11
-	keyCapsLock  = 58
-	ledCapsL     = 1
-	btnLeft      = 0x110
-	btnRight     = 0x111
-	relX         = 0
-	relY         = 1
-	relWheel     = 8
-	relWheelHi   = 11
-	busVirtual   = 6
+	uiSetEvBit        = 0x40045564
+	uiSetKeyBit       = 0x40045565
+	uiSetRelBit       = 0x40045566
+	uiSetLEDBit       = 0x40045569
+	uiSetSwBit        = 0x4004556d
+	uiDevCreate       = 0x5501
+	uiDevDestroy      = 0x5502
+	uiDevSetup        = 0x405c5503
+	uiGetSysname      = 0x8040552c
+	evSyn             = 0
+	evKey             = 1
+	evRel             = 2
+	evSw              = 5
+	evLED             = 0x11
+	keyCapsLock       = 58
+	ledCapsL          = 1
+	swHeadphoneInsert = 2
+	btnLeft           = 0x110
+	btnRight          = 0x111
+	relX              = 0
+	relY              = 1
+	relWheel          = 8
+	relWheelHi        = 11
+	busVirtual        = 6
 )
 
 const virtualMouse = "lys-wm virtual mouse"

@@ -234,11 +234,15 @@ func (n *native) addInputs() error {
 		return err
 	}
 	for _, d := range devices {
-		if err := n.input.Add(d.Devnode); err != nil {
-			n.report(err)
-		}
+		n.addInput(d.Devnode)
 	}
 	return nil
+}
+
+func (n *native) addInput(path string) {
+	if err := n.input.Add(path); err != nil && !errors.Is(err, session.ErrDeclined) {
+		n.report(err)
+	}
 }
 
 func (n *native) Outputs() []*drmbackend.Output {
@@ -339,9 +343,7 @@ func (n *native) udev(ev session.UdevEvent) error {
 	case ev.Subsystem == session.PowerSupply:
 		return n.powerChanged()
 	case ev.Subsystem == session.Input && ev.Action == session.Add:
-		if err := n.input.Add(ev.Devnode); err != nil {
-			n.report(err)
-		}
+		n.addInput(ev.Devnode)
 		return nil
 	case ev.Subsystem == session.Input && ev.Action == session.Remove:
 		return n.input.Remove(ev.Devnode)

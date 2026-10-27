@@ -383,6 +383,8 @@ func (in *Libinput) Start(h backend.Handler) {
 	in.handler = h
 }
 
+var ErrDeclined = errors.New("libinput does not handle the device")
+
 func (in *Libinput) Add(path string) error {
 	if _, ok := in.paths[path]; ok {
 		return nil
@@ -393,7 +395,7 @@ func (in *Libinput) Add(path string) error {
 		if in.openErr != nil {
 			return fmt.Errorf("session: add input device %s: %w", path, in.openErr)
 		}
-		return fmt.Errorf("session: libinput rejected %s", path)
+		return fmt.Errorf("session: add input device %s: %w", path, ErrDeclined)
 	}
 	in.paths[path] = in.fn.deviceRef(dev)
 	return in.drain()
