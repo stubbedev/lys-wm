@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/ebitengine/purego"
 	"golang.org/x/sys/unix"
 )
 
@@ -39,7 +40,7 @@ func PinThread() (unpin func() error) {
 
 func (d *Display) Enter() error {
 	runtime.LockOSThread()
-	if d.lib.egl.getCurrentContext() == d.ctx {
+	if current, _, _ := purego.SyscallN(d.lib.egl.pGetCurrentContext); current == d.ctx {
 		return nil
 	}
 	if err := d.MakeCurrent(); err != nil {

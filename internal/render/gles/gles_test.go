@@ -699,3 +699,42 @@ func drawn(t *testing.T, r render.Renderer, tex render.Texture) [4]byte {
 	}
 	return read()
 }
+
+func TestASteadyPassDoesNotAllocate(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates on its own")
+	}
+	g := renderer(t)
+	tex := load(t, g)
+	fb := framebuffer(t, g, target)
+	damage := render.Region{image.Rect(0, 0, 32, 32)}
+	var failed error
+	draw := func() {
+		p, err := g.Begin(fb, damage)
+		if err != nil {
+			failed = err
+			return
+		}
+		p.FillRect(image.Rect(0, 0, 32, 32), render.Color{A: 0xff})
+		p.DrawTexture(tex.argb, render.FRect{W: float64(texSize.X), H: float64(texSize.Y)}, image.Rect(0, 0, texSize.X, texSize.Y), render.Normal, 1)
+		p.DrawTexture(tex.xrgb, render.FRect{W: float64(texSize.X), H: float64(texSize.Y)}, image.Rect(8, 8, 8+texSize.X, 8+texSize.Y), render.Normal, 1)
+		if err := p.End(); err != nil && failed == nil {
+			failed = err
+		}
+	}
+	allocs := make(chan float64, 1)
+	unpinned := make(chan error, 1)
+	go func() {
+		unpin := gpu.PinThread()
+		draw()
+		allocs <- testing.AllocsPerRun(50, draw)
+		unpinned <- unpin()
+	}()
+	n := <-allocs
+	if err := errors.Join(failed, <-unpinned); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("a steady pass on a pinned thread allocated %v times", n)
+	}
+}

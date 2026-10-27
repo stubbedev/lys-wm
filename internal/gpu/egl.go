@@ -97,7 +97,7 @@ type eglFuncs struct {
 	createContext      func(dpy, config, share uintptr, attribs *int32) uintptr
 	destroyContext     func(dpy, ctx uintptr) uint32
 	makeCurrent        func(dpy, draw, read, ctx uintptr) uint32
-	getCurrentContext  func() uintptr
+	pGetCurrentContext uintptr
 	getPlatformDisplay func(platform uint32, native uintptr, attribs *int32) uintptr
 	queryDevices       func(max int32, devices *uintptr, num *int32) uint32
 	queryDeviceString  func(dev uintptr, name int32) string
@@ -148,7 +148,7 @@ func Load(paths Paths) (*Library, error) {
 		{&e.createContext, "eglCreateContext"},
 		{&e.destroyContext, "eglDestroyContext"},
 		{&e.makeCurrent, "eglMakeCurrent"},
-		{&e.getCurrentContext, "eglGetCurrentContext"},
+		{&e.pGetCurrentContext, "eglGetCurrentContext"},
 	}); err != nil {
 		return nil, err
 	}

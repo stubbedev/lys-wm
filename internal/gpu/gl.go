@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 	"unsafe"
+
+	"github.com/ebitengine/purego"
 )
 
 const (
@@ -87,19 +89,19 @@ func (e *GLError) Error() string {
 }
 
 type GL struct {
-	getError                 func() uint32
+	pGetError                uintptr
 	getString                func(name uint32) string
 	GenTextures              func(n int32, textures *uint32)
 	DeleteTextures           func(n int32, textures *uint32)
-	BindTexture              func(target, texture uint32)
-	ActiveTexture            func(texture uint32)
-	TexParameteri            func(target, pname uint32, param int32)
+	bindTexture              uintptr
+	pActiveTexture           uintptr
+	pTexParameteri           uintptr
 	texImage2D               func(target uint32, level, internalFormat, width, height, border int32, format, typ uint32, pixels *byte)
 	texSubImage2D            func(target uint32, level, x, y, width, height int32, format, typ uint32, pixels *byte)
 	PixelStorei              func(pname uint32, param int32)
 	GenFramebuffers          func(n int32, fbs *uint32)
 	DeleteFramebuffers       func(n int32, fbs *uint32)
-	BindFramebuffer          func(target, fb uint32)
+	pBindFramebuffer         uintptr
 	FramebufferTexture2D     func(target, attachment, texTarget, texture uint32, level int32)
 	FramebufferRenderbuffer  func(target, attachment, rbTarget, rb uint32)
 	CheckFramebufferStatus   func(target uint32) uint32
@@ -109,13 +111,13 @@ type GL struct {
 	RenderbufferStorage      func(target, internalFormat uint32, width, height int32)
 	GenBuffers               func(n int32, buffers *uint32)
 	DeleteBuffers            func(n int32, buffers *uint32)
-	BindBuffer               func(target, buffer uint32)
-	bufferData               func(target uint32, size int, data *float32, usage uint32)
-	Viewport                 func(x, y, width, height int32)
-	Scissor                  func(x, y, width, height int32)
-	Enable                   func(capability uint32)
-	Disable                  func(capability uint32)
-	BlendFunc                func(src, dst uint32)
+	pBindBuffer              uintptr
+	bufferData               uintptr
+	pViewport                uintptr
+	scissor                  uintptr
+	pEnable                  uintptr
+	pDisable                 uintptr
+	pBlendFunc               uintptr
 	ClearColor               func(r, g, b, a float32)
 	Clear                    func(mask uint32)
 	CreateShader             func(typ uint32) uint32
@@ -129,23 +131,25 @@ type GL struct {
 	LinkProgram              func(program uint32)
 	GetProgramiv             func(program, pname uint32, params *int32)
 	getProgramInfoLog        func(program uint32, size int32, length *int32, log *byte)
-	UseProgram               func(program uint32)
+	pUseProgram              uintptr
 	DeleteProgram            func(program uint32)
 	GetUniformLocation       func(program uint32, name string) int32
 	GetAttribLocation        func(program uint32, name string) int32
 	Uniform1i                func(location, v int32)
-	Uniform1f                func(location int32, v float32)
-	Uniform2f                func(location int32, a, b float32)
-	Uniform4f                func(location int32, a, b, c, d float32)
+	pUniform1f               uintptr
+	pUniform2f               uintptr
+	pUniform4f               uintptr
 	uniformMatrix3fv         func(location, count int32, transpose uint8, value *float32)
-	VertexAttribPointer      func(index uint32, size int32, typ uint32, normalized uint8, stride int32, offset uintptr)
-	EnableVertexAttribArray  func(index uint32)
+	pVertexAttribPointer     uintptr
+	pEnableVertexAttribArray uintptr
 	DisableVertexAttribArray func(index uint32)
-	DrawArrays               func(mode uint32, first, count int32)
+	drawArrays               uintptr
+	args                     [6]uintptr
+	floats                   [4]float32
 	readPixels               func(x, y, width, height int32, format, typ uint32, pixels *byte)
 	mapBufferRange           func(target uint32, offset, length int, access uint32) unsafe.Pointer
 	unmapBuffer              func(target uint32) uint8
-	Flush                    func()
+	pFlush                   uintptr
 	Finish                   func()
 	imageTargetTexture2D     func(target uint32, image uintptr)
 	imageTargetRenderbuffer  func(target uint32, image uintptr)
@@ -153,19 +157,19 @@ type GL struct {
 
 func (gl *GL) load(l *Library, path string) error {
 	if err := bind(l.glesLib, path, []symbol{
-		{&gl.getError, "glGetError"},
+		{&gl.pGetError, "glGetError"},
 		{&gl.getString, "glGetString"},
 		{&gl.GenTextures, "glGenTextures"},
 		{&gl.DeleteTextures, "glDeleteTextures"},
-		{&gl.BindTexture, "glBindTexture"},
-		{&gl.ActiveTexture, "glActiveTexture"},
-		{&gl.TexParameteri, "glTexParameteri"},
+		{&gl.bindTexture, "glBindTexture"},
+		{&gl.pActiveTexture, "glActiveTexture"},
+		{&gl.pTexParameteri, "glTexParameteri"},
 		{&gl.texImage2D, "glTexImage2D"},
 		{&gl.texSubImage2D, "glTexSubImage2D"},
 		{&gl.PixelStorei, "glPixelStorei"},
 		{&gl.GenFramebuffers, "glGenFramebuffers"},
 		{&gl.DeleteFramebuffers, "glDeleteFramebuffers"},
-		{&gl.BindFramebuffer, "glBindFramebuffer"},
+		{&gl.pBindFramebuffer, "glBindFramebuffer"},
 		{&gl.FramebufferTexture2D, "glFramebufferTexture2D"},
 		{&gl.FramebufferRenderbuffer, "glFramebufferRenderbuffer"},
 		{&gl.CheckFramebufferStatus, "glCheckFramebufferStatus"},
@@ -175,13 +179,13 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.RenderbufferStorage, "glRenderbufferStorage"},
 		{&gl.GenBuffers, "glGenBuffers"},
 		{&gl.DeleteBuffers, "glDeleteBuffers"},
-		{&gl.BindBuffer, "glBindBuffer"},
+		{&gl.pBindBuffer, "glBindBuffer"},
 		{&gl.bufferData, "glBufferData"},
-		{&gl.Viewport, "glViewport"},
-		{&gl.Scissor, "glScissor"},
-		{&gl.Enable, "glEnable"},
-		{&gl.Disable, "glDisable"},
-		{&gl.BlendFunc, "glBlendFunc"},
+		{&gl.pViewport, "glViewport"},
+		{&gl.scissor, "glScissor"},
+		{&gl.pEnable, "glEnable"},
+		{&gl.pDisable, "glDisable"},
+		{&gl.pBlendFunc, "glBlendFunc"},
 		{&gl.ClearColor, "glClearColor"},
 		{&gl.Clear, "glClear"},
 		{&gl.CreateShader, "glCreateShader"},
@@ -195,21 +199,21 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.LinkProgram, "glLinkProgram"},
 		{&gl.GetProgramiv, "glGetProgramiv"},
 		{&gl.getProgramInfoLog, "glGetProgramInfoLog"},
-		{&gl.UseProgram, "glUseProgram"},
+		{&gl.pUseProgram, "glUseProgram"},
 		{&gl.DeleteProgram, "glDeleteProgram"},
 		{&gl.GetUniformLocation, "glGetUniformLocation"},
 		{&gl.GetAttribLocation, "glGetAttribLocation"},
 		{&gl.Uniform1i, "glUniform1i"},
-		{&gl.Uniform1f, "glUniform1f"},
-		{&gl.Uniform2f, "glUniform2f"},
-		{&gl.Uniform4f, "glUniform4f"},
+		{&gl.pUniform1f, "glUniform1fv"},
+		{&gl.pUniform2f, "glUniform2fv"},
+		{&gl.pUniform4f, "glUniform4fv"},
 		{&gl.uniformMatrix3fv, "glUniformMatrix3fv"},
-		{&gl.VertexAttribPointer, "glVertexAttribPointer"},
-		{&gl.EnableVertexAttribArray, "glEnableVertexAttribArray"},
+		{&gl.pVertexAttribPointer, "glVertexAttribPointer"},
+		{&gl.pEnableVertexAttribArray, "glEnableVertexAttribArray"},
 		{&gl.DisableVertexAttribArray, "glDisableVertexAttribArray"},
-		{&gl.DrawArrays, "glDrawArrays"},
+		{&gl.drawArrays, "glDrawArrays"},
 		{&gl.readPixels, "glReadPixels"},
-		{&gl.Flush, "glFlush"},
+		{&gl.pFlush, "glFlush"},
 		{&gl.Finish, "glFinish"},
 	}); err != nil {
 		return err
@@ -261,7 +265,8 @@ func (gl *GL) ReadPixelsIntoBuffer(x, y, width, height int32, format uint32) {
 }
 
 func (gl *GL) AllocateBuffer(target uint32, size int, usage uint32) {
-	gl.bufferData(target, size, nil, usage)
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3] = uintptr(target), uintptr(size), 0, uintptr(usage)
+	gl.call(gl.bufferData, 4)
 }
 
 func (gl *GL) MapBufferForReading(target uint32, size int) []byte {
@@ -276,8 +281,110 @@ func (gl *GL) UnmapBuffer(target uint32) bool {
 	return gl.unmapBuffer(target) != 0
 }
 
+func (gl *GL) getError() uint32 {
+	r, _, _ := purego.SyscallN(gl.pGetError, gl.args[:0]...)
+	return uint32(r) //nolint:gosec // a GLenum fits uint32
+}
+
+func (gl *GL) ActiveTexture(texture uint32) {
+	gl.args[0] = uintptr(texture)
+	gl.call(gl.pActiveTexture, 1)
+}
+
+func (gl *GL) TexParameteri(target, pname uint32, param int32) {
+	gl.args[0], gl.args[1], gl.args[2] = uintptr(target), uintptr(pname), uintptr(param) //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.pTexParameteri, 3)
+}
+
+func (gl *GL) BindFramebuffer(target, fb uint32) {
+	gl.args[0], gl.args[1] = uintptr(target), uintptr(fb)
+	gl.call(gl.pBindFramebuffer, 2)
+}
+
+func (gl *GL) BindBuffer(target, buffer uint32) {
+	gl.args[0], gl.args[1] = uintptr(target), uintptr(buffer)
+	gl.call(gl.pBindBuffer, 2)
+}
+
+func (gl *GL) Viewport(x, y, width, height int32) {
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3] = uintptr(x), uintptr(y), uintptr(width), uintptr(height) //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.pViewport, 4)
+}
+
+func (gl *GL) Enable(capability uint32) {
+	gl.args[0] = uintptr(capability)
+	gl.call(gl.pEnable, 1)
+}
+
+func (gl *GL) Disable(capability uint32) {
+	gl.args[0] = uintptr(capability)
+	gl.call(gl.pDisable, 1)
+}
+
+func (gl *GL) BlendFunc(src, dst uint32) {
+	gl.args[0], gl.args[1] = uintptr(src), uintptr(dst)
+	gl.call(gl.pBlendFunc, 2)
+}
+
+func (gl *GL) UseProgram(program uint32) {
+	gl.args[0] = uintptr(program)
+	gl.call(gl.pUseProgram, 1)
+}
+
+func (gl *GL) VertexAttribPointer(index uint32, size int32, typ uint32, normalized uint8, stride int32, offset uintptr) {
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3], gl.args[4], gl.args[5] = uintptr(index), uintptr(size), uintptr(typ), uintptr(normalized), uintptr(stride), offset //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.pVertexAttribPointer, 6)
+}
+
+func (gl *GL) EnableVertexAttribArray(index uint32) {
+	gl.args[0] = uintptr(index)
+	gl.call(gl.pEnableVertexAttribArray, 1)
+}
+
+func (gl *GL) Flush() {
+	gl.call(gl.pFlush, 0)
+}
+
+func (gl *GL) Uniform1f(location int32, v float32) {
+	gl.floats[0] = v
+	gl.args[0], gl.args[1], gl.args[2] = uintptr(location), 1, uintptr(unsafe.Pointer(&gl.floats[0])) //nolint:gosec // the floats live in the GL value
+	gl.call(gl.pUniform1f, 3)
+}
+
+func (gl *GL) Uniform2f(location int32, a, b float32) {
+	gl.floats[0], gl.floats[1] = a, b
+	gl.args[0], gl.args[1], gl.args[2] = uintptr(location), 1, uintptr(unsafe.Pointer(&gl.floats[0])) //nolint:gosec // the floats live in the GL value
+	gl.call(gl.pUniform2f, 3)
+}
+
+func (gl *GL) Uniform4f(location int32, a, b, c, d float32) {
+	gl.floats[0], gl.floats[1], gl.floats[2], gl.floats[3] = a, b, c, d
+	gl.args[0], gl.args[1], gl.args[2] = uintptr(location), 1, uintptr(unsafe.Pointer(&gl.floats[0])) //nolint:gosec // the floats live in the GL value
+	gl.call(gl.pUniform4f, 3)
+}
+
+func (gl *GL) call(fn uintptr, n int) {
+	purego.SyscallN(fn, gl.args[:n]...)
+}
+
+func (gl *GL) BindTexture(target, texture uint32) {
+	gl.args[0], gl.args[1] = uintptr(target), uintptr(texture)
+	gl.call(gl.bindTexture, 2)
+}
+
+func (gl *GL) Scissor(x, y, width, height int32) {
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3] = uintptr(x), uintptr(y), uintptr(width), uintptr(height) //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.scissor, 4)
+}
+
+func (gl *GL) DrawArrays(mode uint32, first, count int32) {
+	gl.args[0], gl.args[1], gl.args[2] = uintptr(mode), uintptr(first), uintptr(count) //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.drawArrays, 3)
+}
+
 func (gl *GL) BufferData(target uint32, values []float32, usage uint32) {
-	gl.bufferData(target, len(values)*4, first(values), usage)
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3] = uintptr(target), uintptr(len(values)*4), uintptr(unsafe.Pointer(first(values))), uintptr(usage) //nolint:gosec // the vertices stay alive past the call via KeepAlive
+	gl.call(gl.bufferData, 4)
 	runtime.KeepAlive(values)
 }
 

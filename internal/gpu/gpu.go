@@ -56,6 +56,10 @@ func bind(lib uintptr, path string, syms []symbol) error {
 		if _, err := purego.Dlsym(lib, s.name); err != nil {
 			return fmt.Errorf("gpu: %s lacks %s: %w", path, s.name, err)
 		}
+		if raw, ok := s.fn.(*uintptr); ok {
+			*raw, _ = purego.Dlsym(lib, s.name)
+			continue
+		}
 		purego.RegisterLibFunc(s.fn, lib, s.name)
 	}
 	return nil
