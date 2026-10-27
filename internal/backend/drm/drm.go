@@ -122,13 +122,55 @@ type Backend struct {
 	cursor    image.Point
 	paused    bool
 	closed    bool
+	clientFBs map[backend.ScanoutKey]*clientFB
+}
+
+type clientFB struct {
+	fb        uint32
+	remove    func() error
+	shown     int
+	forgotten bool
+}
+
+func (cf *clientFB) leave() error {
+	cf.shown--
+	if cf.forgotten && cf.shown == 0 {
+		return cf.remove()
+	}
+	return nil
+}
+
+func (b *Backend) clientFB(key backend.ScanoutKey, d gpu.DMABUF) (*clientFB, error) {
+	if cf, ok := b.clientFBs[key]; ok {
+		return cf, nil
+	}
+	fb, remove, err := importFB(b.dev, d, b.modifiers)
+	if err != nil {
+		return nil, err
+	}
+	cf := &clientFB{fb: fb, remove: remove}
+	b.clientFBs[key] = cf
+	return cf, nil
+}
+
+func (b *Backend) forget(key backend.ScanoutKey) error {
+	cf, ok := b.clientFBs[key]
+	if !ok {
+		return nil
+	}
+	delete(b.clientFBs, key)
+	cf.forgotten = true
+	if cf.shown == 0 {
+		return cf.remove()
+	}
+	return nil
 }
 
 func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backend, error) {
 	if opts.Report == nil {
 		return nil, errors.New("drm: Options.Report is required")
 	}
-	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer)}
+	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}}
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support: %w", err)
@@ -506,6 +548,9 @@ func (b *Backend) Close() error {
 	for len(b.outputs) > 0 {
 		errs = append(errs, b.remove(b.outputs[0]))
 	}
+	for key := range b.clientFBs {
+		errs = append(errs, b.forget(key))
+	}
 	if b.src != nil {
 		errs = append(errs, b.src.Remove())
 	}
@@ -780,28 +825,33 @@ func (o *Output) ScanoutFormats() gpu.ScanoutTarget {
 	return gpu.ScanoutTarget{Device: o.b.number, Formats: o.primary.clients}
 }
 
-func (o *Output) Scanout(d gpu.DMABUF, release func() error, tear bool) (bool, error) {
+func (o *Output) ForgetScanout(key backend.ScanoutKey) error {
+	return o.b.forget(key)
+}
+
+func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
 	if !o.enabled || o.off || o.b.paused || o.modeset || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size {
 		return false, nil
 	}
-	fb, remove, err := importFB(o.b.dev, d, o.b.modifiers)
+	cf, err := o.b.clientFB(key, d)
 	if err != nil {
 		return false, nil
 	}
-	s := &scanout{client: true, fb: fb, free: func() error { return errors.Join(remove(), release()) }}
+	s := &scanout{client: true, fb: cf.fb, free: func() error { return errors.Join(cf.leave(), release()) }}
 	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
-	torn := tear && o.tearable(fb, flags|kdrm.AtomicPageFlipAsync)
+	torn := tear && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync)
 	if torn {
 		flags |= kdrm.AtomicPageFlipAsync
 	} else {
 		o.frame(s, -1)
 		if o.test(flags) != nil {
-			return false, remove()
+			return false, nil
 		}
 	}
 	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
-		return false, errors.Join(fmt.Errorf("drm: commit a client buffer on %s: %w", o.Name(), err), remove())
+		return false, fmt.Errorf("drm: commit a client buffer on %s: %w", o.Name(), err)
 	}
+	cf.shown++
 	if o.cursor != nil && !torn {
 		o.cursor.sent()
 	}

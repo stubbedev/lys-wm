@@ -187,7 +187,7 @@ func (c *Compositor) dropTexture(s *surface.Surface) error {
 }
 
 func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
-	c.scanoutBufferGone(b)
+	errs := []error{c.scanoutBufferGone(b)}
 	shown := false
 	for s, t := range c.textures {
 		if t, ok := t.(imported); ok && t.buffer == b {
@@ -195,7 +195,6 @@ func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
 			shown = true
 		}
 	}
-	var errs []error
 	if tex, ok := c.imported[b]; ok {
 		delete(c.imported, b)
 		errs = append(errs, c.destroyTexture(tex))

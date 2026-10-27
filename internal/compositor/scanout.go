@@ -47,7 +47,7 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	if d.Size != bounds.Size() || op.src != (render.FRect{W: float64(d.Size.X), H: float64(d.Size.Y)}) || !op.opaque || !slices.Contains(scanoutFormats, d.Format) {
 		return false, nil
 	}
-	shown, err := out.Scanout(d, func() error { return c.leftScreen(b) }, c.tears(op.surface))
+	shown, err := out.Scanout(b, d, func() error { return c.leftScreen(b) }, c.tears(op.surface))
 	if err != nil || !shown {
 		return false, err
 	}
@@ -140,8 +140,15 @@ func (c *Compositor) releaseBuffer(b *dmabuf.Buffer, client *server.Client) erro
 	return b.Release()
 }
 
-func (c *Compositor) scanoutBufferGone(b *dmabuf.Buffer) {
+func (c *Compositor) scanoutBufferGone(b *dmabuf.Buffer) error {
 	if held, ok := c.scannedOut[b]; ok {
 		held.released = nil
 	}
+	var errs []error
+	for _, o := range c.outputs {
+		if out, ok := o.Backend().(backend.Scanner); ok {
+			errs = append(errs, out.ForgetScanout(b))
+		}
+	}
+	return errors.Join(errs...)
 }

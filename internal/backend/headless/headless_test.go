@@ -431,7 +431,7 @@ func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 			o.AllowScanout(gpu.ScanoutTarget{Formats: []gpu.FormatModifier{format}})
 			released := 0
 			buf := gpu.DMABUF{Size: mode100.Size, Format: format.Format, Modifier: format.Modifier}
-			if ok, err := o.Scanout(buf, func() error { released++; return nil }, false); !ok || err != nil {
+			if ok, err := o.Scanout(nil, buf, func() error { released++; return nil }, false); !ok || err != nil {
 				t.Fatalf("Scanout = %t, %v", ok, err)
 			}
 			if err := stop(b, o); err != nil {

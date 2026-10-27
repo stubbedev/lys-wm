@@ -435,7 +435,11 @@ func (o *Output) ShowsClientBuffer() bool {
 	return o.shownRelease != nil || o.queuedRelease != nil
 }
 
-func (o *Output) Scanout(d gpu.DMABUF, release func() error, tear bool) (bool, error) {
+func (o *Output) ForgetScanout(backend.ScanoutKey) error {
+	return nil
+}
+
+func (o *Output) Scanout(_ backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
 	if o.scanout == nil || !slices.Contains(o.scanout.Formats, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) || o.removed || !o.state.Lit() || o.inFrame || o.presentPending || d.Size != o.state.Mode.Size {
 		return false, nil
 	}

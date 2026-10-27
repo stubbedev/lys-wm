@@ -116,8 +116,13 @@ func Broken(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrBroken}, args...)...)
 }
 
+type ScanoutKey interface {
+	DMABUF() gpu.DMABUF
+}
+
 type Scanner interface {
-	Scanout(b gpu.DMABUF, release func() error, tear bool) (bool, error)
+	Scanout(key ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error)
+	ForgetScanout(key ScanoutKey) error
 	ScanoutFormats() gpu.ScanoutTarget
 }
 

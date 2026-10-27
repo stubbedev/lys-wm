@@ -992,12 +992,17 @@ func TestOutputsOfferThePrimaryPlaneFormatsForScanout(t *testing.T) {
 	}
 }
 
+type fakeBuffer struct{ d gpu.DMABUF }
+
+func (b *fakeBuffer) DMABUF() gpu.DMABUF { return b.d }
+
 func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 	r := start(t)
 	o := r.lit()
 	released := 0
 	client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
-	ok, err := o.Scanout(client, func() error { released++; return nil }, false)
+	key := &fakeBuffer{client}
+	ok, err := o.Scanout(key, client, func() error { released++; return nil }, false)
 	if err != nil || !ok {
 		t.Fatalf("Scanout = %t, %v", ok, err)
 	}
@@ -1006,7 +1011,7 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 	if shown.flags&kdrm.AtomicTestOnly != 0 || r.dev.scanouts[uint32(fb)] != primeHandles+7 {
 		t.Fatalf("the client buffer went out as framebuffer %d with flags %#x", fb, shown.flags)
 	}
-	if again, err := o.Scanout(client, func() error { return nil }, false); again || err != nil {
+	if again, err := o.Scanout(key, client, func() error { return nil }, false); again || err != nil {
 		t.Fatalf("a second scanout during the flip = %t, %v", again, err)
 	}
 	r.dev.flip(t, 10, 2)
@@ -1023,8 +1028,44 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 	if released != 1 {
 		t.Fatalf("the client buffer was released %d times after a frame replaced it", released)
 	}
-	if ok, err := o.Scanout(gpu.DMABUF{Size: image.Pt(640, 480), Format: scanoutFormat}, func() error { return nil }, false); ok || err != nil {
+	small := gpu.DMABUF{Size: image.Pt(640, 480), Format: scanoutFormat}
+	if ok, err := o.Scanout(&fakeBuffer{small}, small, func() error { return nil }, false); ok || err != nil {
 		t.Fatalf("a buffer that does not fill the mode scanned out: %t, %v", ok, err)
+	}
+}
+
+func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
+	key := &fakeBuffer{client}
+	var fbs []uint64
+	for seq := uint32(2); seq < 5; seq++ {
+		if ok, err := o.Scanout(key, client, func() error { return nil }, false); err != nil || !ok {
+			t.Fatalf("Scanout = %t, %v", ok, err)
+		}
+		fbs = append(fbs, r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}])
+		r.dev.flip(t, 10, seq)
+		r.settle()
+	}
+	if fbs[0] == 0 || fbs[1] != fbs[0] || fbs[2] != fbs[0] {
+		t.Fatalf("three scanouts of one buffer used framebuffers %v, want one framebuffer reused", fbs)
+	}
+	removed := r.dev.removedFBs
+	if err := o.ForgetScanout(key); err != nil {
+		t.Fatal(err)
+	}
+	if r.dev.removedFBs != removed {
+		t.Fatal("a framebuffer still on screen was removed when its buffer was forgotten")
+	}
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	r.dev.flip(t, 10, 5)
+	r.settle()
+	if r.dev.removedFBs != removed+1 {
+		t.Fatalf("%d framebuffers removed once the forgotten buffer left the screen, want 1", r.dev.removedFBs-removed)
 	}
 }
 
@@ -1046,15 +1087,19 @@ func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 			o := r.lit()
 			released := 0
 			client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
-			if ok, err := o.Scanout(client, func() error { released++; return nil }, false); err != nil || !ok {
+			key := &fakeBuffer{client}
+			if ok, err := o.Scanout(key, client, func() error { released++; return nil }, false); err != nil || !ok {
 				t.Fatalf("Scanout = %t, %v", ok, err)
 			}
 			fbs := r.dev.removedFBs
 			if err := stop(r, o); err != nil {
 				t.Fatal(err)
 			}
-			if released != 1 || r.dev.removedFBs != fbs+1 {
-				t.Fatalf("released %d times and %d framebuffers removed; want the client buffer let go once", released, r.dev.removedFBs-fbs)
+			if released != 1 || r.dev.removedFBs != fbs {
+				t.Fatalf("released %d times and %d framebuffers removed; want the client buffer let go once and its framebuffer kept for the next scanout", released, r.dev.removedFBs-fbs)
+			}
+			if err := o.ForgetScanout(key); err != nil || r.dev.removedFBs != fbs+1 {
+				t.Fatalf("forgetting the buffer removed %d framebuffers, %v", r.dev.removedFBs-fbs, err)
 			}
 		})
 	}
@@ -1236,12 +1281,18 @@ func TestTearingScanoutsFlipAsync(t *testing.T) {
 		return &fakeAlloc{soft: soft.New()}
 	})
 	o := r.lit()
-	client := func(fd int) gpu.DMABUF {
-		return gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: fd, Stride: 1920 * 4}}}
+	keys := map[int]*fakeBuffer{}
+	client := func(fd int) *fakeBuffer {
+		if k, ok := keys[fd]; ok {
+			return k
+		}
+		keys[fd] = &fakeBuffer{gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: fd, Stride: 1920 * 4}}}}
+		return keys[fd]
 	}
 	scanout := func(fd int, tear bool) commit {
 		t.Helper()
-		if ok, err := o.Scanout(client(fd), func() error { return nil }, tear); err != nil || !ok {
+		k := client(fd)
+		if ok, err := o.Scanout(k, k.d, func() error { return nil }, tear); err != nil || !ok {
 			t.Fatalf("Scanout = %t, %v", ok, err)
 		}
 		return r.dev.commits[len(r.dev.commits)-1]
