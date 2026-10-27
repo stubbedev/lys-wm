@@ -294,7 +294,9 @@ func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
 	binary.NativeEndian.PutUint32(ev, kdrm.EventFlipComplete)
 	binary.NativeEndian.PutUint32(ev[4:], 32)
 	binary.NativeEndian.PutUint64(ev[8:], uint64(crtc))
-	binary.NativeEndian.PutUint32(ev[16:], 1)
+	now := backend.Now()
+	binary.NativeEndian.PutUint32(ev[16:], uint32(now/time.Second))
+	binary.NativeEndian.PutUint32(ev[20:], uint32(now%time.Second/time.Microsecond))
 	binary.NativeEndian.PutUint32(ev[24:], seq)
 	binary.NativeEndian.PutUint32(ev[28:], crtc)
 	if _, err := unix.Write(f.write, ev); err != nil {
@@ -710,6 +712,7 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
+	r.settle()
 	if len(r.dev.commits) != 3 || r.dev.commits[0].flags != kdrm.AtomicTestOnly || r.dev.commits[2].flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent {
 		t.Fatalf("setting the cursor committed %+v", r.dev.commits)
 	}
@@ -745,6 +748,7 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 	if err := cp.HideCursor(); err != nil {
 		t.Fatal(err)
 	}
+	r.settle()
 	if fb, _, ok := cursorAt(r.dev.commits[len(r.dev.commits)-1]); !ok || fb != 0 {
 		t.Fatal("hiding the cursor did not clear its plane")
 	}
@@ -792,6 +796,7 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 	if err := r.setCursor(o, image.Point{}); err != nil {
 		t.Fatal(err)
 	}
+	r.settle()
 	r.dev.flip(t, 10, 2)
 	r.settle()
 	r.dev.commits = nil
@@ -805,6 +810,41 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 		t.Fatalf("a move inside a frame committed %+v", r.dev.commits)
 	}
 	if _, at, _ := cursorAt(r.dev.commits[1]); at != image.Pt(9, 9) {
+		t.Fatalf("the frame put the cursor at %v", at)
+	}
+}
+
+func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	if err := r.setCursor(o, image.Point{}); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	r.dev.flip(t, 10, 2)
+	r.settle()
+	r.dev.commits = nil
+	cp, _ := o.CursorPlane()
+	if err := cp.MoveCursor(image.Pt(5, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.dev.commits) != 0 {
+		t.Fatalf("a cursor move right after a flip committed at once: %+v", r.dev.commits)
+	}
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	var flips []commit
+	for _, c := range r.dev.commits {
+		if c.flags&kdrm.AtomicTestOnly == 0 {
+			flips = append(flips, c)
+		}
+	}
+	if len(flips) != 1 || flips[0].values[[2]uint32{40, propFB}] == 0 {
+		t.Fatalf("a frame requested before the latch committed %d flips, want one frame carrying the cursor: %+v", len(flips), flips)
+	}
+	if _, at, _ := cursorAt(flips[0]); at != image.Pt(5, 5) {
 		t.Fatalf("the frame put the cursor at %v", at)
 	}
 }
@@ -1240,6 +1280,7 @@ func TestCursorAndGammaWaitingOnAFlipShareOneCommit(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
+	r.settle()
 	cp, _ := o.CursorPlane()
 	if err := errors.Join(cp.MoveCursor(image.Pt(30, 20)), o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23})); err != nil {
 		t.Fatal(err)
@@ -1268,6 +1309,7 @@ func TestACursorRefusedAfterAFlipLetsTheLUTThrough(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
+	r.settle()
 	cp, _ := o.CursorPlane()
 	if err := errors.Join(cp.MoveCursor(image.Pt(30, 20)), o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23})); err != nil {
 		t.Fatal(err)

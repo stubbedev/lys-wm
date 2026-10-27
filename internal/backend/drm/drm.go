@@ -365,10 +365,8 @@ func (b *Backend) add(c kdrm.Connector) error {
 	}
 	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
-		Deadline: func(now time.Duration) time.Duration {
-			return backend.LatchDeadline(o.lastFlip, now, modeOf(o.mode).Interval())
-		},
-		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
+		Deadline: o.latchDeadline,
+		Wake:     func(after time.Duration) error { return o.latch.Arm(after) },
 	})
 	if blob, ok := props["EDID"]; ok && blob.Value != 0 {
 		data, err := b.dev.Blob(uint32(blob.Value)) //nolint:gosec // property blob IDs are 32-bit
@@ -390,6 +388,9 @@ func (b *Backend) add(c kdrm.Connector) error {
 		return errors.Join(err, o.release())
 	}
 	if o.latch, err = b.loop.AddTimer(o.clock.Woke); err != nil {
+		return errors.Join(err, o.release())
+	}
+	if o.planesLatch, err = b.loop.AddTimer(o.planesDue); err != nil {
 		return errors.Join(err, o.release())
 	}
 	i := max(slices.IndexFunc(c.Modes, kdrm.Mode.Preferred), 0)
@@ -533,6 +534,8 @@ type Output struct {
 	flipping      bool
 	framing       bool
 	pacer         *loop.Timer
+	planesLatch   *loop.Timer
+	planesWaiting bool
 	latch         *loop.Timer
 	paced         bool
 	lastFlip      time.Duration
@@ -883,11 +886,30 @@ func (o *Output) test(flags uint32) error {
 	return nil
 }
 
+func (o *Output) latchDeadline(now time.Duration) time.Duration {
+	return backend.LatchDeadline(o.lastFlip, now, modeOf(o.mode).Interval())
+}
+
+func (o *Output) planesDue() error {
+	o.planesWaiting = false
+	return o.flushPlanes()
+}
+
 func (o *Output) flushPlanes() error {
 	c := o.cursor
 	cursor := c != nil && c.dirty
 	if !cursor && !o.color.dirty() || !o.lit || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
 		return nil
+	}
+	if !o.color.dirty() {
+		now := backend.Now()
+		if at := o.latchDeadline(now); at > now {
+			if o.planesWaiting {
+				return nil
+			}
+			o.planesWaiting = true
+			return o.planesLatch.Arm(at - now)
+		}
 	}
 	r := &o.b.req
 	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
@@ -987,6 +1009,10 @@ func (o *Output) release() error {
 	if o.pacer != nil {
 		err = errors.Join(err, o.pacer.Remove())
 		o.pacer = nil
+	}
+	if o.planesLatch != nil {
+		err = errors.Join(err, o.planesLatch.Remove())
+		o.planesLatch = nil
 	}
 	if o.cursor != nil {
 		err = errors.Join(err, o.cursor.release())
