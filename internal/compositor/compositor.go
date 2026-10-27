@@ -51,20 +51,24 @@ import (
 var Background = render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
 
 type Config struct {
-	Seat     seat.Config
-	Cursor   CursorConfig
-	WM       wm.Settings
-	Binds    []binds.Bind
-	Report   func(error)
-	Decor    Decor
-	Font     *gtext.Typeface
-	Icons    *icontheme.Theme
-	Rules    []wm.Rule
-	Outputs  OutputRules
+	Seat    seat.Config
+	Cursor  CursorConfig
+	WM      wm.Settings
+	Binds   []binds.Bind
+	Report  func(error)
+	Decor   Decor
+	Font    *gtext.Typeface
+	Icons   *icontheme.Theme
+	Rules   []wm.Rule
+	Outputs OutputRules
+	Tearing bool
+	Hooks   Hooks
+}
+
+type Hooks struct {
 	Reload   func() error
 	Exit     func() error
 	SwitchVT func(vt uint32) error
-	Tearing  bool
 }
 
 type CursorConfig struct {
@@ -145,9 +149,7 @@ type Compositor struct {
 	seatConfig      seat.Config
 	outputRules     OutputRules
 	disabled        []backend.Output
-	reload          func() error
-	exit            func() error
-	switchVT        func(vt uint32) error
+	hooks           Hooks
 	dispatched      func(wm.Action)
 	loop            *loop.Loop
 	display         *server.Display
@@ -223,8 +225,8 @@ func validate(cfg Config) (binds.Map, error) {
 
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
-	c.report, c.seatConfig, c.outputRules, c.reload, c.exit, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, cfg.Reload, cfg.Exit, m
-	c.switchVT, c.tearing, c.icons = cfg.SwitchVT, cfg.Tearing, cfg.Icons
+	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
+	c.tearing, c.icons = cfg.Tearing, cfg.Icons
 }
 
 func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (*Compositor, error) {
@@ -254,6 +256,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		keyInhibitors: map[*surface.Surface]*shortcutsInhibitor{},
 		usable:        map[*output.Output]image.Rectangle{},
 		nextWindow:    1,
+		hooks:         cfg.Hooks,
 	}
 	c.adopt(cfg, m)
 	if err := c.setup(l, display, b, cfg); err != nil {

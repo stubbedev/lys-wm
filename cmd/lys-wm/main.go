@@ -295,7 +295,7 @@ func (s *reloader) reload() error {
 	if err != nil {
 		return err
 	}
-	next.cfg.Reload, next.cfg.Exit, next.cfg.Cursor = s.reload, s.exit, s.cursor
+	next.cfg.Cursor = s.cursor
 	if err := s.comp.Reconfigure(next.cfg); err != nil {
 		return errors.Join(err, next.keymap.Close())
 	}
@@ -382,7 +382,7 @@ func run(args []string) (err error) {
 	}
 	cfg := first.cfg
 	cfg.Cursor = s.cursor
-	cfg.Reload = s.reload
+	cfg.Hooks.Reload = s.reload
 	for _, kv := range first.env {
 		if err := os.Setenv(kv[0], kv[1]); err != nil {
 			return fmt.Errorf("set %s from the config: %w", kv[0], err)
@@ -397,7 +397,7 @@ func run(args []string) (err error) {
 		l.Stop()
 		return nil
 	}
-	cfg.Exit = s.exit
+	cfg.Hooks.Exit = s.exit
 	if _, err := l.AddSignals(func(sig os.Signal) error {
 		if sig != syscall.SIGHUP {
 			l.Stop()
@@ -414,7 +414,7 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	cfg.SwitchVT, s.configureInput = b.switchVT, b.configureInput
+	cfg.Hooks.SwitchVT, s.configureInput = b.switchVT, b.configureInput
 	defer func() { err = errors.Join(err, b.Close()) }()
 	display, err := server.New(l, server.Options{RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"), Trace: trace, Report: cfg.Report})
 	if err != nil {

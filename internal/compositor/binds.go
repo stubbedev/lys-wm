@@ -60,9 +60,9 @@ func (c *Compositor) bindKey(code uint32, pressed bool) (bool, error) {
 		}
 		return true, released
 	}
-	if vt := vtSwitch(c.seat.Keysym(code)); vt != 0 && c.switchVT != nil {
+	if vt := vtSwitch(c.seat.Keysym(code)); vt != 0 && c.hooks.SwitchVT != nil {
 		c.held = append(c.held, code)
-		return true, c.switchVT(vt)
+		return true, c.hooks.SwitchVT(vt)
 	}
 	b, ok := c.match(binds.Key{Code: code})
 	if !ok {

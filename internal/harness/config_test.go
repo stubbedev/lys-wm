@@ -42,7 +42,7 @@ func TestReloadSwapsBindsKeymapAndRepeat(t *testing.T) {
 		next.Seat.RepeatRate, next.Seat.RepeatDelay = 10, 700
 		next.Decor.BorderWidth = 3
 		withBinds(t, bindSpec{chord: "SUPER + R", action: "exec echo new >> " + log})(&next)
-		cfg.Reload = func() error { return comp.Reconfigure(next) }
+		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
 	}, small)
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		comp = c
@@ -325,7 +325,7 @@ func TestARepeatedReloadThatTurnsRepeatOffStopsIt(t *testing.T) {
 		withBinds(t, bindSpec{chord: "SUPER + Q", action: "reload", flags: binds.Flags{Repeating: true}})(cfg)
 		next := *cfg
 		next.Seat.RepeatRate = 0
-		cfg.Reload = func() error {
+		cfg.Hooks.Reload = func() error {
 			reloads++
 			if reloads == 2 {
 				return comp.Reconfigure(next)

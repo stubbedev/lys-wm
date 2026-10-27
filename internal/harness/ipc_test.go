@@ -76,11 +76,11 @@ func expectEvent(t *testing.T, lines <-chan string, want string) {
 func TestEveryActionThroughIPC(t *testing.T) {
 	reloads, exits := 0, 0
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.Reload = func() error {
+		cfg.Hooks.Reload = func() error {
 			reloads++
 			return nil
 		}
-		cfg.Exit = func() error {
+		cfg.Hooks.Exit = func() error {
 			exits++
 			return nil
 		}
@@ -182,7 +182,7 @@ func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
 	h := StartWith(t, func(cfg *compositor.Config) {
 		next := compositor.DefaultConfig(dk, cfg.Font)
 		next.Report = cfg.Report
-		cfg.Reload = func() error { return comp.Reconfigure(next) }
+		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
 	}, small)
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		comp = c

@@ -55,15 +55,15 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 	case wm.DPMSAction:
 		return c.dpms(e)
 	case wm.ReloadAction:
-		if c.reload == nil {
+		if c.hooks.Reload == nil {
 			return errors.New("no config file to reload")
 		}
-		return c.reload()
+		return c.hooks.Reload()
 	case wm.ExitAction:
-		if c.exit == nil {
+		if c.hooks.Exit == nil {
 			return errors.New("nothing to exit to: this compositor was started without a way to stop")
 		}
-		return c.exit()
+		return c.hooks.Exit()
 	}
 	return fmt.Errorf("no handler for effect %T", e)
 }

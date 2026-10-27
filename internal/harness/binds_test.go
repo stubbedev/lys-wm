@@ -201,7 +201,7 @@ func TestDragsNeedAMouseBind(t *testing.T) {
 func TestCtrlAltFunctionKeysSwitchVTs(t *testing.T) {
 	var switched []uint32
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.SwitchVT = func(vt uint32) error {
+		cfg.Hooks.SwitchVT = func(vt uint32) error {
 			switched = append(switched, vt)
 			return nil
 		}
@@ -224,4 +224,33 @@ func TestCtrlAltFunctionKeysSwitchVTs(t *testing.T) {
 	if n := strings.Count(strings.Join(in.Log, "\n"), "key 61 1"); n != 1 {
 		t.Fatalf("F3 reached the client %d times, want only the plain press", n)
 	}
+}
+
+func TestVTSwitchingSurvivesConfigReloads(t *testing.T) {
+	var switched []uint32
+	var comp *compositor.Compositor
+	h := StartWith(t, func(cfg *compositor.Config) {
+		next := compositor.DefaultConfig(cfg.Seat.Keymap, cfg.Font)
+		next.Report = cfg.Report
+		cfg.Hooks.SwitchVT = func(vt uint32) error {
+			switched = append(switched, vt)
+			return nil
+		}
+		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
+	}, small)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		comp = c
+		return nil
+	})
+	for range 2 {
+		h.dispatch("reload")
+	}
+	const keyLeftCtrl, keyLeftAlt, keyF2 = 29, 56, 60
+	h.chord(keyLeftCtrl, keyLeftAlt, keyF2)
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		if !slices.Equal(switched, []uint32{2}) {
+			t.Errorf("after two reloads Ctrl+Alt+F2 switched to %v, want VT 2", switched)
+		}
+		return nil
+	})
 }
