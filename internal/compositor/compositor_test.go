@@ -21,13 +21,13 @@ import (
 
 type spyTexture struct {
 	render.Texture
-	updates   []render.Region
+	updates   []image.Rectangle
 	destroyed bool
 }
 
-func (t *spyTexture) Update(stride int, data []byte, damage render.Region) error {
-	t.updates = append(t.updates, damage)
-	return t.Texture.Update(stride, data, damage)
+func (t *spyTexture) Update(dst image.Rectangle, stride int, data []byte) error {
+	t.updates = append(t.updates, dst)
+	return t.Texture.Update(dst, stride, data)
 }
 
 func (t *spyTexture) Destroy() error {
@@ -231,7 +231,7 @@ func TestCommitUploadsDamageOnceAndReleases(t *testing.T) {
 	r.roundtrip()
 	r.on(func() {
 		tex := r.renderer.textures[0]
-		if len(tex.updates) != 1 || len(tex.updates[0]) != 1 || tex.updates[0][0] != image.Rect(1, 1, 2, 2) {
+		if len(tex.updates) != 1 || tex.updates[0] != image.Rect(1, 1, 2, 2) {
 			t.Errorf("updates %v, want exactly the damaged pixel", tex.updates)
 		}
 		if got := r.texel(tex, 1, 1)[0]; got != 0x22 {

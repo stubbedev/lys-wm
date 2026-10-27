@@ -161,6 +161,13 @@ func (g Region) ClipInto(dst *region.Set, bounds image.Rectangle) {
 	}
 }
 
+func CheckUpdate(size image.Point, dst image.Rectangle, stride, n int) error {
+	if !dst.In(image.Rectangle{Max: size}) {
+		return fmt.Errorf("render: update %v outside a %v texture", dst, size)
+	}
+	return CheckPixels(dst.Size(), stride, n)
+}
+
 func CheckPixels(size image.Point, stride, n int) error {
 	switch {
 	case size.X <= 0 || size.Y <= 0:
@@ -203,7 +210,7 @@ type AsyncReader interface {
 
 type Texture interface {
 	Size() image.Point
-	Update(stride int, data []byte, damage Region) error
+	Update(dst image.Rectangle, stride int, data []byte) error
 	Destroy() error
 }
 

@@ -257,7 +257,7 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tex.Destroy()
-	if err := tex.Update(32, make([]byte, 256), nil); err == nil {
+	if err := tex.Update(image.Rect(0, 0, 8, 8), 32, make([]byte, 256)); err == nil {
 		t.Fatal("a dmabuf texture accepted an upload")
 	}
 	fb := framebuffer(t, g, image.Pt(16, 8))
@@ -303,9 +303,9 @@ func parity(t *testing.T, g *gles.Renderer) {
 	for i := range update {
 		update[i] = 0x10
 	}
-	damage := render.Region{image.Rect(2, 1, 5, 3)}
+	damage := image.Rect(2, 1, 5, 3)
 	for _, tx := range []render.Texture{gtx.argb, stx.argb} {
-		if err := tx.Update(texSize.X*4, update, damage); err != nil {
+		if err := tx.Update(damage, texSize.X*4, update[damage.Min.Y*texSize.X*4+damage.Min.X*4:]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -560,7 +560,7 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 	pix := make([]byte, target.X*target.Y*4)
 	frame := func(r *gles.Renderer, fb *gles.Framebuffer) error {
 		if r != other {
-			if err := tx.argb.Update(texSize.X*4, argb(), render.Region{{Max: texSize}}); err != nil {
+			if err := tx.argb.Update(image.Rectangle{Max: texSize}, texSize.X*4, argb()); err != nil {
 				return err
 			}
 		}

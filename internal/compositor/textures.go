@@ -3,6 +3,7 @@ package compositor
 import (
 	"errors"
 	"fmt"
+	"image"
 	"maps"
 	"slices"
 
@@ -102,12 +103,23 @@ func (c *Compositor) attach(s *surface.Surface) error {
 }
 
 func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
+	full := image.Rectangle{Max: b.Size()}
 	t, ok := c.textures[s].(uploaded)
-	return b.Read(func(data []byte, stride int) error {
-		if ok && t.format == b.Format() && t.tex.Size() == b.Size() {
-			return t.tex.Update(stride, data, s.BufferDamage().Rects())
+	update := ok && t.format == b.Format() && t.tex.Size() == b.Size()
+	c.stagedRects = append(c.stagedRects[:0], full)
+	if update {
+		c.stagedRects = c.stagedRects[:0]
+		for _, r := range s.BufferDamage().Rects() {
+			if r = r.Intersect(full); !r.Empty() {
+				c.stagedRects = append(c.stagedRects, r)
+			}
 		}
-		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), stride, data)
+	}
+	if err := c.stage(b); err != nil {
+		return err
+	}
+	if !update {
+		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), full.Dx()*4, c.staged)
 		if err != nil {
 			return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
 		}
@@ -115,6 +127,37 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 			return errors.Join(err, tex.Destroy())
 		}
 		c.textures[s] = uploaded{tex, b.Format()}
+		return nil
+	}
+	off := 0
+	for _, r := range c.stagedRects {
+		if err := t.tex.Update(r, r.Dx()*4, c.staged[off:]); err != nil {
+			return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
+		}
+		off += r.Dx() * r.Dy() * 4
+	}
+	return nil
+}
+
+func (c *Compositor) stage(b *shm.Buffer) error {
+	n := 0
+	for _, r := range c.stagedRects {
+		n += r.Dx() * r.Dy() * 4
+	}
+	if cap(c.staged) < n {
+		c.staged = make([]byte, n)
+	}
+	c.staged = c.staged[:n]
+	return b.Read(func(data []byte, stride int) error {
+		off := 0
+		for _, r := range c.stagedRects {
+			row := r.Dx() * 4
+			for y := r.Min.Y; y < r.Max.Y; y++ {
+				at := y*stride + r.Min.X*4
+				copy(c.staged[off:off+row], data[at:at+row])
+				off += row
+			}
+		}
 		return nil
 	})
 }

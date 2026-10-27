@@ -57,23 +57,19 @@ func (t *texture) Size() image.Point {
 	return t.size
 }
 
-func (t *texture) Update(stride int, data []byte, damage render.Region) error {
+func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if t.pix == nil {
 		return errors.New("soft: update of a destroyed texture")
 	}
-	if err := render.CheckPixels(t.size, stride, len(data)); err != nil {
+	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
 	}
-	bounds := image.Rectangle{Max: t.size}
-	for _, r := range damage {
-		r = r.Intersect(bounds)
-		for y := r.Min.Y; y < r.Max.Y; y++ {
-			row := t.pix[y*t.stride+r.Min.X*4 : y*t.stride+r.Max.X*4]
-			copy(row, data[y*stride+r.Min.X*4:])
-			if t.opaque {
-				for i := 3; i < len(row); i += 4 {
-					row[i] = 0xff
-				}
+	for y := dst.Min.Y; y < dst.Max.Y; y++ {
+		row := t.pix[y*t.stride+dst.Min.X*4 : y*t.stride+dst.Max.X*4]
+		copy(row, data[(y-dst.Min.Y)*stride:])
+		if t.opaque {
+			for i := 3; i < len(row); i += 4 {
+				row[i] = 0xff
 			}
 		}
 	}
@@ -107,7 +103,7 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 		return nil, err
 	}
 	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, opaque: format == render.XRGB8888}
-	if err := t.Update(stride, data, render.Region{image.Rectangle{Max: size}}); err != nil {
+	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
 		return nil, err
 	}
 	return t, nil

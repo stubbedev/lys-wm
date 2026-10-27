@@ -342,14 +342,14 @@ func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
 	return t, nil
 }
 
-func (t *texture) Update(stride int, data []byte, damage render.Region) error {
+func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if t.id == 0 {
 		return errors.New("gles: update of a destroyed texture")
 	}
 	if t.img != nil {
 		return errors.New("gles: a dmabuf texture is updated by its client, not uploaded")
 	}
-	if err := render.CheckPixels(t.size, stride, len(data)); err != nil {
+	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
 	}
 	gl := t.r.gl
@@ -357,20 +357,9 @@ func (t *texture) Update(stride int, data []byte, damage render.Region) error {
 		return err
 	}
 	gl.BindTexture(gpu.Texture2D, t.id)
-	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4)) //nolint:gosec // bounded by CheckPixels
-	bounds := image.Rectangle{Max: t.size}
-	for _, d := range damage {
-		d = d.Intersect(bounds)
-		if d.Empty() {
-			continue
-		}
-		gl.PixelStorei(gpu.UnpackSkipPixelsExt, int32(d.Min.X))                                                          //nolint:gosec // inside the texture
-		gl.PixelStorei(gpu.UnpackSkipRowsExt, int32(d.Min.Y))                                                            //nolint:gosec // inside the texture
-		gl.TexSubImage2D(gpu.Texture2D, int32(d.Min.X), int32(d.Min.Y), int32(d.Dx()), int32(d.Dy()), gpu.BGRAExt, data) //nolint:gosec // inside the texture
-	}
+	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                                  //nolint:gosec // bounded by CheckUpdate
+	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), gpu.BGRAExt, data) //nolint:gosec // inside the texture
 	gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
-	gl.PixelStorei(gpu.UnpackSkipPixelsExt, 0)
-	gl.PixelStorei(gpu.UnpackSkipRowsExt, 0)
 	return t.r.leave("gles: update texture")
 }
 

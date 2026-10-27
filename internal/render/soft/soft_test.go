@@ -174,7 +174,7 @@ func TestTextureUpdateCopiesOnlyDamage(t *testing.T) {
 	r := soft.New()
 	tex := newTex(t, r, render.XRGB8888, 2, 1, red, red)
 	fresh := []byte{0xff, 0, 0, 0, 0xff, 0, 0, 0}
-	if err := tex.Update(8, fresh, render.Region{image.Rect(1, 0, 2, 1)}); err != nil {
+	if err := tex.Update(image.Rect(1, 0, 2, 1), 4, fresh[4:]); err != nil {
 		t.Fatal(err)
 	}
 	b := soft.NewBuffer(2, 1)
@@ -184,11 +184,14 @@ func TestTextureUpdateCopiesOnlyDamage(t *testing.T) {
 	if got := [2][4]byte{at(b, 0, 0), at(b, 1, 0)}; got != [2][4]byte{red, blue} {
 		t.Fatalf("pixels %v: only the damaged pixel should change, and XRGB stays opaque", got)
 	}
-	if err := tex.Update(4, fresh, nil); err == nil {
+	if err := tex.Update(image.Rect(0, 0, 2, 1), 4, fresh); err == nil {
 		t.Fatal("an update with a short stride was accepted")
 	}
+	if err := tex.Update(image.Rect(1, 0, 3, 1), 8, fresh); err == nil {
+		t.Fatal("an update reaching past the texture was accepted")
+	}
 	tex.Destroy()
-	if err := tex.Update(8, fresh, nil); err == nil {
+	if err := tex.Update(image.Rect(0, 0, 2, 1), 8, fresh); err == nil {
 		t.Fatal("an update of a destroyed texture was accepted")
 	}
 }
