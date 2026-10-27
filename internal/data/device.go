@@ -112,10 +112,10 @@ func (d dataDevice) SetSelection(obj *sw.WlDataDevice, res *sw.WlDataSource, _ u
 	case s == nil:
 	case s.actionsSet:
 		return res.ProtocolError(sw.WlDataSourceErrorInvalidSource, "a drag-and-drop source cannot be the selection")
-	case !s.fresh():
-		return obj.ProtocolError(sw.WlDataDeviceErrorUsedSource, "the source was already used")
+	case s.phase == sourceDragged:
+		return obj.ProtocolError(sw.WlDataDeviceErrorUsedSource, "the source was already dragged")
 	default:
-		s.use()
+		s.use(sourceSelected)
 	}
 	if d.c != d.m.focus {
 		if s != nil {
@@ -148,7 +148,7 @@ func (d dataDevice) StartDrag(obj *sw.WlDataDevice, res *sw.WlDataSource, origin
 		}
 	}
 	if s != nil {
-		s.use()
+		s.use(sourceDragged)
 	}
 	if from.Client() != d.c || !d.m.listener.CanDrag(from, serial) {
 		if s != nil {

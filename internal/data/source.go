@@ -10,7 +10,8 @@ type sourcePhase uint8
 
 const (
 	sourceFresh sourcePhase = iota
-	sourceUsed
+	sourceSelected
+	sourceDragged
 	sourceGone
 )
 
@@ -55,8 +56,8 @@ func (s *source) fresh() bool {
 	return s.phase == sourceFresh
 }
 
-func (s *source) use() {
-	s.phase = sourceUsed
+func (s *source) use(as sourcePhase) {
+	s.phase = as
 }
 
 func (s *source) end() {

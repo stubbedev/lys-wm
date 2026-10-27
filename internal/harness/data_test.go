@@ -78,6 +78,27 @@ func TestClipboardFollowsKeyboardFocus(t *testing.T) {
 	b.seen(t, "the selection cleared with its source", func() bool { return b.cb.Log[len(b.cb.Log)-1] == "selection false" })
 }
 
+func TestASelectionSetAgainStaysTheSelection(t *testing.T) {
+	h := Start(t, small)
+	a := join(t, h, "a")
+	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
+	copied := a.c.DataSource(map[string]string{"text/plain": "hello"})
+	for range 2 {
+		if err := errors.Join(a.cb.Device.SetSelection(copied.Data, a.in.Serial), a.c.Display.Roundtrip()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if slices.Contains(copied.Log, "cancelled") {
+		t.Fatalf("the source set again was cancelled: %v", copied.Log)
+	}
+
+	b := join(t, h, "b")
+	b.seen(t, "the selection offered to b", func() bool { return b.cb.Selection != nil })
+	if got := b.c.Receive(func(fd int) error { return b.cb.Selection.Data.Receive("text/plain", fd) }, a.c); got != "hello" {
+		t.Fatalf("pasted %q, want hello", got)
+	}
+}
+
 func TestPrimarySelection(t *testing.T) {
 	h := Start(t, small)
 	a := join(t, h, "a")
@@ -298,10 +319,6 @@ func TestDataDeviceProtocolErrors(t *testing.T) {
 		{"source used twice for a drag", false, func(p *party) error {
 			s := p.c.DataSource(map[string]string{"a/b": "x"})
 			return errors.Join(p.cb.Device.SetSelection(s.Data, 0), p.cb.Device.StartDrag(s.Data, p.w.Surface, nil, 0))
-		}, uint32(cw.WlDataDeviceErrorUsedSource)},
-		{"source set as the selection twice", false, func(p *party) error {
-			s := p.c.DataSource(map[string]string{"a/b": "x"})
-			return errors.Join(p.cb.Device.SetSelection(s.Data, 0), p.cb.Device.SetSelection(s.Data, 0))
 		}, uint32(cw.WlDataDeviceErrorUsedSource)},
 		{"dragged source as the selection", true, func(p *party) error {
 			s := p.c.DataSource(map[string]string{"a/b": "x"})

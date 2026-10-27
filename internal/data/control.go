@@ -78,7 +78,7 @@ func (m *Manager) setControlSelection(k Kind, s *controlSource) error {
 	if s == nil {
 		return m.SetSelection(k, nil)
 	}
-	s.use()
+	s.use(sourceSelected)
 	return m.SetSelection(k, s)
 }
 
