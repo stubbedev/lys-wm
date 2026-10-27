@@ -41,10 +41,22 @@ type commit struct {
 type recorder struct {
 	commits   []commit
 	destroyed []*Surface
+	quiet     bool
+}
+
+func regionOf(rects []image.Rectangle) region.Region {
+	var g region.Region
+	for _, r := range rects {
+		g = g.Add(r)
+	}
+	return g
 }
 
 func (r *recorder) Committed(s *Surface) error {
-	c := commit{s: s, attached: s.Attached(), bufferDamage: s.BufferDamage(), size: s.Size(), damage: s.Damage(), offset: s.Offset(), scale: s.Scale(), opaque: s.Opaque(), input: s.Input(), stack: slices.Collect(s.Stack()), source: s.BufferSource()}
+	if r.quiet {
+		return nil
+	}
+	c := commit{s: s, attached: s.Attached(), bufferDamage: regionOf(s.BufferDamage()), size: s.Size(), damage: regionOf(s.Damage()), offset: s.Offset(), scale: s.Scale(), opaque: s.Opaque(), input: s.Input(), stack: slices.Collect(s.Stack()), source: s.BufferSource()}
 	if s.Subsurface() != nil {
 		c.subPos = s.Subsurface().Position()
 	}
@@ -200,6 +212,12 @@ func (b testBuffer) Destroy(*sw.WlBuffer) error { return nil }
 
 func (e *env) buffer(w, h int) *cw.WlBuffer {
 	e.t.Helper()
+	proxy, _ := e.bufferPair(w, h)
+	return proxy
+}
+
+func (e *env) bufferPair(w, h int) (*cw.WlBuffer, *sw.WlBuffer) {
+	e.t.Helper()
 	probe := e.surface()
 	if err := probe.Commit(); err != nil {
 		e.t.Fatal(err)
@@ -216,14 +234,15 @@ func (e *env) buffer(w, h int) *cw.WlBuffer {
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	var res *sw.WlBuffer
 	e.on(func() {
-		if _, err := sw.CreateWlBuffer(client, id, 1, func(*sw.WlBuffer) (sw.WlBufferHandler, error) {
+		if res, err = sw.CreateWlBuffer(client, id, 1, func(*sw.WlBuffer) (sw.WlBufferHandler, error) {
 			return testBuffer{image.Pt(w, h)}, nil
 		}); err != nil {
 			e.t.Error(err)
 		}
 	})
-	return proxy
+	return proxy, res
 }
 
 func (e *env) region(add ...image.Rectangle) *cw.WlRegion {
@@ -306,6 +325,36 @@ func TestBufferDamageMapsToSurfaceCoordinates(t *testing.T) {
 	}
 	if e.last(s).attached {
 		t.Fatal("a commit without attach reports an attached buffer")
+	}
+}
+
+func TestAnOrdinaryCommitAllocatesNothing(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	buf, res := e.bufferPair(16, 16)
+	must(t, s.Attach(buf, 0, 0), s.DamageBuffer(0, 0, 16, 16), s.Commit())
+	e.roundtrip()
+	srv := e.last(s).s
+	var allocs float64
+	e.on(func() {
+		e.rec.quiet = true
+		r := surfaceRequests{srv}
+		allocs = testing.AllocsPerRun(100, func() {
+			for _, err := range [...]error{
+				r.Attach(srv.resource, res, 0, 0),
+				r.DamageBuffer(srv.resource, 0, 0, 4, 4),
+				r.Damage(srv.resource, 2, 2, 4, 4),
+				r.Commit(srv.resource),
+			} {
+				if err != nil {
+					t.Error(err)
+				}
+			}
+		})
+		e.rec.quiet = false
+	})
+	if allocs != 0 {
+		t.Fatalf("a commit with an attach and damage allocates %v times", allocs)
 	}
 }
 

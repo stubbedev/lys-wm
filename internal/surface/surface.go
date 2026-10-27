@@ -144,8 +144,8 @@ type state struct {
 	set          field
 	buffer       Buffer
 	offset       image.Point
-	damage       region.Region
-	bufferDamage region.Region
+	damage       region.Set
+	bufferDamage region.Set
 	scale        int32
 	transform    render.Transform
 	opaque       region.Region
@@ -190,11 +190,20 @@ func (st *state) geometry() geometry {
 
 func (dst *state) merge(src *state) {
 	dst.overlay(src)
-	dst.damage = dst.damage.Union(src.damage)
-	dst.bufferDamage = dst.bufferDamage.Union(src.bufferDamage)
+	dst.damage.AddSet(&src.damage)
+	dst.bufferDamage.AddSet(&src.bufferDamage)
 	dst.frames = append(dst.frames, src.frames...)
 	dst.feedbacks = append(dst.feedbacks, src.feedbacks...)
-	*src = state{}
+	src.reset()
+}
+
+func (st *state) reset() {
+	damage, bufferDamage := st.damage, st.bufferDamage
+	damage.Reset()
+	bufferDamage.Reset()
+	clear(st.frames)
+	clear(st.feedbacks)
+	*st = state{damage: damage, bufferDamage: bufferDamage, frames: st.frames[:0], feedbacks: st.feedbacks[:0]}
 }
 
 type Surface struct {
@@ -206,8 +215,9 @@ type Surface struct {
 	queue            []*Update
 	current          state
 	latched          []*spt.WpPresentationFeedback
-	damage           region.Region
-	bufferDamage     region.Region
+	spare            []*Update
+	damage           region.Set
+	bufferDamage     region.Set
 	attached         bool
 	offset           image.Point
 	role             Role
@@ -272,6 +282,26 @@ func (u *Update) absorb(later *Update) {
 	u.state.merge(&later.state)
 	u.gates = append(u.gates, later.gates...)
 	u.applied = append(u.applied, later.applied...)
+	u.s.recycle(later)
+}
+
+func (s *Surface) recycle(u *Update) {
+	u.state.reset()
+	clear(u.gates)
+	clear(u.applied)
+	u.gates, u.applied = u.gates[:0], u.applied[:0]
+	s.spare = append(s.spare, u)
+}
+
+func (s *Surface) newUpdate() *Update {
+	n := len(s.spare)
+	if n == 0 {
+		return &Update{s: s}
+	}
+	u := s.spare[n-1]
+	s.spare[n-1] = nil
+	s.spare = s.spare[:n-1]
+	return u
 }
 
 func (s *Surface) AddHooks(h *Hooks) {
@@ -354,12 +384,12 @@ func (s *Surface) BufferSource() render.FRect {
 	return s.geometry().bufferSource()
 }
 
-func (s *Surface) Damage() region.Region {
-	return s.damage
+func (s *Surface) Damage() []image.Rectangle {
+	return s.damage.Rects()
 }
 
-func (s *Surface) BufferDamage() region.Region {
-	return s.bufferDamage
+func (s *Surface) BufferDamage() []image.Rectangle {
+	return s.bufferDamage.Rects()
 }
 
 func (s *Surface) Attached() bool {
@@ -466,7 +496,8 @@ func (s *Surface) SetPreferredScale(scale120 uint32) error {
 
 func (s *Surface) FrameDone(msec uint32) error {
 	frames := s.current.frames
-	s.current.frames = nil
+	s.current.frames = frames[:0]
+	defer clear(frames)
 	for _, cb := range frames {
 		if err := cb.SendDone(msec); err != nil {
 			return err
@@ -513,7 +544,7 @@ func (s *Surface) commit() error {
 	if err := s.checkSize(); err != nil {
 		return err
 	}
-	u := &Update{s: s}
+	u := s.newUpdate()
 	for _, h := range s.hooks {
 		if h.Commit != nil {
 			if err := h.Commit(u); err != nil {
@@ -521,7 +552,7 @@ func (s *Surface) commit() error {
 			}
 		}
 	}
-	u.state, s.pending = s.pending, state{}
+	u.state, s.pending = s.pending, u.state
 	if s.synchronized() {
 		if s.cache == nil {
 			s.cache = u
@@ -545,24 +576,28 @@ func (s *Surface) flush() error {
 func (s *Surface) drain(parentApplied bool) error {
 	for len(s.queue) > 0 && !s.destroyed && (parentApplied || !s.synchronized()) && s.queue[0].ready() {
 		u := s.queue[0]
-		s.queue[0] = nil
-		s.queue = s.queue[1:]
+		n := copy(s.queue, s.queue[1:])
+		s.queue[n] = nil
+		s.queue = s.queue[:n]
 		if err := s.apply(u); err != nil {
 			return err
 		}
+		s.recycle(u)
 	}
 	return nil
 }
 
 func (s *Surface) apply(u *Update) error {
 	st := &u.state
-	s.damage, s.bufferDamage = s.mapDamage(st)
+	s.mapDamage(st)
 	s.attached = st.set&fieldBuffer != 0
 	s.offset = image.Point{}
 	if st.set&fieldOffset != 0 {
 		s.offset = st.offset
 	}
-	st.damage, st.bufferDamage, st.offset = region.Region{}, region.Region{}, image.Point{}
+	st.damage.Reset()
+	st.bufferDamage.Reset()
+	st.offset = image.Point{}
 	superseded := s.current.feedbacks
 	s.current.feedbacks = nil
 	if err := discard(superseded); err != nil {
@@ -606,13 +641,21 @@ func (s *Surface) apply(u *Update) error {
 	return nil
 }
 
-func (s *Surface) mapDamage(st *state) (surface, buffer region.Region) {
+func (s *Surface) mapDamage(st *state) {
+	s.damage.CopyFrom(&st.damage)
+	s.bufferDamage.Reset()
 	g := s.geometry(st)
 	if g.buffer == nil {
-		return st.damage, region.Region{}
+		return
 	}
 	bounds := image.Rectangle{Max: g.buffer.Size()}
-	return st.damage.Union(st.bufferDamage.Map(g.toSurface)), st.bufferDamage.Intersect(bounds).Union(st.damage.Map(g.toBuffer))
+	for _, r := range st.bufferDamage.Rects() {
+		s.damage.Add(g.toSurface(r))
+		s.bufferDamage.Add(r.Intersect(bounds))
+	}
+	for _, r := range st.damage.Rects() {
+		s.bufferDamage.Add(g.toBuffer(r))
+	}
 }
 
 func (s *Surface) destroy() error {
@@ -688,21 +731,22 @@ func (r surfaceRequests) Offset(_ *sw.WlSurface, x, y int32) error {
 
 const maxDamageRects = 32
 
-func addDamage(g region.Region, r image.Rectangle) region.Region {
-	g = g.Add(r)
+func addDamage(g *region.Set, r image.Rectangle) {
+	g.Add(r)
 	if len(g.Rects()) > maxDamageRects {
-		return region.Rect(g.Bounds())
+		b := g.Bounds()
+		g.Reset()
+		g.Add(b)
 	}
-	return g
 }
 
 func (r surfaceRequests) Damage(_ *sw.WlSurface, x, y, w, h int32) error {
-	r.s.pending.damage = addDamage(r.s.pending.damage, rect(x, y, w, h))
+	addDamage(&r.s.pending.damage, rect(x, y, w, h))
 	return nil
 }
 
 func (r surfaceRequests) DamageBuffer(_ *sw.WlSurface, x, y, w, h int32) error {
-	r.s.pending.bufferDamage = addDamage(r.s.pending.bufferDamage, rect(x, y, w, h))
+	addDamage(&r.s.pending.bufferDamage, rect(x, y, w, h))
 	return nil
 }
 

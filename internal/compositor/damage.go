@@ -101,13 +101,15 @@ func newScene() *scene {
 	return &scene{content: map[*surface.Surface]*region.Set{}}
 }
 
-func (sc *scene) damaged(s *surface.Surface, d region.Region) {
+func (sc *scene) damaged(s *surface.Surface, d []image.Rectangle) {
 	set, ok := sc.content[s]
 	if !ok {
 		set = &region.Set{}
 		sc.content[s] = set
 	}
-	set.AddRegion(d)
+	for _, r := range d {
+		set.Add(r)
+	}
 }
 
 func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {

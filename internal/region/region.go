@@ -26,8 +26,12 @@ func (g Region) Rects() []image.Rectangle {
 }
 
 func (g Region) Bounds() image.Rectangle {
+	return bounds(g.rects)
+}
+
+func bounds(rects []image.Rectangle) image.Rectangle {
 	var b image.Rectangle
-	for _, r := range g.rects {
+	for _, r := range rects {
 		b = b.Union(r)
 	}
 	return b

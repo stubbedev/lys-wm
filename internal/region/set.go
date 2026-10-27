@@ -26,6 +26,10 @@ func (s *Set) Area() int {
 	return area(s.rects)
 }
 
+func (s *Set) Bounds() image.Rectangle {
+	return bounds(s.rects)
+}
+
 func (s *Set) Add(r image.Rectangle) {
 	s.rects = appendUncovered(s.rects, r, &s.pieces, &s.scratch)
 }

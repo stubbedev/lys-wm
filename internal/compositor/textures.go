@@ -59,7 +59,7 @@ type syncRenderer interface {
 
 func (c *Compositor) Committed(s *surface.Surface) error {
 	c.cursorCommitted(s)
-	if d := s.Damage(); !d.Empty() {
+	if d := s.Damage(); len(d) > 0 {
 		for _, sc := range c.scenes {
 			sc.damaged(s, d)
 		}
@@ -141,7 +141,7 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 	c.stagedRects = append(c.stagedRects[:0], full)
 	if update {
 		c.stagedRects = c.stagedRects[:0]
-		for _, r := range s.BufferDamage().Rects() {
+		for _, r := range s.BufferDamage() {
 			if r = r.Intersect(full); !r.Empty() {
 				c.stagedRects = append(c.stagedRects, r)
 			}
