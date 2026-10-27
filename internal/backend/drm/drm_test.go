@@ -519,10 +519,10 @@ func TestFramesCommitAndFlip(t *testing.T) {
 	}
 }
 
-func TestFramesThatPresentNothingWaitForTheNextRefresh(t *testing.T) {
+func TestFramesThatPresentNothingAreBoundedPerRefresh(t *testing.T) {
 	r := start(t)
 	o := r.b.Outputs()[0]
-	limit := int(20*time.Millisecond/o.State().Mode.Interval()) + 2
+	limit := (int(20*time.Millisecond/o.State().Mode.Interval()) + 1) * backend.EmptyFramesPerRefresh
 	frames := 0
 	r.rec.idle = true
 	r.rec.during = func(o backend.Output) error {
@@ -540,6 +540,31 @@ func TestFramesThatPresentNothingWaitForTheNextRefresh(t *testing.T) {
 	}
 	if len(r.dev.commits) != 0 {
 		t.Fatalf("%d commits for frames that drew nothing", len(r.dev.commits))
+	}
+}
+
+func TestAnEmptyFrameLetsTheNextRunAndReportsAnIdleRefresh(t *testing.T) {
+	r := start(t)
+	o := r.b.Outputs()[0]
+	frames := 0
+	r.rec.idle = true
+	r.rec.during = func(o backend.Output) error {
+		frames++
+		if frames == 1 {
+			return o.ScheduleFrame()
+		}
+		return nil
+	}
+	r.rec.log = nil
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if len(r.rec.log) < 3 || !slices.Equal(r.rec.log[:3], []string{"frame", "frame", "presented 0"}) {
+		t.Fatalf("log %v, want both frames before one idle presentation", r.rec.log)
+	}
+	if p := r.rec.presents[len(r.rec.presents)-1]; !p.Idle {
+		t.Fatalf("the refresh after empty frames was presented as %+v, want idle", p)
 	}
 }
 

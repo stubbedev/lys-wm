@@ -582,7 +582,8 @@ type Output struct {
 	planesLatch   *loop.Timer
 	planesWaiting bool
 	latch         *loop.Timer
-	paced         bool
+	empties       int
+	idleAt        time.Duration
 	lastFlip      time.Duration
 	presented     uint64
 	color         colorBlobs
@@ -735,7 +736,7 @@ func (o *Output) ScheduleFrame() error {
 }
 
 func (o *Output) frameReady() bool {
-	return o.enabled && !o.flipping && !o.paced && o.drawing == nil && !o.b.paused && !o.b.closed
+	return o.enabled && !o.flipping && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
 }
 
 func (o *Output) runFrame() error {
@@ -743,24 +744,32 @@ func (o *Output) runFrame() error {
 	err := o.b.handler.Frame(o)
 	o.framing = false
 	if err == nil && !o.flipping && o.enabled && !o.off {
-		err = o.pace()
+		err = o.emptyFrame()
 	}
 	return errors.Join(err, o.flushPlanes())
 }
 
-func (o *Output) pace() error {
+func (o *Output) emptyFrame() error {
+	o.empties++
+	if o.empties > 1 {
+		return nil
+	}
 	now := backend.Now()
 	at, _ := backend.NextVblank(o.lastFlip, now, modeOf(o.mode).Interval())
 	if err := o.pacer.Arm(at - now); err != nil {
 		return fmt.Errorf("drm: pace the frames of %s: %w", o.Name(), err)
 	}
-	o.paced = true
+	o.idleAt = at
 	return nil
 }
 
 func (o *Output) paceElapsed() error {
-	o.paced = false
-	return errors.Join(o.clock.Kick(), o.flushPlanes())
+	o.empties = 0
+	var err error
+	if !o.flipping && o.enabled && !o.off {
+		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: modeOf(o.mode).Interval(), Idle: true})
+	}
+	return errors.Join(err, o.clock.Kick(), o.flushPlanes())
 }
 
 func (o *Output) BeginFrame() (backend.Frame, error) {

@@ -99,7 +99,10 @@ type Presentation struct {
 	Refresh time.Duration
 	Seq     uint64
 	Torn    bool
+	Idle    bool
 }
+
+const EmptyFramesPerRefresh = 2
 
 var ErrNoCursorPlanes = errors.New("backend: this backend draws the cursor in the frame")
 

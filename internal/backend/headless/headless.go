@@ -238,6 +238,7 @@ type Output struct {
 	armed          bool
 	clock          *backend.FrameClock
 	presentPending bool
+	empties        int
 	inFrame        bool
 	lastVblank     time.Duration
 	nextVblank     time.Duration
@@ -368,13 +369,16 @@ func (o *Output) ScheduleFrame() error {
 }
 
 func (o *Output) frameReady() bool {
-	return o.backend.handler != nil && !o.armed && !o.inFrame && !o.removed && o.state.Lit()
+	return o.backend.handler != nil && !o.presentPending && o.empties < backend.EmptyFramesPerRefresh && !o.inFrame && !o.removed && o.state.Lit()
 }
 
 func (o *Output) runFrame() error {
 	o.frames++
 	if err := o.backend.handler.Frame(o); err != nil {
 		return err
+	}
+	if !o.presentPending {
+		o.empties++
 	}
 	return o.arm()
 }
@@ -510,8 +514,15 @@ func (o *Output) arm() error {
 func (o *Output) vblank() error {
 	o.armed = false
 	o.lastVblank, o.seq = o.nextVblank, o.nextSeq
-	if o.presentPending {
+	idle := o.empties > 0
+	o.empties = 0
+	switch {
+	case o.presentPending:
 		if err := o.present(); err != nil {
+			return err
+		}
+	case idle && o.backend.handler != nil:
+		if err := o.backend.handler.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Idle: true}); err != nil {
 			return err
 		}
 	}

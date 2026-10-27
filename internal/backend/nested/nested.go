@@ -499,12 +499,14 @@ func (o *Output) Present(damage render.Region) error {
 
 func (o *Output) frameDone() error {
 	o.callbackPending = false
+	p := backend.Presentation{Time: backend.Now(), Seq: o.seq, Idle: !o.presentPending}
 	if o.presentPending {
 		o.presentPending = false
 		o.seq++
-		if err := o.backend.handler.Presented(o, backend.Presentation{Time: backend.Now(), Seq: o.seq}); err != nil {
-			return err
-		}
+		p.Seq = o.seq
+	}
+	if err := o.backend.handler.Presented(o, p); err != nil {
+		return err
 	}
 	return o.clock.Kick()
 }

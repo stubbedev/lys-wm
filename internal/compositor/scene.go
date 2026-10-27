@@ -93,7 +93,7 @@ func (c *Compositor) render(o *output.Output) error {
 	}
 	sc.cur.cull(&sc.covered)
 	if sc.diff(bounds).Empty() {
-		return errors.Join(c.unchanged(o, sc), c.lockBlanked(o))
+		return c.lockBlanked(o)
 	}
 	if direct, err := c.scanout(o, sc, bounds); err != nil || direct {
 		if err != nil {
@@ -169,18 +169,6 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	return shown, nil
 }
 
-func (c *Compositor) unchanged(o *output.Output, sc *scene) error {
-	now := backend.Now()
-	var err error
-	for _, s := range c.shown[o] {
-		c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
-		if e := errors.Join(s.FrameDone(wire.Millis(now)), s.Presented(c.outputResources, now, 0, sc.last.Seq, 0)); e != nil {
-			err = errors.Join(err, e)
-		}
-	}
-	return err
-}
-
 func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
 	if !w.visible || !w.tile.Overlaps(o.Logical()) {
 		return shown
@@ -253,17 +241,26 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	if o == nil {
 		return nil
 	}
-	c.sceneOf(o).last = p
-	kind := spt.WpPresentationFeedbackKindVsync
-	if p.Torn {
+	sc := c.sceneOf(o)
+	kind, refresh, seq := spt.WpPresentationFeedbackKindVsync, p.Refresh, p.Seq
+	switch {
+	case p.Idle:
+		kind, refresh, seq = 0, 0, sc.last.Seq
+	case p.Torn:
 		kind = 0
+	}
+	if !p.Idle {
+		sc.last = p
 	}
 	var errs error
 	for _, s := range c.shown[o] {
 		c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
 		errs = errors.Join(errs,
 			s.FrameDone(wire.Millis(p.Time)),
-			s.Presented(c.outputResources, p.Time, p.Refresh, p.Seq, kind))
+			s.Presented(c.outputResources, p.Time, refresh, seq, kind))
+	}
+	if p.Idle {
+		return errs
 	}
 	return errors.Join(errs, c.timing.Presented())
 }
