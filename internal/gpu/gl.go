@@ -24,7 +24,13 @@ const (
 	RGBA                          = 0x1908
 	BGRAExt                       = 0x80E1
 	RGBA8OES                      = 0x8058
+	RGB10A2                       = 0x8059
+	Red                           = 0x1903
+	Blue                          = 0x1905
+	TextureSwizzleR               = 0x8E42
+	TextureSwizzleB               = 0x8E44
 	UnsignedByte                  = 0x1401
+	UnsignedInt2101010Rev         = 0x8368
 	Float                         = 0x1406
 	UnpackAlignment               = 0x0CF5
 	PackRowLengthNV               = 0x0D02
@@ -245,13 +251,13 @@ func (gl *GL) Renderer() string   { return gl.getString(glRenderer) }
 func (gl *GL) Version() string    { return gl.getString(glVersion) }
 func (gl *GL) Extensions() string { return gl.getString(glExtensions) }
 
-func (gl *GL) TexImage2D(target uint32, internalFormat int32, width, height int32, format uint32, pixels []byte) {
-	gl.texImage2D(target, 0, internalFormat, width, height, 0, format, UnsignedByte, first(pixels))
+func (gl *GL) TexImage2D(target uint32, internalFormat int32, width, height int32, format, typ uint32, pixels []byte) {
+	gl.texImage2D(target, 0, internalFormat, width, height, 0, format, typ, first(pixels))
 	runtime.KeepAlive(pixels)
 }
 
-func (gl *GL) TexSubImage2D(target uint32, x, y, width, height int32, format uint32, pixels []byte) {
-	gl.texSubImage2D(target, 0, x, y, width, height, format, UnsignedByte, first(pixels))
+func (gl *GL) TexSubImage2D(target uint32, x, y, width, height int32, format, typ uint32, pixels []byte) {
+	gl.texSubImage2D(target, 0, x, y, width, height, format, typ, first(pixels))
 	runtime.KeepAlive(pixels)
 }
 

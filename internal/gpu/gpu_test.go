@@ -57,7 +57,7 @@ func framebuffer(t *testing.T, gl *gpu.GL, size image.Point) {
 	var tex, fb uint32
 	gl.GenTextures(1, &tex)
 	gl.BindTexture(gpu.Texture2D, tex)
-	gl.TexImage2D(gpu.Texture2D, gpu.RGBA, int32(size.X), int32(size.Y), gpu.RGBA, nil)
+	gl.TexImage2D(gpu.Texture2D, gpu.RGBA, int32(size.X), int32(size.Y), gpu.RGBA, gpu.UnsignedByte, nil)
 	gl.GenFramebuffers(1, &fb)
 	gl.BindFramebuffer(gpu.Framebuffer, fb)
 	gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, tex, 0)

@@ -74,6 +74,7 @@ type Renderer struct {
 	verts     [16]float32
 	pass      pass
 	closed    bool
+	es3       bool
 	async     bool
 }
 
@@ -132,7 +133,8 @@ func (r *Renderer) setup() error {
 		r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
 	}
 	r.gl.GenBuffers(1, &r.vbo)
-	r.async = esMajor(r.gl.Version()) >= 3 && r.d.Has("EGL_KHR_fence_sync")
+	r.es3 = esMajor(r.gl.Version()) >= 3
+	r.async = r.es3 && r.d.Has("EGL_KHR_fence_sync")
 	return nil
 }
 
@@ -163,15 +165,32 @@ func (r *Renderer) Finish() error {
 	return r.leave("gles: finish")
 }
 
+var (
+	eightBitFormats = []render.Format{render.ARGB8888, render.XRGB8888, render.ABGR8888, render.XBGR8888}
+	allFormats      = append(slices.Clone(eightBitFormats), render.ARGB2101010, render.XRGB2101010, render.ABGR2101010, render.XBGR2101010)
+)
+
 func (r *Renderer) Formats() []render.Format {
-	return []render.Format{render.ARGB8888, render.XRGB8888, render.ABGR8888, render.XBGR8888}
+	if r.es3 {
+		return allFormats
+	}
+	return eightBitFormats
 }
 
-func glFormat(f render.Format) uint32 {
-	if f.RGBOrder() {
-		return gpu.RGBA
+type pixelUpload struct {
+	internal    int32
+	format, typ uint32
+	swapRB      bool
+}
+
+func uploadOf(f render.Format) pixelUpload {
+	switch {
+	case f.TenBit():
+		return pixelUpload{internal: gpu.RGB10A2, format: gpu.RGBA, typ: gpu.UnsignedInt2101010Rev, swapRB: !f.RGBOrder()}
+	case f.RGBOrder():
+		return pixelUpload{internal: gpu.RGBA, format: gpu.RGBA, typ: gpu.UnsignedByte}
 	}
-	return gpu.BGRAExt
+	return pixelUpload{internal: gpu.BGRAExt, format: gpu.BGRAExt, typ: gpu.UnsignedByte}
 }
 
 type texture struct {
@@ -182,7 +201,7 @@ type texture struct {
 	target uint32
 	img    *gpu.Image
 	filter int32
-	format uint32
+	upload pixelUpload
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -195,13 +214,18 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := r.enter(); err != nil {
 		return nil, err
 	}
-	t := &texture{r: r, size: size, opaque: format.Opaque(), target: gpu.Texture2D, format: glFormat(format)}
+	t := &texture{r: r, size: size, opaque: format.Opaque(), target: gpu.Texture2D, upload: uploadOf(format)}
 	r.gl.GenTextures(1, &t.id)
 	r.gl.BindTexture(gpu.Texture2D, t.id)
 	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
 	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
-	r.gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                     //nolint:gosec // bounded by CheckPixels
-	r.gl.TexImage2D(gpu.Texture2D, int32(t.format), int32(size.X), int32(size.Y), t.format, data) //nolint:gosec // texture sizes fit GLsizei
+	if t.upload.swapRB {
+		r.gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleR, gpu.Blue)
+		r.gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleB, gpu.Red)
+	}
+	u := t.upload
+	r.gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                       //nolint:gosec // bounded by CheckPixels
+	r.gl.TexImage2D(gpu.Texture2D, u.internal, int32(size.X), int32(size.Y), u.format, u.typ, data) //nolint:gosec // texture sizes fit GLsizei
 	r.gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
 	if err := r.leave("gles: new texture"); err != nil {
 		return nil, errors.Join(err, t.Destroy())
@@ -371,8 +395,8 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 		return err
 	}
 	gl.BindTexture(gpu.Texture2D, t.id)
-	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                               //nolint:gosec // bounded by CheckUpdate
-	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), t.format, data) //nolint:gosec // inside the texture
+	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                                                    //nolint:gosec // bounded by CheckUpdate
+	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), t.upload.format, t.upload.typ, data) //nolint:gosec // inside the texture
 	gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
 	return t.r.leave("gles: update texture")
 }
@@ -415,7 +439,7 @@ func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
 	f := &Framebuffer{r: r, size: size}
 	r.gl.GenTextures(1, &f.tex)
 	r.gl.BindTexture(gpu.Texture2D, f.tex)
-	r.gl.TexImage2D(gpu.Texture2D, gpu.RGBA, int32(size.X), int32(size.Y), gpu.RGBA, nil) //nolint:gosec // framebuffer sizes fit GLsizei
+	r.gl.TexImage2D(gpu.Texture2D, gpu.RGBA, int32(size.X), int32(size.Y), gpu.RGBA, gpu.UnsignedByte, nil) //nolint:gosec // framebuffer sizes fit GLsizei
 	r.gl.GenFramebuffers(1, &f.fbo)
 	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
 	r.gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, f.tex, 0)

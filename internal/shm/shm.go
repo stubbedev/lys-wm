@@ -21,10 +21,14 @@ import (
 const shmVersion = 2
 
 var wireFormats = map[render.Format]sw.WlShmFormat{
-	render.ARGB8888: sw.WlShmFormatArgb8888,
-	render.XRGB8888: sw.WlShmFormatXrgb8888,
-	render.ABGR8888: sw.WlShmFormatAbgr8888,
-	render.XBGR8888: sw.WlShmFormatXbgr8888,
+	render.ARGB8888:    sw.WlShmFormatArgb8888,
+	render.XRGB8888:    sw.WlShmFormatXrgb8888,
+	render.ABGR8888:    sw.WlShmFormatAbgr8888,
+	render.XBGR8888:    sw.WlShmFormatXbgr8888,
+	render.ARGB2101010: sw.WlShmFormatArgb2101010,
+	render.XRGB2101010: sw.WlShmFormatXrgb2101010,
+	render.ABGR2101010: sw.WlShmFormatAbgr2101010,
+	render.XBGR2101010: sw.WlShmFormatXbgr2101010,
 }
 
 type Manager struct {

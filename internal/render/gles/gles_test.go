@@ -2,9 +2,11 @@ package gles_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"image"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -641,30 +643,45 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 	}
 }
 
-func TestRGBOrderedTexturesMatchTheirBGRTwins(t *testing.T) {
+func encode(f render.Format, c render.Color) []byte {
+	lo, hi := c.B, c.R
+	if f.RGBOrder() {
+		lo, hi = hi, lo
+	}
+	a := c.A
+	if f.Opaque() {
+		a = 0
+	}
+	if !f.TenBit() {
+		return []byte{lo, c.G, hi, a}
+	}
+	ten := func(v uint8) uint32 { return uint32(v) * 0x3ff / 0xff }
+	return binary.LittleEndian.AppendUint32(nil, uint32(a>>6)<<30|ten(hi)<<20|ten(c.G)<<10|ten(lo))
+}
+
+func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
+	c := render.Color{R: 0xff, G: 0xaa, B: 0x55, A: 0xff}
+	want := [4]byte{c.B, c.G, c.R, c.A}
 	for _, r := range []render.Renderer{renderer(t), soft.New()} {
-		for bgr, rgb := range map[render.Format]render.Format{render.ARGB8888: render.ABGR8888, render.XRGB8888: render.XBGR8888} {
-			bgra := []byte{0x30, 0x60, 0x90, 0xff}
-			rgba := []byte{0x90, 0x60, 0x30, 0xff}
-			a, err := r.NewTexture(bgr, image.Pt(1, 1), 4, bgra)
+		if !slices.Contains(r.Formats(), render.XBGR2101010) {
+			t.Errorf("%T offers %v, without 10-bit formats", r, r.Formats())
+		}
+		for _, f := range r.Formats() {
+			px := encode(f, c)
+			tex, err := r.NewTexture(f, image.Pt(1, 1), 4, px)
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := r.NewTexture(rgb, image.Pt(1, 1), 4, rgba)
-			if err != nil {
+			if got := drawn(t, r, tex); got != want {
+				t.Errorf("%T: format %d drew %v, want %v", r, f, got, want)
+			}
+			if err := tex.Update(image.Rect(0, 0, 1, 1), 4, encode(f, render.Color{A: 0xff})); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Update(image.Rect(0, 0, 1, 1), 4, rgba); err != nil {
-				t.Fatal(err)
+			if got := drawn(t, r, tex); got != [4]byte{0, 0, 0, 0xff} {
+				t.Errorf("%T: format %d updated to black drew %v", r, f, got)
 			}
-			got := map[render.Format][4]byte{}
-			for f, tex := range map[render.Format]render.Texture{bgr: a, rgb: b} {
-				got[f] = drawn(t, r, tex)
-			}
-			if got[bgr] != got[rgb] || got[bgr] != [4]byte(bgra) {
-				t.Errorf("%T: %v drew %v and %v drew %v, want both %v", r, bgr, got[bgr], rgb, got[rgb], bgra)
-			}
-			if err := errors.Join(a.Destroy(), b.Destroy()); err != nil {
+			if err := tex.Destroy(); err != nil {
 				t.Fatal(err)
 			}
 		}

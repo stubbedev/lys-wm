@@ -90,8 +90,13 @@ func New() *Renderer {
 	return r
 }
 
+var formats = []render.Format{
+	render.ARGB8888, render.XRGB8888, render.ABGR8888, render.XBGR8888,
+	render.ARGB2101010, render.XRGB2101010, render.ABGR2101010, render.XBGR2101010,
+}
+
 func (r *Renderer) Formats() []render.Format {
-	return []render.Format{render.ARGB8888, render.XRGB8888, render.ABGR8888, render.XBGR8888}
+	return formats
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {

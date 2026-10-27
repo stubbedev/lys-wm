@@ -3,6 +3,7 @@
 package render
 
 import (
+	"encoding/binary"
 	"fmt"
 	"image"
 	"math"
@@ -128,18 +129,44 @@ const (
 	XRGB8888
 	ABGR8888
 	XBGR8888
+	ARGB2101010
+	XRGB2101010
+	ABGR2101010
+	XBGR2101010
 )
 
+type formatTraits struct {
+	opaque, rgbOrder, tenBit bool
+}
+
+var traits = [...]formatTraits{
+	XRGB8888:    {opaque: true},
+	ABGR8888:    {rgbOrder: true},
+	XBGR8888:    {opaque: true, rgbOrder: true},
+	ARGB2101010: {tenBit: true},
+	XRGB2101010: {opaque: true, tenBit: true},
+	ABGR2101010: {rgbOrder: true, tenBit: true},
+	XBGR2101010: {opaque: true, rgbOrder: true, tenBit: true},
+}
+
 func (f Format) Opaque() bool {
-	return f == XRGB8888 || f == XBGR8888
+	return traits[f].opaque
 }
 
 func (f Format) RGBOrder() bool {
-	return f == ABGR8888 || f == XBGR8888
+	return traits[f].rgbOrder
+}
+
+func (f Format) TenBit() bool {
+	return traits[f].tenBit
 }
 
 func (f Format) Decode(px []byte) Color {
 	c := Color{B: px[0], G: px[1], R: px[2], A: px[3]}
+	if f.TenBit() {
+		v := binary.LittleEndian.Uint32(px)
+		c = Color{B: tenToEight(v), G: tenToEight(v >> 10), R: tenToEight(v >> 20), A: uint8(v>>30) * 0x55}
+	}
 	if f.RGBOrder() {
 		c.R, c.B = c.B, c.R
 	}
@@ -147,6 +174,10 @@ func (f Format) Decode(px []byte) Color {
 		c.A = 0xff
 	}
 	return c
+}
+
+func tenToEight(v uint32) uint8 {
+	return uint8(((v&0x3ff)*0xff + 0x3ff/2) / 0x3ff)
 }
 
 type Color struct {
