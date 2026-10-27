@@ -50,8 +50,7 @@ type texture struct {
 	pix    []byte
 	stride int
 	size   image.Point
-	opaque bool
-	swap   bool
+	format render.Format
 }
 
 func (t *texture) Size() image.Point {
@@ -69,12 +68,8 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 		row := t.pix[y*t.stride+dst.Min.X*4 : y*t.stride+dst.Max.X*4]
 		copy(row, data[(y-dst.Min.Y)*stride:])
 		for i := 0; i < len(row); i += 4 {
-			if t.swap {
-				row[i], row[i+2] = row[i+2], row[i]
-			}
-			if t.opaque {
-				row[i+3] = 0xff
-			}
+			c := t.format.Decode(row[i : i+4])
+			row[i], row[i+1], row[i+2], row[i+3] = c.B, c.G, c.R, c.A
 		}
 	}
 	return nil
@@ -106,7 +101,7 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := render.CheckPixels(size, stride, len(data)); err != nil {
 		return nil, err
 	}
-	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, opaque: format.Opaque(), swap: format.RGBOrder()}
+	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format}
 	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
 		return nil, err
 	}

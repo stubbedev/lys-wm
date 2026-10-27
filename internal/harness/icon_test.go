@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
+	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cxti "github.com/stubbedev/lys-wm/internal/protocol/client/xdgtoplevelicon"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -88,6 +90,51 @@ func eventuallyIcon(t *testing.T, h *Harness, title string, ok func(*ipc.Icon) b
 	}
 }
 
+func iconImage(t *testing.T, h *Harness, size int) (ipc.IconImage, image.Image) {
+	t.Helper()
+	raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindIcon, Window: query[[]ipc.Window](h, ipc.KindWindows)[0].ID, Size: size})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var img ipc.IconImage
+	if err := json.Unmarshal(raw, &img); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(img.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return img, decoded
+}
+
+func TestIconBuffersInRGBOrderKeepTheirColours(t *testing.T) {
+	for _, format := range []cw.WlShmFormat{cw.WlShmFormatAbgr8888, cw.WlShmFormatXbgr8888} {
+		t.Run(fmt.Sprint(format), func(t *testing.T) {
+			h := Start(t, small)
+			c := testclient.Connect(t, h.Socket())
+			m := iconManager(t, c)
+			w := c.Window("iconic", quadrants)
+			c.DispatchUntil("the window to map", w.Mapped)
+			icon, err := m.CreateIcon()
+			if err != nil {
+				t.Fatal(err)
+			}
+			red := c.FormatBuffer(image.Pt(16, 16), format, 0, func(pix []byte, _ int, _ image.Point, _ int) {
+				for i := 0; i < len(pix); i += 4 {
+					pix[i], pix[i+1], pix[i+2], pix[i+3] = 0xff, 0, 0, 0xff
+				}
+			})
+			if err := errors.Join(icon.AddBuffer(red, 1), m.SetIcon(w.Toplevel, icon), icon.Destroy(), w.Surface.Commit(), c.Display.Flush()); err != nil {
+				t.Fatal(err)
+			}
+			eventuallyIcon(t, h, "iconic", func(i *ipc.Icon) bool { return i != nil })
+			if _, decoded := iconImage(t, h, 16); color.RGBAModel.Convert(decoded.At(5, 5)) != (color.RGBA{R: 0xff, A: 0xff}) {
+				t.Fatalf("the icon pixel is %v, want opaque red", decoded.At(5, 5))
+			}
+		})
+	}
+}
+
 func TestToplevelIconsReachIPCAndTheTab(t *testing.T) {
 	decor := compositor.DefaultDecor()
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Decor = decor }, tall)
@@ -104,18 +151,7 @@ func TestToplevelIconsReachIPCAndTheTab(t *testing.T) {
 	if first.Name != "lys-wm-test" || !slices.Equal(first.Sizes, []int{16, 32}) || first.Serial == 0 {
 		t.Fatalf("icon %+v, want lys-wm-test with 16 and 32 pixel buffers", first)
 	}
-	raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindIcon, Window: query[[]ipc.Window](h, ipc.KindWindows)[0].ID, Size: 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var img ipc.IconImage
-	if err := json.Unmarshal(raw, &img); err != nil {
-		t.Fatal(err)
-	}
-	decoded, err := png.Decode(bytes.NewReader(img.PNG))
-	if err != nil {
-		t.Fatal(err)
-	}
+	img, decoded := iconImage(t, h, 20)
 	if r, g, b, a := decoded.At(5, 5).RGBA(); img.Size != 32 || img.Scale != 1 || r != 0 || g != 0xffff || b != 0 || a != 0xffff {
 		t.Fatalf("the icon for 20 pixels is %d at scale %d with %v, want the green 32 pixel buffer", img.Size, img.Scale, decoded.At(5, 5))
 	}

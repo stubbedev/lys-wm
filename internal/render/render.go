@@ -138,6 +138,17 @@ func (f Format) RGBOrder() bool {
 	return f == ABGR8888 || f == XBGR8888
 }
 
+func (f Format) Decode(px []byte) Color {
+	c := Color{B: px[0], G: px[1], R: px[2], A: px[3]}
+	if f.RGBOrder() {
+		c.R, c.B = c.B, c.R
+	}
+	if f.Opaque() {
+		c.A = 0xff
+	}
+	return c
+}
+
 type Color struct {
 	R, G, B, A uint8
 }

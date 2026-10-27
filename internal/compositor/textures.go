@@ -187,12 +187,8 @@ func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, 
 			dst := cp.pix[(y*size.X+r.Min.X)*4 : (y*size.X+r.Max.X)*4]
 			copy(dst, c.staged[off:off+row])
 			for i := 0; i < len(dst); i += 4 {
-				if format.RGBOrder() {
-					dst[i], dst[i+2] = dst[i+2], dst[i]
-				}
-				if format.Opaque() {
-					dst[i+3] = 0xff
-				}
+				c := format.Decode(dst[i : i+4])
+				dst[i], dst[i+1], dst[i+2], dst[i+3] = c.B, c.G, c.R, c.A
 			}
 			off += row
 		}

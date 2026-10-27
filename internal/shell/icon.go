@@ -8,7 +8,6 @@ import (
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
 	sxti "github.com/stubbedev/lys-wm/internal/protocol/server/xdgtoplevelicon"
-	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/shm"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -189,16 +188,14 @@ func keptIconBuffers(buffers []iconBuffer) []iconBuffer {
 func copyIcon(b *shm.Buffer) (*image.RGBA, error) {
 	size := b.Size()
 	img := image.NewRGBA(image.Rectangle{Max: size})
-	opaque := b.Format() == render.XRGB8888
+	format := b.Format()
 	err := b.Read(func(data []byte, stride int) error {
 		for y := range size.Y {
 			src := data[y*stride : y*stride+4*size.X]
 			dst := img.Pix[y*img.Stride : y*img.Stride+4*size.X]
 			for x := 0; x < len(src); x += 4 {
-				dst[x], dst[x+1], dst[x+2], dst[x+3] = src[x+2], src[x+1], src[x], src[x+3]
-				if opaque {
-					dst[x+3] = 0xff
-				}
+				c := format.Decode(src[x : x+4])
+				dst[x], dst[x+1], dst[x+2], dst[x+3] = c.R, c.G, c.B, c.A
 			}
 		}
 		return nil

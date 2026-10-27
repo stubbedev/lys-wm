@@ -217,18 +217,23 @@ func (r release) Release(*cw.WlBuffer) error {
 
 func (c *Client) Buffer(size image.Point, frame int, paint Painter) *cw.WlBuffer {
 	c.t.Helper()
-	b := c.buffers(size, 1)[0]
+	return c.FormatBuffer(size, cw.WlShmFormatXrgb8888, frame, paint)
+}
+
+func (c *Client) FormatBuffer(size image.Point, format cw.WlShmFormat, frame int, paint Painter) *cw.WlBuffer {
+	c.t.Helper()
+	b := c.buffers(size, format, 1)[0]
 	paint(b.pix, size.X*4, size, frame)
 	return b.wl
 }
 
 func (c *Client) Target(size image.Point) (*cw.WlBuffer, []byte) {
 	c.t.Helper()
-	b := c.buffers(size, 1)[0]
+	b := c.buffers(size, cw.WlShmFormatXrgb8888, 1)[0]
 	return b.wl, b.pix
 }
 
-func (c *Client) buffers(size image.Point, n int) []*buffer {
+func (c *Client) buffers(size image.Point, format cw.WlShmFormat, n int) []*buffer {
 	c.t.Helper()
 	stride := size.X * 4
 	frame := stride * size.Y
@@ -244,7 +249,7 @@ func (c *Client) buffers(size image.Point, n int) []*buffer {
 	out := make([]*buffer, n)
 	for i := range out {
 		b := &buffer{pix: m[i*frame : (i+1)*frame]}
-		b.wl, err = pool.CreateBuffer(release{b}, int32(i*frame), int32(size.X), int32(size.Y), int32(stride), cw.WlShmFormatXrgb8888) //nolint:gosec // test buffers are small
+		b.wl, err = pool.CreateBuffer(release{b}, int32(i*frame), int32(size.X), int32(size.Y), int32(stride), format) //nolint:gosec // test buffers are small
 		c.must(err)
 		out[i] = b
 	}
@@ -547,7 +552,7 @@ func (w *Window) configured() error {
 	}
 	if size != w.Size || w.buffers == nil {
 		w.Size = size
-		w.buffers = w.c.buffers(size, 2)
+		w.buffers = w.c.buffers(size, cw.WlShmFormatXrgb8888, 2)
 	}
 	return w.draw()
 }
