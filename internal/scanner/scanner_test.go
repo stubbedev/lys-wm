@@ -115,6 +115,25 @@ func TestInvalidProtocolsAreRejected(t *testing.T) {
 	}
 }
 
+func TestCapitalisedEnumEntriesKeepTheirGoNames(t *testing.T) {
+	x := `<protocol name="p"><interface name="a" version="1"><enum name="mode"><entry name="None" value="0"/><entry name="Server" value="2"/></enum></interface></protocol>`
+	p, err := parseProtocol(strings.NewReader(x), "test.xml", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range p.interfaces[0].enums[0].entries {
+		names = append(names, e.goName)
+	}
+	if want := []string{"AModeNone", "AModeServer"}; !slices.Equal(names, want) {
+		t.Fatalf("entries named %v, want %v", names, want)
+	}
+	clash := `<protocol name="p"><interface name="a" version="1"><enum name="mode"><entry name="none" value="0"/><entry name="None" value="1"/></enum></interface></protocol>`
+	if _, err := parseProtocol(strings.NewReader(clash), "test.xml", "p"); err == nil || !strings.Contains(err.Error(), "duplicates another entry") {
+		t.Fatalf("none and None: %v", err)
+	}
+}
+
 func TestIdentifierCollisionsFailGeneration(t *testing.T) {
 	x := `<protocol name="p"><interface name="a" version="1"><enum name="b"><entry name="c" value="0"/></enum></interface><interface name="a_b" version="1"/></protocol>`
 	p, err := parseProtocol(strings.NewReader(x), "test.xml", "p")

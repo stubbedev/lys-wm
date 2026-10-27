@@ -249,7 +249,7 @@ func parseEnum(x xmlEnum, owner *iface) (*enum, error) {
 	seen := map[string]bool{}
 	for _, xe := range x.Entries {
 		if xe.Name == "" || strings.ContainsFunc(xe.Name, func(r rune) bool {
-			return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_'
+			return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_'
 		}) {
 			return nil, fmt.Errorf("enum %s: invalid entry name %q", x.Name, xe.Name)
 		}
