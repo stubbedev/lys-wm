@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/shm"
 	"github.com/stubbedev/lys-wm/internal/singlepixel"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -67,6 +68,9 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 }
 
 func (c *Compositor) attach(s *surface.Surface) error {
+	if _, ok := s.Buffer().(*shm.Buffer); !ok {
+		delete(c.cursorPixels, s)
+	}
 	switch b := s.Buffer().(type) {
 	case nil:
 		return c.dropTexture(s)
@@ -127,6 +131,9 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 	if err := c.stage(b); err != nil {
 		return err
 	}
+	if seat.IsCursorSurface(s) {
+		c.keepCursorPixels(s, b.Format(), b.Size())
+	}
 	if !update {
 		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), full.Dx()*4, c.staged)
 		if err != nil {
@@ -146,6 +153,31 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 		off += r.Dx() * r.Dy() * 4
 	}
 	return nil
+}
+
+func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, size image.Point) {
+	cp := c.cursorPixels[s]
+	if cp == nil || cp.size != size {
+		cp = &cursorPixels{pix: make([]byte, size.X*size.Y*4), size: size}
+		c.cursorPixels[s] = cp
+	}
+	off := 0
+	for _, r := range c.stagedRects {
+		row := r.Dx() * 4
+		for y := r.Min.Y; y < r.Max.Y; y++ {
+			dst := cp.pix[(y*size.X+r.Min.X)*4 : (y*size.X+r.Max.X)*4]
+			copy(dst, c.staged[off:off+row])
+			for i := 0; i < len(dst); i += 4 {
+				if format.RGBOrder() {
+					dst[i], dst[i+2] = dst[i+2], dst[i]
+				}
+				if format.Opaque() {
+					dst[i+3] = 0xff
+				}
+			}
+			off += row
+		}
+	}
 }
 
 func (c *Compositor) stage(b *shm.Buffer) error {
@@ -228,6 +260,7 @@ func (c *Compositor) Destroyed(s *surface.Surface) error {
 	if err := c.dropTexture(s); err != nil {
 		return err
 	}
+	delete(c.cursorPixels, s)
 	for _, sc := range c.scenes {
 		sc.forget(s)
 	}

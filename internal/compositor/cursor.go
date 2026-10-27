@@ -6,6 +6,8 @@ import (
 	"image"
 	"math"
 
+	"golang.org/x/image/draw"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -57,11 +59,19 @@ func (c *Compositor) cursorTexture(name string, scale output.Scale) (*cursorText
 		size:    image.Pt(img.Size.X*px/nominal, img.Size.Y*px/nominal),
 		hotspot: image.Pt(img.Hotspot.X*px/nominal, img.Hotspot.Y*px/nominal),
 	}
-	if ct.size == img.Size {
-		ct.pixels = img.Pixels
+	ct.pixels = img.Pixels
+	if ct.size != img.Size {
+		ct.pixels = resample(img.Pixels, img.Size, ct.size)
 	}
 	c.pointers[key] = ct
 	return ct, nil
+}
+
+func resample(pix []byte, from, to image.Point) []byte {
+	src := &image.RGBA{Pix: pix, Stride: from.X * 4, Rect: image.Rectangle{Max: from}}
+	dst := image.NewRGBA(image.Rectangle{Max: to})
+	draw.CatmullRom.Scale(dst, dst.Rect, src, src.Rect, draw.Src, nil)
+	return dst.Pix
 }
 
 func (c *Compositor) drawCursor(pass *frame, o *output.Output, shown []*surface.Surface) ([]*surface.Surface, error) {
@@ -162,9 +172,34 @@ func (c *Compositor) themePixels(o *output.Output) (*cursorTexture, bool) {
 	return ct, err == nil && ct.pixels != nil
 }
 
+type cursorPixels struct {
+	pix  []byte
+	size image.Point
+}
+
+func (c *Compositor) surfacePixels() (*cursorPixels, bool) {
+	cur, ok := c.seat.Cursor().(seat.SurfaceCursor)
+	if !ok || len(c.cursorOps.ops) != 1 {
+		return nil, false
+	}
+	cp, ok := c.cursorPixels[cur.Surface]
+	if !ok {
+		return nil, false
+	}
+	op := c.cursorOps.ops[0]
+	full := render.FRect{W: float64(cp.size.X), H: float64(cp.size.Y)}
+	if op.surface != cur.Surface || op.transform != render.Normal || op.alpha != 1 || op.src != full || op.dst.Size() != cp.size {
+		return nil, false
+	}
+	return cp, true
+}
+
 func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, origin, hotspot image.Point) error {
 	if ct, ok := c.themePixels(o); ok {
 		return hw.plane.LoadCursor(ct.pixels, ct.size.X*4, ct.size, hotspot)
+	}
+	if cp, ok := c.surfacePixels(); ok {
+		return hw.plane.LoadCursor(cp.pix, cp.size.X*4, cp.size, hotspot)
 	}
 	f, err := hw.plane.BeginCursor()
 	if err != nil {

@@ -115,6 +115,7 @@ type Compositor struct {
 	shell           *shell.Shell
 	textures        map[*surface.Surface]texture
 	staged          []byte
+	cursorPixels    map[*surface.Surface]*cursorPixels
 	stagedRects     []image.Rectangle
 	imported        map[*dmabuf.Buffer]render.Texture
 	captureTargets  map[*dmabuf.Buffer]render.ReadTarget
@@ -246,6 +247,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		textures:       map[*surface.Surface]texture{},
 		imported:       map[*dmabuf.Buffer]render.Texture{},
 		captureTargets: map[*dmabuf.Buffer]render.ReadTarget{},
+		cursorPixels:   map[*surface.Surface]*cursorPixels{},
 		shown:          map[*output.Output][]*surface.Surface{},
 		touches:        map[int32]touchAt{},
 		labels:         map[*output.Output]map[labelKey]*label{},

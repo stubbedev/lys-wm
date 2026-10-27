@@ -205,7 +205,7 @@ func TestARefusingCursorPlaneFallsBackToTheFrame(t *testing.T) {
 	})
 }
 
-func TestThemeCursorsCopyToThePlaneAndClientCursorsRender(t *testing.T) {
+func TestCursorsCopyToThePlaneUnlessTheyAreScaled(t *testing.T) {
 	r := inputOn(t, StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	counts := func() (images, copies uint64) {
@@ -227,9 +227,43 @@ func TestThemeCursorsCopyToThePlaneAndClientCursorsRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.c.Sync()
-	_, before := counts()
 	r.h.Eventually("the client cursor on the plane", showing(77, 47, [3]byte{0xff, 0, 0}))
-	if _, copies := counts(); copies != before {
-		t.Fatalf("a client cursor surface was copied (%d copies, %d before) instead of rendered", copies, before)
+	images, copies := counts()
+	if err := errors.Join(cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(0, 0xff, 0)), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit()); err != nil {
+		t.Fatal(err)
 	}
+	r.c.Sync()
+	r.h.Eventually("the recoloured client cursor", showing(77, 47, [3]byte{0, 0xff, 0}))
+	if after, copied := counts(); after != images+1 || copied != copies+1 {
+		t.Fatalf("a 1:1 shm cursor commit loaded %d images, %d copied; want one copied", after-images, copied-copies)
+	}
+	images, copies = counts()
+	if err := errors.Join(cursor.SetBufferScale(2), cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(0xff, 0, 0)), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit()); err != nil {
+		t.Fatal(err)
+	}
+	r.c.Sync()
+	r.h.Eventually("the scaled client cursor", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return b.Outputs()[0].Cursor().Images() > images
+	})
+	if _, copied := counts(); copied != copies {
+		t.Fatal("a cursor drawn at half its buffer size was copied instead of rendered")
+	}
+}
+
+func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
+	theme := testenv.CursorTheme(t)
+	h := StartWithCursorPlanes(t, plane, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, scaled)
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return errors.Join(c.SetOutputScale(b.Outputs()[0], 180), b.Pointer().MoveTo(b.Outputs()[0], 0.5, 0.5), b.Pointer().Frame())
+	})
+	h.Eventually("the arrow on the plane at scale 1.5", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		cur := b.Outputs()[0].Cursor()
+		return cur.Visible() && cur.Images() > 0
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if cur := b.Outputs()[0].Cursor(); cur.Copies() != cur.Images() {
+			t.Errorf("%d of %d cursor images at scale 1.5 rendered and read back instead of copied", cur.Images()-cur.Copies(), cur.Images())
+		}
+		return nil
+	})
 }

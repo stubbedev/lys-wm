@@ -34,6 +34,10 @@ type SurfaceCursor struct {
 	Hotspot image.Point
 }
 
+func IsCursorSurface(s *surface.Surface) bool {
+	return s.Role() != nil && s.Role().RoleName() == cursorRole
+}
+
 type ShapeCursor struct {
 	Shape string
 }
@@ -252,7 +256,7 @@ func (r pointerRequests) SetCursor(obj *sw.WlPointer, serial uint32, wl *sw.WlSu
 		if err != nil {
 			return err
 		}
-		if sf.Role() == nil || sf.Role().RoleName() != cursorRole {
+		if !IsCursorSurface(sf) {
 			if err := sf.SetRole(cursorSurface{s}); err != nil {
 				return obj.ProtocolError(sw.WlPointerErrorRole, "%v", err)
 			}
