@@ -188,6 +188,7 @@ type Compositor struct {
 	wsManagers      []*wsManager
 	captures        map[*output.Output][]*capture
 	reads           map[*asyncRead]struct{}
+	cursorReads     map[*cursorRead]struct{}
 	offLoopWork     sync.WaitGroup
 	captureSessions []*captureSession
 	cursorSessions  []*cursorSession
@@ -259,6 +260,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		display:        display,
 		pointers:       map[cursorKey]*cursorTexture{},
 		hwCursors:      map[*output.Output]*hwCursor{},
+		cursorReads:    map[*cursorRead]struct{}{},
 		blanked:        map[*output.Output]bool{},
 		captures:       map[*output.Output][]*capture{},
 		reads:          map[*asyncRead]struct{}{},

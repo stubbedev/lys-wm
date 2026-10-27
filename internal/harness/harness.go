@@ -65,12 +65,19 @@ func StartWith(t *testing.T, configure func(*compositor.Config), modes ...backen
 	return start(t, setup{open: softBackend, configure: configure, traced: true}, modes...)
 }
 
+func withCursorPlanes(open func(*loop.Loop) (*headless.Backend, error), size image.Point) func(*loop.Loop) (*headless.Backend, error) {
+	return func(l *loop.Loop) (*headless.Backend, error) {
+		b, err := open(l)
+		if err != nil {
+			return nil, err
+		}
+		return b, b.SetCursorPlanes(size)
+	}
+}
+
 func StartWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
-	return start(t, setup{open: func(l *loop.Loop) (*headless.Backend, error) {
-		b := headless.New(l)
-		return b, b.SetCursorPlanes(size)
-	}, configure: configure, traced: true}, modes...)
+	return start(t, setup{open: withCursorPlanes(softBackend, size), configure: configure, traced: true}, modes...)
 }
 
 func StartUntraced(t *testing.T, modes ...backend.Mode) *Harness {
@@ -78,12 +85,20 @@ func StartUntraced(t *testing.T, modes ...backend.Mode) *Harness {
 	return start(t, setup{open: softBackend, configure: func(*compositor.Config) {}}, modes...)
 }
 
+func glesBackend(l *loop.Loop) (*headless.Backend, error) {
+	return headless.NewGLES(l, gpu.PathsFromEnv(os.Getenv))
+}
+
 func StartGLES(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
 	testenv.GPU(t)
-	return start(t, setup{open: func(l *loop.Loop) (*headless.Backend, error) {
-		return headless.NewGLES(l, gpu.PathsFromEnv(os.Getenv))
-	}, configure: configure, traced: true}, modes...)
+	return start(t, setup{open: glesBackend, configure: configure, traced: true}, modes...)
+}
+
+func StartGLESWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
+	t.Helper()
+	testenv.GPU(t)
+	return start(t, setup{open: withCursorPlanes(glesBackend, size), configure: configure, traced: true}, modes...)
 }
 
 const XTransferTimeout = 2 * time.Second

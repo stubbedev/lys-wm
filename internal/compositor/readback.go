@@ -171,5 +171,11 @@ func (c *Compositor) endReads() error {
 		r.cancel()
 		errs = append(errs, r.end(nil))
 	}
+	for r := range c.cursorReads {
+		errs = append(errs, r.end(false))
+	}
+	for _, hw := range c.hwCursors {
+		errs = append(errs, hw.release())
+	}
 	return errors.Join(errs...)
 }

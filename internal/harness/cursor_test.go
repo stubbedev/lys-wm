@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"strings"
 	"testing"
@@ -263,6 +264,36 @@ func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if cur := b.Outputs()[0].Cursor(); cur.Copies() != cur.Images() {
 			t.Errorf("%d of %d cursor images at scale 1.5 rendered and read back instead of copied", cur.Images()-cur.Copies(), cur.Images())
+		}
+		return nil
+	})
+}
+
+func TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback(t *testing.T) {
+	r := inputOn(t, StartGLESWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	cursor := r.c.Surface()
+	if err := cursor.SetBufferScale(2); err != nil {
+		t.Fatal(err)
+	}
+	colours := [][3]byte{{0xff, 0, 0}, {0, 0xff, 0}, {0, 0, 0xff}}
+	for i := range 6 {
+		want := colours[i%len(colours)]
+		errs := []error{cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(want[2], want[1], want[0])), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit()}
+		if i == 0 {
+			errs = append(errs, r.in.Pointer.SetCursor(r.in.Serial, cursor, 2, 2))
+		}
+		if err := errors.Join(errs...); err != nil {
+			t.Fatal(err)
+		}
+		r.c.Sync()
+		r.h.Eventually(fmt.Sprintf("cursor colour %v on the plane", want), func(b *headless.Backend, c *compositor.Compositor) bool {
+			return b.Outputs()[0].Cursor().Visible() && showing(79, 49, want)(b, c)
+		})
+	}
+	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if cur := b.Outputs()[0].Cursor(); cur.Copies() != cur.Images() {
+			t.Errorf("%d of %d cursor images were read back synchronously", cur.Images()-cur.Copies(), cur.Images())
 		}
 		return nil
 	})

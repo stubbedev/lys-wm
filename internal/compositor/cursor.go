@@ -106,6 +106,17 @@ type hwCursor struct {
 	loaded  cursorImage
 	holds   bool
 	inFrame bool
+	target  render.AsyncReadTarget
+	reading *cursorRead
+}
+
+type cursorRead struct {
+	c       *Compositor
+	hw      *hwCursor
+	o       *output.Output
+	target  render.AsyncReadTarget
+	pending render.PendingRead
+	hotspot image.Point
 }
 
 type cursorImage struct {
@@ -145,7 +156,7 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 		return false, hw.plane.HideCursor()
 	}
 	if !hw.holds || hw.loaded != want {
-		if err := c.loadCursor(hw, o, box.Min, want.hotspot); err != nil {
+		if err := c.loadCursor(hw, o, box, want.hotspot); err != nil {
 			return false, c.dropCursorPlane(o, err)
 		}
 		hw.loaded, hw.holds = want, true
@@ -194,13 +205,17 @@ func (c *Compositor) surfacePixels() (*cursorPixels, bool) {
 	return cp, true
 }
 
-func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, origin, hotspot image.Point) error {
+func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, box image.Rectangle, hotspot image.Point) error {
 	if ct, ok := c.themePixels(o); ok {
 		return hw.plane.LoadCursor(ct.pixels, ct.size.X*4, ct.size, hotspot)
 	}
 	if cp, ok := c.surfacePixels(); ok {
 		return hw.plane.LoadCursor(cp.pix, cp.size.X*4, cp.size, hotspot)
 	}
+	if r, ok := c.asyncReader(); ok {
+		return c.readCursor(r, hw, o, box, hotspot)
+	}
+	origin := box.Min
 	f, err := hw.plane.BeginCursor()
 	if err != nil {
 		return err
@@ -217,11 +232,88 @@ func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, origin, hotspot 
 	return hw.plane.SetCursor(hotspot)
 }
 
+func (c *Compositor) readCursor(r render.AsyncReader, hw *hwCursor, o *output.Output, box image.Rectangle, hotspot image.Point) error {
+	size := box.Size()
+	target := hw.target
+	hw.target = nil
+	if target != nil && target.Size() != size {
+		if err := target.Destroy(); err != nil {
+			return err
+		}
+		target = nil
+	}
+	if target == nil {
+		var err error
+		if target, err = r.NewAsyncTarget(size); err != nil {
+			return err
+		}
+	}
+	read := &cursorRead{c: c, hw: hw, o: o, target: target, hotspot: hotspot}
+	p, err := c.renderer.Begin(target, render.Region{image.Rectangle{Max: size}})
+	if err != nil {
+		return errors.Join(err, target.Destroy())
+	}
+	p.Clear(render.Color{})
+	c.cursorOps.replayFrom(p, box.Min)
+	if err := p.End(); err != nil {
+		return errors.Join(err, target.Destroy())
+	}
+	if read.pending, err = target.ReadAsync(); err != nil {
+		return errors.Join(err, target.Destroy())
+	}
+	hw.reading = read
+	c.cursorReads[read] = struct{}{}
+	c.offLoop(read.pending.Wait, read.waited)
+	return nil
+}
+
+func (r *cursorRead) waited(err error) error {
+	c, hw := r.c, r.hw
+	current := hw.reading == r && c.hwCursors[r.o] == hw
+	if hw.reading == r {
+		hw.reading = nil
+	}
+	if current && err == nil {
+		var pix []byte
+		if pix, err = r.pending.Map(); err == nil {
+			size := r.target.Size()
+			err = hw.plane.LoadCursor(pix, size.X*4, size, r.hotspot)
+		}
+	}
+	keep := current && hw.target == nil
+	err = errors.Join(err, r.end(keep))
+	if keep {
+		hw.target = r.target
+	}
+	if err != nil && current {
+		return c.dropCursorPlane(r.o, err)
+	}
+	return err
+}
+
+func (r *cursorRead) end(keepTarget bool) error {
+	delete(r.c.cursorReads, r)
+	err := r.pending.Release()
+	if keepTarget {
+		return err
+	}
+	return errors.Join(err, r.target.Destroy())
+}
+
+func (hw *hwCursor) release() error {
+	if hw.target == nil {
+		return nil
+	}
+	t := hw.target
+	hw.target = nil
+	return t.Destroy()
+}
+
 func (c *Compositor) dropCursorPlane(o *output.Output, cause error) error {
 	hw := c.hwCursors[o]
 	delete(c.hwCursors, o)
 	c.report(fmt.Errorf("compositor: drawing the cursor in the frame on %s: %w", o.Backend().Name(), cause))
-	return hw.plane.HideCursor()
+	return errors.Join(hw.plane.HideCursor(), hw.release())
 }
 
 func (c *Compositor) cursorMoved() error {

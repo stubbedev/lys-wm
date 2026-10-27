@@ -256,9 +256,13 @@ func (c *Compositor) disable(o *output.Output) error {
 	b := o.Backend()
 	c.outputs = slices.DeleteFunc(c.outputs, func(x *output.Output) bool { return x == o })
 	delete(c.shown, o)
-	delete(c.hwCursors, o)
+	var errs []error
+	if hw, ok := c.hwCursors[o]; ok {
+		errs = append(errs, hw.release())
+		delete(c.hwCursors, o)
+	}
 	delete(c.blanked, o)
-	errs := []error{c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove()}
+	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())
 	delete(c.usable, o)
 	delete(c.scenes, o)
 	delete(c.dropped, o)
