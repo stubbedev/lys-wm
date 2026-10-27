@@ -1540,3 +1540,31 @@ func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
 		t.Fatal("a frame with a newly shown cursor went out without a test commit")
 	}
 }
+
+func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.rec.idle = true
+	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	r.dev.flip(t, 10, 2)
+	r.settle()
+	presents := len(r.rec.presents)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	cp, _ := o.CursorPlane()
+	if err := cp.MoveCursor(image.Pt(40, 30)); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if !o.flipping || o.queued != nil {
+		t.Fatalf("want a cursor-only flip pending at the refresh: flipping %v, queued %v", o.flipping, o.queued != nil)
+	}
+	idle := slices.IndexFunc(r.rec.presents[presents:], func(p backend.Presentation) bool { return p.Idle })
+	if idle < 0 {
+		t.Fatalf("the empty frame's refresh went unreported behind a cursor flip: %+v", r.rec.presents[presents:])
+	}
+}

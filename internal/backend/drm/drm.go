@@ -775,7 +775,7 @@ func (o *Output) emptyFrame() error {
 func (o *Output) paceElapsed() error {
 	o.empties = 0
 	var err error
-	if !o.flipping && o.enabled && !o.off {
+	if o.queued == nil && o.enabled && !o.off {
 		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: modeOf(o.mode).Interval(), Idle: true})
 	}
 	return errors.Join(err, o.clock.Kick(), o.flushPlanes())
