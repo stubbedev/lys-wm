@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/colorrep"
 	"github.com/stubbedev/lys-wm/internal/committiming"
 	"github.com/stubbedev/lys-wm/internal/contenttype"
 	"github.com/stubbedev/lys-wm/internal/ctmcontrol"
@@ -117,7 +118,8 @@ type Compositor struct {
 	staged          []byte
 	cursorPixels    map[*surface.Surface]*cursorPixels
 	stagedRects     []image.Rectangle
-	imported        map[*dmabuf.Buffer]render.Texture
+	imported        map[*dmabuf.Buffer]importedTexture
+	colorrep        *colorrep.Manager
 	captureTargets  map[*dmabuf.Buffer]render.ReadTarget
 	dmabuf          *dmabuf.Manager
 	importer        dmabufRenderer
@@ -245,7 +247,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 	c := &Compositor{
 		renderer:       b.Renderer(),
 		textures:       map[*surface.Surface]texture{},
-		imported:       map[*dmabuf.Buffer]render.Texture{},
+		imported:       map[*dmabuf.Buffer]importedTexture{},
 		captureTargets: map[*dmabuf.Buffer]render.ReadTarget{},
 		cursorPixels:   map[*surface.Surface]*cursorPixels{},
 		shown:          map[*output.Output][]*surface.Surface{},
@@ -302,6 +304,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.ctm, err = ctmcontrol.New(display, c, c.report); err != nil {
+		return err
+	}
+	if c.colorrep, err = colorrep.New(display); err != nil {
 		return err
 	}
 	if c.outputConfig, err = outputmanagement.New(display, c, c.report); err != nil {
@@ -421,8 +426,8 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 
 func (c *Compositor) Close() error {
 	errs := []error{c.endReads(), c.dropDecor()}
-	for b, tex := range c.imported {
-		errs = append(errs, tex.Destroy())
+	for b, cached := range c.imported {
+		errs = append(errs, cached.tex.Destroy())
 		delete(c.imported, b)
 	}
 	for b, t := range c.captureTargets {

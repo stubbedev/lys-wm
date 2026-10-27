@@ -236,6 +236,15 @@ type Update struct {
 	applied []func() error
 }
 
+func (u *Update) Buffer() Buffer {
+	for _, st := range slices.Backward(u.s.unapplied()) {
+		if st.set&fieldBuffer != 0 {
+			return st.buffer
+		}
+	}
+	return u.s.current.buffer
+}
+
 func (u *Update) Gate(ready func() bool) {
 	u.gates = append(u.gates, ready)
 }

@@ -28,6 +28,11 @@ type uploaded struct {
 	format render.Format
 }
 
+type importedTexture struct {
+	tex render.Texture
+	yuv gpu.YUVEncoding
+}
+
 type imported struct {
 	tex    render.Texture
 	buffer *dmabuf.Buffer
@@ -80,20 +85,34 @@ func (c *Compositor) attach(s *surface.Surface) error {
 		}
 		return b.Release()
 	case *dmabuf.Buffer:
-		if t, ok := c.textures[s].(imported); ok && t.buffer == b {
-			return nil
+		d := b.DMABUF()
+		if d.Format.YUV() {
+			d.YUV = c.colorrep.Of(s)
+			if d.YUV.Coefficients == gpu.CoefficientsUnspecified {
+				def := gpu.DefaultYUV(d.Size)
+				d.YUV.Coefficients, d.YUV.Range = def.Coefficients, def.Range
+			}
 		}
-		tex, ok := c.imported[b]
+		cached, ok := c.imported[b]
+		if ok && cached.yuv == d.YUV {
+			if t, shown := c.textures[s].(imported); shown && t.buffer == b {
+				return nil
+			}
+		}
+		if ok && cached.yuv != d.YUV {
+			delete(c.imported, b)
+			if err := c.destroyTexture(cached.tex); err != nil {
+				return err
+			}
+			ok = false
+		}
+		tex := cached.tex
 		if !ok {
 			var err error
-			d := b.DMABUF()
-			if d.Format.YUV() {
-				d.YUV = gpu.DefaultYUV(d.Size)
-			}
 			if tex, err = c.importer.ImportTexture(d); err != nil {
 				return fmt.Errorf("compositor: import the dmabuf of wl_surface@%d: %w", s.Resource().Base().ID(), err)
 			}
-			c.imported[b] = tex
+			c.imported[b] = importedTexture{tex: tex, yuv: d.YUV}
 		}
 		if err := c.dropTexture(s); err != nil {
 			return err
@@ -227,9 +246,9 @@ func (c *Compositor) BufferDestroyed(b *dmabuf.Buffer) error {
 			shown = true
 		}
 	}
-	if tex, ok := c.imported[b]; ok {
+	if cached, ok := c.imported[b]; ok {
 		delete(c.imported, b)
-		errs = append(errs, c.destroyTexture(tex))
+		errs = append(errs, c.destroyTexture(cached.tex))
 	}
 	if t, ok := c.captureTargets[b]; ok {
 		delete(c.captureTargets, b)

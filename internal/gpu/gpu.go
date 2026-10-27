@@ -96,16 +96,30 @@ const (
 	FullRange
 )
 
+type Siting uint8
+
+const (
+	SitingUnspecified Siting = iota
+	SitedAt0
+	SitedAtHalf
+	SitedAt1
+)
+
+type ChromaSiting struct {
+	Horizontal, Vertical Siting
+}
+
 type YUVEncoding struct {
 	Coefficients Coefficients
 	Range        Range
+	Chroma       ChromaSiting
 }
 
 func DefaultYUV(size image.Point) YUVEncoding {
 	if size.Y >= 720 {
-		return YUVEncoding{BT709, LimitedRange}
+		return YUVEncoding{Coefficients: BT709, Range: LimitedRange}
 	}
-	return YUVEncoding{BT601, LimitedRange}
+	return YUVEncoding{Coefficients: BT601, Range: LimitedRange}
 }
 
 type FormatModifier struct {

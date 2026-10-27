@@ -248,6 +248,11 @@
       "path": "protocols/hyprland-ctm-control-v1.xml"
     },
     {
+      "package": "colorrepresentation",
+      "source": "wayland-protocols",
+      "path": "staging/color-representation/color-representation-v1.xml"
+    },
+    {
       "package": "fifo",
       "source": "wayland-protocols",
       "path": "staging/fifo/fifo-v1.xml"

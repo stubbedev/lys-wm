@@ -40,6 +40,10 @@ const (
 	eglITURec2020              = 0x3281
 	eglYUVFullRange            = 0x3282
 	eglYUVNarrowRange          = 0x3283
+	eglChromaHorizontalSiting  = 0x327D
+	eglChromaVerticalSiting    = 0x327E
+	eglChromaSiting0           = 0x3284
+	eglChromaSitingHalf        = 0x3285
 	eglTrue                    = 1
 	eglSyncNativeFence         = 0x3144
 	eglSyncFence               = 0x30F9
@@ -438,7 +442,7 @@ func (d *Display) ImportDMABUF(b DMABUF) (*Image, error) {
 	if withModifier && !d.Has("EGL_EXT_image_dma_buf_import_modifiers") {
 		return nil, fmt.Errorf("%w: EGL_EXT_image_dma_buf_import_modifiers for modifier %v", ErrUnsupported, b.Modifier)
 	}
-	attribs := make([]int32, 0, 7+len(b.Planes)*10+7)
+	attribs := make([]int32, 0, 7+len(b.Planes)*10+11)
 	attribs = append(attribs, eglWidth, int32(b.Size.X), eglHeight, int32(b.Size.Y), eglLinuxDRMFourCC, int32(b.Format)) //nolint:gosec // sizes and fourccs fit EGLint by the dmabuf protocol
 	for i, p := range b.Planes {
 		attribs = append(attribs, planeFD[i], int32(p.FD), planeOffset[i], int32(p.Offset), planePitch[i], int32(p.Stride)) //nolint:gosec // fds, offsets and strides fit EGLint by the dmabuf protocol
@@ -473,6 +477,17 @@ func appendYUVHints(attribs []int32, f fourcc.Format, e YUVEncoding) []int32 {
 		attribs = append(attribs, eglSampleRangeHint, eglYUVNarrowRange)
 	case FullRange:
 		attribs = append(attribs, eglSampleRangeHint, eglYUVFullRange)
+	}
+	for _, s := range [2]struct {
+		attrib int32
+		siting Siting
+	}{{eglChromaHorizontalSiting, e.Chroma.Horizontal}, {eglChromaVerticalSiting, e.Chroma.Vertical}} {
+		switch s.siting {
+		case SitedAt0:
+			attribs = append(attribs, s.attrib, eglChromaSiting0)
+		case SitedAtHalf:
+			attribs = append(attribs, s.attrib, eglChromaSitingHalf)
+		}
 	}
 	return attribs
 }
