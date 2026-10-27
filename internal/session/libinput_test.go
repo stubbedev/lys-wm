@@ -110,3 +110,53 @@ func TestPlainOpenerNamesTheDeviceItOpened(t *testing.T) {
 		t.Fatal("a directory was taken as a device")
 	}
 }
+
+// takeOnceOpener lends a device once until it is released, as logind's
+// TakeDevice does.
+type takeOnceOpener struct {
+	taken map[Device]bool
+}
+
+func (o *takeOnceOpener) TakeDevice(path string) (int, Device, error) {
+	d, err := DeviceOf(path)
+	if err != nil {
+		return -1, Device{}, err
+	}
+	if o.taken[d] {
+		return -1, Device{}, unix.EBUSY
+	}
+	fd, d, err := PlainOpener{}.TakeDevice(path)
+	if err == nil {
+		o.taken[d] = true
+	}
+	return fd, d, err
+}
+
+func (o *takeOnceOpener) ReleaseDevice(d Device) error {
+	delete(o.taken, d)
+	return nil
+}
+
+// A session that turns active without having been inactive resumes
+// nothing: libinput resuming devices it never let go of takes each a
+// second time, which logind refuses, and lys-wm used to exit on that
+// when a greeter's session turned active right after it started.
+func TestLibinputResumesOnlyAfterASuspend(t *testing.T) {
+	kbd := newVirtualKeyboard(t)
+	opener := &takeOnceOpener{taken: map[Device]bool{}}
+	in := libinput(t, opener)
+	if err := in.Add(kbd.node); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.Resume(); err != nil {
+		t.Fatalf("a resume without a suspend: %v", err)
+	}
+	in.Suspend()
+	in.Suspend()
+	if err := in.Resume(); err != nil {
+		t.Fatalf("a resume after a suspend: %v", err)
+	}
+	if d, _ := DeviceOf(kbd.node); !opener.taken[d] {
+		t.Error("the keyboard was not taken back after the resume")
+	}
+}

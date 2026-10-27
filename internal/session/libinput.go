@@ -191,6 +191,10 @@ type Libinput struct {
 	fds     map[int32]Device
 	openErr error
 	out     []backend.Event
+	// suspended: the devices were let go for an inactive session, and a
+	// resume takes them again. A resume without one would take each
+	// device a second time, which logind refuses.
+	suspended bool
 }
 
 type libinputInterface struct {
@@ -413,13 +417,24 @@ func (in *Libinput) Remove(path string) error {
 }
 
 func (in *Libinput) Suspend() {
+	if in.suspended {
+		return
+	}
 	in.fn.suspend(in.li)
+	in.suspended = true
 }
 
+// Resume takes the devices back after a Suspend; without one there is
+// nothing to take back, as when a session turns active right after
+// lys-wm started on it.
 func (in *Libinput) Resume() error {
+	if !in.suspended {
+		return nil
+	}
 	if in.fn.resume(in.li) != 0 {
 		return errors.New("session: libinput_resume failed")
 	}
+	in.suspended = false
 	return in.drain()
 }
 
