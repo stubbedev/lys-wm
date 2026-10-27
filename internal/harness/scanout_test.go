@@ -29,6 +29,7 @@ var primaryPlane = gpu.ScanoutTarget{Device: 0xe201, Formats: []gpu.FormatModifi
 	{Format: fourcc.ARGB8888, Modifier: fourcc.Linear},
 	{Format: fourcc.XRGB8888, Modifier: 7},
 	{Format: fourcc.XRGB8888, Modifier: fourcc.Invalid},
+	{Format: fourcc.XRGB2101010, Modifier: fourcc.Linear},
 }}
 
 type scanoutScene struct {
@@ -108,6 +109,32 @@ func TestAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T) {
 	s.show(t, "a fullscreen dmabuf over the wallpaper and the bar", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff)))
 }
 
+func TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt(t *testing.T) {
+	s := fullscreenScanout(t, func(*compositor.Config) {})
+	before := scanouts(s.h)
+	b := s.c.DMABUFIn(fourcc.ARGB8888, image.Pt(160, 100), testclient.Fill(0, 0xff, 0))
+	if err := errors.Join(s.w.Surface.Attach(b.WL, 0, 0), s.w.Surface.DamageBuffer(0, 0, 160, 100), s.w.Surface.Commit(), s.c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, s.h)
+	if n := scanouts(s.h); n != before {
+		t.Fatalf("an ARGB dmabuf with no opaque region scanned out %d frames", n-before)
+	}
+	region, err := s.c.Compositor.CreateRegion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(region.Add(0, 0, 160, 100), s.w.Surface.SetOpaqueRegion(region), region.Destroy()); err != nil {
+		t.Fatal(err)
+	}
+	s.show(t, "the ARGB dmabuf once its opaque region covers it", b)
+}
+
+func TestATenBitDMABUFScansOutUnconverted(t *testing.T) {
+	s := fullscreenScanout(t, func(*compositor.Config) {})
+	s.show(t, "an XR30 dmabuf", s.c.DMABUFIn(fourcc.XRGB2101010, image.Pt(160, 100), testclient.Fill(0xff, 0, 0)))
+}
+
 func TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease(t *testing.T) {
 	s := fullscreenScanout(t, func(*compositor.Config) {})
 	gone := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff))
@@ -134,7 +161,7 @@ func TestAFullscreenSurfaceIsOfferedThePlaneFormats(t *testing.T) {
 		got = c.SurfaceScanout(game)
 		return nil
 	})
-	want := []gpu.FormatModifier{primaryPlane.Formats[0], primaryPlane.Formats[2], primaryPlane.Formats[3]}
+	want := []gpu.FormatModifier{primaryPlane.Formats[0], primaryPlane.Formats[2], primaryPlane.Formats[3], primaryPlane.Formats[4]}
 	if game == nil || got.Device != primaryPlane.Device || !slices.Equal(got.Formats, want) {
 		t.Fatalf("a fullscreen surface is offered %+v, want device %#x and the opaque formats %+v", got, primaryPlane.Device, want)
 	}

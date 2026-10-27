@@ -38,7 +38,7 @@ func (t uploaded) opaque() bool { return t.format == render.XRGB8888 }
 
 func (t imported) texture() render.Texture { return t.tex }
 
-func (t imported) opaque() bool { return slices.Contains(opaqueFormats, t.buffer.DMABUF().Format) }
+func (t imported) opaque() bool { return !t.buffer.DMABUF().Format.HasAlpha() }
 
 type dmabufRenderer interface {
 	dmabuf.Importer

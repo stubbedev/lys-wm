@@ -21,7 +21,7 @@ type scannedOut struct {
 	then     []func() error
 }
 
-var opaqueFormats = []fourcc.Format{fourcc.XRGB8888, fourcc.XBGR8888}
+var scanoutFormats = []fourcc.Format{fourcc.XRGB8888, fourcc.XBGR8888, fourcc.XRGB2101010, fourcc.XBGR2101010}
 
 type filling struct {
 	surface *surface.Surface
@@ -43,7 +43,8 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	}
 	b := t.buffer
 	d := b.DMABUF()
-	if d.Size != bounds.Size() || op.src != (render.FRect{W: float64(d.Size.X), H: float64(d.Size.Y)}) || !slices.Contains(opaqueFormats, d.Format) {
+	d.Format = d.Format.Opaque()
+	if d.Size != bounds.Size() || op.src != (render.FRect{W: float64(d.Size.X), H: float64(d.Size.Y)}) || !op.opaque || !slices.Contains(scanoutFormats, d.Format) {
 		return false, nil
 	}
 	shown, err := out.Scanout(d, func() error { return c.leftScreen(b) }, c.tears(op.surface))
@@ -96,7 +97,7 @@ func (c *Compositor) SurfaceScanout(s *surface.Surface) gpu.ScanoutTarget {
 	for _, o := range c.outputs {
 		if f, ok := c.filled[o]; ok && f.surface == s {
 			t := f.out.ScanoutFormats()
-			t.Formats = slices.DeleteFunc(slices.Clone(t.Formats), func(f gpu.FormatModifier) bool { return !slices.Contains(opaqueFormats, f.Format) })
+			t.Formats = slices.DeleteFunc(slices.Clone(t.Formats), func(f gpu.FormatModifier) bool { return !slices.Contains(scanoutFormats, f.Format) })
 			return t
 		}
 	}

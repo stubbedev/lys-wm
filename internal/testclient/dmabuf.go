@@ -122,6 +122,7 @@ func (m *mapping) unmap() error {
 }
 
 type memory struct {
+	format   fourcc.Format
 	fd       int
 	stride   int
 	modifier fourcc.Modifier
@@ -160,7 +161,7 @@ func udmabuf(size image.Point, modifier fourcc.Modifier) (m memory, err error) {
 		return memory{}, errors.Join(err, unix.Close(fd))
 	}
 	return memory{
-		fd: fd, stride: stride, modifier: modifier, mapped: mapped, pixels: mapped.pixels,
+		format: dmabufFormat, fd: fd, stride: stride, modifier: modifier, mapped: mapped, pixels: mapped.pixels,
 		close: func() error { return errors.Join(mapped.unmap(), unix.Close(fd)) },
 	}, nil
 }
@@ -213,15 +214,18 @@ func readBack(r *gles.Renderer, b gpu.DMABUF) (pix []byte, err error) {
 	return pix, target.Read(pix, b.Size.X*4)
 }
 
-func (c *Client) gbmMemory(fb feedback.Feedback, size image.Point, modifiers []fourcc.Modifier, usage gpu.Usage) memory {
+func (c *Client) gbmMemory(fb feedback.Feedback, format fourcc.Format, size image.Point, modifiers []fourcc.Modifier, usage gpu.Usage) memory {
 	c.t.Helper()
 	s := c.gpuStack(fb)
-	b, err := s.GBM.Allocate(size, dmabufFormat, modifiers, usage)
+	b, err := s.GBM.Allocate(size, format, modifiers, usage)
+	if err != nil && format != dmabufFormat {
+		c.t.Skipf("testclient: %v", err)
+	}
 	c.must(err)
 	if len(b.Planes) != 1 {
-		c.must(errors.Join(fmt.Errorf("testclient: a %v buffer with modifier %v has %d planes", dmabufFormat, b.Modifier, len(b.Planes)), b.Close()))
+		c.must(errors.Join(fmt.Errorf("testclient: a %v buffer with modifier %v has %d planes", format, b.Modifier, len(b.Planes)), b.Close()))
 	}
-	m := memory{fd: b.Planes[0].FD, stride: int(b.Planes[0].Stride), modifier: b.Modifier, close: b.Close}
+	m := memory{format: format, fd: b.Planes[0].FD, stride: int(b.Planes[0].Stride), modifier: b.Modifier, close: b.Close}
 	m.pixels = func() ([]byte, error) { return readBack(s.Renderer, b.DMABUF) }
 	if b.Modifier != fourcc.Linear {
 		return m
@@ -299,25 +303,36 @@ func (c *Client) DMABUFOutside(size image.Point, excluded []fourcc.Modifier) *DM
 	if len(mods) == 0 {
 		c.t.Skipf("testclient: the compositor imports %v only with the modifiers %v", dmabufFormat, excluded)
 	}
-	return c.share(g, c.gbmMemory(*g.feedback, size, mods, 0), size)
+	return c.share(g, c.gbmMemory(*g.feedback, dmabufFormat, size, mods, 0), size)
 }
 
 func (c *Client) DMABUF(size image.Point, paint Painter) *DMABUF {
 	c.t.Helper()
+	return c.DMABUFIn(dmabufFormat, size, paint)
+}
+
+func (c *Client) DMABUFIn(format fourcc.Format, size image.Point, paint Painter) *DMABUF {
+	c.t.Helper()
 	g := c.bindDMABUF()
 	var mem memory
-	if g.feedback == nil {
-		mem = c.legacyMemory(g.legacy, size)
-	} else {
-		linear := gpu.FormatModifier{Format: dmabufFormat, Modifier: fourcc.Linear}
+	switch {
+	case g.feedback != nil:
+		linear := gpu.FormatModifier{Format: format, Modifier: fourcc.Linear}
 		if !g.feedback.Imports(linear) {
+			if format != dmabufFormat {
+				c.t.Skipf("testclient: the compositor's main device takes no %v dmabufs", linear)
+			}
 			c.t.Fatalf("testclient: the compositor's main device takes no %v dmabufs for the client to paint", linear)
 		}
-		mem = c.gbmMemory(*g.feedback, size, []fourcc.Modifier{fourcc.Linear}, 0)
+		mem = c.gbmMemory(*g.feedback, format, size, []fourcc.Modifier{fourcc.Linear}, 0)
+	case format == dmabufFormat:
+		mem = c.legacyMemory(g.legacy, size)
+	default:
+		c.t.Skipf("testclient: %v dmabufs need dmabuf feedback", format)
 	}
 	b := c.share(g, mem, size)
 	if mem.mapped == nil {
-		c.t.Fatalf("testclient: GBM allocated a %v buffer with modifier %v when asked for linear", dmabufFormat, mem.modifier)
+		c.t.Fatalf("testclient: GBM allocated a %v buffer with modifier %v when asked for linear", format, mem.modifier)
 	}
 	c.must(mem.mapped.paint(paint))
 	return b
@@ -332,7 +347,7 @@ func (c *Client) RenderTarget(size image.Point, modifiers []fourcc.Modifier) *DM
 	if len(modifiers) == 0 {
 		c.t.Fatalf("testclient: no modifiers to render a %v target with", dmabufFormat)
 	}
-	return c.share(g, c.gbmMemory(*g.feedback, size, modifiers, gpu.UseRendering), size)
+	return c.share(g, c.gbmMemory(*g.feedback, dmabufFormat, size, modifiers, gpu.UseRendering), size)
 }
 
 func (c *Client) share(g dmabufGlobal, mem memory, size image.Point) *DMABUF {
@@ -347,7 +362,7 @@ func (c *Client) share(g dmabufGlobal, mem memory, size image.Point) *DMABUF {
 	hi, lo := wire.Halves(uint64(mem.modifier))
 	c.must(params.Add(mem.fd, 0, 0, uint32(mem.stride), hi, lo)) //nolint:gosec // test buffers are small
 	b := &DMABUF{c: c, pixels: mem.pixels}
-	b.WL, err = params.CreateImmed(b, int32(size.X), int32(size.Y), uint32(dmabufFormat), 0) //nolint:gosec // test buffers are small
+	b.WL, err = params.CreateImmed(b, int32(size.X), int32(size.Y), uint32(mem.format), 0) //nolint:gosec // test buffers are small
 	c.must(err)
 	c.must(errors.Join(params.Destroy(), g.linux.Destroy()))
 	return b
