@@ -1,6 +1,7 @@
 package xcursor
 
 import (
+	"bytes"
 	"encoding/binary"
 	"image"
 	"os"
@@ -48,29 +49,55 @@ func encode(entries ...entry) []byte {
 	return append(out, body...)
 }
 
-func TestParseReadsEveryImage(t *testing.T) {
+type countingReader struct {
+	r    *bytes.Reader
+	read int
+}
+
+func (c *countingReader) ReadAt(p []byte, off int64) (int, error) {
+	n, err := c.r.ReadAt(p, off)
+	c.read += n
+	return n, err
+}
+
+func nearest(data []byte, want int) (Image, int, error) {
+	r := &countingReader{r: bytes.NewReader(data)}
+	img, err := Nearest(r, int64(len(data)), want)
+	return img, r.read, err
+}
+
+func TestNearestReadsOnlyTheImageItReturns(t *testing.T) {
 	data := encode(
-		entry{nominal: 24, size: image.Pt(2, 3), hot: image.Pt(1, 2), fill: 7},
+		entry{nominal: 24, size: image.Pt(24, 24), hot: image.Pt(1, 2), fill: 7},
 		entry{nominal: 1, notAnImage: true},
-		entry{nominal: 48, size: image.Pt(4, 4), hot: image.Pt(4, 4), fill: 9},
+		entry{nominal: 48, size: image.Pt(48, 48), hot: image.Pt(4, 4), fill: 9},
+		entry{nominal: 96, size: image.Pt(96, 96), fill: 5},
 	)
-	imgs, err := Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(imgs) != 2 {
-		t.Fatalf("%d images, want 2 with the comment skipped", len(imgs))
-	}
-	first := imgs[0]
-	if first.Nominal != 24 || first.Size != image.Pt(2, 3) || first.Hotspot != image.Pt(1, 2) || len(first.Pixels) != 24 || first.Pixels[23] != 7 {
-		t.Fatalf("first image %+v", first)
-	}
-	if imgs[1].Nominal != 48 || imgs[1].Hotspot != image.Pt(4, 4) {
-		t.Fatalf("second image %+v", imgs[1])
+	for _, c := range []struct {
+		want, nominal int
+		side          int
+		hot           image.Point
+		fill          byte
+	}{
+		{20, 24, 24, image.Pt(1, 2), 7},
+		{40, 48, 48, image.Pt(4, 4), 9},
+		{200, 96, 96, image.Point{}, 5},
+		{36, 24, 24, image.Pt(1, 2), 7},
+	} {
+		img, read, err := nearest(data, c.want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if img.Nominal != c.nominal || img.Size != image.Pt(c.side, c.side) || img.Hotspot != c.hot || img.Pixels[len(img.Pixels)-1] != c.fill {
+			t.Errorf("nearest to %d: %+v, want the %d px image", c.want, img, c.nominal)
+		}
+		if pixels := c.side * c.side * 4; read > pixels+headerSize+4*12+imageSize {
+			t.Errorf("nearest to %d read %d of %d bytes for a %d byte image", c.want, read, len(data), pixels)
+		}
 	}
 }
 
-func TestParseRejectsMalformedFiles(t *testing.T) {
+func TestNearestRejectsMalformedFiles(t *testing.T) {
 	good := encode(entry{nominal: 24, size: image.Pt(2, 2), fill: 1})
 	cases := map[string][]byte{
 		"empty":            nil,
@@ -81,12 +108,12 @@ func TestParseRejectsMalformedFiles(t *testing.T) {
 		"bad image header": encode(entry{nominal: 24, size: image.Pt(1, 1), headerLength: 40}),
 	}
 	for n := 1; n < len(good); n++ {
-		if _, err := Parse(good[:n]); err == nil {
+		if _, _, err := nearest(good[:n], 24); err == nil {
 			t.Fatalf("a file cut to %d of %d bytes parsed", n, len(good))
 		}
 	}
 	for name, data := range cases {
-		if _, err := Parse(data); err == nil {
+		if _, _, err := nearest(data, 24); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
 	}

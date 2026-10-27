@@ -4,11 +4,11 @@ package xcursor
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,56 +30,69 @@ type Image struct {
 	Pixels  []byte
 }
 
-func Parse(data []byte) ([]Image, error) {
+func Nearest(r io.ReaderAt, size int64, want int) (Image, error) {
 	le := binary.LittleEndian
-	if len(data) < headerSize || string(data[:4]) != magic {
-		return nil, errors.New("xcursor: not an Xcursor file")
+	var head [headerSize]byte
+	if size < headerSize {
+		return Image{}, errors.New("xcursor: not an Xcursor file")
 	}
-	header, ntoc := le.Uint32(data[4:]), le.Uint32(data[12:])
-	if uint64(header)+uint64(ntoc)*12 > uint64(len(data)) {
-		return nil, fmt.Errorf("xcursor: table of contents with %d entries does not fit %d bytes", ntoc, len(data))
+	if _, err := r.ReadAt(head[:], 0); err != nil || string(head[:4]) != magic {
+		return Image{}, errors.New("xcursor: not an Xcursor file")
 	}
-	var images []Image
+	header, ntoc := le.Uint32(head[4:]), le.Uint32(head[12:])
+	if int64(header)+int64(ntoc)*12 > size {
+		return Image{}, fmt.Errorf("xcursor: table of contents with %d entries does not fit %d bytes", ntoc, size)
+	}
+	toc := make([]byte, int(ntoc)*12)
+	if _, err := r.ReadAt(toc, int64(header)); err != nil {
+		return Image{}, fmt.Errorf("xcursor: read the table of contents: %w", err)
+	}
+	pos, nominal, found := uint32(0), 0, false
 	for i := range int(ntoc) {
-		entry := data[int(header)+i*12:]
+		entry := toc[i*12:]
 		if le.Uint32(entry) != imageType {
 			continue
 		}
-		img, err := parseImage(data, le.Uint32(entry[8:]))
-		if err != nil {
-			return nil, err
+		n := int(le.Uint32(entry[4:]))
+		if !found || dist(n, want) < dist(nominal, want) {
+			pos, nominal, found = le.Uint32(entry[8:]), n, true
 		}
-		images = append(images, img)
 	}
-	if len(images) == 0 {
-		return nil, errors.New("xcursor: no images")
+	if !found {
+		return Image{}, errors.New("xcursor: no images")
 	}
-	return images, nil
+	return readImage(r, size, pos)
 }
 
-func parseImage(data []byte, pos uint32) (Image, error) {
+func readImage(r io.ReaderAt, size int64, pos uint32) (Image, error) {
 	le := binary.LittleEndian
-	if uint64(pos)+imageSize > uint64(len(data)) {
-		return Image{}, fmt.Errorf("xcursor: image header at %d runs past %d bytes", pos, len(data))
+	if int64(pos)+imageSize > size {
+		return Image{}, fmt.Errorf("xcursor: image header at %d runs past %d bytes", pos, size)
 	}
-	h := data[pos:]
-	if le.Uint32(h) != imageSize || le.Uint32(h[4:]) != imageType {
+	var h [imageSize]byte
+	if _, err := r.ReadAt(h[:], int64(pos)); err != nil {
+		return Image{}, fmt.Errorf("xcursor: read the image header at %d: %w", pos, err)
+	}
+	if le.Uint32(h[:]) != imageSize || le.Uint32(h[4:]) != imageType {
 		return Image{}, fmt.Errorf("xcursor: malformed image header at %d", pos)
 	}
 	nominal, w, ht, xhot, yhot := le.Uint32(h[8:]), le.Uint32(h[16:]), le.Uint32(h[20:]), le.Uint32(h[24:]), le.Uint32(h[28:])
 	if w == 0 || ht == 0 || w > maxSide || ht > maxSide || xhot > w || yhot > ht || nominal > maxSide {
 		return Image{}, fmt.Errorf("xcursor: image %dx%d with hotspot %d,%d at %d is invalid", w, ht, xhot, yhot, pos)
 	}
-	start := int(pos) + imageSize
-	end := start + int(w)*int(ht)*4
-	if end > len(data) {
-		return Image{}, fmt.Errorf("xcursor: %dx%d pixels at %d run past %d bytes", w, ht, pos, len(data))
+	start := int64(pos) + imageSize
+	pixels := make([]byte, int(w)*int(ht)*4)
+	if start+int64(len(pixels)) > size {
+		return Image{}, fmt.Errorf("xcursor: %dx%d pixels at %d run past %d bytes", w, ht, pos, size)
+	}
+	if _, err := r.ReadAt(pixels, start); err != nil {
+		return Image{}, fmt.Errorf("xcursor: read %dx%d pixels at %d: %w", w, ht, pos, err)
 	}
 	return Image{
 		Size:    image.Pt(int(w), int(ht)),
 		Hotspot: image.Pt(int(xhot), int(yhot)),
 		Nominal: int(nominal),
-		Pixels:  bytes.Clone(data[start:end]),
+		Pixels:  pixels,
 	}, nil
 }
 
@@ -106,13 +119,12 @@ func SearchPath(getenv func(string) string) []string {
 }
 
 type Theme struct {
-	name  string
-	dirs  []string
-	cache map[string][]Image
+	name string
+	dirs []string
 }
 
 func Open(name string, searchPath []string) (*Theme, error) {
-	t := &Theme{name: name, cache: map[string][]Image{}}
+	t := &Theme{name: name}
 	if err := t.resolve(name, searchPath, map[string]bool{}); err != nil {
 		return nil, err
 	}
@@ -173,46 +185,44 @@ func readInherits(path string) ([]string, error) {
 	return nil, nil
 }
 
-func (t *Theme) images(name string) ([]Image, error) {
-	if imgs, ok := t.cache[name]; ok {
-		return imgs, nil
+func (t *Theme) Load(size int, names ...string) (Image, error) {
+	for _, name := range names {
+		img, ok, err := t.nearest(name, size)
+		if err != nil {
+			return Image{}, err
+		}
+		if ok {
+			return img, nil
+		}
 	}
+	return Image{}, fmt.Errorf("xcursor: theme %q has none of %v", t.name, names)
+}
+
+func (t *Theme) nearest(name string, size int) (Image, bool, error) {
 	for _, dir := range t.dirs {
-		data, err := os.ReadFile(filepath.Join(dir, name)) //nolint:gosec // theme files come from the user's XCURSOR_PATH
+		f, err := os.Open(filepath.Join(dir, name)) //nolint:gosec // theme files come from the user's XCURSOR_PATH
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("xcursor: read %s from theme %q: %w", name, t.name, err)
+			return Image{}, false, fmt.Errorf("xcursor: open %s from theme %q: %w", name, t.name, err)
 		}
-		imgs, err := Parse(data)
+		img, err := nearestIn(f, size)
 		if err != nil {
-			return nil, fmt.Errorf("xcursor: %s in theme %q: %w", name, t.name, err)
+			return Image{}, false, fmt.Errorf("xcursor: %s in theme %q: %w", name, t.name, err)
 		}
-		t.cache[name] = imgs
-		return imgs, nil
+		return img, true, nil
 	}
-	return nil, nil
+	return Image{}, false, nil
 }
 
-func (t *Theme) Load(size int, names ...string) (Image, error) {
-	for _, name := range names {
-		imgs, err := t.images(name)
-		if err != nil {
-			return Image{}, err
-		}
-		if len(imgs) == 0 {
-			continue
-		}
-		best := imgs[0]
-		for _, img := range imgs[1:] {
-			if dist(img.Nominal, size) < dist(best.Nominal, size) {
-				best = img
-			}
-		}
-		return best, nil
+func nearestIn(f *os.File, size int) (img Image, err error) {
+	defer func() { err = errors.Join(err, f.Close()) }()
+	info, err := f.Stat()
+	if err != nil {
+		return Image{}, err
 	}
-	return Image{}, fmt.Errorf("xcursor: theme %q has none of %v", t.name, names)
+	return Nearest(f, info.Size(), size)
 }
 
 func dist(a, b int) int {
