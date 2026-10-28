@@ -47,7 +47,7 @@ type native struct {
 	cards   []*card
 	report  func(error)
 	lid     *os.File
-	power   func() error
+	power   func()
 }
 
 type nativeOptions struct {
@@ -160,15 +160,14 @@ func (n *native) lidPolicy() compositor.LidPolicy {
 	}
 }
 
-func (n *native) onPower(changed func() error) {
+func (n *native) onPower(changed func()) {
 	n.power = changed
 }
 
-func (n *native) powerChanged() error {
-	if n.power == nil {
-		return nil
+func (n *native) powerChanged() {
+	if n.power != nil {
+		n.power()
 	}
-	return n.power()
 }
 
 func (n *native) primary() *card {
@@ -339,9 +338,12 @@ func (n *native) ActiveChanged(active bool) error {
 func (n *native) udev(ev session.UdevEvent) error {
 	switch {
 	case ev.Action == session.Overflow:
-		return errors.Join(n.addInputs(), n.syncCards(), n.powerChanged())
+		err := errors.Join(n.addInputs(), n.syncCards())
+		n.powerChanged()
+		return err
 	case ev.Subsystem == session.PowerSupply:
-		return n.powerChanged()
+		n.powerChanged()
+		return nil
 	case ev.Subsystem == session.Input && ev.Action == session.Add:
 		n.addInput(ev.Devnode)
 		return nil

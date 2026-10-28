@@ -285,7 +285,9 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 			return nil
 		}
 		c.lidClosed = e.On
-		return errors.Join(c.applyOutputRules(), c.applyLidPolicy())
+		err := c.applyOutputRules()
+		c.applyLidPolicy()
+		return err
 	}
 	return nil
 }

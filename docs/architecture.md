@@ -450,6 +450,9 @@ A sleep is pending from the moment logind accepts lys-wm's Suspend, or
 announces `PrepareForSleep(true)`, until `PrepareForSleep(false)`; the policy
 does not ask again in between, so the AC and battery uevents of one unplug
 suspend once (#205). A Suspend logind refuses is reported, never fatal.
+A power supply that disappears while it is read, as USB-C supplies do on
+plug and unplug, is skipped; any other read error is reported and leaves the
+power state unknown, so the policy does not suspend (#211).
 
 Licences decide how they may be used:
 

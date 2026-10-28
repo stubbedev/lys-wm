@@ -1,8 +1,12 @@
 package session
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -43,5 +47,38 @@ func TestOnBattery(t *testing.T) {
 				t.Fatalf("OnBattery = %v, %v; want %v", got, err, c.want)
 			}
 		})
+	}
+}
+
+type vanishing struct {
+	fs.FS
+	gone string
+}
+
+func (v vanishing) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(v.FS, name)
+	if err != nil {
+		return nil, err
+	}
+	return entries, os.RemoveAll(v.gone)
+}
+
+func TestASupplyThatVanishesWhileItIsReadIsSkipped(t *testing.T) {
+	roots := supplies(t, map[string][2]string{"BAT0": {"Battery", ""}, "AC": {"Mains", "0"}, "ucsi-source-psy-1": {"USB", "1"}})
+	sys := vanishing{FS: os.DirFS(roots.Sys), gone: filepath.Join(roots.Sys, "class", "power_supply", "ucsi-source-psy-1")}
+	got, err := onBattery(sys)
+	if err != nil || !got {
+		t.Fatalf("onBattery = %v, %v; want on battery once the plugged USB-C charger is gone", got, err)
+	}
+}
+
+func TestAPowerSupplyReadErrorIsReturned(t *testing.T) {
+	roots := supplies(t, map[string][2]string{"AC": {"Mains", ""}})
+	if err := os.Mkdir(filepath.Join(roots.Sys, "class", "power_supply", "AC", "online"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := OnBattery(roots)
+	if !errors.Is(err, syscall.EISDIR) || !strings.Contains(err.Error(), roots.Sys) || !strings.Contains(err.Error(), "AC/online") {
+		t.Fatalf("OnBattery error %v, want EISDIR naming %s and AC/online", err, roots.Sys)
 	}
 }

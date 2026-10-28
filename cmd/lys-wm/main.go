@@ -132,7 +132,7 @@ type opened struct {
 	switchVT       func(vt uint32) error
 	configureInput func(session.InputConfig) error
 	lid            compositor.LidPolicy
-	onPower        func(changed func() error)
+	onPower        func(changed func())
 }
 
 func hostInput(session.InputConfig) error { return nil }

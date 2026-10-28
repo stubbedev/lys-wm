@@ -54,10 +54,10 @@ func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
 	lid(true)
 	expect("closing the lid undocked on AC", 1)
 	battery = true
-	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.PowerChanged() })
+	powerChanged(h)
 	expect("unplugging AC with the lid closed", 2)
 	lid(false)
-	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.PowerChanged() })
+	powerChanged(h)
 	expect("a power change with the lid open", 2)
 }
 
@@ -68,7 +68,9 @@ func TestWithoutALidPolicyTheLidNeverSuspends(t *testing.T) {
 		return err
 	})
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
-		return errors.Join(b.Switches().Toggle(backend.SwitchLid, true), c.PowerChanged())
+		err := b.Switches().Toggle(backend.SwitchLid, true)
+		c.PowerChanged()
+		return err
 	})
 }
 
@@ -92,7 +94,7 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 		}
 		return b.Switches().Toggle(backend.SwitchLid, true)
 	})
-	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.PowerChanged() })
+	powerChanged(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
 		if suspends != 2 {
 			t.Errorf("%d suspends, want one for the lid closing and one for the power change", suspends)
@@ -100,6 +102,46 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 		got := r.take()
 		if len(got) != 2 || !errors.Is(got[0], refusal) || !errors.Is(got[1], refusal) {
 			t.Errorf("reports %v, want the refusal twice", got)
+		}
+		return nil
+	})
+}
+
+func powerChanged(h *Harness) {
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		c.PowerChanged()
+		return nil
+	})
+}
+
+func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
+	var r reports
+	failure := errors.New("session: read the power supplies under /sys: read class/power_supply/AC/online: no such device")
+	suspends := 0
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Report = r.report
+		c.Hooks.Lid = compositor.LidPolicy{
+			Suspend: func() error {
+				suspends++
+				return nil
+			},
+			OnBattery: func() (bool, error) { return false, failure },
+		}
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if _, err := b.AddNamedOutput("eDP-1", small); err != nil {
+			return err
+		}
+		return b.Switches().Toggle(backend.SwitchLid, true)
+	})
+	powerChanged(h)
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		if suspends != 0 {
+			t.Errorf("%d suspends with the power state unknown, want none", suspends)
+		}
+		got := r.take()
+		if len(got) != 2 || !errors.Is(got[0], failure) || !errors.Is(got[1], failure) {
+			t.Errorf("reports %v, want the power read failure for the lid closing and for the power change", got)
 		}
 		return nil
 	})

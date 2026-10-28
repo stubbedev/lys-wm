@@ -8,26 +8,26 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 )
 
-func (c *Compositor) PowerChanged() error {
-	return c.applyLidPolicy()
+func (c *Compositor) PowerChanged() {
+	c.applyLidPolicy()
 }
 
-func (c *Compositor) applyLidPolicy() error {
+func (c *Compositor) applyLidPolicy() {
 	lid := c.hooks.Lid
 	if lid.Suspend == nil || !c.lidClosed || c.docked() {
-		return nil
+		return
 	}
 	battery, err := lid.OnBattery()
 	if err != nil {
-		return fmt.Errorf("compositor: read the power supply for the lid policy: %w", err)
+		c.report(fmt.Errorf("compositor: the lid policy does not suspend, the power state is unknown: %w", err))
+		return
 	}
 	if !battery {
-		return nil
+		return
 	}
 	if err := lid.Suspend(); err != nil {
 		c.report(fmt.Errorf("compositor: the lid policy could not suspend: %w", err))
 	}
-	return nil
 }
 
 func (c *Compositor) docked() bool {
