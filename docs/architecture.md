@@ -453,6 +453,10 @@ suspend once (#205). A Suspend logind refuses is reported, never fatal.
 A power supply that disappears while it is read, as USB-C supplies do on
 plug and unplug, is skipped; any other read error is reported and leaves the
 power state unknown, so the policy does not suspend (#211).
+After a wake the policy runs again once logind's default lid holdoff (30 s)
+has passed, so a laptop woken with the lid still closed, undocked and on
+battery sleeps again, while a lid opened to wake it, or a dock that comes up,
+is seen first; a suspend that fails at once cannot spin (#212).
 
 Licences decide how they may be used:
 

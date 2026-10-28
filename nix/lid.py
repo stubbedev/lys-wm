@@ -1,7 +1,9 @@
 import datetime as dt
 import json
+import time
 
 SETTLE = dt.timedelta(seconds=5)
+HOLDOFF = dt.timedelta(seconds=30)
 LOGIN1 = "org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager"
 SUSPENDS = f"journalctl -b -q -o cat -t {suspend_tag} | wc -l"
 
@@ -48,6 +50,22 @@ def suspends_once(why, change):
     assert after == before + 1, f"{why}: suspended {after - before} times, want once"
 
 
+def suspends_again_after_the_holdoff():
+    before = suspends()
+    start = time.monotonic()
+    machine.wait_until_succeeds(f"test $({SUSPENDS}) -gt {before}", timeout=int(3 * HOLDOFF.total_seconds()))
+    waited = time.monotonic() - start
+    assert waited >= (HOLDOFF - 2 * SETTLE).total_seconds(), f"suspended again {waited:.1f} s after waking, before the holdoff"
+
+
+def stays_awake_through_the_holdoff(why, change):
+    before = suspends()
+    change()
+    machine.sleep(duration=HOLDOFF + SETTLE)
+    after = suspends()
+    assert after == before, f"{why}: suspended {after - before} times"
+
+
 machine.wait_until_succeeds(f"test -p {lid_fifo}", timeout=30)
 inhibitors = json.loads(machine.succeed(f"busctl --json=short call {LOGIN1} ListInhibitors"))["data"][0]
 assert any(what == "handle-lid-switch" and who == "lys-wm" and mode == "block" for what, who, _, mode, _, _ in inhibitors), f"lys-wm holds no blocking handle-lid-switch inhibitor: {inhibitors}"
@@ -62,4 +80,6 @@ stays_awake("plugging in AC with the lid closed, undocked", lambda: set_ac("on")
 stays_awake("opening the lid undocked on AC", lambda: set_lid("open"))
 stays_awake("closing the lid undocked on AC", lambda: set_lid("closed"))
 suspends_once("unplugging AC with the lid closed, undocked", lambda: set_ac("off"))
+suspends_again_after_the_holdoff()
+stays_awake_through_the_holdoff("opening the lid during the holdoff after a wake", lambda: set_lid("open"))
 machine.succeed("pgrep -x lys-wm")

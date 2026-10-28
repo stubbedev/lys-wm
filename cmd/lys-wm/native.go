@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -48,7 +49,11 @@ type native struct {
 	report  func(error)
 	lid     *os.File
 	power   func()
+	wake    *loop.Timer
+	holdoff time.Duration
 }
+
+const lidHoldoff = 30 * time.Second
 
 type nativeOptions struct {
 	input      session.InputConfig
@@ -142,6 +147,9 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 		if n.lid, err = n.logind.InhibitLidSwitch(); err != nil {
 			return nil, err
 		}
+		if err := n.recheckAfterWake(lidHoldoff); err != nil {
+			return nil, err
+		}
 		subsystems = append(subsystems, session.PowerSupply)
 	}
 	if n.monitor, err = session.Watch(l, n.logind.Seat(), subsystems, n.udev); err != nil {
@@ -158,6 +166,18 @@ func (n *native) lidPolicy() compositor.LidPolicy {
 		Suspend:   n.logind.Suspend,
 		OnBattery: func() (bool, error) { return session.OnBattery(session.SystemRoots) },
 	}
+}
+
+func (n *native) recheckAfterWake(holdoff time.Duration) error {
+	t, err := n.l.AddTimer(func() error {
+		n.powerChanged()
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("the lid policy's check after a wake: %w", err)
+	}
+	n.wake, n.holdoff = t, holdoff
+	return nil
 }
 
 func (n *native) onPower(changed func()) {
@@ -315,11 +335,17 @@ func (n *native) DeviceResumed(d session.Device, fd int) error {
 
 func (n *native) PrepareForSleep(sleeping bool) error {
 	if sleeping {
+		if n.wake != nil {
+			return n.wake.Disarm()
+		}
 		return nil
 	}
 	var errs []error
 	for _, c := range n.cards {
 		errs = append(errs, c.backend.Wake())
+	}
+	if n.wake != nil {
+		errs = append(errs, n.wake.Arm(n.holdoff))
 	}
 	return errors.Join(errs...)
 }
@@ -407,6 +433,9 @@ func (n *native) remove(c *card) error {
 
 func (n *native) Close() error {
 	var errs []error
+	if n.wake != nil {
+		errs = append(errs, n.wake.Remove())
+	}
 	if n.monitor != nil {
 		errs = append(errs, n.monitor.Close())
 	}
