@@ -51,6 +51,13 @@ const (
 	atomNetWMWindowTypeUtility
 	atomNetWMWindowTypeSplash
 	atomNetWMWindowTypeToolbar
+	atomNetWMWindowTypeMenu
+	atomNetWMWindowTypePopupMenu
+	atomNetWMWindowTypeDropdownMenu
+	atomNetWMWindowTypeCombo
+	atomNetWMWindowTypeTooltip
+	atomNetWMWindowTypeNotification
+	atomNetWMWindowTypeDND
 	atomClipboard
 	atomPrimary
 	atomTargets
@@ -63,41 +70,48 @@ const (
 )
 
 var atomNames = [atomCount]string{
-	atomWMS0:                   "WM_S0",
-	atomNetWMCMS0:              "_NET_WM_CM_S0",
-	atomWMProtocols:            "WM_PROTOCOLS",
-	atomWMDeleteWindow:         "WM_DELETE_WINDOW",
-	atomWMTakeFocus:            "WM_TAKE_FOCUS",
-	atomWMState:                "WM_STATE",
-	atomWMClass:                "WM_CLASS",
-	atomWMName:                 "WM_NAME",
-	atomWMHints:                "WM_HINTS",
-	atomWMNormalHints:          "WM_NORMAL_HINTS",
-	atomWMTransientFor:         "WM_TRANSIENT_FOR",
-	atomWLSurfaceSerial:        "WL_SURFACE_SERIAL",
-	atomUTF8String:             "UTF8_STRING",
-	atomNetSupported:           "_NET_SUPPORTED",
-	atomNetSupportingWMCheck:   "_NET_SUPPORTING_WM_CHECK",
-	atomNetWMName:              "_NET_WM_NAME",
-	atomNetWMPID:               "_NET_WM_PID",
-	atomNetActiveWindow:        "_NET_ACTIVE_WINDOW",
-	atomNetClientList:          "_NET_CLIENT_LIST",
-	atomNetWMState:             "_NET_WM_STATE",
-	atomNetWMStateFullscreen:   "_NET_WM_STATE_FULLSCREEN",
-	atomNetWMStateModal:        "_NET_WM_STATE_MODAL",
-	atomNetWMWindowType:        "_NET_WM_WINDOW_TYPE",
-	atomNetWMWindowTypeDialog:  "_NET_WM_WINDOW_TYPE_DIALOG",
-	atomNetWMWindowTypeUtility: "_NET_WM_WINDOW_TYPE_UTILITY",
-	atomNetWMWindowTypeSplash:  "_NET_WM_WINDOW_TYPE_SPLASH",
-	atomNetWMWindowTypeToolbar: "_NET_WM_WINDOW_TYPE_TOOLBAR",
-	atomClipboard:              "CLIPBOARD",
-	atomPrimary:                "PRIMARY",
-	atomTargets:                "TARGETS",
-	atomIncr:                   "INCR",
-	atomWLSelection:            "_WL_SELECTION",
-	atomNetFrameExtents:        "_NET_FRAME_EXTENTS",
-	atomNetRequestFrameExtents: "_NET_REQUEST_FRAME_EXTENTS",
-	atomNetWMPing:              "_NET_WM_PING",
+	atomWMS0:                        "WM_S0",
+	atomNetWMCMS0:                   "_NET_WM_CM_S0",
+	atomWMProtocols:                 "WM_PROTOCOLS",
+	atomWMDeleteWindow:              "WM_DELETE_WINDOW",
+	atomWMTakeFocus:                 "WM_TAKE_FOCUS",
+	atomWMState:                     "WM_STATE",
+	atomWMClass:                     "WM_CLASS",
+	atomWMName:                      "WM_NAME",
+	atomWMHints:                     "WM_HINTS",
+	atomWMNormalHints:               "WM_NORMAL_HINTS",
+	atomWMTransientFor:              "WM_TRANSIENT_FOR",
+	atomWLSurfaceSerial:             "WL_SURFACE_SERIAL",
+	atomUTF8String:                  "UTF8_STRING",
+	atomNetSupported:                "_NET_SUPPORTED",
+	atomNetSupportingWMCheck:        "_NET_SUPPORTING_WM_CHECK",
+	atomNetWMName:                   "_NET_WM_NAME",
+	atomNetWMPID:                    "_NET_WM_PID",
+	atomNetActiveWindow:             "_NET_ACTIVE_WINDOW",
+	atomNetClientList:               "_NET_CLIENT_LIST",
+	atomNetWMState:                  "_NET_WM_STATE",
+	atomNetWMStateFullscreen:        "_NET_WM_STATE_FULLSCREEN",
+	atomNetWMStateModal:             "_NET_WM_STATE_MODAL",
+	atomNetWMWindowType:             "_NET_WM_WINDOW_TYPE",
+	atomNetWMWindowTypeDialog:       "_NET_WM_WINDOW_TYPE_DIALOG",
+	atomNetWMWindowTypeUtility:      "_NET_WM_WINDOW_TYPE_UTILITY",
+	atomNetWMWindowTypeSplash:       "_NET_WM_WINDOW_TYPE_SPLASH",
+	atomNetWMWindowTypeToolbar:      "_NET_WM_WINDOW_TYPE_TOOLBAR",
+	atomNetWMWindowTypeMenu:         "_NET_WM_WINDOW_TYPE_MENU",
+	atomNetWMWindowTypePopupMenu:    "_NET_WM_WINDOW_TYPE_POPUP_MENU",
+	atomNetWMWindowTypeDropdownMenu: "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU",
+	atomNetWMWindowTypeCombo:        "_NET_WM_WINDOW_TYPE_COMBO",
+	atomNetWMWindowTypeTooltip:      "_NET_WM_WINDOW_TYPE_TOOLTIP",
+	atomNetWMWindowTypeNotification: "_NET_WM_WINDOW_TYPE_NOTIFICATION",
+	atomNetWMWindowTypeDND:          "_NET_WM_WINDOW_TYPE_DND",
+	atomClipboard:                   "CLIPBOARD",
+	atomPrimary:                     "PRIMARY",
+	atomTargets:                     "TARGETS",
+	atomIncr:                        "INCR",
+	atomWLSelection:                 "_WL_SELECTION",
+	atomNetFrameExtents:             "_NET_FRAME_EXTENTS",
+	atomNetRequestFrameExtents:      "_NET_REQUEST_FRAME_EXTENTS",
+	atomNetWMPing:                   "_NET_WM_PING",
 }
 
 func (a atom) String() string {

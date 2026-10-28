@@ -170,6 +170,24 @@ func windowsOf(c *compositor.Compositor) []ipc.Window {
 	return c.Snapshot().Windows
 }
 
+func TestManagedXMenusTooltipsAndNotificationsFloat(t *testing.T) {
+	for _, kind := range []string{"MENU", "POPUP_MENU", "DROPDOWN_MENU", "COMBO", "TOOLTIP", "NOTIFICATION", "DND"} {
+		t.Run(kind, func(t *testing.T) {
+			h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+			xc := xDial(t, h)
+			xc.intern("_NET_WM_WINDOW_TYPE_" + kind)
+			xc.window(image.Rect(0, 0, 40, 30), 0x0000ff, false, map[string][]byte{
+				"WM_CLASS":            []byte("menu\x00XTest\x00"),
+				"_NET_WM_WINDOW_TYPE": xc.atom("_NET_WM_WINDOW_TYPE_" + kind),
+			})
+			h.Eventually("the window floating", func(_ *headless.Backend, c *compositor.Compositor) bool {
+				ws := windowsOf(c)
+				return len(ws) == 1 && ws[0].Floating
+			})
+		})
+	}
+}
+
 func TestXWindowsAreManaged(t *testing.T) {
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)

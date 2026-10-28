@@ -166,9 +166,14 @@ func (w *Window) has(list []xproto.Atom, names ...atom) bool {
 	return false
 }
 
+var floatingTypes = []atom{
+	atomNetWMWindowTypeDialog, atomNetWMWindowTypeUtility, atomNetWMWindowTypeSplash, atomNetWMWindowTypeToolbar,
+	atomNetWMWindowTypeMenu, atomNetWMWindowTypePopupMenu, atomNetWMWindowTypeDropdownMenu, atomNetWMWindowTypeCombo,
+	atomNetWMWindowTypeTooltip, atomNetWMWindowTypeNotification, atomNetWMWindowTypeDND,
+}
+
 func (w *Window) PrefersFloating() bool {
-	return w.has(w.props.states, atomNetWMStateModal) ||
-		w.has(w.props.types, atomNetWMWindowTypeDialog, atomNetWMWindowTypeUtility, atomNetWMWindowTypeSplash, atomNetWMWindowTypeToolbar)
+	return w.has(w.props.states, atomNetWMStateModal) || w.has(w.props.types, floatingTypes...)
 }
 
 func (w *Window) SizeHints() SizeHints {
