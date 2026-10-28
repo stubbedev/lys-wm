@@ -218,19 +218,39 @@ func (c *Client) gbmMemory(fb feedback.Feedback, format fourcc.Format, size imag
 	c.t.Helper()
 	s := c.gpuStack(fb)
 	b, err := s.GBM.Allocate(size, format, modifiers, usage)
+	c.must(err)
+	return c.gbmBuffer(s.Renderer, b, format)
+}
+
+func (c *Client) linearMemory(fb feedback.Feedback, format fourcc.Format, size image.Point) memory {
+	c.t.Helper()
+	s := c.gpuStack(fb)
+	b, err := s.GBM.Allocate(size, format.WithAlpha(), []fourcc.Modifier{fourcc.Linear}, 0)
 	if err != nil && format != dmabufFormat {
 		c.t.Skipf("testclient: %v", err)
 	}
 	c.must(err)
-	if len(b.Planes) != 1 {
-		c.must(errors.Join(fmt.Errorf("testclient: a %v buffer with modifier %v has %d planes", format, b.Modifier, len(b.Planes)), b.Close()))
+	m := c.gbmBuffer(s.Renderer, b, format)
+	if m.mapped == nil {
+		c.must(errors.Join(fmt.Errorf("testclient: GBM allocated a %v buffer with modifier %v when asked for linear", b.Format, b.Modifier), m.close()))
 	}
-	m := memory{format: format, fd: b.Planes[0].FD, stride: int(b.Planes[0].Stride), modifier: b.Modifier, close: b.Close}
-	m.pixels = func() ([]byte, error) { return readBack(s.Renderer, b.DMABUF) }
-	if b.Modifier != fourcc.Linear {
+	return m
+}
+
+func (c *Client) gbmBuffer(r *gles.Renderer, b *gpu.Buffer, format fourcc.Format) memory {
+	c.t.Helper()
+	if len(b.Planes) != 1 {
+		c.must(errors.Join(fmt.Errorf("testclient: a %v buffer with modifier %v has %d planes", b.Format, b.Modifier, len(b.Planes)), b.Close()))
+	}
+	d := b.DMABUF
+	d.Format = format
+	m := memory{format: format, fd: d.Planes[0].FD, stride: int(d.Planes[0].Stride), modifier: d.Modifier, close: b.Close}
+	m.pixels = func() ([]byte, error) { return readBack(r, d) }
+	if d.Modifier != fourcc.Linear {
 		return m
 	}
-	if m.mapped, err = mapDMABUF(m.fd, m.stride, size); err != nil {
+	var err error
+	if m.mapped, err = mapDMABUF(m.fd, m.stride, d.Size); err != nil {
 		c.must(errors.Join(err, b.Close()))
 	}
 	m.close = func() error { return errors.Join(m.mapped.unmap(), b.Close()) }
@@ -329,16 +349,13 @@ func (c *Client) DMABUFIn(format fourcc.Format, size image.Point, paint Painter)
 			}
 			c.t.Fatalf("testclient: the compositor's main device takes no %v dmabufs for the client to paint", linear)
 		}
-		mem = c.gbmMemory(*g.feedback, format, size, []fourcc.Modifier{fourcc.Linear}, 0)
+		mem = c.linearMemory(*g.feedback, format, size)
 	case format == dmabufFormat:
 		mem = c.legacyMemory(g.legacy, size)
 	default:
 		c.t.Skipf("testclient: %v dmabufs need dmabuf feedback", format)
 	}
 	b := c.share(g, mem, size)
-	if mem.mapped == nil {
-		c.t.Fatalf("testclient: GBM allocated a %v buffer with modifier %v when asked for linear", format, mem.modifier)
-	}
 	c.must(mem.mapped.paint(paint))
 	return b
 }
