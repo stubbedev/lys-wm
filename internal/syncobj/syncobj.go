@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/drm"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/drm"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	sls "github.com/stubbedev/lys-wm/internal/protocol/server/linuxdrmsyncobj"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"

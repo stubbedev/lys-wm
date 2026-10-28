@@ -6,7 +6,7 @@ require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
-	github.com/stubbedev/lys-lib v0.1.1-0.20261027165538-f6074bfcef28
+	github.com/stubbedev/lys-lib v0.1.1-0.20261028192531-ea7bcda3a192
 	github.com/stubbedev/lys-ui v0.0.0-20261027165722-cbf3d26e3ab0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0

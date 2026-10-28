@@ -16,7 +16,8 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | Input devices | `libinput` through purego (#42) |
 | Keymaps and keyboard state | `libxkbcommon` through purego (#13) |
 | Wayland wire protocol | in-repo codec and scanner (#3, #4) |
-| DRM/KMS ioctls, epoll, timerfd, signalfd, memfd | [`golang.org/x/sys/unix`](https://pkg.go.dev/golang.org/x/sys/unix) |
+| DRM/KMS ioctls, pixel formats, EDID | lys-lib's `drm`, `fourcc` and `edid`, shared with lys-splash (stubbedev/lys-lib#30) |
+| epoll, timerfd, signalfd, memfd | [`golang.org/x/sys/unix`](https://pkg.go.dev/golang.org/x/sys/unix) |
 | logind | [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus) |
 | udev | netlink, read directly (#39) |
 | X11 window manager | [`github.com/jezek/xgb`](https://github.com/jezek/xgb) (#45) |

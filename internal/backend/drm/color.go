@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"math"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
-	kdrm "github.com/stubbedev/lys-wm/internal/drm"
 )
 
 var (

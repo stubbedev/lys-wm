@@ -6,9 +6,8 @@ import (
 	"image"
 
 	"github.com/ebitengine/purego"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 )
 
 type Usage uint32

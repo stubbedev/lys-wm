@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	ccs "github.com/stubbedev/lys-wm/internal/protocol/client/cursorshape"
 	cel "github.com/stubbedev/lys-wm/internal/protocol/client/extforeigntoplevellist"
 	ceis "github.com/stubbedev/lys-wm/internal/protocol/client/extimagecapturesource"

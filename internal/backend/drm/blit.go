@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/stubbedev/lys-wm/internal/fourcc"
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 )

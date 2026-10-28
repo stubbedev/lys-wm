@@ -7,9 +7,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/region"

@@ -6,11 +6,11 @@ import (
 	"image"
 	"slices"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
+	"github.com/stubbedev/lys-lib/edid"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
-	kdrm "github.com/stubbedev/lys-wm/internal/drm"
-	"github.com/stubbedev/lys-wm/internal/edid"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"

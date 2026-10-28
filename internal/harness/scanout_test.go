@@ -6,9 +6,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/surface"

@@ -10,8 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ebitengine/purego"
-
-	"github.com/stubbedev/lys-wm/internal/fourcc"
+	"github.com/stubbedev/lys-lib/fourcc"
 )
 
 const (

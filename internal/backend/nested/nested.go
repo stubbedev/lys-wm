@@ -8,8 +8,9 @@ import (
 	"image"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/edid"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
-	"github.com/stubbedev/lys-wm/internal/edid"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"

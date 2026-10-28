@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )

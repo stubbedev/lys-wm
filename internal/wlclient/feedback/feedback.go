@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	ld "github.com/stubbedev/lys-wm/internal/protocol/client/linuxdmabuf"
 	"github.com/stubbedev/lys-wm/internal/wlclient"

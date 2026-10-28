@@ -8,8 +8,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
 	sefl "github.com/stubbedev/lys-wm/internal/protocol/server/extforeigntoplevellist"

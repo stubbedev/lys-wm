@@ -6,8 +6,9 @@ import (
 	"image"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	swsc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrscreencopy"

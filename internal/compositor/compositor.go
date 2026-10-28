@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/drm"
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-ui/icontheme"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/ctmcontrol"
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/drm"
 	"github.com/stubbedev/lys-wm/internal/fifo"
 	"github.com/stubbedev/lys-wm/internal/gammacontrol"
 	"github.com/stubbedev/lys-wm/internal/gpu"

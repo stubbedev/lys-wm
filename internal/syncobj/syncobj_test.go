@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/drm"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
-	"github.com/stubbedev/lys-wm/internal/drm"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	cld "github.com/stubbedev/lys-wm/internal/protocol/client/linuxdmabuf"

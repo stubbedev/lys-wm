@@ -13,7 +13,7 @@ gates: fmt-check tidy-check check vuln headless race
 # harness, which boots lys-wm on the headless backend and drives real clients
 # against it, the session bus and GPU tests, and the end-to-end session in
 # cmd/lys-wm.
-headless_packages := "./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/drm/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/xwayland/... ./cmd/lys-wm/..."
+headless_packages := "./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/xwayland/... ./cmd/lys-wm/..."
 
 # Run the tests that need dev-shell programs. LYS_WM_HEADLESS=1 turns a missing
 # program into a failure instead of a skip.

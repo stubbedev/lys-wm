@@ -6,8 +6,9 @@ import (
 	"image"
 	"path/filepath"
 
-	kdrm "github.com/stubbedev/lys-wm/internal/drm"
-	"github.com/stubbedev/lys-wm/internal/fourcc"
+	kdrm "github.com/stubbedev/lys-lib/drm"
+	"github.com/stubbedev/lys-lib/fourcc"
+
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"

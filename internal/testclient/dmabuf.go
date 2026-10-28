@@ -8,9 +8,9 @@ import (
 	"slices"
 	"unsafe"
 
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	cld "github.com/stubbedev/lys-wm/internal/protocol/client/linuxdmabuf"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"

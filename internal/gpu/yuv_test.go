@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-wm/internal/fourcc"
+	"github.com/stubbedev/lys-lib/fourcc"
 )
 
 func TestDefaultYUVFollowsTheVideoSize(t *testing.T) {

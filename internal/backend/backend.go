@@ -8,9 +8,9 @@ import (
 	"image"
 	"time"
 
+	"github.com/stubbedev/lys-lib/edid"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-wm/internal/edid"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/xkb"
