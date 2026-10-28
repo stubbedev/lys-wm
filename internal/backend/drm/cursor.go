@@ -138,7 +138,7 @@ func (c *cursor) flush() error {
 
 func (c *cursor) test() error {
 	o := c.o
-	if !o.lit || o.off || o.b.paused {
+	if !o.testable() {
 		return nil
 	}
 	o.b.req.Reset()

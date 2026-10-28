@@ -34,12 +34,9 @@ assert commits, "lys-wm committed nothing on vkms"
 assert commits[0].endswith(" nonblocking"), f"something but lys-wm committed on vkms first: {commits[0]}"
 modesets = [line for line in vkms if modeset.search(line)]
 assert not modesets, f"the hand-over modeset vkms: {modesets[:8]}"
-takeover = machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'Virtual-2 keeps the 1024x768@'")
-print(takeover)
 
 machine.succeed("systemctl stop greetd.service")
 machine.wait_until_fails("pgrep -x lys-wm", timeout=timedelta(seconds=60))
-since = machine.succeed("date +%s").strip()
 print(machine.succeed("splash-handover other"))
 machine.succeed("systemctl start greetd.service")
 outputs = wait_for_outputs()
@@ -49,5 +46,4 @@ vkms = vkms_after_marker()
 modesets = [line for line in vkms if modeset.search(line)]
 print("\n".join(modesets[:8]))
 assert modesets, "lys-wm took over a different mode without a modeset"
-machine.fail(f"journalctl --no-pager -t lys-wm --since=@{since} | grep 'Virtual-2 keeps'")
 background_only("Virtual-2")

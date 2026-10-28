@@ -574,8 +574,6 @@ func (b *Backend) add(c kdrm.Connector) error {
 	}
 	if inherited {
 		o.kms, o.lit = kmsInherited, true
-		m := modeOf(o.mode)
-		b.report(fmt.Errorf("drm: %s keeps the %dx%d@%d.%03d Hz mode it is lit in, and its first frame flips over the one on screen without a modeset", o.Name(), m.Size.X, m.Size.Y, m.RefreshMHz/1000, m.RefreshMHz%1000))
 	}
 	b.outputs = append(b.outputs, o)
 	return b.handler.OutputAdded(o)
@@ -868,8 +866,8 @@ func (o *Output) disable() error {
 	if !o.enabled {
 		return nil
 	}
-	if !o.lit {
-		o.enabled = false
+	if !o.lit || o.b.paused {
+		o.enabled, o.lit = false, false
 		return o.freeBuffers()
 	}
 	r := &o.b.req
@@ -901,6 +899,10 @@ func (o *Output) ScheduleFrame() error {
 		return nil
 	}
 	return o.clock.Request()
+}
+
+func (o *Output) testable() bool {
+	return o.lit && o.kms != kmsInherited && !o.off && !o.b.paused
 }
 
 func (o *Output) frameReady() bool {

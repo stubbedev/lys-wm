@@ -113,7 +113,7 @@ func (o *Output) setColor(p colorProp, data []byte) error {
 			return fmt.Errorf("drm: the %s of %s: %w", p, o.Name(), err)
 		}
 	}
-	if o.lit && !o.off && !o.b.paused {
+	if o.testable() {
 		r := &o.b.req
 		r.Reset()
 		o.crtc.set(r, p.String(), uint64(blob))

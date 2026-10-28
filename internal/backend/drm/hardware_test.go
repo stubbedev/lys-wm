@@ -188,6 +188,7 @@ func startWithoutMaster(t *testing.T, card string) {
 		deepFrames(t, o)
 	}
 	t.Logf("atomic async page flips: %v", b.async)
+	b.Pause()
 	if err := b.Close(); err != nil {
 		t.Fatal(err)
 	}

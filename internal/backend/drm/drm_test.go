@@ -1663,8 +1663,8 @@ func TestAnOutputLitInItsModeFlipsOverWhatIsOnScreen(t *testing.T) {
 	lit.Type, lit.Name = 0, [32]byte{'s', 'p', 'l', 'a', 's', 'h'}
 	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: lit}, false)
 	o := r.b.Outputs()[0]
-	if len(r.reports) != 1 || !strings.Contains(r.reports[0].Error(), "DP-1 keeps the 1920x1080@60.000 Hz mode it is lit in") {
-		t.Fatalf("reports %v, want the takeover", r.reports)
+	if len(r.reports) != 0 {
+		t.Fatalf("taking over a lit output reported %v", r.reports)
 	}
 	if err := o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23}); err != nil {
 		t.Fatal(err)
@@ -1762,7 +1762,7 @@ func TestAnOutputKeepsTheCRTCAndPrimaryPlaneItIsLitOn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := bootLit(t, &tc.lit, tc.sharedPrimary)
 			o := r.b.Outputs()[0]
-			if o.crtc.id != tc.lit.crtc || o.primary.id != tc.lit.plane || len(r.reports) != 1 {
+			if o.crtc.id != tc.lit.crtc || o.primary.id != tc.lit.plane || len(r.reports) != 0 {
 				t.Fatalf("CRTC %d plane %d, reports %v", o.crtc.id, o.primary.id, r.reports)
 			}
 			flip := r.firstFrame(o)
@@ -1770,5 +1770,17 @@ func TestAnOutputKeepsTheCRTCAndPrimaryPlaneItIsLitOn(t *testing.T) {
 				t.Fatalf("the first frame committed %+v", got)
 			}
 		})
+	}
+}
+
+func TestAPausedBackendClosesWithoutCommitting(t *testing.T) {
+	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: modes[0]}, false)
+	r.b.Pause()
+	before := len(r.dev.commits)
+	if err := r.b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.dev.commits[before:]; len(got) != 0 {
+		t.Fatalf("closing without DRM master committed %+v", got)
 	}
 }
