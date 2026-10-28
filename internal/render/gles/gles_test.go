@@ -510,37 +510,39 @@ func sampleNV12(t *testing.T, g *gles.Renderer, node string, y, cb, cr byte, yuv
 		t.Fatal(err)
 	}
 	defer dev.Close()
-	bo, err := dev.Allocate(image.Pt(16, 16), fourcc.NV12, nil, gpu.UseLinear)
+	carrier, err := dev.Allocate(image.Pt(4, 24), fourcc.XRGB8888, nil, gpu.UseLinear)
 	if err != nil {
-		t.Skipf("%s cannot allocate linear NV12: %v", dev.Backend(), err)
+		t.Fatalf("%s cannot allocate the linear buffer that carries the NV12 planes: %v", dev.Backend(), err)
 	}
-	defer bo.Close()
-	for i, p := range bo.Planes {
-		rows := 16
-		if i == 1 {
-			rows = 8
-		}
-		size := int(p.Offset) + rows*int(p.Stride)
-		m, err := unix.Mmap(p.FD, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
-		if err != nil {
-			t.Skipf("map NV12 plane %d: %v", i, err)
-		}
-		for j := int(p.Offset); j < size; j++ {
+	defer carrier.Close()
+	plane := carrier.Planes[0]
+	stride := int(plane.Stride)
+	m, err := unix.Mmap(plane.FD, int64(plane.Offset), 24*stride, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	if err != nil {
+		t.Fatalf("map the NV12 carrier: %v", err)
+	}
+	for row := range 24 {
+		for col := range 16 {
 			switch {
-			case i == 0:
-				m[j] = y
-			case (j-int(p.Offset))%2 == 0:
-				m[j] = cb
+			case row < 16:
+				m[row*stride+col] = y
+			case col%2 == 0:
+				m[row*stride+col] = cb
 			default:
-				m[j] = cr
+				m[row*stride+col] = cr
 			}
 		}
-		if err := unix.Munmap(m); err != nil {
-			t.Fatal(err)
-		}
 	}
-	d := bo.DMABUF
-	d.YUV = yuv
+	if err := unix.Munmap(m); err != nil {
+		t.Fatal(err)
+	}
+	d := gpu.DMABUF{
+		Size:     image.Pt(16, 16),
+		Format:   fourcc.NV12,
+		Modifier: fourcc.Linear,
+		Planes:   []gpu.Plane{plane, {FD: plane.FD, Offset: plane.Offset + 16*plane.Stride, Stride: plane.Stride}},
+		YUV:      yuv,
+	}
 	tex, err := g.ImportTexture(d)
 	if err != nil {
 		t.Fatal(err)
