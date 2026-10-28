@@ -44,7 +44,7 @@ type goneSource struct{}
 
 type sourceHandle struct{ source captureSource }
 
-func (c *Compositor) addImageCapture(d *server.Display) error {
+func (c *Compositor) addImageCapture(d *server.Display, offer *dmabufOffer) error {
 	if _, err := d.AddGlobal(seis.ExtOutputImageCaptureSourceManagerV1Interface, captureSourceVersion, func(cl *server.Client, id wire.ObjectID, version uint32) error {
 		_, err := seis.NewExtOutputImageCaptureSourceManagerV1(cl, id, version, outputSources{c})
 		return err
@@ -57,11 +57,7 @@ func (c *Compositor) addImageCapture(d *server.Display) error {
 	}); err != nil {
 		return err
 	}
-	offer, err := captureOffer(c.renderer)
-	if err != nil {
-		return err
-	}
-	_, err = d.AddGlobal(seic.ExtImageCopyCaptureManagerV1Interface, imageCaptureVersion, func(cl *server.Client, id wire.ObjectID, version uint32) error {
+	_, err := d.AddGlobal(seic.ExtImageCopyCaptureManagerV1Interface, imageCaptureVersion, func(cl *server.Client, id wire.ObjectID, version uint32) error {
 		_, err := seic.NewExtImageCopyCaptureManagerV1(cl, id, version, imageCaptures{c, cl, offer})
 		return err
 	})
@@ -76,6 +72,10 @@ type dmabufOffer struct {
 type dmabufFormat struct {
 	format    fourcc.Format
 	modifiers []byte
+}
+
+func (o *dmabufOffer) offers(f fourcc.Format) bool {
+	return o.device != nil && slices.ContainsFunc(o.formats, func(d dmabufFormat) bool { return d.format == f })
 }
 
 func captureOffer(r render.Renderer) (*dmabufOffer, error) {

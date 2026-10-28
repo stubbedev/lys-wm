@@ -263,6 +263,11 @@ func (c *Client) bindDMABUF() dmabufGlobal {
 	return d
 }
 
+func (c *Client) HasDMABUFFeedback() bool {
+	c.t.Helper()
+	return c.bindDMABUF().feedback != nil
+}
+
 func (c *Client) legacyMemory(mods *legacyModifiers, size image.Point) memory {
 	c.t.Helper()
 	modifier := fourcc.Linear

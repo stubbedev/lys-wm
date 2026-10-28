@@ -344,10 +344,14 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.addWorkspaces(display); err != nil {
 		return err
 	}
-	if err := c.addScreencopy(display); err != nil {
+	offer, err := captureOffer(c.renderer)
+	if err != nil {
 		return err
 	}
-	if err := c.addImageCapture(display); err != nil {
+	if err := c.addScreencopy(display, offer); err != nil {
+		return err
+	}
+	if err := c.addImageCapture(display, offer); err != nil {
 		return err
 	}
 	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display)); err != nil {

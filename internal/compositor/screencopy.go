@@ -6,6 +6,8 @@ import (
 	"image"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/dmabuf"
+	"github.com/stubbedev/lys-wm/internal/fourcc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	swsc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrscreencopy"
@@ -18,17 +20,21 @@ import (
 
 const screencopyVersion = 3
 
-func (c *Compositor) addScreencopy(d *server.Display) error {
+const screencopyDMABUFFormat = fourcc.XRGB8888
+
+func (c *Compositor) addScreencopy(d *server.Display, offer *dmabufOffer) error {
+	dmabufs := offer.offers(screencopyDMABUFFormat)
 	_, err := d.AddGlobal(swsc.ZwlrScreencopyManagerV1Interface, screencopyVersion, func(cl *server.Client, id wire.ObjectID, version uint32) error {
-		_, err := swsc.NewZwlrScreencopyManagerV1(cl, id, version, screencopyManager{c, cl})
+		_, err := swsc.NewZwlrScreencopyManagerV1(cl, id, version, screencopyManager{c, cl, dmabufs})
 		return err
 	})
 	return err
 }
 
 type screencopyManager struct {
-	c  *Compositor
-	cl *server.Client
+	c       *Compositor
+	cl      *server.Client
+	dmabufs bool
 }
 
 func (screencopyManager) Destroy(*swsc.ZwlrScreencopyManagerV1) error {
@@ -70,12 +76,15 @@ func (m screencopyManager) frame(res *swsc.ZwlrScreencopyFrameV1, cursor bool, w
 	if err := res.SendBuffer(sw.WlShmFormatXrgb8888, uint32(size.X), uint32(size.Y), uint32(size.X*4)); err != nil { //nolint:gosec // capture sizes are positive output sizes
 		return nil, err
 	}
-	if res.Base().Version() >= 3 {
-		if err := res.SendBufferDone(); err != nil {
+	if res.Base().Version() < 3 {
+		return f, nil
+	}
+	if m.dmabufs {
+		if err := res.SendLinuxDmabuf(uint32(screencopyDMABUFFormat), uint32(size.X), uint32(size.Y)); err != nil { //nolint:gosec // capture sizes are positive output sizes
 			return nil, err
 		}
 	}
-	return f, nil
+	return f, res.SendBufferDone()
 }
 
 type screencopyFrame struct {
@@ -100,11 +109,7 @@ func (f *screencopyFrame) copy(obj *swsc.ZwlrScreencopyFrameV1, wl *sw.WlBuffer,
 	if f.state != frameIdle {
 		return obj.ProtocolError(swsc.ZwlrScreencopyFrameV1ErrorAlreadyUsed, "the frame was already copied")
 	}
-	b, ok := wl.Handler().(*shm.Buffer)
-	if !ok {
-		return obj.ProtocolError(swsc.ZwlrScreencopyFrameV1ErrorInvalidBuffer, "not a shared-memory buffer")
-	}
-	target, err := shmTarget(b, f.region.Size(), []render.Format{render.XRGB8888}, nil)
+	target, err := f.target(wl)
 	if err != nil {
 		return obj.ProtocolError(swsc.ZwlrScreencopyFrameV1ErrorInvalidBuffer, "%v", err)
 	}
@@ -138,6 +143,19 @@ func (f *screencopyFrame) copy(obj *swsc.ZwlrScreencopyFrameV1, wl *sw.WlBuffer,
 		return errors.Join(append(errs, f.res.SendReady(ts.SecHi, ts.SecLo, ts.Nsec))...)
 	}
 	return f.c.queueCapture(k, damage)
+}
+
+func (f *screencopyFrame) target(wl *sw.WlBuffer) (captureTarget, error) {
+	switch b := wl.Handler().(type) {
+	case *shm.Buffer:
+		return shmTarget(b, f.region.Size(), []render.Format{render.XRGB8888}, nil)
+	case *dmabuf.Buffer:
+		if f.res.Base().Version() < 3 {
+			return nil, fmt.Errorf("%w: dmabufs need wlr-screencopy version 3", errConstraints)
+		}
+		return f.c.dmabufTarget(b, f.region.Size())
+	}
+	return nil, fmt.Errorf("%w: neither a shared-memory nor a dmabuf buffer", errConstraints)
 }
 
 func (*screencopyFrame) Destroy(*swsc.ZwlrScreencopyFrameV1) error {
