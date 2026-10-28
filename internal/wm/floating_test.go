@@ -113,3 +113,65 @@ func TestResizeFocused(t *testing.T) {
 		t.Fatalf("a floating 450x300 window resized by -10,20: %v", rect.Size())
 	}
 }
+
+func TestLimitsFit(t *testing.T) {
+	for _, c := range []struct {
+		size, minimum, maximum, want image.Point
+	}{
+		{image.Pt(40, 90), image.Pt(400, 300), image.Point{}, image.Pt(400, 300)},
+		{image.Pt(900, 900), image.Point{}, image.Pt(800, 0), image.Pt(800, 900)},
+		{image.Pt(500, 500), image.Pt(100, 100), image.Pt(600, 600), image.Pt(500, 500)},
+		{image.Point{}, image.Point{}, image.Point{}, image.Point{}},
+	} {
+		if got := (Limits{Min: c.minimum, Max: c.maximum}).Fit(c.size); got != c.want {
+			t.Errorf("Limits{%v, %v}.Fit(%v) = %v, want %v", c.minimum, c.maximum, c.size, got, c.want)
+		}
+	}
+}
+
+func TestFloatingWindowsKeepTheirLimits(t *testing.T) {
+	area := image.Rect(0, 0, 1000, 600)
+	limits := Limits{Min: image.Pt(300, 200), Max: image.Pt(600, 400)}
+	floating := func(t *testing.T) State {
+		t.Helper()
+		s := ok(t)(State{}.AddOutput("DP-1", area, area))
+		s = ok(t)(s.MapFloating(1, image.Rect(100, 100, 500, 400)))
+		return ok(t)(s.SetLimits(1, limits))
+	}
+	for name, c := range map[string]struct {
+		change func(State) (State, error)
+		want   image.Rectangle
+	}{
+		"shrunk by the keyboard": {func(s State) (State, error) { return s.ResizeFocused(-300, -300) }, image.Rect(100, 100, 400, 300)},
+		"grown by the keyboard":  {func(s State) (State, error) { return s.ResizeFocused(500, 500) }, image.Rect(100, 100, 700, 500)},
+		"dragged from the left past min": {func(s State) (State, error) {
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(300, 0), false, true)
+		}, image.Rect(200, 100, 500, 400)},
+		"dragged from the right past max": {func(s State) (State, error) {
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(400, 0), true, true)
+		}, image.Rect(100, 100, 700, 400)},
+		"placed too small":           {func(s State) (State, error) { return s.SetFloatingRect(1, image.Rect(0, 0, 10, 10)) }, image.Rect(0, 0, 300, 200)},
+		"limits that grow after map": {func(s State) (State, error) { return s.SetLimits(1, Limits{Min: image.Pt(450, 350)}) }, image.Rect(100, 100, 550, 450)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := ok(t)(c.change(floating(t)))
+			if _, rect, _ := layerOf(s, 1); rect != c.want {
+				t.Fatalf("%v, want %v", rect, c.want)
+			}
+		})
+	}
+	s := ok(t)(State{}.AddOutput("DP-1", area, area))
+	s = ok(t)(s.MapWindow(1, Autotile{}))
+	s = ok(t)(s.SetLimits(1, Limits{Min: image.Pt(700, 500)}))
+	s = ok(t)(s.ToggleFloating(Autotile{}))
+	if _, rect, _ := layerOf(s, 1); rect != image.Rect(150, 50, 850, 550) {
+		t.Fatalf("toggled to float with a 700x500 minimum on a 1000x600 output: %v", rect)
+	}
+	if _, err := s.SetLimits(9, limits); err == nil {
+		t.Fatal("limits were set on an unknown window")
+	}
+	s = ok(t)(s.UnmapWindow(1))
+	if _, kept := s.limits[1]; kept {
+		t.Fatal("an unmapped window's limits were kept")
+	}
+}

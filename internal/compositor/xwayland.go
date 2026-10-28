@@ -71,7 +71,7 @@ func (t xToplevel) state(w want) xwayland.State {
 	r := t.c.toX(w.rect)
 	if w.layer == wm.LayerFloating {
 		h := t.SizeHints()
-		r.Max = r.Min.Add(clampSize(r.Size(), h.Min, h.Max))
+		r.Max = r.Min.Add(wm.Limits{Min: h.Min, Max: h.Max}.Fit(r.Size()))
 	}
 	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen}
 }
@@ -173,7 +173,7 @@ func (c *Compositor) XWindowChanged(w *xwayland.Window) error {
 	if win := c.windowOf(xToplevel{w, c}); win != nil && w.Urgent() {
 		err = c.markUrgent(win)
 	}
-	return errors.Join(err, c.refreshPointer(), c.scheduleAll(), c.syncForeign())
+	return errors.Join(err, c.refreshLimits(xToplevel{w, c}), c.refreshPointer(), c.scheduleAll(), c.syncForeign())
 }
 
 func (c *Compositor) XWindowResponsive(w *xwayland.Window, responsive bool) error {

@@ -111,6 +111,7 @@ type State struct {
 	workspaces []Workspace
 	focused    string
 	remembered map[string]WorkspaceID
+	limits     map[WindowID]Limits
 }
 
 var (
@@ -124,6 +125,7 @@ func (s State) clone() State {
 		workspaces: make([]Workspace, len(s.workspaces)),
 		focused:    s.focused,
 		remembered: make(map[string]WorkspaceID, len(s.remembered)),
+		limits:     maps.Clone(s.limits),
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
@@ -398,6 +400,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 	if err := w.remove(id); err != nil {
 		return State{}, err
 	}
+	delete(s.limits, id)
 	s.dropIfIdle(w.ID)
 	return s, nil
 }

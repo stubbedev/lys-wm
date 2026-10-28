@@ -251,20 +251,30 @@ func floatSize(t toplevel, ruled image.Point) image.Point {
 		size = t.Geometry().Size()
 	}
 	minimum, maximum := t.sizeLimits()
-	return clampSize(size, minimum, maximum)
+	return wm.Limits{Min: minimum, Max: maximum}.Fit(size)
 }
 
-func clampSize(size, minimum, maximum image.Point) image.Point {
-	clamp := func(v, lo, hi int) int {
-		if lo > 0 {
-			v = max(v, lo)
+func (c *Compositor) frameLimits(t toplevel) wm.Limits {
+	minimum, maximum := t.sizeLimits()
+	frame := 2 * c.decor.BorderWidth
+	framed := func(p image.Point) image.Point {
+		if p.X > 0 {
+			p.X += frame
 		}
-		if hi > 0 {
-			v = min(v, hi)
+		if p.Y > 0 {
+			p.Y += frame
 		}
-		return v
+		return p
 	}
-	return image.Pt(clamp(size.X, minimum.X, maximum.X), clamp(size.Y, minimum.Y, maximum.Y))
+	return wm.Limits{Min: framed(minimum), Max: framed(maximum)}
+}
+
+func (c *Compositor) refreshLimits(t toplevel) error {
+	w := c.windowOf(t)
+	if w == nil {
+		return nil
+	}
+	return c.update(c.wm.SetLimits(w.id, c.frameLimits(t)))
 }
 
 func (c *Compositor) focusWindow(w *window) error {
@@ -312,6 +322,9 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	if err != nil {
 		return err
 	}
+	if s, err = s.SetLimits(w.id, c.frameLimits(t)); err != nil {
+		return err
+	}
 	for _, p := range s.Arrange(c.decor.reserved()).Windows {
 		if p.ID == w.id && t.scaled() {
 			w.scale = c.scaleOver(p.Rect)
@@ -340,8 +353,10 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	return c.update(c.wm.UnmapWindow(w.id))
 }
 
-func (c *Compositor) ToplevelChanged(_ *shell.Toplevel, change shell.Change) error {
+func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {
 	switch change {
+	case shell.ChangedSizeLimits:
+		return c.refreshLimits(xdgToplevel{t})
 	case shell.ChangedModal:
 		return errors.Join(c.reconcile(), c.syncForeign())
 	case shell.ChangedIcon:

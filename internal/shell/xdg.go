@@ -66,6 +66,7 @@ const (
 	ChangedParent
 	ChangedModal
 	ChangedIcon
+	ChangedSizeLimits
 )
 
 type Listener interface {

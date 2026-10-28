@@ -147,9 +147,15 @@ func (t *Toplevel) applyPending() error {
 	if maxSize.X > 0 && minSize.X > maxSize.X || maxSize.Y > 0 && minSize.Y > maxSize.Y {
 		return t.resource.ProtocolError(sxdg.XdgToplevelErrorInvalidSize, "minimum size %v exceeds maximum size %v", minSize, maxSize)
 	}
+	limitsChanged := minSize != t.min || maxSize != t.max
 	t.min, t.max, t.minSet, t.maxSet = minSize, maxSize, false, false
 	if s, ok := t.configures.take(); ok {
 		t.current = s
+	}
+	if limitsChanged {
+		if err := t.xs.base.shell.listener.ToplevelChanged(t, ChangedSizeLimits); err != nil {
+			return err
+		}
 	}
 	if !t.iconSet {
 		return nil

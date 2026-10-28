@@ -81,6 +81,25 @@ func TestFullscreenCoversTheTopLayerButNotOverlay(t *testing.T) {
 	h.Eventually("the note above the window", showing(150, 95, noteColor))
 }
 
+func mouseDrag(t *testing.T, h *Harness) func(button uint32, from, to image.Point) {
+	return func(button uint32, from, to image.Point) {
+		t.Helper()
+		h.key(keySuper, true)
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			o := b.Outputs()[0]
+			p := b.Pointer()
+			size := small.Size
+			return errors.Join(
+				p.MoveTo(o, float64(from.X)/float64(size.X), float64(from.Y)/float64(size.Y)), p.Frame(),
+				p.Button(button, true), p.Frame(),
+				p.MoveTo(o, float64(to.X)/float64(size.X), float64(to.Y)/float64(size.Y)), p.Frame(),
+				p.Button(button, false), p.Frame(),
+			)
+		})
+		h.key(keySuper, false)
+	}
+}
+
 func TestMouseDragsMoveAndResize(t *testing.T) {
 	h := StartWith(t, withBinds(t,
 		bindSpec{chord: "SUPER + mouse:272", action: "movewindow"},
@@ -92,21 +111,7 @@ func TestMouseDragsMoveAndResize(t *testing.T) {
 	right := c.Window("right", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("right to map", right.Mapped)
 
-	drag := func(button uint32, from, to image.Point) {
-		t.Helper()
-		h.key(keySuper, true)
-		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-			o := b.Outputs()[0]
-			p := b.Pointer()
-			return errors.Join(
-				p.MoveTo(o, float64(from.X)/160, float64(from.Y)/100), p.Frame(),
-				p.Button(button, true), p.Frame(),
-				p.MoveTo(o, float64(to.X)/160, float64(to.Y)/100), p.Frame(),
-				p.Button(button, false), p.Frame(),
-			)
-		})
-		h.key(keySuper, false)
-	}
+	drag := mouseDrag(t, h)
 
 	drag(btnRight, image.Pt(40, 50), image.Pt(70, 50))
 	c.DispatchUntil("the left tile grown by the drag", func() bool { return left.Logical == image.Pt(110, 100) })
@@ -287,6 +292,33 @@ func TestWaylandWindowsThatDoNotAskToFloatTile(t *testing.T) {
 			c.DispatchUntil("the two share the output", func() bool { return app.Logical.X < small.Size.X })
 		})
 	}
+}
+
+func TestDraggingAFloatingWindowSmallerStopsAtItsMinimum(t *testing.T) {
+	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:273", action: "resizewindow"}), small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.WindowWith("roomy", testclient.Fill(0, 0, 0xff), func(w *testclient.Window) error { return w.Toplevel.SetMinSize(60, 40) })
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("togglefloating")
+	c.DispatchUntil("it floats at half the output", func() bool { return w.Logical == image.Pt(80, 50) })
+	mouseDrag(t, h)(btnRight, image.Pt(110, 70), image.Pt(10, 10))
+	c.DispatchUntil("the drag to settle", func() bool { return w.Logical != image.Pt(80, 50) })
+	if w.Logical != image.Pt(60, 40) {
+		t.Fatalf("a window asking for at least 60x40 was dragged to %v", w.Logical)
+	}
+}
+
+func TestAFloatingWindowGrowsWhenItRaisesItsMinimum(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("growing", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("togglefloating")
+	c.DispatchUntil("it floats at half the output", func() bool { return w.Logical == image.Pt(80, 50) })
+	if err := errors.Join(w.Toplevel.SetMinSize(100, 70), w.Surface.Commit(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("it grows to its new minimum", func() bool { return w.Logical == image.Pt(100, 70) })
 }
 
 func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {

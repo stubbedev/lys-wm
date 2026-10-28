@@ -40,22 +40,6 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 	return errors.Join(c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
 }
 
-func (c *Compositor) resized(r image.Rectangle, it *interaction, d image.Point) image.Rectangle {
-	if it.right {
-		r.Max.X = max(r.Max.X+d.X, r.Min.X+minFloat)
-	} else {
-		r.Min.X = min(r.Min.X+d.X, r.Max.X-minFloat)
-	}
-	if it.bottom {
-		r.Max.Y = max(r.Max.Y+d.Y, r.Min.Y+minFloat)
-	} else {
-		r.Min.Y = min(r.Min.Y+d.Y, r.Max.Y-minFloat)
-	}
-	return r
-}
-
-const minFloat = 32
-
 func (c *Compositor) dragMoved() error {
 	it := c.interaction
 	at := c.cursor.pixel()
@@ -66,7 +50,7 @@ func (c *Compositor) dragMoved() error {
 	case floating && it.mode == wm.DragMove:
 		return c.update(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
 	case floating:
-		return c.update(c.wm.SetFloatingRect(it.w.id, c.resized(it.rect, it, total)))
+		return c.update(c.wm.ResizeFloating(it.w.id, it.rect, total, it.right, it.bottom))
 	case it.mode == wm.DragResize:
 		s := c.wm
 		var err error
