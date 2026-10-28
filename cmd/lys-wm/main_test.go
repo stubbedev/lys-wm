@@ -156,11 +156,20 @@ func TestTheConfigEnvChoosesTheCursor(t *testing.T) {
 }
 
 func TestSessionVars(t *testing.T) {
-	env := map[string]string{"WAYLAND_DISPLAY": "wayland-1", "LYS_WM_SOCKET": "/run/t.sock"}
+	env := map[string]string{"PATH": "/nix/bin:/usr/bin", "WAYLAND_DISPLAY": "wayland-1", "LYS_WM_SOCKET": "/run/t.sock"}
 	got := sessionVars([][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}}, func(k string) string { return env[k] })
-	want := [][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}, {"WAYLAND_DISPLAY", "wayland-1"}, {"LYS_WM_SOCKET", "/run/t.sock"}}
+	want := [][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}, {"PATH", "/nix/bin:/usr/bin"}, {"WAYLAND_DISPLAY", "wayland-1"}, {"LYS_WM_SOCKET", "/run/t.sock"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("%v, want %v", got, want)
+	}
+}
+
+func TestSessionVarsLetTheConfigEnvWin(t *testing.T) {
+	env := map[string]string{"PATH": "/usr/bin", "WAYLAND_DISPLAY": "wayland-1"}
+	got := sessionVars([][2]string{{"PATH", "/opt/bin"}}, func(k string) string { return env[k] })
+	want := [][2]string{{"PATH", "/opt/bin"}, {"WAYLAND_DISPLAY", "wayland-1"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%v, want %v: the config's PATH once, the process's dropped, unset DISPLAY left out", got, want)
 	}
 }
 

@@ -274,7 +274,10 @@ func (s source) load() (loaded, error) {
 
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
 	out := slices.Clone(env)
-	for _, name := range []string{"WAYLAND_DISPLAY", "DISPLAY", ipc.SocketEnv} {
+	for _, name := range []string{"PATH", "WAYLAND_DISPLAY", "DISPLAY", ipc.SocketEnv} {
+		if slices.ContainsFunc(env, func(kv [2]string) bool { return kv[0] == name }) {
+			continue
+		}
 		if v := getenv(name); v != "" {
 			out = append(out, [2]string{name, v})
 		}
