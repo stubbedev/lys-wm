@@ -46,6 +46,8 @@ const (
 	propEDID
 	inFormatsBlob = 500
 	edidBlob      = 501
+	litModeBlob   = 502
+	splashFB      = 650
 	fakeNumber    = 0xe200
 )
 
@@ -55,8 +57,15 @@ type commit struct {
 	values   map[[2]uint32]uint64
 }
 
+type splash struct {
+	crtc, plane uint32
+	mode        kdrm.Mode
+}
+
 type fakeDevice struct {
 	events, write  int
+	splash         *splash
+	sharedPrimary  bool
 	connected      bool
 	unplugged      bool
 	gone           bool
@@ -154,11 +163,15 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 	switch kind {
 	case kdrm.ObjectPlane:
 		typ, formats := map[uint32]uint64{42: 0, 43: 2}[object], uint64(0)
-		if object == 40 || object == 41 {
+		if object == 40 || object == 41 || object == 42 && f.sharedPrimary {
 			typ, formats = 1, inFormatsBlob
 		}
+		var fb, on uint64
+		if f.splash != nil && f.splash.plane == object {
+			fb, on = splashFB, uint64(f.splash.crtc)
+		}
 		props := map[string]kdrm.Property{
-			"type": {ID: propType, Value: typ}, "FB_ID": {ID: propFB}, "CRTC_ID": {ID: propPlaneCRTC},
+			"type": {ID: propType, Value: typ}, "FB_ID": {ID: propFB, Value: fb}, "CRTC_ID": {ID: propPlaneCRTC, Value: on},
 			"SRC_X": {ID: propSrcX}, "SRC_Y": {ID: propSrcY}, "SRC_W": {ID: propSrcW}, "SRC_H": {ID: propSrcH},
 			"CRTC_X": {ID: propCRTCX}, "CRTC_Y": {ID: propCRTCY}, "CRTC_W": {ID: propCRTCW}, "CRTC_H": {ID: propCRTCH},
 			"IN_FORMATS": {ID: propInFormats, Value: formats}, "IN_FENCE_FD": {ID: propInFence},
@@ -168,13 +181,21 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		}
 		return props, nil
 	case kdrm.ObjectCRTC:
-		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive}, "MODE_ID": {ID: propModeID}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}}
+		var active, mode uint64
+		if f.splash != nil && f.splash.crtc == object {
+			active, mode = 1, litModeBlob
+		}
+		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive, Value: active}, "MODE_ID": {ID: propModeID, Value: mode}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}}
 		if !f.noCTM {
 			props["CTM"] = kdrm.Property{ID: propCTM}
 		}
 		return props, nil
 	case kdrm.ObjectConnector:
-		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC}}
+		var routed uint64
+		if f.splash != nil {
+			routed = uint64(f.splash.crtc)
+		}
+		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC, Value: routed}}
 		if f.badEDID {
 			props["EDID"] = kdrm.Property{ID: propEDID, Value: edidBlob}
 		}
@@ -190,6 +211,9 @@ func (f *fakeDevice) PropertyInfo(uint32) (kdrm.PropertyInfo, error) {
 func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 	if id == edidBlob {
 		return []byte("not an EDID"), nil
+	}
+	if id == litModeBlob && f.splash != nil {
+		return f.splash.mode.Bytes(), nil
 	}
 	if id != inFormatsBlob {
 		return nil, fmt.Errorf("no blob %d", id)
@@ -1609,5 +1633,142 @@ func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	idle := slices.IndexFunc(r.rec.presents[presents:], func(p backend.Presentation) bool { return p.Idle })
 	if idle < 0 {
 		t.Fatalf("the empty frame's refresh went unreported behind a cursor flip: %+v", r.rec.presents[presents:])
+	}
+}
+
+func bootLit(t *testing.T, lit *splash, sharedPrimary bool) *rig {
+	t.Helper()
+	return boot(t, func(d *fakeDevice) allocator {
+		d.splash, d.sharedPrimary = lit, sharedPrimary
+		return &fakeAlloc{soft: soft.New()}
+	})
+}
+
+func (r *rig) firstFrame(o *Output) []commit {
+	r.t.Helper()
+	before := len(r.dev.commits)
+	if err := o.ScheduleFrame(); err != nil {
+		r.t.Fatal(err)
+	}
+	r.settle()
+	frame := r.dev.commits[before:]
+	if len(frame) == 0 || frame[len(frame)-1].flags&kdrm.AtomicTestOnly != 0 {
+		r.t.Fatalf("the first frame committed %+v", frame)
+	}
+	return frame
+}
+
+func TestAnOutputLitInItsModeFlipsOverWhatIsOnScreen(t *testing.T) {
+	lit := modes[0]
+	lit.Type, lit.Name = 0, [32]byte{'s', 'p', 'l', 'a', 's', 'h'}
+	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: lit}, false)
+	o := r.b.Outputs()[0]
+	if len(r.reports) != 1 || !strings.Contains(r.reports[0].Error(), "DP-1 keeps the 1920x1080@60.000 Hz mode it is lit in") {
+		t.Fatalf("reports %v, want the takeover", r.reports)
+	}
+	if err := o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.setCursor(o, image.Pt(1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := o.CursorPlane()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cp.MoveCursor(image.Pt(30, 40)); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	for i, c := range r.dev.commits {
+		if c.flags != kdrm.AtomicTestOnly {
+			t.Fatalf("commit %d replaced what is on screen before the first frame: %+v", i, c)
+		}
+	}
+	frame := r.firstFrame(o)
+	for i, c := range frame {
+		if c.flags&kdrm.AtomicAllowModeset != 0 {
+			t.Fatalf("commit %d of the first frame allows a modeset: %+v", i, c)
+		}
+	}
+	flip := frame[len(frame)-1]
+	if flip.flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent || flip.values[[2]uint32{40, propFB}] != 901 || flip.values[[2]uint32{40, propPlaneCRTC}] != 10 {
+		t.Fatalf("the first frame committed %+v", flip)
+	}
+	for _, k := range [][2]uint32{{10, propModeID}, {10, propActive}, {20, propConnCRTC}} {
+		if v, ok := flip.values[k]; ok {
+			t.Fatalf("the first frame set object %d property %d to %d", k[0], k[1], v)
+		}
+	}
+	if lut, ok := gammaOf(flip); !ok || lut == 0 {
+		t.Fatalf("the first frame set GAMMA_LUT %d (%v), not the LUT set before it", lut, ok)
+	}
+	if fb, at, ok := cursorAt(flip); !ok || fb == 0 || at != image.Pt(29, 39) {
+		t.Fatalf("the first frame put cursor fb %d at %v (%v)", fb, at, ok)
+	}
+}
+
+func TestAnOutputLitInItsModeTurnsOffBeforeItsFirstFrame(t *testing.T) {
+	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: modes[0]}, false)
+	o := r.b.Outputs()[0]
+	state := o.State()
+	state.Power = backend.PoweredOff
+	if err := o.Commit(state); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.dev.commits) != 1 || r.dev.commits[0].flags != kdrm.AtomicAllowModeset || r.dev.commits[0].values[[2]uint32{10, propActive}] != 0 {
+		t.Fatalf("powering off what is on screen committed %+v", r.dev.commits)
+	}
+}
+
+func TestOutputsNotLitInTheirModeAreModeset(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		lit  *splash
+	}{
+		{"an unlit card", nil},
+		{"a CRTC lit in another mode", &splash{crtc: 10, plane: 40, mode: modes[1]}},
+		{"a lit CRTC without a framebuffer", &splash{crtc: 10, mode: modes[0]}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := bootLit(t, tc.lit, false)
+			o := r.b.Outputs()[0]
+			if len(r.reports) != 0 {
+				t.Fatalf("reports %v", r.reports)
+			}
+			frame := r.firstFrame(o)
+			flip := frame[len(frame)-1]
+			if flip.flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent|kdrm.AtomicAllowModeset {
+				t.Fatalf("the first frame committed with flags %#x", flip.flags)
+			}
+			for k, v := range map[[2]uint32]uint64{{20, propConnCRTC}: 10, {10, propActive}: 1, {10, propModeID}: 601, {40, propFB}: 901} {
+				if got, ok := flip.values[k]; !ok || got != v {
+					t.Errorf("object %d property %d = %d (%v), want %d", k[0], k[1], got, ok, v)
+				}
+			}
+		})
+	}
+}
+
+func TestAnOutputKeepsTheCRTCAndPrimaryPlaneItIsLitOn(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		lit           splash
+		sharedPrimary bool
+	}{
+		{"the second CRTC", splash{crtc: 11, plane: 41, mode: modes[0]}, false},
+		{"the second primary plane of a CRTC", splash{crtc: 10, plane: 42, mode: modes[0]}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := bootLit(t, &tc.lit, tc.sharedPrimary)
+			o := r.b.Outputs()[0]
+			if o.crtc.id != tc.lit.crtc || o.primary.id != tc.lit.plane || len(r.reports) != 1 {
+				t.Fatalf("CRTC %d plane %d, reports %v", o.crtc.id, o.primary.id, r.reports)
+			}
+			flip := r.firstFrame(o)
+			if got := flip[len(flip)-1]; got.flags&kdrm.AtomicAllowModeset != 0 || got.values[[2]uint32{tc.lit.plane, propPlaneCRTC}] != uint64(tc.lit.crtc) {
+				t.Fatalf("the first frame committed %+v", got)
+			}
+		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"iter"
 	"slices"
 	"time"
 
@@ -424,31 +425,103 @@ func (b *Backend) Hotplug() error {
 	return b.scan()
 }
 
-func (b *Backend) free(kind planeKind, cr *crtc) *plane {
-	for _, p := range b.planes {
-		if p.kind == kind && !p.taken && p.possible&(1<<cr.index) != 0 {
-			return p
+func (b *Backend) frees(kind planeKind, cr *crtc) iter.Seq[*plane] {
+	return func(yield func(*plane) bool) {
+		for _, p := range b.planes {
+			if p.kind == kind && !p.taken && p.possible&(1<<cr.index) != 0 && !yield(p) {
+				return
+			}
 		}
+	}
+}
+
+func (b *Backend) free(kind planeKind, cr *crtc) *plane {
+	for p := range b.frees(kind, cr) {
+		return p
 	}
 	return nil
 }
 
-func (b *Backend) pick(c kdrm.Connector) (*crtc, *plane, error) {
+func (b *Backend) pick(c kdrm.Connector, routed uint32) (*crtc, *plane, error) {
+	var first *crtc
 	for _, encID := range c.Encoders {
 		enc, err := b.dev.Encoder(encID)
 		if err != nil {
 			return nil, nil, err
 		}
 		for _, cr := range b.crtcs {
-			if cr.output != nil || enc.PossibleCRTCs&(1<<cr.index) == 0 {
+			if cr.output != nil || enc.PossibleCRTCs&(1<<cr.index) == 0 || b.free(primaryPlane, cr) == nil {
 				continue
 			}
-			if p := b.free(primaryPlane, cr); p != nil {
-				return cr, p, nil
+			if cr.id == routed {
+				p, err := b.primaryOn(cr)
+				return cr, p, err
+			}
+			if first == nil {
+				first = cr
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("drm: no free CRTC and primary plane for %s", c.Name())
+	if first == nil {
+		return nil, nil, fmt.Errorf("drm: no free CRTC and primary plane for %s", c.Name())
+	}
+	return first, b.free(primaryPlane, first), nil
+}
+
+func (b *Backend) primaryOn(cr *crtc) (*plane, error) {
+	for p := range b.frees(primaryPlane, cr) {
+		on, err := b.scanning(p)
+		if err != nil {
+			return nil, err
+		}
+		if on == cr.id {
+			return p, nil
+		}
+	}
+	return b.free(primaryPlane, cr), nil
+}
+
+func (b *Backend) scanning(p *plane) (uint32, error) {
+	props, err := b.dev.Properties(p.id, kdrm.ObjectPlane)
+	if err != nil {
+		return 0, fmt.Errorf("drm: read what plane %d scans out: %w", p.id, err)
+	}
+	if props["FB_ID"].Value == 0 {
+		return 0, nil
+	}
+	return uint32(props["CRTC_ID"].Value), nil //nolint:gosec // KMS object IDs are 32-bit
+}
+
+func (b *Backend) inherits(o *Output, routed uint32) (bool, error) {
+	if routed != o.crtc.id {
+		return false, nil
+	}
+	props, err := b.dev.Properties(o.crtc.id, kdrm.ObjectCRTC)
+	if err != nil {
+		return false, fmt.Errorf("drm: read the state of CRTC %d for %s: %w", o.crtc.id, o.Name(), err)
+	}
+	blob := props["MODE_ID"].Value
+	if props["ACTIVE"].Value != 1 || blob == 0 {
+		return false, nil
+	}
+	data, err := b.dev.Blob(uint32(blob)) //nolint:gosec // property blob IDs are 32-bit
+	if err != nil {
+		return false, fmt.Errorf("drm: read the lit mode of CRTC %d for %s: %w", o.crtc.id, o.Name(), err)
+	}
+	lit, err := kdrm.ParseMode(data)
+	if err != nil {
+		return false, fmt.Errorf("drm: the lit mode of CRTC %d for %s: %w", o.crtc.id, o.Name(), err)
+	}
+	if !sameTimings(lit, o.mode) {
+		return false, nil
+	}
+	on, err := b.scanning(o.primary)
+	return on == o.crtc.id, err
+}
+
+func sameTimings(a, b kdrm.Mode) bool {
+	a.Type, a.Name, b.Type, b.Name = 0, [32]byte{}, 0, [32]byte{}
+	return a == b
 }
 
 func (b *Backend) add(c kdrm.Connector) error {
@@ -456,7 +529,8 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
-	cr, p, err := b.pick(c)
+	routed := uint32(props["CRTC_ID"].Value) //nolint:gosec // KMS object IDs are 32-bit
+	cr, p, err := b.pick(c, routed)
 	if err != nil {
 		return err
 	}
@@ -493,6 +567,15 @@ func (b *Backend) add(c kdrm.Connector) error {
 	i := max(slices.IndexFunc(c.Modes, kdrm.Mode.Preferred), 0)
 	if err := o.setMode(c.Modes[i], backend.Depth8); err != nil {
 		return errors.Join(err, o.release())
+	}
+	inherited, err := b.inherits(o, routed)
+	if err != nil {
+		return errors.Join(err, o.release())
+	}
+	if inherited {
+		o.kms, o.lit = kmsInherited, true
+		m := modeOf(o.mode)
+		b.report(fmt.Errorf("drm: %s keeps the %dx%d@%d.%03d Hz mode it is lit in, and its first frame flips over the one on screen without a modeset", o.Name(), m.Size.X, m.Size.Y, m.RefreshMHz/1000, m.RefreshMHz%1000))
 	}
 	b.outputs = append(b.outputs, o)
 	return b.handler.OutputAdded(o)
@@ -553,7 +636,7 @@ func (b *Backend) Pause() {
 func (b *Backend) Wake() error {
 	var errs []error
 	for _, o := range b.outputs {
-		o.modeset = true
+		o.kms = kmsModeset
 		errs = append(errs, b.handler.OutputDamaged(o))
 	}
 	return errors.Join(errs...)
@@ -563,7 +646,7 @@ func (b *Backend) Resume() error {
 	b.paused = false
 	var errs []error
 	for _, o := range b.outputs {
-		o.modeset, o.flipping = true, false
+		o.kms, o.flipping = kmsModeset, false
 		errs = append(errs, o.dropScanout(o.queued))
 		o.queued = nil
 		if o.cursor != nil {
@@ -612,6 +695,14 @@ func (b *Backend) Close() error {
 	return errors.Join(append(errs, b.alloc.close())...)
 }
 
+type kmsState uint8
+
+const (
+	kmsModeset kmsState = iota
+	kmsInherited
+	kmsFlip
+)
+
 type Output struct {
 	b             *Backend
 	identity      edid.Info
@@ -625,7 +716,7 @@ type Output struct {
 	modeBlob      uint32
 	enabled       bool
 	off           bool
-	modeset       bool
+	kms           kmsState
 	lit           bool
 	buffers       []*scanout
 	drawing       *scanout
@@ -722,7 +813,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
 	if o.modeBlob != 0 {
 		err = o.b.dev.DestroyBlob(o.modeBlob)
 	}
-	o.mode, o.depth, o.modeBlob, o.enabled, o.modeset = m, d, blob, true, true
+	o.mode, o.depth, o.modeBlob, o.enabled, o.kms = m, d, blob, true, kmsModeset
 	if err != nil || d == backend.Depth8 || o.b.paused {
 		return err
 	}
@@ -756,7 +847,7 @@ func (o *Output) setPower(on bool) error {
 		return nil
 	}
 	if on {
-		o.off, o.modeset = false, true
+		o.off, o.kms = false, kmsModeset
 		return o.b.handler.OutputDamaged(o)
 	}
 	if o.lit {
@@ -893,7 +984,7 @@ func (o *Output) Present(render.Region) error {
 		return err
 	}
 	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
-	if o.modeset {
+	if o.kms == kmsModeset {
 		flags |= kdrm.AtomicAllowModeset
 	}
 	err = o.submit(s, fence, flags)
@@ -908,7 +999,7 @@ func (o *Output) Present(render.Region) error {
 	}
 	o.renderFence = fence
 	o.aimedAt, _ = backend.NextVblank(o.lastFlip, backend.Now(), modeOf(o.mode).Interval())
-	o.modeset, o.lit, o.flipping, o.torn = false, true, true, false
+	o.kms, o.lit, o.flipping, o.torn = kmsFlip, true, true, false
 	o.queued = s
 	return nil
 }
@@ -922,7 +1013,7 @@ func (o *Output) ForgetScanout(key backend.ScanoutKey) error {
 }
 
 func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
-	if !o.enabled || o.off || o.b.paused || o.modeset || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size {
+	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size {
 		return false, nil
 	}
 	cf, err := o.b.clientFB(key, d)
@@ -984,7 +1075,7 @@ func (o *Output) planeKey(fb, flags uint32) planeKey {
 
 func (o *Output) verify(fb, flags uint32) error {
 	key := o.planeKey(fb, flags)
-	if _, ok := o.tested[key]; ok && !o.modeset && !o.color.dirty() {
+	if _, ok := o.tested[key]; ok && o.kms == kmsFlip && !o.color.dirty() {
 		return nil
 	}
 	if err := o.test(flags); err != nil {
@@ -1025,7 +1116,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 func (o *Output) frame(s *scanout, fence int) {
 	r := &o.b.req
 	r.Reset()
-	if o.modeset {
+	if o.kms == kmsModeset {
 		o.connector.set(&o.b.req, "CRTC_ID", uint64(o.crtc.id))
 		o.crtc.set(&o.b.req, "MODE_ID", uint64(o.modeBlob))
 		o.crtc.set(&o.b.req, "ACTIVE", 1)
@@ -1104,7 +1195,7 @@ func (o *Output) planesDue() error {
 func (o *Output) flushPlanes() error {
 	c := o.cursor
 	cursor := c != nil && c.dirty
-	if !cursor && !o.color.dirty() || !o.lit || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
+	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
 		return nil
 	}
 	if !o.color.dirty() {

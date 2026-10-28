@@ -216,6 +216,17 @@ cannot allocate XR30 at all; #215), with the plane's modifiers for that
 format, and test-commits the modeset first; a plane, allocator or kernel
 that refuses it leaves the output at 8 bits with the refusal logged.
 
+A boot splash hands its last frame over without a black one in between
+(#204). An output keeps the CRTC its connector is routed to, and the primary
+plane already scanning out on it, when the encoder allows them. If that CRTC
+is active in the output's chosen mode and its primary plane shows a
+framebuffer, the output is inherited: nothing commits to it until its first
+frame, which only swaps the primary plane's framebuffer (with the cursor and
+colour state) and carries no `ALLOW_MODESET`, and lys-wm logs that it kept
+the lit mode. Any other lit state, a different mode included, is modeset as
+before. The splash leaves its framebuffer on screen by closing it with
+`DRM_IOCTL_MODE_CLOSEFB` (Linux 6.8) rather than removing it.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

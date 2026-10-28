@@ -148,7 +148,7 @@ func (o *Output) addColor() {
 		switch {
 		case c.dirty:
 			o.crtc.set(&o.b.req, p.String(), uint64(c.next))
-		case o.modeset:
+		case o.kms != kmsFlip:
 			o.crtc.set(&o.b.req, p.String(), uint64(c.current))
 		}
 	}
