@@ -208,10 +208,12 @@ allocates buffers that plane can show.
 Composited frames are 8-bit XRGB8888 unless an output rule asks for
 `bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
 because XR30 primaries break screen sharing and some fullscreen games on
-some drivers, NVIDIA's among them. A 10-bit output allocates XR30 buffers
-with the primary plane's XR30 modifiers that the renderer draws, and
-test-commits the modeset first; a plane, allocator or kernel that refuses
-it leaves the output at 8 bits with the refusal logged.
+some drivers, NVIDIA's among them. A 10-bit output allocates its buffers in
+the first opaque 10-bit format its primary plane scans out and the renderer
+draws, XR30 and then XB30 (NVIDIA's planes offer only XB30, and its GBM
+cannot allocate XR30 at all; #215), with the plane's modifiers for that
+format, and test-commits the modeset first; a plane, allocator or kernel
+that refuses it leaves the output at 8 bits with the refusal logged.
 
 ## Content updates
 

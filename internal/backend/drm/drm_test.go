@@ -64,7 +64,7 @@ type fakeDevice struct {
 	refuseCursor   bool
 	refuseGamma    bool
 	noCTM          bool
-	deep           bool
+	deep           fourcc.Format
 	refuseAsync    bool
 	refusePowerOff bool
 	refuseModesets bool
@@ -144,8 +144,8 @@ func (f *fakeDevice) Plane(id uint32) (kdrm.Plane, error) {
 	switch {
 	case id == 43:
 		formats = []fourcc.Format{cursorFormat}
-	case f.deep:
-		formats = append(formats, fourcc.XRGB2101010)
+	case f.deep != 0:
+		formats = append(formats, f.deep)
 	}
 	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01}[id], Formats: formats}, nil
 }
@@ -195,8 +195,8 @@ func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 		return nil, fmt.Errorf("no blob %d", id)
 	}
 	formats, mask := []uint32{uint32(scanoutFormat), 0}, uint64(1)
-	if f.deep {
-		formats, mask = []uint32{uint32(scanoutFormat), uint32(fourcc.XRGB2101010)}, 3
+	if f.deep != 0 {
+		formats, mask = []uint32{uint32(scanoutFormat), uint32(f.deep)}, 3
 	}
 	b := binary.NativeEndian.AppendUint32(nil, 1)
 	for _, v := range []uint32{0, uint32(1 + mask/2), 24, 2, 32} {
@@ -593,17 +593,19 @@ func TestTenBitFramesNeedAPlaneThatScansThemOut(t *testing.T) {
 		t.Fatalf("10-bit frames on an XRGB8888-only plane: %v", err)
 	}
 
-	r = boot(t, func(d *fakeDevice) allocator {
-		d.deep = true
-		return &fakeAlloc{soft: soft.New()}
-	})
-	o = r.b.Outputs()[0]
-	allocated := len(r.alloc.formats)
-	if err := o.Commit(deep); err != nil {
-		t.Fatal(err)
-	}
-	if got := r.alloc.formats[allocated:]; !slices.Equal(got, []fourcc.Format{fourcc.XRGB2101010, fourcc.XRGB2101010}) || o.State() != deep {
-		t.Fatalf("a 10-bit commit allocated %v and left state %+v", got, o.State())
+	for _, format := range []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010} {
+		r = boot(t, func(d *fakeDevice) allocator {
+			d.deep = format
+			return &fakeAlloc{soft: soft.New()}
+		})
+		o = r.b.Outputs()[0]
+		allocated := len(r.alloc.formats)
+		if err := o.Commit(deep); err != nil {
+			t.Fatalf("a 10-bit commit on a plane that scans out %v: %v", format, err)
+		}
+		if got := r.alloc.formats[allocated:]; !slices.Equal(got, []fourcc.Format{format, format}) || o.State() != deep {
+			t.Fatalf("a 10-bit commit on a plane that scans out %v allocated %v and left state %+v", format, got, o.State())
+		}
 	}
 	if test := r.dev.commits[len(r.dev.commits)-1]; test.flags&kdrm.AtomicTestOnly == 0 || test.flags&kdrm.AtomicAllowModeset == 0 {
 		t.Fatalf("the 10-bit modeset was not tested first: %+v", test)

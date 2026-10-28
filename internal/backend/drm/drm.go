@@ -20,7 +20,12 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
-var depthFormats = [...]fourcc.Format{backend.Depth8: fourcc.XRGB8888, backend.Depth10: fourcc.XRGB2101010}
+var deepFormats = []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010}
+
+type layout struct {
+	format    fourcc.Format
+	modifiers []fourcc.Modifier
+}
 
 const (
 	scanoutFormat = fourcc.XRGB8888
@@ -99,17 +104,17 @@ type plane struct {
 	kind      planeKind
 	possible  uint32
 	modifiers []fourcc.Modifier
-	deep      []fourcc.Modifier
+	deep      layout
 	deepOK    bool
 	clients   []gpu.FormatModifier
 	taken     bool
 }
 
-func (p *plane) depth(d backend.BitDepth) ([]fourcc.Modifier, bool) {
+func (p *plane) depth(d backend.BitDepth) (layout, bool) {
 	if d == backend.Depth10 {
 		return p.deep, p.deepOK
 	}
-	return p.modifiers, true
+	return layout{format: scanoutFormat, modifiers: p.modifiers}, true
 }
 
 var _ backend.Scanner = (*Output)(nil)
@@ -215,9 +220,13 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if err != nil {
 		return nil, err
 	}
-	deepRenderable, err := alloc.renderable(depthFormats[backend.Depth10])
-	if err != nil {
-		return nil, err
+	deepRenderable := make([]layout, 0, len(deepFormats))
+	for _, f := range deepFormats {
+		mods, err := alloc.renderable(f)
+		if err != nil {
+			return nil, err
+		}
+		deepRenderable = append(deepRenderable, layout{format: f, modifiers: mods})
 	}
 	var size [2]uint64
 	for i, c := range []uint64{kdrm.CapCursorWidth, kdrm.CapCursorHeight} {
@@ -241,7 +250,32 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	return b, nil
 }
 
-func (b *Backend) plane(id uint32, renderable, deepRenderable []fourcc.Modifier) (*plane, error) {
+func deepLayout(formats []fourcc.Format, blob []byte, renderable []layout) (layout, bool, error) {
+	for _, r := range renderable {
+		if !slices.Contains(formats, r.format) {
+			continue
+		}
+		if blob == nil {
+			return layout{format: r.format}, true, nil
+		}
+		scanable, err := kdrm.Modifiers(blob, r.format)
+		if err != nil {
+			return layout{}, false, err
+		}
+		both := layout{format: r.format}
+		for _, m := range scanable {
+			if slices.Contains(r.modifiers, m) {
+				both.modifiers = append(both.modifiers, m)
+			}
+		}
+		if len(both.modifiers) > 0 {
+			return both, true, nil
+		}
+	}
+	return layout{}, false, nil
+}
+
+func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable []layout) (*plane, error) {
 	info, err := b.dev.Plane(id)
 	if err != nil {
 		return nil, err
@@ -282,22 +316,13 @@ func (b *Backend) plane(id uint32, renderable, deepRenderable []fourcc.Modifier)
 			return nil, fmt.Errorf("drm: formats of primary plane %d: %w", id, err)
 		}
 	}
-	deep := depthFormats[backend.Depth10]
-	if blob == nil {
-		p.deepOK = p.kind == primaryPlane && slices.Contains(info.Formats, deep)
-		return p, nil
+	if p.kind == primaryPlane {
+		if p.deep, p.deepOK, err = deepLayout(info.Formats, blob, deepRenderable); err != nil {
+			return nil, fmt.Errorf("drm: 10-bit formats of primary plane %d: %w", id, err)
+		}
 	}
-	if p.kind == primaryPlane && slices.Contains(info.Formats, deep) {
-		deepScanable, err := kdrm.Modifiers(blob, deep)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range deepScanable {
-			if slices.Contains(deepRenderable, m) {
-				p.deep = append(p.deep, m)
-			}
-		}
-		p.deepOK = len(p.deep) > 0
+	if blob == nil {
+		return p, nil
 	}
 	scanable, err := kdrm.Modifiers(blob, format)
 	if err != nil {
@@ -671,9 +696,9 @@ func (o *Output) State() backend.OutputState {
 }
 
 func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
-	modifiers, ok := o.primary.depth(d)
+	l, ok := o.primary.depth(d)
 	if !ok {
-		return fmt.Errorf("drm: the primary plane of %s scans out no %v the renderer can draw: %w", o.Name(), depthFormats[d], backend.ErrDepthUnsupported)
+		return fmt.Errorf("drm: the primary plane of %s scans out none of %v that the renderer can draw: %w", o.Name(), deepFormats, backend.ErrDepthUnsupported)
 	}
 	clear(o.tested)
 	blob, err := o.b.dev.CreateBlob(m.Bytes())
@@ -685,10 +710,10 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
 	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
 	for range buffersPerOut {
-		s, err := o.b.alloc.allocate(size, depthFormats[d], modifiers)
+		s, err := o.b.alloc.allocate(size, l.format, l.modifiers)
 		if err != nil {
 			if d != backend.Depth8 {
-				err = fmt.Errorf("drm: %v buffers for %s: %w: %w", depthFormats[d], o.Name(), backend.ErrDepthUnsupported, err)
+				err = fmt.Errorf("drm: %v buffers for %s: %w: %w", l.format, o.Name(), backend.ErrDepthUnsupported, err)
 			}
 			return errors.Join(err, o.b.dev.DestroyBlob(blob), o.freeBuffers())
 		}
@@ -703,7 +728,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
 	}
 	o.frame(o.buffers[0], -1)
 	if err := o.test(kdrm.AtomicAllowModeset); err != nil {
-		return fmt.Errorf("drm: %s refuses %v frames: %w: %w", o.Name(), depthFormats[d], backend.ErrDepthUnsupported, err)
+		return fmt.Errorf("drm: %s refuses %v frames: %w: %w", o.Name(), l.format, backend.ErrDepthUnsupported, err)
 	}
 	return nil
 }

@@ -99,6 +99,23 @@ func gammaRamps(t *testing.T, o *Output) {
 	t.Logf("%s gamma LUT of %d entries", o.Name(), size)
 }
 
+func deepFrames(t *testing.T, o *Output) {
+	t.Helper()
+	l, ok := o.primary.depth(backend.Depth10)
+	if !ok {
+		t.Logf("%s scans out no 10-bit format the renderer draws", o.Name())
+		return
+	}
+	s, err := o.b.alloc.allocate(image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay)), l.format, l.modifiers)
+	if err != nil {
+		t.Fatalf("%s offers %v with %v for 10-bit frames, but they do not allocate: %v", o.Name(), l.format, l.modifiers, err)
+	}
+	if err := s.free(); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%s draws 10-bit frames as %v", o.Name(), l.format)
+}
+
 func colorTransform(t *testing.T, o *Output) {
 	t.Helper()
 	if !o.HasColorTransform() {
@@ -167,6 +184,7 @@ func startWithoutMaster(t *testing.T, card string) {
 		cursorImage(t, o)
 		gammaRamps(t, o)
 		colorTransform(t, o)
+		deepFrames(t, o)
 	}
 	t.Logf("atomic async page flips: %v", b.async)
 	if err := b.Close(); err != nil {
