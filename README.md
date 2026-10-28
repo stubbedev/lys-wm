@@ -53,6 +53,13 @@ display managers such as greetd (`lys-wm --systemd`), enables the portals that
 `lys-wm-portals.conf` routes to, polkit and the rest of a Wayland session. GPU
 drivers come from `/run/opengl-driver`, as for every NixOS compositor.
 
+With standalone home-manager on another distribution, import
+`lys-wm.homeManagerModules.default` and set `programs.lys-wm.enable = true`.
+It installs lys-wm and links `lys-wm-session.target` into
+`~/.config/systemd/user`, because the user manager there does not search the
+Nix profile for units. The display manager, portals and GPU drivers stay the
+host's.
+
 ## Config
 
 One YAML file, `~/.config/lys-wm/config.yaml`; see
