@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"errors"
 	"image"
 	"testing"
 
@@ -44,4 +45,32 @@ func TestDMABUFClientsOnTheGLESRenderer(t *testing.T) {
 	}
 	c.Sync()
 	h.Eventually("the window under the destroyed dmabuf", showing(18, 18, [3]byte{0xff, 0, 0}))
+}
+
+func TestADMABUFDestroyedInASynchronizedCacheKeepsItsClient(t *testing.T) {
+	h := StartGLES(t, func(*compositor.Config) {}, small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("dmabuf cache", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	w.Stop()
+	child := c.Surface()
+	sub, err := c.Subcompositor.GetSubsurface(child, w.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blue := c.DMABUF(image.Pt(16, 16), testclient.Fill(0xff, 0, 0))
+	if err := errors.Join(
+		sub.SetPosition(10, 10), child.Attach(blue.WL, 0, 0), child.DamageBuffer(0, 0, 16, 16), child.Commit(),
+		blue.WL.Destroy(), w.Surface.Commit(), c.Display.Flush(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	c.Sync()
+	h.Eventually("the window under the dmabuf destroyed in its cache", showing(18, 18, [3]byte{0xff, 0, 0}))
+	green := c.DMABUF(image.Pt(16, 16), testclient.Fill(0, 0xff, 0))
+	if err := errors.Join(child.Attach(green.WL, 0, 0), child.DamageBuffer(0, 0, 16, 16), child.Commit(), w.Surface.Commit(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	c.Sync()
+	h.Eventually("the next dmabuf", showing(18, 18, [3]byte{0, 0xff, 0}))
 }

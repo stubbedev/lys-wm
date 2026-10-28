@@ -225,6 +225,16 @@ overwritten by them, which is what lets fifo queue frames instead of
 dropping them. A synchronized subsurface keeps one cached update that
 absorbs its commits and enters its queue when the parent applies.
 
+Every surface state that has not applied yet (pending, a synchronized
+cache, a queued update) locks the buffer it attaches, and the update
+unlocks it once the compositor has taken its contents (#202). A client may
+destroy a `wl_buffer` that such a state still holds: the shm pool mapping
+or dmabuf planes behind it are released only once the wl_buffer is gone
+and no state holds it, so a held update still shows what was attached.
+Applied state does not lock its buffer, so destroying the buffer a
+surface shows behaves as it did before: shm contents stay uploaded, and a
+dmabuf leaves the screen.
+
 A frame latches what it draws: the presentation feedback of every surface
 it shows moves from the surface to that frame, and the output's next vblank
 reports it presented (#121). An update that applies after the latch, as a fifo

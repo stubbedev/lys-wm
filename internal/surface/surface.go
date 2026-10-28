@@ -24,10 +24,6 @@ const (
 	subcompositorVersion = 1
 )
 
-type Buffer interface {
-	Size() image.Point
-}
-
 type Role interface {
 	RoleName() string
 	Committed(s *Surface) error
@@ -278,11 +274,16 @@ func (u *Update) ready() bool {
 	return true
 }
 
-func (u *Update) absorb(later *Update) {
+func (u *Update) absorb(later *Update) error {
+	var replaced Buffer
+	if later.state.set&fieldBuffer != 0 {
+		replaced = u.state.buffer
+	}
 	u.state.merge(&later.state)
 	u.gates = append(u.gates, later.gates...)
 	u.applied = append(u.applied, later.applied...)
 	u.s.recycle(later)
+	return unlock(replaced)
 }
 
 func (s *Surface) recycle(u *Update) {
@@ -556,10 +557,9 @@ func (s *Surface) commit() error {
 	if s.synchronized() {
 		if s.cache == nil {
 			s.cache = u
-		} else {
-			s.cache.absorb(u)
+			return nil
 		}
-		return nil
+		return s.cache.absorb(u)
 	}
 	s.queue = append(s.queue, u)
 	return s.drain()
@@ -587,8 +587,11 @@ func (s *Surface) drain() error {
 	return nil
 }
 
-func (s *Surface) apply(u *Update) error {
+func (s *Surface) apply(u *Update) (err error) {
 	st := &u.state
+	if b := st.buffer; b != nil {
+		defer func() { err = errors.Join(err, b.Unlock()) }()
+	}
 	s.mapDamage(st)
 	s.attached = st.set&fieldBuffer != 0
 	s.offset = image.Point{}
@@ -662,6 +665,10 @@ func (s *Surface) destroy() error {
 	s.destroyed = true
 	var errs []error
 	var feedbacks []*spt.WpPresentationFeedback
+	for _, st := range s.unapplied() {
+		errs = append(errs, unlock(st.buffer))
+		st.buffer = nil
+	}
 	for _, st := range append(s.unapplied(), &s.current) {
 		for _, cb := range st.frames {
 			errs = append(errs, s.client.Remove(cb.Base().ID()))
@@ -707,20 +714,22 @@ func (r surfaceRequests) Attach(obj *sw.WlSurface, buffer *sw.WlBuffer, x, y int
 	if (x != 0 || y != 0) && obj.Base().Version() >= 5 {
 		return s.protocolError(sw.WlSurfaceErrorInvalidOffset, "attach offset (%d, %d) must be 0 since version 5; use wl_surface.offset", x, y)
 	}
-	s.pending.set |= fieldBuffer
-	s.pending.buffer = nil
+	var b Buffer
 	if buffer != nil {
-		b, ok := buffer.Handler().(Buffer)
-		if !ok {
+		var ok bool
+		if b, ok = buffer.Handler().(Buffer); !ok {
 			return fmt.Errorf("surface: wl_buffer@%d has handler %T, which is not a surface.Buffer", buffer.Base().ID(), buffer.Handler())
 		}
-		s.pending.buffer = b
+		b.Lock()
 	}
+	replaced := s.pending.buffer
+	s.pending.set |= fieldBuffer
+	s.pending.buffer = b
 	if x != 0 || y != 0 {
 		s.pending.set |= fieldOffset
 		s.pending.offset = image.Pt(int(x), int(y))
 	}
-	return nil
+	return unlock(replaced)
 }
 
 func (r surfaceRequests) Offset(_ *sw.WlSurface, x, y int32) error {

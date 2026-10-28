@@ -54,6 +54,12 @@ func (b *Buffer) Destroy(*sw.WlBuffer) error {
 	return nil
 }
 
+func (b *Buffer) Lock() {}
+
+func (b *Buffer) Unlock() error {
+	return nil
+}
+
 func (b *Buffer) Release() error {
 	return b.resource.SendRelease()
 }

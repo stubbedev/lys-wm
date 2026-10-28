@@ -204,11 +204,13 @@ func (e *env) surface() *cw.WlSurface {
 }
 
 type testBuffer struct {
-	size image.Point
+	*Backing
+	size     image.Point
+	released bool
 }
 
-func (b testBuffer) Size() image.Point          { return b.size }
-func (b testBuffer) Destroy(*sw.WlBuffer) error { return nil }
+func (b *testBuffer) Size() image.Point          { return b.size }
+func (b *testBuffer) Destroy(*sw.WlBuffer) error { return nil }
 
 func (e *env) buffer(w, h int) *cw.WlBuffer {
 	e.t.Helper()
@@ -236,8 +238,13 @@ func (e *env) bufferPair(w, h int) (*cw.WlBuffer, *sw.WlBuffer) {
 	}
 	var res *sw.WlBuffer
 	e.on(func() {
-		if res, err = sw.CreateWlBuffer(client, id, 1, func(*sw.WlBuffer) (sw.WlBufferHandler, error) {
-			return testBuffer{image.Pt(w, h)}, nil
+		if res, err = sw.CreateWlBuffer(client, id, 1, func(wl *sw.WlBuffer) (sw.WlBufferHandler, error) {
+			b := &testBuffer{size: image.Pt(w, h)}
+			b.Backing = NewBacking(wl, func() error {
+				b.released = true
+				return nil
+			})
+			return b, nil
 		}); err != nil {
 			e.t.Error(err)
 		}
@@ -979,4 +986,117 @@ func TestSynchronizedUpdatesWaitForTheParentCommitThatCarriesThem(t *testing.T) 
 		t.Fatalf("the parent commit applied the synchronized update with damage %v", d.Rects())
 	}
 	must(t, sub.Destroy())
+}
+
+func (e *env) testBuffer(res *sw.WlBuffer) *testBuffer {
+	e.t.Helper()
+	var handler sw.WlBufferHandler
+	e.on(func() { handler = res.Handler() })
+	b, ok := handler.(*testBuffer)
+	if !ok {
+		e.t.Fatalf("wl_buffer@%d has handler %T", res.Base().ID(), handler)
+	}
+	return b
+}
+
+func (e *env) released(b *testBuffer) bool {
+	var released bool
+	e.on(func() { released = b.released })
+	return released
+}
+
+func TestABufferDestroyedUnderAHeldUpdateLastsUntilTheUpdateApplies(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	must(t, s.Commit())
+	e.roundtrip()
+	server := e.last(s).s
+	proxy, res := e.bufferPair(4, 4)
+	b := e.testBuffer(res)
+	var hold *Hold
+	var releasedWhenApplied []bool
+	hooks := &Hooks{
+		Commit:  func(u *Update) error { hold = u.Hold(); return nil },
+		Applied: func() error { releasedWhenApplied = append(releasedWhenApplied, b.released); return nil },
+	}
+	e.on(func() { server.AddHooks(hooks) })
+	must(t, s.Attach(proxy, 0, 0), s.Commit(), proxy.Destroy())
+	e.roundtrip()
+	if e.released(b) {
+		t.Fatal("destroying the wl_buffer released it while a held update still referred to it")
+	}
+	e.on(func() {
+		if err := hold.Release(); err != nil {
+			t.Error(err)
+		}
+	})
+	if !slices.Equal(releasedWhenApplied, []bool{false}) || !e.released(b) {
+		t.Fatalf("released while applying: %v, released after: %v; want it live while the update applied and released once it had", releasedWhenApplied, e.released(b))
+	}
+	if size := e.last(s).size; size != image.Pt(4, 4) {
+		t.Fatalf("the held update applied size %v, want the destroyed buffer's 4x4", size)
+	}
+}
+
+func TestABufferDestroyedAfterItsUpdateAppliedIsReleasedAtOnce(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	proxy, res := e.bufferPair(4, 4)
+	b := e.testBuffer(res)
+	must(t, s.Attach(proxy, 0, 0), s.Commit())
+	e.roundtrip()
+	if e.released(b) {
+		t.Fatal("a shown buffer was released before its wl_buffer was destroyed")
+	}
+	must(t, proxy.Destroy())
+	e.roundtrip()
+	if !e.released(b) {
+		t.Fatal("a wl_buffer destroyed after its update applied was not released")
+	}
+	if size := e.last(s).size; size != image.Pt(4, 4) {
+		t.Fatalf("the surface has size %v after its buffer was destroyed, want 4x4", size)
+	}
+}
+
+func TestABufferDestroyedInASynchronizedCacheLastsUntilTheParentApplies(t *testing.T) {
+	e := setup(t, 6)
+	parent, child := e.surface(), e.surface()
+	sub, err := e.subcomp.GetSubsurface(child, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, res := e.bufferPair(4, 4)
+	b := e.testBuffer(res)
+	must(t, child.Attach(proxy, 0, 0), child.Commit(), proxy.Destroy())
+	e.roundtrip()
+	if e.released(b) {
+		t.Fatal("destroying the wl_buffer released it while a synchronized subsurface cached it")
+	}
+	must(t, parent.Commit())
+	e.roundtrip()
+	if !e.released(b) {
+		t.Fatal("the cached buffer was not released once its update applied")
+	}
+	if size := e.last(child).size; size != image.Pt(4, 4) {
+		t.Fatalf("the cached update applied size %v, want the destroyed buffer's 4x4", size)
+	}
+	must(t, sub.Destroy())
+}
+
+func TestReplacingAnAttachedBufferUnlocksIt(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	first, firstRes := e.bufferPair(4, 4)
+	second, _ := e.bufferPair(2, 2)
+	b := e.testBuffer(firstRes)
+	must(t, s.Attach(first, 0, 0), s.Attach(second, 0, 0), first.Destroy())
+	e.roundtrip()
+	if !e.released(b) {
+		t.Fatal("a buffer replaced before the commit stayed locked after its wl_buffer was destroyed")
+	}
+	must(t, s.Commit())
+	e.roundtrip()
+	if size := e.last(s).size; size != image.Pt(2, 2) {
+		t.Fatalf("the commit applied size %v, want the second buffer's 2x2", size)
+	}
 }

@@ -15,6 +15,7 @@ import (
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
@@ -136,7 +137,7 @@ func (p *pool) CreateBuffer(obj *sw.WlShmPool, res *sw.WlBuffer, offset, width, 
 	}
 	b := &Buffer{pool: p, resource: res, offset: int(offset), size: size, stride: int(stride), format: f}
 	p.refs++
-	server.OnDestroy(res, func() error { return errors.Join(b.dropWriter(), p.unref()) })
+	b.Backing = surface.NewBacking(res, func() error { return errors.Join(b.dropWriter(), p.unref()) })
 	return b, nil
 }
 
@@ -184,6 +185,7 @@ func (p *pool) writableMapping() ([]byte, error) {
 }
 
 type Buffer struct {
+	*surface.Backing
 	pool     *pool
 	resource *sw.WlBuffer
 	offset   int

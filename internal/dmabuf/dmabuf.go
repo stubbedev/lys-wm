@@ -393,7 +393,7 @@ func (p *params) Create(obj *sld.ZwpLinuxBufferParamsV1, width, height int32, fo
 	if buf.resource, err = obj.SendCreated(buf); err != nil {
 		return errors.Join(err, closeAll(b))
 	}
-	server.OnDestroy(buf.resource, buf.destroyed)
+	buf.Backing = surface.NewBacking(buf.resource, buf.destroyed)
 	return nil
 }
 
@@ -407,7 +407,7 @@ func (p *params) CreateImmed(obj *sld.ZwpLinuxBufferParamsV1, res *sw.WlBuffer, 
 		return nil, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorInvalidWlBuffer, "%v", err)
 	}
 	buf := &Buffer{m: p.m, resource: res, dmabuf: b}
-	server.OnDestroy(res, buf.destroyed)
+	buf.Backing = surface.NewBacking(res, buf.destroyed)
 	return buf, nil
 }
 
@@ -416,6 +416,7 @@ func (p *params) SetSamplingDevice(obj *sld.ZwpLinuxBufferParamsV1, _ []byte) er
 }
 
 type Buffer struct {
+	*surface.Backing
 	dmabuf   gpu.DMABUF
 	m        *Manager
 	resource *sw.WlBuffer
