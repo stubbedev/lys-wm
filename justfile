@@ -24,20 +24,26 @@ headless:
 # shell otherwise runs on Mesa's llvmpipe.
 hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGLESRenderer|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGLESRenderer"
 
-# Run the GPU tests on the host's own EGL vendors instead of the dev shell's
-# Mesa, then check frame pacing: headless GLES lys-wm in a private runtime dir,
-# with Xwayland off, runs es2gears_wayland and fails below min_fps.
+# Run the GPU tests on the container's /run/opengl-driver instead of the dev
+# shell's llvmpipe, failing when any of them skips, then check frame pacing:
+# headless GLES lys-wm in a private runtime dir, with Xwayland off, runs
+# es2gears_wayland and fails below min_fps.
 hardware min_fps="57":
     #!/usr/bin/env bash
     set -euo pipefail
     unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE
-    LYS_WM_HEADLESS=1 go test -count=1 -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/backend/drm/ ./internal/harness/ | grep -E '^(--- |ok|FAIL)|_test.go'
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
+    LYS_WM_HEADLESS=1 go test -count=1 -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/backend/drm/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'
+    if grep -E '^[[:space:]]*--- SKIP: |^testing: warning: no tests to run' "$dir/tests.log" > "$dir/not-run.log"; then
+        echo "hardware: these tests did not run on this machine:" >&2
+        cat "$dir/not-run.log" >&2
+        exit 1
+    fi
     mkdir -m 0700 "$dir/run"
     go build -o "$dir/lys-wm" ./cmd/lys-wm
     printf 'xwayland:\n  enabled: false\n' > "$dir/config.yaml"
-    XDG_RUNTIME_DIR="$dir/run" WAYLAND_DISPLAY= "$dir/lys-wm" -backend headless -renderer gles -config "$dir/config.yaml" 2> "$dir/lys-wm.log" &
+    XDG_RUNTIME_DIR="$dir/run" WAYLAND_DISPLAY='' "$dir/lys-wm" -backend headless -renderer gles -config "$dir/config.yaml" 2> "$dir/lys-wm.log" &
     compositor=$!
     trap 'kill "$compositor" 2>/dev/null || true; wait "$compositor" 2>/dev/null || true; rm -rf "$dir"' EXIT
     for _ in $(seq 50); do
@@ -62,12 +68,15 @@ hardware min_fps="57":
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and
-# NVIDIA's device nodes, and the host's GPU drivers and EGL external platforms
-# (NVIDIA's GBM and Wayland support): no DRM card nodes, no
-# host runtime dir, no session bus and no display sockets, so nothing it runs
-# reaches the desktop session. The container user has a passwd entry, which
-# Xwayland's local-user access check needs. `just docker hardware` renders on
-# the host's GPU. Memory is capped, as the race suite runs many binaries.
+# NVIDIA's device nodes, GPU drivers at /run/opengl-driver (the host's on
+# NixOS, the flake's Mesa elsewhere) and the host's EGL external platforms
+# (NVIDIA's GBM and Wayland support): no host runtime dir, no session bus and
+# no display sockets, so nothing it runs reaches the desktop session. Only
+# `just docker hardware`, which renders on the host's GPU, also gets the DRM
+# card nodes: its tests open them without master and never commit, so a
+# running session keeps the display. The container user has a passwd entry,
+# which Xwayland's local-user access check needs. Memory is capped, as the
+# race suite runs many binaries.
 docker recipe="gates" memory="10g":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -80,12 +89,19 @@ docker recipe="gates" memory="10g":
     certs=$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#cacert^out)/etc/ssl/certs/ca-bundle.crt
     docker volume create lys-wm-go > /dev/null
     docker run --rm -v lys-wm-go:/go debian:trixie-slim chown "$(id -u):$(id -g)" /go
+    recipe={{quote(recipe)}}
+    nodes=(/dev/dri/renderD* /dev/nvidia*)
+    if [[ "$recipe" == hardware ]]; then
+        nodes+=(/dev/dri/card*)
+    fi
     gpu=()
-    for node in /dev/dri/renderD* /dev/nvidia*; do
+    for node in "${nodes[@]}"; do
         [[ -c "$node" ]] && gpu+=(--device "$node" --group-add "$(stat -c %g "$node")")
     done
     if [[ -e /run/opengl-driver ]]; then
         gpu+=(-v /run/opengl-driver:/run/opengl-driver:ro)
+    else
+        gpu+=(-v "$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#mesa^out):/run/opengl-driver:ro")
     fi
     if [[ -d /etc/egl/egl_external_platform.d ]]; then
         gpu+=(-v "$(readlink -f /etc/egl/egl_external_platform.d):/etc/egl/egl_external_platform.d:ro")
@@ -93,7 +109,7 @@ docker recipe="gates" memory="10g":
     docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${gpu[@]}" \
         --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 --shm-size 1g \
         -v /nix/store:/nix/store:ro -v "$dir/env.sh:/env.sh:ro" -v "$dir/passwd:/etc/passwd:ro" -v "$dir/group:/etc/group:ro" -v "$PWD:/src" -v lys-wm-go:/go -w /src -e SSL_CERT_FILE="$certs" \
-        debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker {{quote(recipe)}}
+        debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker "$recipe"
 
 # Run a NixOS VM test that needs the network, which the Nix build sandbox
 # does not give checks, in a container with /dev/kvm and its own network:

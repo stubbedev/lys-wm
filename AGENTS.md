@@ -14,8 +14,11 @@ nix build -L
 
 Every test runs in a container (`just docker <recipe>`) or a NixOS VM
 (`nix build .#checks...`), never against the desktop session on the host.
-The container gets KVM, the GPUs' render nodes and the host's drivers, but no
-DRM card node, runtime dir, session bus or display socket.
+The container gets KVM, the GPUs' render nodes and GPU drivers at
+`/run/opengl-driver` (the host's on NixOS, the flake's Mesa elsewhere), but no
+runtime dir, session bus or display socket, and no DRM card node except under
+`just docker hardware`, whose tests open the cards without master and never
+commit.
 
 After every push, watch CI until it is green (`gh run watch`). A red `main`
 is fixed before anything else lands.
@@ -23,9 +26,9 @@ is fixed before anything else lands.
 The dev shell runs the GPU tests on Mesa's llvmpipe. On a machine with a GPU,
 run `just docker hardware` after changes to rendering, DRM, dmabuf, capture or frame
 pacing: it runs the GPU, DRM-without-master and GLES harness tests on the
-host's own EGL driver, then measures es2gears against headless GLES lys-wm in a
-private runtime dir (Xwayland off) and fails below `min_fps` (57 by default,
-for the 60 Hz headless output).
+host's GPU and fails if any of them skips, then measures es2gears against
+headless GLES lys-wm in a private runtime dir (Xwayland off) and fails below
+`min_fps` (57 by default, for the 60 Hz headless output).
 
 After changes to Xwayland, X11 window management or scaling, run the real X
 applications too. `nix build .#checks.x86_64-linux.vm-xwayland-apps` drives
