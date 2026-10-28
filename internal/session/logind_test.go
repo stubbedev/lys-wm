@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
-	"github.com/godbus/dbus/v5/prop"
+	"github.com/stubbedev/lys-lib/third_party/godbus"
+	"github.com/stubbedev/lys-lib/third_party/godbus/prop"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"

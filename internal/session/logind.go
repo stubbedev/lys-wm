@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"

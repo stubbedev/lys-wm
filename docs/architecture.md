@@ -18,7 +18,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | Wayland wire protocol | in-repo codec and scanner (#3, #4) |
 | DRM/KMS ioctls, pixel formats, EDID | lys-lib's `drm`, `fourcc` and `edid`, shared with lys-splash (stubbedev/lys-lib#30) |
 | epoll, timerfd, signalfd, memfd | [`golang.org/x/sys/unix`](https://pkg.go.dev/golang.org/x/sys/unix) |
-| logind | [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus) |
+| logind, systemd | lys-lib's `third_party/godbus`, godbus v5.2.4 with the fd and ordered-dispatch fixes every lys process shares |
 | udev | netlink, read directly (#39) |
 | X11 window manager | [`github.com/jezek/xgb`](https://github.com/jezek/xgb) (#45) |
 | Text | [`github.com/go-text/typesetting`](https://github.com/go-text/typesetting), through lys-lib's `render` |
