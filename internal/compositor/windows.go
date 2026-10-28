@@ -208,7 +208,12 @@ func (c *Compositor) settle(w *window, activated bool) error {
 
 func (c *Compositor) floats(t toplevel) (bool, image.Point) {
 	d := wm.Decide(c.rules, t.AppID(), t.Title())
-	return d.Mode == wm.RuleFloat || ((t.parent() != nil || t.prefersFloating()) && d.Mode != wm.RuleTile), d.Size
+	wants := t.parent() != nil || t.prefersFloating() || fixedSize(t.sizeLimits())
+	return d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile), d.Size
+}
+
+func fixedSize(minimum, maximum image.Point) bool {
+	return minimum != (image.Point{}) && minimum == maximum
 }
 
 func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {

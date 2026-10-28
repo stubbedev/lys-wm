@@ -58,3 +58,7 @@ func (t *Toplevel) setModal(on bool) error {
 func (t *Toplevel) Modal() bool {
 	return t.modal
 }
+
+func (t *Toplevel) Dialog() bool {
+	return t.dialog
+}

@@ -190,8 +190,10 @@ earlier ones.
 
 X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 `jetbrains-idea`). Without a rule, a window floats when it has a parent
-(`WM_TRANSIENT_FOR` for X11), is modal, is a dialog, utility, splash or
-toolbar window, or has a fixed size; `tile: true` overrides that.
+(`xdg_toplevel.set_parent` or xdg-foreign; `WM_TRANSIENT_FOR` for X11),
+has a fixed size (its minimum size equals its maximum; `WM_NORMAL_HINTS`
+for X11), is an `xdg_dialog_v1`, or, for X11, is modal or a dialog,
+utility, splash or toolbar window; `tile: true` overrides that.
 
 ## env and autostart
 

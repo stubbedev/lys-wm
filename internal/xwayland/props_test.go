@@ -48,11 +48,11 @@ func TestParseHints(t *testing.T) {
 
 func TestParseSizeHints(t *testing.T) {
 	fixed, err := parseSizeHints(words(sizeMin|sizeMax, 0, 0, 0, 0, 300, 200, 300, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-	if err != nil || !fixed.Fixed() || fixed.Min != image.Pt(300, 200) {
+	if err != nil || fixed.Min != image.Pt(300, 200) || fixed.Max != fixed.Min {
 		t.Fatalf("%+v, %v", fixed, err)
 	}
 	loose, err := parseSizeHints(words(sizeMin, 0, 0, 0, 0, 300, 200, 900, 900))
-	if err != nil || loose.Fixed() || loose.Max != (image.Point{}) {
+	if err != nil || loose.Min != image.Pt(300, 200) || loose.Max != (image.Point{}) {
 		t.Fatalf("%+v, %v", loose, err)
 	}
 	if _, err := parseSizeHints(words(1, 2, 3)); err == nil {

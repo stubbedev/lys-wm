@@ -78,10 +78,6 @@ type SizeHints struct {
 	Min, Max image.Point
 }
 
-func (h SizeHints) Fixed() bool {
-	return h.Min != (image.Point{}) && h.Min == h.Max
-}
-
 func parseSizeHints(data []byte) (SizeHints, error) {
 	v, err := cardinals(data, atomWMNormalHints, 9)
 	if err != nil {

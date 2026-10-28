@@ -167,7 +167,7 @@ func (w *Window) has(list []xproto.Atom, names ...atom) bool {
 }
 
 func (w *Window) PrefersFloating() bool {
-	return w.props.size.Fixed() || w.has(w.props.states, atomNetWMStateModal) ||
+	return w.has(w.props.states, atomNetWMStateModal) ||
 		w.has(w.props.types, atomNetWMWindowTypeDialog, atomNetWMWindowTypeUtility, atomNetWMWindowTypeSplash, atomNetWMWindowTypeToolbar)
 }
 

@@ -220,6 +220,75 @@ func TestAWindowAcrossOutputsPrefersTheHighestScale(t *testing.T) {
 	}
 }
 
+func fixedSize(size image.Point) func(*testclient.Window) error {
+	return func(w *testclient.Window) error {
+		return errors.Join(w.Toplevel.SetMinSize(int32(size.X), int32(size.Y)), w.Toplevel.SetMaxSize(int32(size.X), int32(size.Y)))
+	}
+}
+
+func TestWaylandWindowsThatAskToFloatFloat(t *testing.T) {
+	for name, setup := range map[string]func(*testing.T, *testclient.Client) func(*testclient.Window) error{
+		"a fixed size": func(*testing.T, *testclient.Client) func(*testclient.Window) error {
+			return fixedSize(image.Pt(60, 40))
+		},
+		"an xdg dialog without a parent": func(t *testing.T, c *testclient.Client) func(*testclient.Window) error {
+			m := dialogManager(t, c)
+			return func(w *testclient.Window) error {
+				_, err := m.GetXdgDialog(w.Toplevel)
+				return err
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := Start(t, small)
+			c := testclient.Connect(t, h.Socket())
+			app := c.Window("app", testclient.Fill(0, 0, 0xff))
+			c.DispatchUntil("the app to map", app.Mapped)
+			asks := c.WindowWith("asks", testclient.Fill(0, 0xff, 0), setup(t, c))
+			c.DispatchUntil("it to map", asks.Mapped)
+			if slices.Contains(asks.States, cxdg.XdgToplevelStateTiledLeft) {
+				t.Fatalf("it was configured tiled: %v", asks.States)
+			}
+			c.DispatchUntil("the app keeps the whole output", func() bool { return app.Logical == small.Size })
+			h.Eventually("it centred over the app", showing(65, 40, [3]byte{0, 0xff, 0}))
+			h.Eventually("the app around it", showing(10, 10, redColor))
+		})
+	}
+}
+
+func TestAFixedSizeWaylandWindowFloatsAtItsSize(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	fixed := c.WindowWith("fixed", testclient.Fill(0, 0xff, 0), fixedSize(image.Pt(60, 40)))
+	c.DispatchUntil("the fixed window to map", fixed.Mapped)
+	if fixed.Logical != image.Pt(60, 40) {
+		t.Fatalf("a window fixed at 60x40 floats at %v", fixed.Logical)
+	}
+}
+
+func TestWaylandWindowsThatDoNotAskToFloatTile(t *testing.T) {
+	for name, cfg := range map[string]struct {
+		rules []wm.Rule
+		setup func(*testclient.Window) error
+	}{
+		"only a minimum size": {setup: func(w *testclient.Window) error { return w.Toplevel.SetMinSize(20, 20) }},
+		"a fixed size overridden by a tile rule": {
+			rules: []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^second$`), Mode: wm.RuleTile}},
+			setup: fixedSize(image.Pt(60, 40)),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := StartWith(t, func(conf *compositor.Config) { conf.Rules = cfg.rules }, small)
+			c := testclient.Connect(t, h.Socket())
+			app := c.Window("app", testclient.Fill(0, 0, 0xff))
+			c.DispatchUntil("the app to map", app.Mapped)
+			second := c.WindowWith("second", testclient.Fill(0, 0xff, 0), cfg.setup)
+			c.DispatchUntil("the second window to map", second.Mapped)
+			c.DispatchUntil("the two share the output", func() bool { return app.Logical.X < small.Size.X })
+		})
+	}
+}
+
 func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}

@@ -55,8 +55,8 @@ func (t xdgToplevel) modal() bool {
 	return t.Modal()
 }
 
-func (xdgToplevel) prefersFloating() bool {
-	return false
+func (t xdgToplevel) prefersFloating() bool {
+	return t.Dialog()
 }
 
 func (t xdgToplevel) sizeLimits() (minimum, maximum image.Point) {
