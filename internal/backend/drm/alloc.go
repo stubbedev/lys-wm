@@ -44,11 +44,7 @@ func (a *gbmAllocator) renderable(format fourcc.Format) ([]fourcc.Modifier, erro
 }
 
 func (a *gbmAllocator) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
-	usage := gpu.UseRendering
-	if len(modifiers) == 0 {
-		usage |= gpu.UseScanout
-	}
-	bo, err := a.stack.GBM.Allocate(size, format, modifiers, usage)
+	bo, err := a.stack.GBM.Allocate(size, format, modifiers, gpu.UseRendering|gpu.UseScanout)
 	if err != nil {
 		return nil, err
 	}

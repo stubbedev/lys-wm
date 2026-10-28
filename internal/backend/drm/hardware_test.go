@@ -28,9 +28,9 @@ func (a *added) OutputAdded(o backend.Output) error {
 
 func (a *added) OutputRemoved(backend.Output) error { return nil }
 
-func connected(t *testing.T) int {
+func connected(t *testing.T, card string) int {
 	t.Helper()
-	statuses, err := filepath.Glob("/sys/class/drm/card0-*/status")
+	statuses, err := filepath.Glob(filepath.Join("/sys/class/drm", card+"-*", "status"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,10 +117,23 @@ func colorTransform(t *testing.T, o *Output) {
 	t.Logf("%s takes a CTM", o.Name())
 }
 
-func TestStartOnThisCardWithoutMaster(t *testing.T) {
-	dev, err := kdrm.Open("/dev/dri/card0")
+func TestStartOnEveryCardWithoutMaster(t *testing.T) {
+	cards, err := filepath.Glob("/dev/dri/card*")
 	if err != nil {
-		t.Skipf("no DRM card: %v", err)
+		t.Fatal(err)
+	}
+	if len(cards) == 0 {
+		t.Skip("no DRM card")
+	}
+	for _, card := range cards {
+		t.Run(filepath.Base(card), func(t *testing.T) { startWithoutMaster(t, card) })
+	}
+}
+
+func startWithoutMaster(t *testing.T, card string) {
+	dev, err := kdrm.Open(card)
+	if err != nil {
+		t.Skipf("cannot open %s: %v", card, err)
 	}
 	defer dev.Close()
 	l, err := loop.New()
@@ -140,8 +153,8 @@ func TestStartOnThisCardWithoutMaster(t *testing.T) {
 	if err := b.Start(h); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.outputs) != connected(t) {
-		t.Fatalf("%d outputs for %d connected connectors", len(h.outputs), connected(t))
+	if n := connected(t, filepath.Base(card)); len(h.outputs) != n {
+		t.Fatalf("%d outputs for %d connected connectors", len(h.outputs), n)
 	}
 	for _, o := range b.Outputs() {
 		if len(o.buffers) != buffersPerOut || o.buffers[0].fb == 0 || !o.State().Enabled() || !o.State().Mode.Preferred {
