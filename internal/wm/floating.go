@@ -86,28 +86,43 @@ func (s State) ToggleFloating(at Autotile) (State, error) {
 	if !ok {
 		return s, nil
 	}
+	if s.Floats(id) {
+		return s.Tile(id, at)
+	}
+	area := s.output(s.windowWorkspace(id).Output).Area
+	return s.Float(id, centered(area, s.limits[id].floored().Fit(area.Size().Div(2))))
+}
+
+func (s State) Float(id WindowID, rect image.Rectangle) (State, error) {
 	s = s.clone()
 	w := s.windowWorkspace(id)
-	o := s.output(w.Output)
-	if i := w.floatingIndex(id); i >= 0 {
-		if err := w.remove(id); err != nil {
-			return State{}, err
-		}
-		tree, err := w.Tree.Place(id, o.Area, at)
-		if err != nil {
-			return State{}, err
-		}
-		w.Tree, w.floatFocus = tree, false
-		w.record()
-		return s, nil
+	if w == nil || !w.Tree.Contains(id) {
+		return State{}, fmt.Errorf("float window %d: %w", id, ErrUnknownWindow)
 	}
+	focused, _ := w.focused()
 	if err := w.remove(id); err != nil {
 		return State{}, err
 	}
-	w.Floating = append(w.Floating, Floating{ID: id, Rect: centered(o.Area, s.limits[id].floored().Fit(o.Area.Size().Div(2)))})
-	w.floatFocus = true
-	w.record()
-	return s, nil
+	w.Floating = append(w.Floating, Floating{ID: id, Rect: s.limits[id].fitRect(rect, true, true)})
+	return s, w.focus(focused)
+}
+
+func (s State) Tile(id WindowID, at Autotile) (State, error) {
+	s = s.clone()
+	w := s.windowWorkspace(id)
+	if w == nil || w.floatingIndex(id) < 0 {
+		return State{}, fmt.Errorf("tile window %d: %w", id, ErrUnknownWindow)
+	}
+	focused, _ := w.focused()
+	if err := w.remove(id); err != nil {
+		return State{}, err
+	}
+	tree, err := w.Tree.Place(id, s.output(w.Output).Area, at)
+	if err != nil {
+		return State{}, err
+	}
+	w.Tree = tree
+	return s, w.focus(focused)
 }
 
 func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error) {

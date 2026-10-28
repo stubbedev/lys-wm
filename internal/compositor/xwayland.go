@@ -173,7 +173,7 @@ func (c *Compositor) XWindowChanged(w *xwayland.Window) error {
 	if win := c.windowOf(xToplevel{w, c}); win != nil && w.Urgent() {
 		err = c.markUrgent(win)
 	}
-	return errors.Join(err, c.refreshLimits(xToplevel{w, c}), c.refreshPointer(), c.scheduleAll(), c.syncForeign())
+	return errors.Join(err, c.refreshLimits(xToplevel{w, c}), c.redecide(xToplevel{w, c}), c.refreshPointer(), c.scheduleAll(), c.syncForeign())
 }
 
 func (c *Compositor) XWindowResponsive(w *xwayland.Window, responsive bool) error {

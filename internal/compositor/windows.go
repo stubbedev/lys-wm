@@ -24,6 +24,7 @@ type window struct {
 	urgent  bool
 	hung    bool
 	scale   output.Scale
+	floated bool
 }
 
 func (c *Compositor) windowOrigin(w *window) origin {
@@ -277,6 +278,22 @@ func (c *Compositor) refreshLimits(t toplevel) error {
 	return c.update(c.wm.SetLimits(w.id, c.frameLimits(t)))
 }
 
+func (c *Compositor) redecide(t toplevel) error {
+	w := c.windowOf(t)
+	if w == nil || c.wm.Floats(w.id) != w.floated {
+		return nil
+	}
+	float, size := c.floats(t)
+	if float == w.floated {
+		return nil
+	}
+	w.floated = float
+	if float {
+		return c.update(c.wm.Float(w.id, c.floatRect(t, size)))
+	}
+	return c.update(c.wm.Tile(w.id, c.settings.Autotile))
+}
+
 func (c *Compositor) focusWindow(w *window) error {
 	c.layerFocus = nil
 	return c.update(c.wm.FocusWindow(w.id))
@@ -314,7 +331,9 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	c.nextWindow++
 	var s wm.State
 	var err error
-	if float, size := c.floats(t); float {
+	float, size := c.floats(t)
+	w.floated = float
+	if float {
 		s, err = c.wm.MapFloating(w.id, c.floatRect(t, size))
 	} else {
 		s, err = c.wm.MapWindow(w.id, c.settings.Autotile)
@@ -356,7 +375,9 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {
 	switch change {
 	case shell.ChangedSizeLimits:
-		return c.refreshLimits(xdgToplevel{t})
+		return errors.Join(c.refreshLimits(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
+	case shell.ChangedTitle, shell.ChangedAppID, shell.ChangedParent:
+		return errors.Join(c.redecide(xdgToplevel{t}), c.syncForeign())
 	case shell.ChangedModal:
 		return errors.Join(c.reconcile(), c.syncForeign())
 	case shell.ChangedIcon:

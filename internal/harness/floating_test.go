@@ -321,6 +321,43 @@ func TestAFloatingWindowGrowsWhenItRaisesItsMinimum(t *testing.T) {
 	c.DispatchUntil("it grows to its new minimum", func() bool { return w.Logical == image.Pt(100, 70) })
 }
 
+func TestWindowsFloatOrTileAgainWhenWhatDecidedItChanges(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^Friends List$`), Mode: wm.RuleFloat}}
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	app := c.Window("app", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the app to map", app.Mapped)
+	w := c.Window("Steam", testclient.Fill(0, 0xff, 0))
+	c.DispatchUntil("the window to map tiled", func() bool { return w.Mapped() && app.Logical.X < small.Size.X })
+	tiled := func() bool { return app.Logical.X < small.Size.X }
+	floats := func() bool { return app.Logical == small.Size }
+	change := func(what string, f func() error, want func() bool) {
+		t.Helper()
+		if err := errors.Join(f(), w.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		c.DispatchUntil(what, want)
+	}
+	change("a retitle into the float rule floats it", func() error { return w.Toplevel.SetTitle("Friends List") }, floats)
+	change("a retitle out of it tiles it again", func() error { return w.Toplevel.SetTitle("Steam") }, tiled)
+	change("a fixed size floats it", func() error { return fixedSize(image.Pt(60, 40))(w) }, floats)
+	if w.Logical != image.Pt(60, 40) {
+		t.Fatalf("a window that became fixed at 60x40 floats at %v", w.Logical)
+	}
+	change("a size it can grow from again tiles it", func() error { return w.Toplevel.SetMaxSize(0, 0) }, tiled)
+
+	h.dispatch("togglefloating")
+	c.DispatchUntil("the user floats it", floats)
+	change("a retitle leaves the user's choice", func() error { return w.Toplevel.SetTitle("still mine") }, floats)
+	if err := c.Display.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	if !floats() {
+		t.Fatal("a window the user floated tiled again when its title changed")
+	}
+}
+
 func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}

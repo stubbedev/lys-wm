@@ -193,7 +193,9 @@ X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 (`xdg_toplevel.set_parent` or xdg-foreign; `WM_TRANSIENT_FOR` for X11),
 has a fixed size (its minimum size equals its maximum; `WM_NORMAL_HINTS`
 for X11), is an `xdg_dialog_v1`, or, for X11, is modal or a dialog,
-utility, splash or toolbar window; `tile: true` overrides that.
+utility, splash or toolbar window; `tile: true` overrides that. The
+choice is made again whenever the window's title, app_id, parent or size
+limits change, until you float or tile the window yourself.
 
 ## env and autostart
 
