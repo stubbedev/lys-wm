@@ -17,6 +17,7 @@ import (
 	"time"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/xdg"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -204,15 +205,11 @@ func loadFont(path string) (*gtext.Typeface, error) {
 }
 
 func configPath(getenv func(string) string) (string, error) {
-	dir := getenv("XDG_CONFIG_HOME")
-	if !filepath.IsAbs(dir) {
-		home := getenv("HOME")
-		if !filepath.IsAbs(home) {
-			return "", errors.New("neither XDG_CONFIG_HOME nor HOME is an absolute path; pass --config")
-		}
-		dir = filepath.Join(home, ".config")
+	dir, ok := xdg.Env(getenv).ConfigDir("lys-wm")
+	if !ok {
+		return "", errors.New("neither XDG_CONFIG_HOME nor HOME is an absolute path; pass --config")
 	}
-	return filepath.Join(dir, "lys-wm", "config.yaml"), nil
+	return filepath.Join(dir, "config.yaml"), nil
 }
 
 type source struct {
