@@ -60,6 +60,7 @@
       vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
+      vm-lid = import ./lid.nix {inherit pkgs module;};
       vm-xwayland = import ./xwayland.nix {inherit pkgs module;};
       vm-xwayland-apps = xwaylandApp "idea";
       headless = pkgs.callPackage ./headless.nix {
