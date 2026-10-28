@@ -62,6 +62,7 @@ type Logind struct {
 	signals  chan *dbus.Signal
 	done     chan struct{}
 	active   bool
+	sleeping bool
 	seatID   string
 	owner    string
 }
@@ -205,6 +206,7 @@ func (lg *Logind) handle(sig *dbus.Signal) error {
 		if err := dbus.Store(sig.Body, &sleeping); err != nil {
 			return fmt.Errorf("session: PrepareForSleep: %w", err)
 		}
+		lg.sleeping = sleeping
 		return lg.listener.PrepareForSleep(sleeping)
 	case propsIface + ".PropertiesChanged":
 		var iface string
@@ -254,9 +256,18 @@ func (lg *Logind) InhibitLidSwitch() (*os.File, error) {
 }
 
 func (lg *Logind) Suspend() error {
-	if err := call(lg.manager, managerIface+".Suspend", false).Err; err != nil {
+	if lg.sleeping {
+		return nil
+	}
+	err := call(lg.manager, managerIface+".Suspend", false).Err
+	var refusal dbus.Error
+	switch {
+	case errors.As(err, &refusal):
+		return fmt.Errorf("session: logind refused to suspend: %s: %w", refusal.Name, err)
+	case err != nil:
 		return fmt.Errorf("session: suspend: %w", err)
 	}
+	lg.sleeping = true
 	return nil
 }
 

@@ -24,7 +24,10 @@ func (c *Compositor) applyLidPolicy() error {
 	if !battery {
 		return nil
 	}
-	return lid.Suspend()
+	if err := lid.Suspend(); err != nil {
+		c.report(fmt.Errorf("compositor: the lid policy could not suspend: %w", err))
+	}
+	return nil
 }
 
 func (c *Compositor) docked() bool {

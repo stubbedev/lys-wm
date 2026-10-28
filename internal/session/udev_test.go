@@ -94,6 +94,20 @@ func udevMessage(props ...string) []byte {
 	return append(msg, body...)
 }
 
+func trustSelf(_ unix.Sockaddr, c *unix.Ucred) bool {
+	return c != nil && c.Uid == uint32(os.Getuid())
+}
+
+func sendUevents(t *testing.T, fd int, msgs ...[]byte) {
+	t.Helper()
+	creds := unix.UnixCredentials(&unix.Ucred{Pid: int32(os.Getpid()), Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())})
+	for _, msg := range msgs {
+		if err := unix.Sendmsg(fd, msg, creds, nil, 0); err != nil {
+			t.Fatalf("send a uevent: %v", err)
+		}
+	}
+}
+
 func TestParseUdevMessages(t *testing.T) {
 	msg := udevMessage("ACTION=change", "DEVPATH=/devices/pci/drm/card0", "SUBSYSTEM=drm", "DEVNAME=/dev/dri/card0", "MAJOR=226", "MINOR=0", "HOTPLUG=1")
 	ev, err := parseUdevMessage(msg, "/sys")
@@ -130,9 +144,7 @@ func TestMonitorDeliversTrustedSeatEvents(t *testing.T) {
 	}
 	defer l.Close()
 	var got []UdevEvent
-	m, err := watch(l, fds[0], DefaultSeat, "/sys", []Subsystem{DRM, Input}, func(_ unix.Sockaddr, c *unix.Ucred) bool {
-		return c != nil && c.Uid == uint32(os.Getuid())
-	}, func(ev UdevEvent) error {
+	m, err := watch(l, fds[0], DefaultSeat, "/sys", []Subsystem{DRM, Input}, trustSelf, func(ev UdevEvent) error {
 		got = append(got, ev)
 		if len(got) == 2 {
 			l.Stop()
@@ -143,18 +155,13 @@ func TestMonitorDeliversTrustedSeatEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	creds := unix.UnixCredentials(&unix.Ucred{Pid: int32(os.Getpid()), Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())})
-	for _, msg := range [][]byte{
+	sendUevents(t, fds[1],
 		udevMessage("ACTION=add", "SUBSYSTEM=sound", "DEVPATH=/s", "DEVNAME=snd/c", "MAJOR=116", "MINOR=1"),
 		udevMessage("ACTION=add", "SUBSYSTEM=input", "DEVPATH=/i", "DEVNAME=input/event9", "MAJOR=13", "MINOR=73", "ID_SEAT=seat1"),
 		[]byte("not udev"),
 		udevMessage("ACTION=add", "SUBSYSTEM=input", "DEVPATH=/i", "DEVNAME=input/event8", "MAJOR=13", "MINOR=72"),
 		udevMessage("ACTION=remove", "SUBSYSTEM=drm", "DEVPATH=/d", "DEVNAME=dri/card1", "MAJOR=226", "MINOR=1"),
-	} {
-		if err := unix.Sendmsg(fds[1], msg, creds, nil, 0); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 	if err := l.Run(); err != nil {
 		t.Fatal(err)
 	}

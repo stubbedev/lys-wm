@@ -71,3 +71,36 @@ func TestWithoutALidPolicyTheLidNeverSuspends(t *testing.T) {
 		return errors.Join(b.Switches().Toggle(backend.SwitchLid, true), c.PowerChanged())
 	})
 }
+
+func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
+	var r reports
+	refusal := errors.New("session: logind refused to suspend: org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress")
+	suspends := 0
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Report = r.report
+		c.Hooks.Lid = compositor.LidPolicy{
+			Suspend: func() error {
+				suspends++
+				return refusal
+			},
+			OnBattery: func() (bool, error) { return true, nil },
+		}
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if _, err := b.AddNamedOutput("eDP-1", small); err != nil {
+			return err
+		}
+		return b.Switches().Toggle(backend.SwitchLid, true)
+	})
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.PowerChanged() })
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		if suspends != 2 {
+			t.Errorf("%d suspends, want one for the lid closing and one for the power change", suspends)
+		}
+		got := r.take()
+		if len(got) != 2 || !errors.Is(got[0], refusal) || !errors.Is(got[1], refusal) {
+			t.Errorf("reports %v, want the refusal twice", got)
+		}
+		return nil
+	})
+}

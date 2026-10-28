@@ -446,6 +446,10 @@ on every relevant change: suspend when the lid is closed, no external output
 is connected and the machine is on battery. The alternative, leaving the edge
 to logind and only re-checking afterwards, split one policy between two owners
 whose settings could disagree. `lid_suspend: false` hands the lid back.
+A sleep is pending from the moment logind accepts lys-wm's Suspend, or
+announces `PrepareForSleep(true)`, until `PrepareForSleep(false)`; the policy
+does not ask again in between, so the AC and battery uevents of one unplug
+suspend once (#205). A Suspend logind refuses is reported, never fatal.
 
 Licences decide how they may be used:
 

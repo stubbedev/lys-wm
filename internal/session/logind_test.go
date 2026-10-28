@@ -3,26 +3,35 @@ package session
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
-const sessionPath = dbus.ObjectPath("/org/freedesktop/login1/session/_31")
+const (
+	sessionPath         = dbus.ObjectPath("/org/freedesktop/login1/session/_31")
+	operationInProgress = login1 + ".OperationInProgress"
+)
 
 type fakeLogind struct {
-	mu    sync.Mutex
-	calls []string
-	conn  *dbus.Conn
-	props *prop.Properties
+	address  string
+	mu       sync.Mutex
+	calls    []string
+	conn     *dbus.Conn
+	props    *prop.Properties
+	sleeping bool
+	refusal  *dbus.Error
 }
 
 func (f *fakeLogind) note(s string) {
@@ -35,6 +44,35 @@ func (f *fakeLogind) seen() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.calls)
+}
+
+func (f *fakeLogind) refuse(e *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refusal = e
+}
+
+func (f *fakeLogind) sleep() *dbus.Error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch {
+	case f.refusal != nil:
+		return f.refusal
+	case f.sleeping:
+		return dbus.NewError(operationInProgress, []any{"There's already a shutdown or sleep operation in progress"})
+	}
+	f.sleeping = true
+	if err := f.conn.Emit(managerPath, managerIface+".PrepareForSleep", true); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+func (f *fakeLogind) wake() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sleeping = false
+	return f.conn.Emit(managerPath, managerIface+".PrepareForSleep", false)
 }
 
 type manager struct{ f *fakeLogind }
@@ -60,7 +98,7 @@ func (m manager) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Error)
 
 func (m manager) Suspend(interactive bool) *dbus.Error {
 	m.f.note(fmt.Sprintf("Suspend %v", interactive))
-	return nil
+	return m.f.sleep()
 }
 
 type session struct{ f *fakeLogind }
@@ -111,7 +149,7 @@ func logind(t *testing.T, address string) *fakeLogind {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	f := &fakeLogind{conn: conn}
+	f := &fakeLogind{address: address, conn: conn}
 	seatPath := dbus.ObjectPath("/org/freedesktop/login1/seat/seat0")
 	for _, e := range []struct {
 		v     any
@@ -189,14 +227,19 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func TestLogindSession(t *testing.T) {
+func openLogind(t *testing.T) (*fakeLogind, *loop.Loop, *Logind, *events) {
+	t.Helper()
 	address := testenv.DBus(t)
 	f := logind(t, address)
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
+	t.Cleanup(func() {
+		if err := l.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	ev := &events{}
 	lg, err := Open(l, address, func(k string) string {
 		if k == "XDG_SESSION_ID" {
@@ -207,16 +250,27 @@ func TestLogindSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return f, l, lg, ev
+}
+
+func run(t *testing.T, l *loop.Loop) {
+	t.Helper()
+	done := make(chan error, 1)
 	go func() { done <- l.Run() }()
-	defer func() {
+	t.Cleanup(func() {
 		_ = l.Post(func() error {
 			l.Stop()
 			return nil
 		})
-		if err := errors.Join(<-done, l.Close()); err != nil {
+		if err := <-done; err != nil {
 			t.Error(err)
 		}
-	}()
+	})
+}
+
+func TestLogindSession(t *testing.T) {
+	f, l, lg, ev := openLogind(t)
+	run(t, l)
 	if !lg.Active() || lg.Seat() != "seat0" {
 		t.Fatalf("active %v on seat %q", lg.Active(), lg.Seat())
 	}
@@ -231,7 +285,7 @@ func TestLogindSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := errors.Join(inhibitor.Close(), lg.Suspend()); err != nil {
+	if err := inhibitor.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := lg.SwitchTo(0); err == nil {
@@ -240,7 +294,7 @@ func TestLogindSession(t *testing.T) {
 	if _, _, err := lg.TakeDevice("/"); err == nil {
 		t.Fatal("a directory was taken as a device")
 	}
-	forger, err := dbus.Connect(address)
+	forger, err := dbus.Connect(f.address)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,8 +332,105 @@ func TestLogindSession(t *testing.T) {
 	if err := lg.Close(); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"GetSession 1", "TakeControl", "TakeDevice", "ReleaseDevice", "SwitchTo", "Inhibit handle-lid-switch block", "Suspend false", "SwitchTo", "PauseDeviceComplete", "ReleaseControl"}
+	want := []string{"GetSession 1", "TakeControl", "TakeDevice", "ReleaseDevice", "SwitchTo", "Inhibit handle-lid-switch block", "SwitchTo", "PauseDeviceComplete", "ReleaseControl"}
 	if got := f.seen(); !slices.Equal(got, want) {
 		t.Fatalf("logind saw %v, want %v", got, want)
+	}
+}
+
+var acUnplug = [][]byte{
+	udevMessage("ACTION=change", "SUBSYSTEM=power_supply", "DEVPATH=/devices/LNXSYSTM:00/ACPI0003:00/power_supply/AC", "POWER_SUPPLY_ONLINE=0"),
+	udevMessage("ACTION=change", "SUBSYSTEM=power_supply", "DEVPATH=/devices/LNXSYSTM:00/PNP0C0A:00/power_supply/BAT0", "POWER_SUPPLY_STATUS=Discharging"),
+}
+
+func suspendOnPowerChanges(t *testing.T) (*fakeLogind, *events, func(msgs ...[]byte)) {
+	t.Helper()
+	f, l, lg, ev := openLogind(t)
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = unix.Close(fds[1]) })
+	m, err := watch(l, fds[0], DefaultSeat, "/sys", []Subsystem{PowerSupply}, trustSelf, func(UdevEvent) error {
+		if err := lg.Suspend(); err != nil {
+			return ev.add(err.Error())
+		}
+		return ev.add("power")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	run(t, l)
+	t.Cleanup(func() {
+		if err := lg.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return f, ev, func(msgs ...[]byte) { sendUevents(t, fds[1], msgs...) }
+}
+
+func tally(log []string) map[string]int {
+	n := map[string]int{}
+	for _, s := range log {
+		n[s]++
+	}
+	return n
+}
+
+func expectLog(t *testing.T, ev *events, want map[string]int) {
+	t.Helper()
+	total := 0
+	for _, n := range want {
+		total += n
+	}
+	waitFor(t, fmt.Sprintf("%d events", total), func() bool { return len(ev.seen()) >= total })
+	if got := tally(ev.seen()); !maps.Equal(got, want) {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+}
+
+func TestAnUnplugSuspendsOnceUntilTheSleepEnds(t *testing.T) {
+	f, ev, send := suspendOnPowerChanges(t)
+	suspends := func() int { return tally(f.seen())["Suspend false"] }
+
+	send(acUnplug...)
+	expectLog(t, ev, map[string]int{"power": 2, "sleep": 1})
+	if n := suspends(); n != 1 {
+		t.Fatalf("the AC and battery uevents of one unplug called Suspend %d times, want 1", n)
+	}
+
+	if err := f.wake(); err != nil {
+		t.Fatal(err)
+	}
+	expectLog(t, ev, map[string]int{"power": 2, "sleep": 1, "wake": 1})
+	send(acUnplug...)
+	expectLog(t, ev, map[string]int{"power": 4, "sleep": 2, "wake": 1})
+	if n := suspends(); n != 2 {
+		t.Fatalf("an unplug after waking called Suspend %d times in all, want 2", n)
+	}
+}
+
+func TestARefusedSuspendLeavesNoSleepPending(t *testing.T) {
+	f, ev, send := suspendOnPowerChanges(t)
+	f.refuse(dbus.NewError(operationInProgress, []any{"There's already a shutdown or sleep operation in progress"}))
+	send(acUnplug[0])
+	waitFor(t, "the refusal", func() bool { return len(ev.seen()) == 1 })
+	if got := ev.seen()[0]; !strings.Contains(got, operationInProgress) {
+		t.Fatalf("a refused Suspend reported %q, want logind's %s", got, operationInProgress)
+	}
+
+	f.refuse(nil)
+	send(acUnplug[0])
+	waitFor(t, "the suspend after the refusal", func() bool { return len(ev.seen()) == 3 })
+	if got := tally(ev.seen()[1:]); !maps.Equal(got, map[string]int{"power": 1, "sleep": 1}) {
+		t.Fatalf("after a refusal: events %v", got)
+	}
+	if n := tally(f.seen())["Suspend false"]; n != 2 {
+		t.Fatalf("logind saw %d Suspend calls, want 2", n)
 	}
 }
