@@ -6,7 +6,7 @@ pkgs: {
   LYS_WM_LIBEGL = "${pkgs.libglvnd}/lib/libEGL.so.1";
   LYS_WM_LIBGLESV2 = "${pkgs.libglvnd}/lib/libGLESv2.so.2";
   LYS_WM_LIBGBM = "${pkgs.libgbm}/lib/libgbm.so.1";
-  LYS_WM_PNP_IDS = "${pkgs.hwdata}/share/hwdata/pnp.ids";
+  LYS_PNP_IDS = "${pkgs.hwdata}/share/hwdata/pnp.ids";
   LYS_WM_LIBINPUT = "${pkgs.libinput.out}/lib/libinput.so.10";
   LYS_WM_XWAYLAND = "${pkgs.xwayland}/bin/Xwayland";
   __EGL_VENDOR_LIBRARY_DIRS = "${pkgs.mesa}/share/glvnd/egl_vendor.d";
