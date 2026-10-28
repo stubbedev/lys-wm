@@ -6,8 +6,8 @@ require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jezek/xgb v1.3.1
-	github.com/stubbedev/lys-lib v0.1.1-0.20261028195043-32acd1d2ae02
-	github.com/stubbedev/lys-ui v0.0.0-20261027165722-cbf3d26e3ab0
+	github.com/stubbedev/lys-lib v0.1.1-0.20261028201802-d8c9c868ab87
+	github.com/stubbedev/lys-ui v0.0.0-20261028195420-8f40bd86c0b3
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
@@ -19,7 +19,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stubbedev/memory-go v0.3.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
