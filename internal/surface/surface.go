@@ -334,7 +334,7 @@ func (h *Hold) Release() error {
 }
 
 func (s *Surface) Retry() error {
-	if err := s.drain(false); err != nil {
+	if err := s.drain(); err != nil {
 		return s.client.Fail(err)
 	}
 	return nil
@@ -562,7 +562,7 @@ func (s *Surface) commit() error {
 		return nil
 	}
 	s.queue = append(s.queue, u)
-	return s.drain(false)
+	return s.drain()
 }
 
 func (s *Surface) flush() error {
@@ -570,11 +570,11 @@ func (s *Surface) flush() error {
 		s.queue = append(s.queue, s.cache)
 		s.cache = nil
 	}
-	return s.drain(true)
+	return s.drain()
 }
 
-func (s *Surface) drain(parentApplied bool) error {
-	for len(s.queue) > 0 && !s.destroyed && (parentApplied || !s.synchronized()) && s.queue[0].ready() {
+func (s *Surface) drain() error {
+	for len(s.queue) > 0 && !s.destroyed && s.queue[0].ready() {
 		u := s.queue[0]
 		n := copy(s.queue, s.queue[1:])
 		s.queue[n] = nil

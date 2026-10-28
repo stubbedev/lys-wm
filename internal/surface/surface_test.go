@@ -925,6 +925,45 @@ func TestSynchronizedSubsurfacesMergeUpdatesUntilTheParentApplies(t *testing.T) 
 		t.Fatalf("a held synchronized update applied with damage %v", c.damage.Rects())
 	}
 	e.on(func() {
+		for _, h := range holds[:1] {
+			if err := h.Release(); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	if n := len(e.commits()); n != before {
+		t.Fatal("a synchronized update applied with one of its holds still closed")
+	}
+	e.on(func() {
+		for _, h := range holds[1:] {
+			if err := h.Release(); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	if d := e.last(child).damage; d.Area() != 50 {
+		t.Fatalf("once its parent applied, the released synchronized update applied damage %v, want both rectangles without another parent commit", d.Rects())
+	}
+	must(t, sub.Destroy())
+}
+
+func TestSynchronizedUpdatesWaitForTheParentCommitThatCarriesThem(t *testing.T) {
+	e := setup(t, 6)
+	parent, child := e.surface(), e.surface()
+	sub, err := e.subcomp.GetSubsurface(child, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, child.Commit(), parent.Commit())
+	e.roundtrip()
+	server := e.last(child).s
+	var holds []*Hold
+	hooks := &Hooks{Commit: func(u *Update) error { holds = append(holds, u.Hold()); return nil }}
+	e.on(func() { server.AddHooks(hooks) })
+	must(t, child.Damage(0, 0, 5, 5), child.Commit())
+	e.roundtrip()
+	before := len(e.commits())
+	e.on(func() {
 		for _, h := range holds {
 			if err := h.Release(); err != nil {
 				t.Error(err)
@@ -932,12 +971,12 @@ func TestSynchronizedSubsurfacesMergeUpdatesUntilTheParentApplies(t *testing.T) 
 		}
 	})
 	if n := len(e.commits()); n != before {
-		t.Fatal("a synchronized update applied on release without its parent")
+		t.Fatal("a released synchronized update applied before its parent committed")
 	}
 	must(t, parent.Commit())
 	e.roundtrip()
-	if d := e.last(child).damage; d.Area() != 50 {
-		t.Fatalf("the merged synchronized update applied damage %v, want both rectangles", d.Rects())
+	if d := e.last(child).damage; d.Area() != 25 {
+		t.Fatalf("the parent commit applied the synchronized update with damage %v", d.Rects())
 	}
 	must(t, sub.Destroy())
 }
