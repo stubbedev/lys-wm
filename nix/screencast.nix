@@ -88,6 +88,10 @@ in
     inherit (chosen) name;
     devices = ["virtio-gpu-pci"];
     outputs = ["Virtual-1"];
+    lysWMConfig = ''
+      rules:
+        - {title: ^presentation-shm:, tile: true}
+    '';
     machineConfig = {
       imports = [chosen.machineConfig];
       services.pipewire.enable = true;
