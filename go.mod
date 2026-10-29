@@ -5,8 +5,8 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/jezek/xgb v1.3.1
-	github.com/stubbedev/lys-lib v0.1.1-0.20261029152646-586d3f5b8610
-	github.com/stubbedev/lys-ui v0.0.0-20261029153549-3325566c96fc
+	github.com/stubbedev/lys-lib v0.1.1-0.20261029154144-c3c0d438dfc8
+	github.com/stubbedev/lys-ui v0.0.0-20261029184732-b19356f405b6
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
