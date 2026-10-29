@@ -1,1 +1,1 @@
-lys-ui: lys-ui.overrideAttrs {tags = ["lysuidebug"];}
+lys-ui: lys-ui.overrideAttrs {tags = ["lysdebug"];}
