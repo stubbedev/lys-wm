@@ -5,15 +5,14 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/jezek/xgb v1.3.1
-	github.com/stubbedev/lys-lib v0.1.1-0.20261028202131-e10e9a07cba0
-	github.com/stubbedev/lys-ui v0.0.0-20261028195420-8f40bd86c0b3
+	github.com/stubbedev/lys-lib v0.1.1-0.20261029064013-1fdc06f14490
+	github.com/stubbedev/lys-ui v0.0.0-20261029064820-b9c521d18dda
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
 )
 
 require (
-	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/kettek/apng v0.0.0-20250827064933-2bb5f5fcf253 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
