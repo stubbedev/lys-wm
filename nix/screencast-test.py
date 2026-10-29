@@ -1,6 +1,7 @@
 import json
 import re
 import shlex
+import time
 
 ANIMATION = "presentation-shm"
 ANIMATION_PREVIEW = "ff0000"
@@ -18,7 +19,7 @@ PICKER_WIDE_PROBE = (5, 400, 1, 1)
 PICKER_PAGE = (0, 260, 1280, 330)
 PICKER_PAGE_CENTER = (640, 420)
 PICKER_OUTPUTS_TAB = (640, 228)
-PICKER_POLLS = 600
+PICKER_APPEARS_S = 60
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
 
@@ -116,16 +117,19 @@ def answer(label, ran, done, confirm):
             machine.send_key("ret")
         return
     answered = 0
-    for _ in range(PICKER_POLLS):
-        if done():
-            return
+    deadline = time.monotonic() + PICKER_APPEARS_S
+    while not done():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"no share picker for {label} within {PICKER_APPEARS_S} s" if answered == 0 else f"sharing {label} did not finish after the pick")
         if picker_shown():
             machine.sleep(2)
             pick_in_picker(label)
             answered += 1
-            if confirm and answered == 1:
-                machine.sleep(3)
-                machine.send_key("ret")
+            if answered == 1:
+                if confirm:
+                    machine.sleep(3)
+                    machine.send_key("ret")
+                deadline = time.monotonic() + params["seconds"] + PICKER_APPEARS_S
         machine.sleep(1)
 
 
@@ -160,9 +164,12 @@ def share(app, label, confirm):
     ran = choose(label)
     machine.send_key(KEYS[label])
     finished = as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'"
-    answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
     try:
+        answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
         machine.wait_until_succeeds(finished, timeout=params["seconds"] + 300)
+    except Exception:
+        dump(app)
+        raise
     finally:
         machine.screenshot(f"{app}-{KEYS[label]}")
     title = next(w for w in windows() if w["id"] == shown["id"])["title"]
