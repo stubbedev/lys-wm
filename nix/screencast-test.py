@@ -15,10 +15,9 @@ ABS_MAX = 0x7FFF
 CURSOR_BOX = 64
 PICKER_PANEL = "262638"
 PICKER_PROBE = (630, 630, 20, 10)
-PICKER_WIDE_PROBE = (5, 400, 1, 1)
 PICKER_PAGE = (0, 260, 1280, 330)
 PICKER_PAGE_CENTER = (640, 420)
-PICKER_OUTPUTS_TAB = (640, 228)
+PICKER_OUTPUTS_TAB = (560, 228)
 PICKER_APPEARS_S = 60
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
@@ -99,9 +98,8 @@ def picker_shown():
 
 def pick_in_picker(label):
     if label == MONITOR:
-        if locate(PICKER_PANEL, *PICKER_WIDE_PROBE) is not None:
-            click(*PICKER_OUTPUTS_TAB)
-            machine.sleep(2)
+        click(*PICKER_OUTPUTS_TAB)
+        machine.sleep(2)
         click(*PICKER_PAGE_CENTER, then=POINTER_REST)
         return
     found = locate(ANIMATION_PREVIEW, *PICKER_PAGE)
