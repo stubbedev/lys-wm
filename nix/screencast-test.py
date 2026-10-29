@@ -164,7 +164,7 @@ def share(app, label, confirm):
     finished = as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'"
     try:
         answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
-        machine.wait_until_succeeds(finished, timeout=params["seconds"] + 300)
+        machine.wait_until_succeeds(finished, timeout=params["seconds"] + PICKER_APPEARS_S)
     except Exception:
         dump(app)
         raise

@@ -16,7 +16,7 @@
       import ./screencast.nix {
         inherit pkgs module portal;
         lysShell = inputs.lys-shell.nixosModules.default;
-        seconds = 60;
+        seconds = 10;
       };
     xwaylandApp = app:
       import ./xwayland-apps.nix {
