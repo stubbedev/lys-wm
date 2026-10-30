@@ -37,7 +37,7 @@ assert not modesets, f"the hand-over modeset vkms: {modesets[:8]}"
 
 machine.succeed("systemctl stop greetd.service")
 machine.wait_until_fails("pgrep -x lys-wm", timeout=timedelta(seconds=60))
-print(machine.succeed("splash-handover other"))
+machine.succeed("systemd-run --unit=splash-handover-other --service-type=notify splash-handover other")
 machine.succeed("systemctl start greetd.service")
 outputs = wait_for_outputs()
 mode = outputs["Virtual-2"]["mode"]

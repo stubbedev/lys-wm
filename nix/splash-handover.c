@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -6,7 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
+
+#include <systemd/sd-daemon.h>
 
 #include <drm_fourcc.h>
 #include <xf86drm.h>
@@ -14,6 +19,8 @@
 
 #define CARDS 16
 #define COLOR 0x00ff8000u
+#define SUCCESSOR "lys-wm"
+#define PATIENCE_SECONDS 300
 
 static void die(const char *format, ...) {
 	va_list args;
@@ -169,6 +176,66 @@ static void mark(const char *message) {
 	}
 }
 
+static int named(const char *pid, const char *name) {
+	char path[sizeof("/proc//comm") + 256], comm[32];
+	snprintf(path, sizeof(path), "/proc/%s/comm", pid);
+	FILE *f = fopen(path, "re");
+	if (f == NULL) {
+		return 0;
+	}
+	int match = fgets(comm, sizeof(comm), f) != NULL && strncmp(comm, name, strlen(name)) == 0 && comm[strlen(name)] == '\n';
+	fclose(f);
+	return match;
+}
+
+static int holds(const char *pid, dev_t card) {
+	char path[sizeof("/proc//fd") + 256];
+	snprintf(path, sizeof(path), "/proc/%s/fd", pid);
+	int dir = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dir < 0) {
+		return 0;
+	}
+	DIR *fds = fdopendir(dir);
+	if (fds == NULL) {
+		close(dir);
+		return 0;
+	}
+	int found = 0;
+	for (struct dirent *e; !found && (e = readdir(fds)) != NULL;) {
+		struct stat st;
+		found = e->d_name[0] != '.' && fstatat(dir, e->d_name, &st, 0) == 0 && S_ISCHR(st.st_mode) && st.st_rdev == card;
+	}
+	closedir(fds);
+	return found;
+}
+
+static int successor_holds(dev_t card) {
+	DIR *proc = opendir("/proc");
+	if (proc == NULL) {
+		die("list /proc: %s", strerror(errno));
+	}
+	int found = 0;
+	for (struct dirent *e; !found && (e = readdir(proc)) != NULL;) {
+		found = e->d_name[0] >= '1' && e->d_name[0] <= '9' && named(e->d_name, SUCCESSOR) && holds(e->d_name, card);
+	}
+	closedir(proc);
+	return found;
+}
+
+static void await_successor(int fd, const char *path) {
+	struct stat st;
+	if (fstat(fd, &st) != 0) {
+		die("stat %s: %s", path, strerror(errno));
+	}
+	struct timespec pause = {.tv_nsec = 10 * 1000 * 1000};
+	for (long waited = 0; !successor_holds(st.st_rdev); waited++) {
+		if (waited >= PATIENCE_SECONDS * 100L) {
+			die("%s did not open %s within %d s", SUCCESSOR, path, PATIENCE_SECONDS);
+		}
+		nanosleep(&pause, NULL);
+	}
+}
+
 int main(int argc, char **argv) {
 	if (argc != 2) {
 		die("usage: splash-handover preferred|other");
@@ -235,13 +302,21 @@ int main(int argc, char **argv) {
 		die("light %s on CRTC %u: %s", mode->name, crtc, strerror(errno));
 	}
 	drmModeAtomicFree(req);
-	if (drmModeCloseFB(fd, fb) != 0) {
-		die("close framebuffer %u: %s", fb, strerror(errno));
+	if (drmDropMaster(fd) != 0) {
+		die("drop DRM master of %s: %s", path, strerror(errno));
 	}
 	char message[128];
 	snprintf(message, sizeof(message), "splash-handover: lit %s on CRTC %u of %s\n", mode->name, crtc, path);
 	mark(message);
 	fputs(message, stdout);
+	fflush(stdout);
+	if (sd_notify(0, "READY=1") < 0) {
+		die("tell systemd the splash is up: %s", strerror(errno));
+	}
+	await_successor(fd, path);
+	if (drmModeCloseFB(fd, fb) != 0) {
+		die("close framebuffer %u: %s", fb, strerror(errno));
+	}
 	drmModeFreeEncoder(enc);
 	drmModeFreeConnector(conn);
 	drmModeFreeResources(res);
