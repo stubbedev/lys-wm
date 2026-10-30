@@ -133,13 +133,21 @@ type Options struct {
 	Paths   gpu.Paths
 	Vendors edid.Vendors
 	Report  func(error)
+	Vulkan  bool
+}
+
+func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {
+	if opts.Vulkan {
+		return newVulkanAllocator(dev)
+	}
+	return newGBMAllocator(dev, opts.Paths)
 }
 
 func New(l *loop.Loop, dev *kdrm.Device, opts Options) (*Backend, error) {
 	if err := atomic(dev); err != nil {
 		return nil, err
 	}
-	alloc, err := newGBMAllocator(dev, opts.Paths)
+	alloc, err := primaryAllocator(dev, opts)
 	if err != nil {
 		return nil, err
 	}

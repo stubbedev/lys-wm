@@ -163,6 +163,15 @@ platform for KMS, the device platform, or Mesa's surfaceless platform; each
 has one configless GLES2 context and no surfaces, and renders into dmabufs
 or textures.
 
+`render/vulkan` (#155) is a second GPU renderer on lys-lib's `gpu` package,
+the Vulkan stack lys-ui and lys-shell draw with; `-renderer vulkan` selects
+it on the DRM and headless backends, where it allocates scanout targets in a
+modifier the plane and the device share and fences them with sync files.
+GLES stays the default. lys-lib loads `libvulkan.so.1`, whose store path the
+Nix build bakes in and `LYS_LIBVULKAN` overrides; the dev shell points
+`VK_DRIVER_FILES` at lavapipe, as it points EGL at llvmpipe, and both renderers
+are pixel-compared against the software renderer by `render/rendertest`.
+
 Without cgo, `os.Setenv` does not reach libc's `getenv`, so variables that
 drivers read must be in the process environment from the start. The dev
 shell sets `__EGL_VENDOR_LIBRARY_DIRS` to Mesa's vendor and
@@ -378,6 +387,8 @@ Everything lives under `internal/` except the commands.
 | `render` | The renderer interface (#7) |
 | `render/soft` | The CPU renderer, for headless and golden tests (#7) |
 | `render/gles` | The GLES2 renderer (#34) |
+| `render/vulkan` | The Vulkan renderer, on lys-lib's `gpu` package (#155) |
+| `render/rendertest` | The scene and checks every renderer is held to the software renderer's pixels with |
 | `gpu` | purego bindings for EGL, GLES2 and GBM (#33) |
 | `surface` | `wl_compositor`, `wl_surface`, `wl_region`, `wl_subcompositor`, `wp_viewporter`, `wp_fractional_scale_v1`, `wp_presentation`: double-buffered state, a queue of content updates that apply in order once their gates open, subsurface trees, roles (#11, #19, #117) |
 | `tearingcontrol` | `wp_tearing_control_manager_v1`: the vsync or async presentation hint, which travels with its content update; with `tearing` on, a fullscreen direct scanout of a surface that asks, that a rule allows, or that hints nothing and is a game, goes out as an async page flip of the primary plane's `FB_ID` alone (#122) |

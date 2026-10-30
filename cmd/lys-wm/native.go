@@ -47,6 +47,7 @@ type native struct {
 	handler backend.Handler
 	cards   []*card
 	report  func(error)
+	vulkan  bool
 	lid     *os.File
 	power   func()
 	wake    *loop.Timer
@@ -59,6 +60,7 @@ type nativeOptions struct {
 	input      session.InputConfig
 	gpu        string
 	lidSuspend bool
+	vulkan     bool
 }
 
 func choosePrimary(cards []gpuCard, configured string) (int, string, error) {
@@ -110,7 +112,7 @@ func (n *native) gpuCards() ([]gpuCard, error) {
 }
 
 func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, report func(error)) (n *native, err error) {
-	n = &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report}
+	n = &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report, vulkan: opts.vulkan}
 	if n.logind, err = session.Open(l, session.SystemBus(getenv), getenv, n); err != nil {
 		return nil, err
 	}
@@ -216,7 +218,7 @@ func (n *native) add(g gpuCard) error {
 }
 
 func (n *native) drmOptions() drmbackend.Options {
-	return drmbackend.Options{Paths: n.paths, Vendors: n.vendors, Report: n.report}
+	return drmbackend.Options{Paths: n.paths, Vendors: n.vendors, Report: n.report, Vulkan: n.vulkan}
 }
 
 func (n *native) addSecondary(g gpuCard) {

@@ -144,11 +144,49 @@ func TestStartOnEveryCardWithoutMaster(t *testing.T) {
 		t.Skip("no DRM card")
 	}
 	for _, card := range cards {
-		t.Run(filepath.Base(card), func(t *testing.T) { startWithoutMaster(t, card) })
+		for _, vulkan := range []bool{false, true} {
+			name := filepath.Base(card) + "/gles"
+			if vulkan {
+				name = filepath.Base(card) + "/vulkan"
+			}
+			t.Run(name, func(t *testing.T) { startWithoutMaster(t, card, vulkan) })
+		}
 	}
 }
 
-func startWithoutMaster(t *testing.T, card string) {
+func scanoutFrame(t *testing.T, b *Backend, o *Output) {
+	t.Helper()
+	s := o.buffers[0]
+	size := s.target.Size()
+	p, err := b.Renderer().Begin(s.target, render.Region{{Max: size}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff})
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	read, ok := s.target.(render.ReadTarget)
+	if !ok {
+		t.Fatalf("%s: a %T scanout buffer cannot be read back", o.Name(), s.target)
+	}
+	pix := make([]byte, size.X*size.Y*4)
+	if err := read.Read(pix, size.X*4); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		at   image.Point
+		want [3]byte
+	}{{image.Pt(1, 1), [3]byte{0, 0, 0xff}}, {size.Sub(image.Pt(2, 2)), [3]byte{0xff, 0x80, 0}}} {
+		i := c.at.Y*size.X*4 + c.at.X*4
+		if got := [3]byte(pix[i:]); got != c.want {
+			t.Errorf("%s: scanout pixel %v is %v, want %v", o.Name(), c.at, got, c.want)
+		}
+	}
+}
+
+func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 	dev, err := kdrm.Open(card)
 	if err != nil {
 		t.Skipf("cannot open %s: %v", card, err)
@@ -163,9 +201,9 @@ func startWithoutMaster(t *testing.T, card string) {
 	if err != nil {
 		t.Skipf("no PNP ID database: %v", err)
 	}
-	b, err := New(l, dev, Options{Paths: gpu.PathsFromEnv(os.Getenv), Vendors: vendors, Report: func(err error) { t.Error(err) }})
+	b, err := New(l, dev, Options{Paths: gpu.PathsFromEnv(os.Getenv), Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan})
 	if err != nil {
-		t.Skipf("no EGL vendor drives this card's GBM device here (unset __EGL_VENDOR_LIBRARY_DIRS on a GPU machine): %v", err)
+		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
 	}
 	h := &added{}
 	if err := b.Start(h); err != nil {
@@ -182,6 +220,7 @@ func startWithoutMaster(t *testing.T, card string) {
 			t.Errorf("%s has no EDID description", o.Name())
 		}
 		t.Logf("%s (%s) on CRTC %d and plane %d with modifiers %v, %+v", o.Name(), o.Description(), o.crtc.id, o.primary.id, o.primary.modifiers, o.State().Mode)
+		scanoutFrame(t, b, o)
 		cursorImage(t, o)
 		gammaRamps(t, o)
 		colorTransform(t, o)

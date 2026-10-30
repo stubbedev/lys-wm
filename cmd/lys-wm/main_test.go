@@ -57,7 +57,7 @@ func TestChooseRenderer(t *testing.T) {
 		requested string
 		backend   backendKind
 		want      rendererKind
-	}{{"", nestedBackend, glesRenderer}, {"", headlessBackend, softRenderer}, {"", drmBackend, glesRenderer}, {"soft", nestedBackend, softRenderer}, {"gles", headlessBackend, glesRenderer}, {"vulkan", headlessBackend, vulkanRenderer}} {
+	}{{"", nestedBackend, glesRenderer}, {"", headlessBackend, softRenderer}, {"", drmBackend, glesRenderer}, {"soft", nestedBackend, softRenderer}, {"gles", headlessBackend, glesRenderer}, {"vulkan", headlessBackend, vulkanRenderer}, {"vulkan", drmBackend, vulkanRenderer}} {
 		if got, err := chooseRenderer(c.requested, c.backend); err != nil || got != c.want {
 			t.Errorf("chooseRenderer(%q, %v) = %v, %v; want %v", c.requested, c.backend, got, err, c.want)
 		}
@@ -65,7 +65,7 @@ func TestChooseRenderer(t *testing.T) {
 	for _, c := range []struct {
 		requested string
 		backend   backendKind
-	}{{"vulkan", nestedBackend}, {"vulkan", drmBackend}, {"metal", headlessBackend}, {"soft", drmBackend}} {
+	}{{"vulkan", nestedBackend}, {"metal", headlessBackend}, {"soft", drmBackend}} {
 		if _, err := chooseRenderer(c.requested, c.backend); err == nil {
 			t.Errorf("chooseRenderer(%q, %v) succeeded", c.requested, c.backend)
 		}
