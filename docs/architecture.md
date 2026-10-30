@@ -190,7 +190,13 @@ rendering in software; the choice and its reason are logged at startup.
 The other cards show outputs the primary rendered (#63): their frames are
 drawn into the primary's offscreen targets and copied into the card's
 linear dumb buffers before each flip, the same copy the cursor plane uses,
-so display-only devices such as vkms and DisplayLink work too. Outputs keep
+so display-only devices such as vkms and DisplayLink work too. A secondary
+with a render node gets a GPU blit instead: the primary renders into a
+linear buffer the secondary samples and draws into its own scanout buffer.
+NVIDIA's GLES renders into no linear buffer, so an NVIDIA primary renders
+its usual tiled frame and its Vulkan device (lys-lib's `gpu`) copies it with
+the copy engine into a linear buffer its GBM allocates, which the secondary
+samples (#147); sync files order the three steps. Outputs keep
 the kernel's connector names, which are unique across cards because the
 kernel numbers the connectors of each type globally. Cards come and go with udev: a
 new card is driven as a secondary, a removed secondary drops its outputs

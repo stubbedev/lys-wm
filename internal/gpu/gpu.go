@@ -8,6 +8,7 @@ import (
 	"image"
 
 	"github.com/ebitengine/purego"
+	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/fourcc"
 )
 
@@ -76,6 +77,14 @@ type DMABUF struct {
 	Modifier fourcc.Modifier
 	Planes   []Plane
 	YUV      YUVEncoding
+}
+
+func (d DMABUF) Dmabuf() dmabuf.Buffer {
+	planes := make([]dmabuf.Plane, len(d.Planes))
+	for i, p := range d.Planes {
+		planes[i] = dmabuf.Plane{FD: p.FD, Offset: p.Offset, Stride: p.Stride}
+	}
+	return dmabuf.Buffer{Width: d.Size.X, Height: d.Size.Y, Format: d.Format, Modifier: d.Modifier, Planes: planes}
 }
 
 type Coefficients uint8

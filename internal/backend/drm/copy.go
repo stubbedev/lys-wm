@@ -83,8 +83,12 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, paths gpu.Paths, can
 		return cpu, fmt.Sprintf("a CPU copy, since %s cannot render: %v", name, err)
 	}
 	a := &blitAllocator{primary: p, local: local}
-	if err := a.probe(); err != nil {
-		return cpu, fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(err, local.close()))
+	direct := a.probe()
+	if direct == nil {
+		return a, "a GPU blit on " + name
 	}
-	return a, "a GPU blit on " + name
+	if err := a.copyThroughVulkan(); err != nil {
+		return cpu, fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close()))
+	}
+	return a, "a GPU blit on " + name + ", from a linear copy of each frame that Vulkan makes on the primary GPU"
 }

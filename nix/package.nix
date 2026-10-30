@@ -26,7 +26,7 @@
 
         # Pins the module dependencies in go.sum. When they change, set this to
         # lib.fakeHash, run `nix build` and put the reported got: hash here.
-        vendorHash = "sha256-L8YhGWJfHDCIJSwdC81p4+aMzJEKKUSigGqRv1DRigE=";
+        vendorHash = "sha256-v4O6JrW99/aFlqI9akQKAlnKH6cZI1pETHmNf1yE0U8=";
 
         subPackages = ["cmd/lys-wm" "cmd/lys-wmctl"];
 
@@ -37,6 +37,7 @@
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultEGL=${libglvnd}/lib/libEGL.so.1"
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultGLESv2=${libglvnd}/lib/libGLESv2.so.2"
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultGBM=${libgbm}/lib/libgbm.so.1"
+          "-X github.com/stubbedev/lys-lib/third_party/vk.defaultLibrary=${vulkan-loader}/lib/libvulkan.so.1"
           "-X github.com/stubbedev/lys-lib/edid.defaultPNP=${hwdata}/share/hwdata/pnp.ids"
           "-X github.com/stubbedev/lys-wm/internal/session.defaultLibinput=${libinput.out}/lib/libinput.so.10"
           "-X github.com/stubbedev/lys-wm/internal/xwayland.defaultXwayland=${xwayland}/bin/Xwayland"
