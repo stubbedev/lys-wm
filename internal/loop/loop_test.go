@@ -43,6 +43,25 @@ func isOpen(fd int) bool {
 	return err == nil
 }
 
+type openFile struct {
+	fd       int
+	dev, ino uint64
+}
+
+func opened(t *testing.T, fd int) openFile {
+	t.Helper()
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		t.Fatalf("fd %d: %v", fd, err)
+	}
+	return openFile{fd: fd, dev: st.Dev, ino: st.Ino}
+}
+
+func (f openFile) stillOpen() bool {
+	var st unix.Stat_t
+	return unix.Fstat(f.fd, &st) == nil && st.Dev == f.dev && st.Ino == f.ino
+}
+
 func run(t *testing.T, l *Loop) {
 	t.Helper()
 	done := make(chan error, 1)
@@ -100,6 +119,7 @@ func TestOnceFiresOnceAndClosesItsFD(t *testing.T) {
 	}
 	r, w := p[0], p[1]
 	t.Cleanup(func() { _ = unix.Close(w) })
+	file := opened(t, r)
 	fired := 0
 	if err := l.Once(r, func() error {
 		fired++
@@ -115,7 +135,7 @@ func TestOnceFiresOnceAndClosesItsFD(t *testing.T) {
 	if fired != 1 {
 		t.Fatalf("fired %d times, want once", fired)
 	}
-	if isOpen(r) {
+	if file.stillOpen() {
 		t.Fatal("Once left its fd open after firing")
 	}
 }
@@ -160,11 +180,11 @@ func TestTimer(t *testing.T) {
 	if fires != 3 || time.Since(start) < 3*time.Millisecond {
 		t.Fatalf("timer fired %d times in %v, want 3 re-armed one-shots", fires, time.Since(start))
 	}
-	fd := timer.fd
+	file := opened(t, timer.fd)
 	if err := timer.Remove(); err != nil {
 		t.Fatal(err)
 	}
-	if isOpen(fd) {
+	if file.stillOpen() {
 		t.Fatal("Remove left the timerfd open")
 	}
 	if err := timer.Arm(time.Millisecond); !errors.Is(err, ErrClosed) {
@@ -382,13 +402,13 @@ func TestCloseReleasesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owned := []int{l.epfd, l.mailboxFD, timer.fd}
+	owned := []openFile{opened(t, l.epfd), opened(t, l.mailboxFD), opened(t, timer.fd)}
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for _, fd := range owned {
-		if isOpen(fd) {
-			t.Errorf("fd %d is still open after Close", fd)
+	for _, f := range owned {
+		if f.stillOpen() {
+			t.Errorf("fd %d is still open after Close", f.fd)
 		}
 	}
 	if !isOpen(r) {
