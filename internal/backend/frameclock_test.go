@@ -93,11 +93,11 @@ func TestAFrameClockWaitsForItsLatchDeadline(t *testing.T) {
 	var wakes []time.Duration
 	ahead := true
 	clock := NewFrameClock(q.add, func() bool { return true }, func() error { frames++; return nil }, &Latch{
-		Deadline: func(now time.Duration) time.Duration {
+		Wait: func() time.Duration {
 			if ahead {
-				return now + 5*time.Millisecond
+				return 5 * time.Millisecond
 			}
-			return now - time.Millisecond
+			return -time.Millisecond
 		},
 		Wake: func(after time.Duration) error {
 			wakes = append(wakes, after)

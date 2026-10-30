@@ -89,6 +89,7 @@ type fakeDevice struct {
 	scanouts       map[uint32]uint32
 	removedFBs     int
 	unmapped       map[uint32]bool
+	now            func() time.Duration
 }
 
 var modes = []kdrm.Mode{
@@ -328,7 +329,7 @@ func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
 	binary.NativeEndian.PutUint32(ev, kdrm.EventFlipComplete)
 	binary.NativeEndian.PutUint32(ev[4:], 32)
 	binary.NativeEndian.PutUint64(ev[8:], uint64(crtc))
-	now := backend.Now()
+	now := f.now()
 	binary.NativeEndian.PutUint32(ev[16:], uint32(now/time.Second))
 	binary.NativeEndian.PutUint32(ev[20:], uint32(now%time.Second/time.Microsecond))
 	binary.NativeEndian.PutUint32(ev[24:], seq)
@@ -437,6 +438,7 @@ type rig struct {
 	b       *Backend
 	rec     *recorder
 	reports []error
+	pinned  time.Duration
 }
 
 func start(t *testing.T) *rig {
@@ -457,12 +459,14 @@ func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	r := &rig{t: t, l: l, dev: &fakeDevice{events: p[0], write: p[1], connected: true}, rec: &recorder{}}
+	r.dev.now = r.now
 	a := alloc(r.dev)
 	r.alloc, _ = a.(*fakeAlloc)
 	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }}); err != nil {
 		t.Fatal(err)
 	}
 	r.b.fenceTime = func(int) (time.Duration, bool, error) { return backend.Now(), true, nil }
+	r.b.now = r.now
 	if err := r.b.Start(r.rec); err != nil {
 		t.Fatal(err)
 	}
@@ -484,6 +488,39 @@ func (r *rig) settle() {
 	}
 	if err := r.l.Run(); err != nil {
 		r.t.Fatal(err)
+	}
+}
+
+func (r *rig) now() time.Duration {
+	if r.pinned != 0 {
+		return r.pinned
+	}
+	return backend.Now()
+}
+
+func (r *rig) until(what string, done func() bool) {
+	r.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var check *loop.Timer
+	check, err := r.l.AddTimer(func() error {
+		if done() || time.Now().After(deadline) {
+			r.l.Stop()
+			return nil
+		}
+		return check.Arm(time.Millisecond)
+	})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	defer check.Remove()
+	if err := check.Arm(time.Millisecond); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := r.l.Run(); err != nil {
+		r.t.Fatal(err)
+	}
+	if !done() {
+		r.t.Fatalf("waited 10 s for %s", what)
 	}
 }
 
@@ -913,13 +950,19 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 
 func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	r := start(t)
+	r.pinned = backend.Now()
 	o := r.lit()
+	half := modeOf(o.mode).Interval() / 2
+	r.pinned += half
 	if err := r.setCursor(o, image.Point{}); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	if !o.flipping {
+		t.Fatalf("a cursor set at the latch did not commit: %+v", r.dev.commits)
+	}
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the cursor flip", func() bool { return !o.flipping })
+	time.Sleep(2 * half)
 	r.dev.commits = nil
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(5, 5)); err != nil {
@@ -932,6 +975,11 @@ func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.settle()
+	if len(r.dev.commits) != 0 {
+		t.Fatalf("a frame requested before the latch committed: %+v", r.dev.commits)
+	}
+	r.pinned += half
+	r.until("the frame after the latch", func() bool { return o.flipping })
 	var flips []commit
 	for _, c := range r.dev.commits {
 		if c.flags&kdrm.AtomicTestOnly == 0 {

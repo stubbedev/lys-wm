@@ -175,8 +175,9 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 		ctm:     backend.Identity,
 	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
-		Deadline: func(now time.Duration) time.Duration {
-			return backend.LatchDeadline(o.lastVblank, now, o.state.Mode.Interval())
+		Wait: func() time.Duration {
+			now := backend.Now()
+			return backend.LatchDeadline(o.lastVblank, now, o.state.Mode.Interval()) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})

@@ -3,8 +3,8 @@ package backend
 import "time"
 
 type Latch struct {
-	Deadline func(now time.Duration) time.Duration
-	Wake     func(after time.Duration) error
+	Wait func() time.Duration
+	Wake func(after time.Duration) error
 }
 
 type FrameClock struct {
@@ -39,10 +39,9 @@ func (f *FrameClock) Kick() error {
 		return nil
 	}
 	if f.latch != nil {
-		now := Now()
-		if at := f.latch.Deadline(now); at > now {
+		if wait := f.latch.Wait(); wait > 0 {
 			f.waiting = true
-			return f.latch.Wake(at - now)
+			return f.latch.Wake(wait)
 		}
 	}
 	f.queued = true
