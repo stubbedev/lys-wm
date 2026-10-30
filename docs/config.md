@@ -213,7 +213,9 @@ and `XDG_SESSION_TYPE=wayland` are set unless `env` overrides them.
 `WAYLAND_DISPLAY`, `DISPLAY` and `LYS_WM_SOCKET` belong to lys-wm and cannot be
 set here. `XCURSOR_THEME`, `XCURSOR_SIZE` and `XCURSOR_PATH` set here choose the
 pointer for lys-wm as well as for its clients. Each `autostart` command runs once with `sh -c`, after the display
-and the IPC socket are up. A reload changes neither.
+and the IPC socket are up. A reload changes neither. Autostart commands and
+`exec` binds write to lys-wm's own stdout and stderr, and lys-wm logs any that
+exits with a non-zero status or dies from a signal.
 
 ## xwayland
 

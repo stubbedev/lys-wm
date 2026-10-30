@@ -2,7 +2,6 @@ package harness
 
 import (
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -62,17 +61,12 @@ func TestAnInheritedFrameStaysUntilAClientDraws(t *testing.T) {
 }
 
 func TestAnInheritedFrameGivesWayWhenNoClientDraws(t *testing.T) {
-	var mu sync.Mutex
-	var reports []string
+	r := &reports{}
 	timeout := 50 * time.Millisecond
 	start := time.Now()
 	h := StartInherited(t, func(cfg *compositor.Config) {
 		cfg.InheritTimeout = timeout
-		cfg.Report = func(err error) {
-			mu.Lock()
-			defer mu.Unlock()
-			reports = append(reports, err.Error())
-		}
+		cfg.Report = r.report
 	}, small)
 	h.Eventually("the frame that replaces the inherited one", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		return b.Outputs()[0].Takeover() != nil
@@ -88,9 +82,7 @@ func TestAnInheritedFrameGivesWayWhenNoClientDraws(t *testing.T) {
 	if bg := compositor.Background; first != [3]byte{bg.R, bg.G, bg.B} {
 		t.Fatalf("the frame drawn after the timeout shows %v, not the background", first)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(reports) != 1 || !strings.Contains(reports[0], "no client drew on HEADLESS-1 within 50ms") {
-		t.Fatalf("the timeout reported %q", reports)
+	if got := r.take(); len(got) != 1 || !strings.Contains(got[0].Error(), "no client drew on HEADLESS-1 within 50ms") {
+		t.Fatalf("the timeout reported %q", got)
 	}
 }

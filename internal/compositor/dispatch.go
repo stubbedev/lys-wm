@@ -8,7 +8,10 @@ import (
 	"os/exec"
 	"syscall"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -75,14 +78,38 @@ func (c *Compositor) spawn(command string) error {
 	}
 	cmd := exec.CommandContext(context.Background(), sh, "-c", command) //nolint:gosec // binds and lys-wmctl dispatch run the user's own commands
 	cmd.Env = append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path())
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("exec %q: %w", command, err)
 	}
-	go reap(cmd)
+	go c.reap(command, cmd)
 	return nil
 }
 
-func reap(cmd *exec.Cmd) {
-	_ = cmd.Wait()
+func (c *Compositor) reap(command string, cmd *exec.Cmd) {
+	exited := exitError(command, cmd.Wait())
+	if exited == nil {
+		return
+	}
+	if err := c.loop.Post(func() error {
+		c.report(exited)
+		return nil
+	}); err != nil && !errors.Is(err, loop.ErrClosed) {
+		panic(fmt.Sprintf("compositor: report how %q exited: %v", command, err))
+	}
+}
+
+func exitError(command string, err error) error {
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		if err != nil {
+			return fmt.Errorf("compositor: wait for %q: %w", command, err)
+		}
+		return nil
+	}
+	if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		return fmt.Errorf("compositor: %q was killed by signal %s", command, unix.SignalName(ws.Signal()))
+	}
+	return fmt.Errorf("compositor: %q exited with status %d", command, exit.ExitCode())
 }
