@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/stubbedev/lys-lib/drm"
 	gtext "github.com/stubbedev/lys-lib/render"
@@ -52,18 +53,19 @@ import (
 var Background = render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
 
 type Config struct {
-	Seat    seat.Config
-	Cursor  CursorConfig
-	WM      wm.Settings
-	Binds   []binds.Bind
-	Report  func(error)
-	Decor   Decor
-	Font    *gtext.Typeface
-	Icons   *icontheme.Theme
-	Rules   []wm.Rule
-	Outputs OutputRules
-	Tearing bool
-	Hooks   Hooks
+	Seat           seat.Config
+	Cursor         CursorConfig
+	WM             wm.Settings
+	Binds          []binds.Bind
+	Report         func(error)
+	Decor          Decor
+	Font           *gtext.Typeface
+	Icons          *icontheme.Theme
+	Rules          []wm.Rule
+	Outputs        OutputRules
+	Tearing        bool
+	Hooks          Hooks
+	InheritTimeout time.Duration
 }
 
 type Hooks struct {
@@ -94,13 +96,14 @@ func DefaultSettings() wm.Settings {
 
 func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 	return Config{
-		Seat:   seat.Config{Keymap: keymap, RepeatRate: seat.DefaultRepeatRate, RepeatDelay: seat.DefaultRepeatDelay},
-		Cursor: CursorConfig{Size: DefaultCursorSize},
-		WM:     DefaultSettings(),
-		Report: func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
-		Decor:  DefaultDecor(),
-		Font:   font,
-		Icons:  icontheme.New("", nil),
+		Seat:           seat.Config{Keymap: keymap, RepeatRate: seat.DefaultRepeatRate, RepeatDelay: seat.DefaultRepeatDelay},
+		Cursor:         CursorConfig{Size: DefaultCursorSize},
+		WM:             DefaultSettings(),
+		Report:         func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
+		Decor:          DefaultDecor(),
+		Font:           font,
+		Icons:          icontheme.New("", nil),
+		InheritTimeout: DefaultInheritTimeout,
 	}
 }
 
@@ -149,6 +152,8 @@ type Compositor struct {
 	labels          map[*output.Output]map[labelKey]*label
 	scenes          map[*output.Output]*scene
 	dropped         map[*output.Output]int
+	inherited       map[*output.Output]*loop.Timer
+	inheritTimeout  time.Duration
 	outputResources []*sw.WlOutput
 	tabBars         []wm.TabBar
 	binds           binds.Map
@@ -220,6 +225,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.Icons == nil {
 		return binds.Map{}, errors.New("compositor: Config.Icons is nil")
 	}
+	if cfg.InheritTimeout <= 0 {
+		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
+	}
 	if cfg.Cursor.Size <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: cursor size %d is not positive", cfg.Cursor.Size)
 	}
@@ -237,7 +245,7 @@ func validate(cfg Config) (binds.Map, error) {
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
-	c.tearing, c.icons = cfg.Tearing, cfg.Icons
+	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
 }
 
 func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (*Compositor, error) {
@@ -256,6 +264,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		labels:         map[*output.Output]map[labelKey]*label{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},
+		inherited:      map[*output.Output]*loop.Timer{},
 		loop:           l,
 		display:        display,
 		pointers:       map[cursorKey]*cursorTexture{},
@@ -449,6 +458,9 @@ func (c *Compositor) Close() error {
 	}
 	for s := range c.textures {
 		errs = append(errs, c.dropTexture(s))
+	}
+	for o := range c.inherited {
+		errs = append(errs, c.endInherited(o))
 	}
 	if c.repeat.timer != nil {
 		errs = append(errs, c.repeat.timer.Remove())

@@ -80,6 +80,16 @@ func StartWithCursorPlanes(t *testing.T, size image.Point, configure func(*compo
 	return start(t, setup{open: withCursorPlanes(softBackend, size), configure: configure, traced: true}, modes...)
 }
 
+func StartInherited(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
+	t.Helper()
+	open := func(l *loop.Loop) (*headless.Backend, error) {
+		b := headless.New(l)
+		b.InheritFrames()
+		return b, nil
+	}
+	return start(t, setup{open: open, configure: configure, traced: true}, modes...)
+}
+
 func StartUntraced(t *testing.T, modes ...backend.Mode) *Harness {
 	t.Helper()
 	return start(t, setup{open: softBackend, configure: func(*compositor.Config) {}}, modes...)

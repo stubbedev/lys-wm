@@ -1733,7 +1733,13 @@ func TestAnOutputLitInItsModeFlipsOverWhatIsOnScreen(t *testing.T) {
 			t.Fatalf("commit %d replaced what is on screen before the first frame: %+v", i, c)
 		}
 	}
+	if !o.Inherited() {
+		t.Fatal("an output lit in its mode does not report its inherited frame")
+	}
 	frame := r.firstFrame(o)
+	if o.Inherited() {
+		t.Fatal("the output still reports an inherited frame after its first flip")
+	}
 	for i, c := range frame {
 		if c.flags&kdrm.AtomicAllowModeset != 0 {
 			t.Fatalf("commit %d of the first frame allows a modeset: %+v", i, c)
@@ -1781,8 +1787,8 @@ func TestOutputsNotLitInTheirModeAreModeset(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := bootLit(t, tc.lit, false)
 			o := r.b.Outputs()[0]
-			if len(r.reports) != 0 {
-				t.Fatalf("reports %v", r.reports)
+			if len(r.reports) != 0 || o.Inherited() {
+				t.Fatalf("reports %v, inherited %v", r.reports, o.Inherited())
 			}
 			frame := r.firstFrame(o)
 			flip := frame[len(frame)-1]

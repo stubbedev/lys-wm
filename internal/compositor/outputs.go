@@ -233,6 +233,9 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 		return err
 	}
 	c.outputs = append(c.outputs, o)
+	if err := c.keepInherited(o); err != nil {
+		return err
+	}
 	c.addCursorPlane(o)
 	if err := c.relayout(); err != nil {
 		return err
@@ -280,7 +283,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.usable, o)
 	delete(c.scenes, o)
 	delete(c.dropped, o)
-	errs = append(errs, c.dropLabels(o), c.power.Removed(o), c.gamma.Removed(o))
+	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.power.Removed(o), c.gamma.Removed(o))
 	c.ctm.Removed(o)
 	for _, e := range c.entered {
 		if slices.Contains(e.outputs, o) {

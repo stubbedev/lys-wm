@@ -33,6 +33,7 @@ type Backend struct {
 	touch      *Touch
 	switches   *Switches
 	cursorSize image.Point
+	inherit    bool
 	closed     bool
 }
 
@@ -149,6 +150,10 @@ func (b *Backend) Outputs() []*Output {
 	return slices.Clone(b.outputs)
 }
 
+func (b *Backend) InheritFrames() {
+	b.inherit = true
+}
+
 func (b *Backend) AddOutput(modes ...backend.Mode) (*Output, error) {
 	return b.AddNamedOutput(fmt.Sprintf("HEADLESS-%d", b.next+1), modes...)
 }
@@ -168,11 +173,12 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 	}
 	b.next++
 	o := &Output{
-		backend: b,
-		name:    name,
-		modes:   slices.Clone(modes),
-		state:   backend.OutputState{Power: backend.PoweredOn, Mode: current},
-		ctm:     backend.Identity,
+		backend:   b,
+		name:      name,
+		modes:     slices.Clone(modes),
+		state:     backend.OutputState{Power: backend.PoweredOn, Mode: current},
+		ctm:       backend.Identity,
+		inherited: b.inherit,
 	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
@@ -222,6 +228,7 @@ func (b *Backend) RemoveOutput(o *Output) error {
 }
 
 var (
+	_ backend.Inheriting     = (*Output)(nil)
 	_ backend.Scanner        = (*Output)(nil)
 	_ backend.Gamma          = (*Output)(nil)
 	_ backend.ColorTransform = (*Output)(nil)
@@ -263,6 +270,16 @@ type Output struct {
 	queuedTorn     bool
 	torn           uint64
 	failPresents   error
+	inherited      bool
+	takeover       *soft.Buffer
+}
+
+func (o *Output) Inherited() bool {
+	return o.inherited
+}
+
+func (o *Output) Takeover() *soft.Buffer {
+	return o.takeover
 }
 
 func (o *Output) SetGammaSize(n int) {
@@ -350,6 +367,9 @@ func (o *Output) Commit(s backend.OutputState) error {
 			}
 		}
 	}
+	if !s.Lit() || s.Mode != o.state.Mode {
+		o.inherited = false
+	}
 	var err error
 	if !s.Lit() {
 		o.clock.Cancel()
@@ -425,6 +445,13 @@ func (o *Output) Present(damage render.Region) error {
 	o.drawn = true
 	o.damage = append(o.damage[:0], damage...)
 	_, o.unread = o.target.(*gles.Framebuffer)
+	if o.inherited {
+		snap, err := o.Primary()
+		if err != nil {
+			return err
+		}
+		o.takeover, o.inherited = snap, false
+	}
 	o.presentPending, o.queuedTorn = true, false
 	o.presents++
 	return o.arm()
@@ -457,7 +484,7 @@ func (o *Output) Scanout(_ backend.ScanoutKey, d gpu.DMABUF, release func() erro
 	if o.scanout == nil || !slices.Contains(o.scanout.Formats, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) || o.removed || !o.state.Lit() || o.inFrame || o.presentPending || d.Size != o.state.Mode.Size {
 		return false, nil
 	}
-	o.queuedRelease, o.presentPending, o.drawn, o.queuedTorn = release, true, false, tear
+	o.queuedRelease, o.presentPending, o.drawn, o.queuedTorn, o.inherited = release, true, false, tear, false
 	o.presents++
 	o.scanouts++
 	if tear {

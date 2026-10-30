@@ -177,6 +177,10 @@ type ColorTransform interface {
 	SetColorTransform(m Matrix) error
 }
 
+type Inheriting interface {
+	Inherited() bool
+}
+
 type Capability uint8
 
 const (

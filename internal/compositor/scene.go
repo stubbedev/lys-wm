@@ -74,6 +74,9 @@ func (c *Compositor) render(o *output.Output) error {
 	} else if shown, err = c.drawDesktop(pass, o, shown); err != nil {
 		return err
 	}
+	if held, err := c.holdsInherited(o, len(shown) > 0); held || err != nil {
+		return err
+	}
 	pass.cursorFrom = len(pass.ops)
 	placed, err := c.placeCursor(o)
 	if err != nil {

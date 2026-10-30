@@ -118,7 +118,10 @@ func (p *plane) depth(d backend.BitDepth) (layout, bool) {
 	return layout{format: scanoutFormat, modifiers: p.modifiers}, true
 }
 
-var _ backend.Scanner = (*Output)(nil)
+var (
+	_ backend.Scanner    = (*Output)(nil)
+	_ backend.Inheriting = (*Output)(nil)
+)
 
 type Backend struct {
 	loop      *loop.Loop
@@ -900,6 +903,10 @@ func (o *Output) ScheduleFrame() error {
 		return nil
 	}
 	return o.clock.Request()
+}
+
+func (o *Output) Inherited() bool {
+	return o.kms == kmsInherited
 }
 
 func (o *Output) testable() bool {
