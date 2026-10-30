@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/golden"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/rendertest"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
@@ -299,4 +300,8 @@ func BenchmarkDrawTexture(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
+	rendertest.EveryFormat(t, soft.New(), soft.NewBuffer(1, 1))
 }

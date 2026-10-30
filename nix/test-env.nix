@@ -12,4 +12,5 @@ pkgs: {
   LYS_WM_XWAYLAND = "${pkgs.xwayland}/bin/Xwayland";
   __EGL_VENDOR_LIBRARY_DIRS = "${pkgs.mesa}/share/glvnd/egl_vendor.d";
   LIBGL_ALWAYS_SOFTWARE = "1";
+  VK_DRIVER_FILES = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
 }

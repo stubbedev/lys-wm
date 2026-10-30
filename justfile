@@ -13,7 +13,7 @@ gates: fmt-check tidy-check check vuln headless race
 # harness, which boots lys-wm on the headless backend and drives real clients
 # against it, the session bus and GPU tests, and the end-to-end session in
 # cmd/lys-wm.
-headless_packages := "./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/xwayland/... ./cmd/lys-wm/..."
+headless_packages := "./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/render/vulkan/... ./internal/xwayland/... ./cmd/lys-wm/..."
 
 # Run the tests that need dev-shell programs. LYS_WM_HEADLESS=1 turns a missing
 # program into a failure instead of a skip.
@@ -22,7 +22,7 @@ headless:
 
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
-hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGLESRenderer|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGLESRenderer"
+hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGLESRenderer|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGLESRenderer|TestParityWithTheSoftwareRenderer|TestReadKeepsTheStridePadding"
 
 # Run the GPU tests on the container's /run/opengl-driver instead of the dev
 # shell's llvmpipe, failing when any of them skips, then check frame pacing:
@@ -31,10 +31,10 @@ hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFCl
 hardware min_fps="57":
     #!/usr/bin/env bash
     set -euo pipefail
-    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE
+    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
-    LYS_WM_HEADLESS=1 go test -count=1 -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/backend/drm/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'
+    LYS_WM_HEADLESS=1 go test -count=1 -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/render/vulkan/ ./internal/backend/drm/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'
     if grep -E '^[[:space:]]*--- SKIP: |^testing: warning: no tests to run' "$dir/tests.log" > "$dir/not-run.log"; then
         echo "hardware: these tests did not run on this machine:" >&2
         cat "$dir/not-run.log" >&2

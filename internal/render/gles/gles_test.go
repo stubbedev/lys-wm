@@ -2,11 +2,9 @@ package gles_test
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"image"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/gles"
+	"github.com/stubbedev/lys-wm/internal/render/rendertest"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
@@ -64,107 +63,6 @@ func framebuffer(t *testing.T, r *gles.Renderer, size image.Point) *gles.Framebu
 	return f
 }
 
-var (
-	texSize = image.Pt(7, 5)
-	target  = image.Pt(64, 48)
-)
-
-func argb() []byte {
-	pix := make([]byte, texSize.X*texSize.Y*4)
-	for y := range texSize.Y {
-		for x := range texSize.X {
-			a := byte(255 - 30*x)
-			if y == 0 {
-				a = 255
-			}
-			p := pix[(y*texSize.X+x)*4:]
-			p[0], p[1], p[2], p[3] = byte(int(a)*y/texSize.Y), byte(int(a)*x/texSize.X), a/2, a
-		}
-	}
-	return pix
-}
-
-func xrgb() []byte {
-	pix := argb()
-	for i := 3; i < len(pix); i += 4 {
-		pix[i] = byte(i)
-	}
-	return pix
-}
-
-type textures struct{ argb, xrgb render.Texture }
-
-func load(t *testing.T, r render.Renderer) textures {
-	t.Helper()
-	a, err := r.NewTexture(render.ARGB8888, texSize, texSize.X*4, argb())
-	if err != nil {
-		t.Fatal(err)
-	}
-	x, err := r.NewTexture(render.XRGB8888, texSize, texSize.X*4, xrgb())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := errors.Join(a.Destroy(), x.Destroy()); err != nil {
-			t.Error(err)
-		}
-	})
-	return textures{a, x}
-}
-
-func paint(t *testing.T, r render.Renderer, target render.Target, damage render.Region, draw func(render.Pass)) {
-	t.Helper()
-	p, err := r.Begin(target, damage)
-	if err != nil {
-		t.Fatal(err)
-	}
-	draw(p)
-	if err := p.End(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func scene(tx textures) func(render.Pass) {
-	return func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff})
-		p.FillRect(image.Rect(4, 30, 40, 46), render.Color{R: 0x40, G: 0x20, B: 0x00, A: 0x80})
-		for i := range render.Flipped270 + 1 {
-			size := i.Size(texSize)
-			at := image.Pt(1+(int(i)%4)*9, 1+int(i)/4*9)
-			p.DrawTexture(tx.argb, render.FRect{W: 7, H: 5}, image.Rectangle{Min: at, Max: at.Add(size)}, i, 1)
-		}
-		p.DrawTexture(tx.xrgb, render.FRect{W: 7, H: 5}, image.Rect(40, 2, 47, 7), render.Normal, 0.5)
-		p.DrawTexture(tx.argb, render.FRect{X: 1, Y: 1, W: 4, H: 3}, image.Rect(40, 10, 44, 13), render.Normal, 1)
-		p.DrawTexture(tx.xrgb, render.FRect{W: 7, H: 5}, image.Rect(50, 20, 55, 27), render.Rotate90, 1)
-	}
-}
-
-func compare(t *testing.T, want *soft.Buffer, got *gles.Framebuffer, tolerance int) {
-	t.Helper()
-	pix := make([]byte, len(want.Pix))
-	if err := got.Read(pix, want.Stride); err != nil {
-		t.Fatal(err)
-	}
-	bad := 0
-	for y := range want.H {
-		for x := range want.W {
-			i := y*want.Stride + x*4
-			for c := range 4 {
-				if d := int(pix[i+c]) - int(want.Pix[i+c]); d < -tolerance || d > tolerance {
-					if bad < 10 {
-						t.Errorf("(%d,%d): gles %v, soft %v", x, y, pix[i:i+4], want.Pix[i:i+4])
-					}
-					bad++
-					break
-				}
-			}
-		}
-	}
-	if bad > 0 {
-		t.Fatalf("%d pixels differ", bad)
-	}
-}
-
 func TestOverlappingDamageBlendsOnce(t *testing.T) {
 	r := renderer(t)
 	fb, err := r.NewFramebuffer(image.Pt(4, 1))
@@ -177,8 +75,8 @@ func TestOverlappingDamageBlendsOnce(t *testing.T) {
 		}
 	})
 	all := image.Rect(0, 0, 4, 1)
-	paint(t, r, fb, render.Region{all}, func(p render.Pass) { p.FillRect(all, render.Color{A: 0xff}) })
-	paint(t, r, fb, render.Region{image.Rect(0, 0, 3, 1), image.Rect(1, 0, 4, 1), image.Rect(1, 0, 2, 1)}, func(p render.Pass) {
+	rendertest.Paint(t, r, fb, render.Region{all}, func(p render.Pass) { p.FillRect(all, render.Color{A: 0xff}) })
+	rendertest.Paint(t, r, fb, render.Region{image.Rect(0, 0, 3, 1), image.Rect(1, 0, 4, 1), image.Rect(1, 0, 2, 1)}, func(p render.Pass) {
 		p.FillRect(all, render.Color{R: 0x80, A: 0x80})
 	})
 	pix := make([]byte, 16)
@@ -249,7 +147,7 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Destroy()
-	paint(t, g, client, render.Region{image.Rect(0, 0, 8, 8)}, func(p render.Pass) {
+	rendertest.Paint(t, g, client, render.Region{image.Rect(0, 0, 8, 8)}, func(p render.Pass) {
 		p.FillRect(image.Rect(0, 0, 8, 8), render.Color{B: 0x80, A: 0x80})
 		p.FillRect(image.Rect(0, 0, 4, 8), render.Color{R: 0xff, A: 0xff})
 	})
@@ -265,7 +163,7 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 		t.Fatal("a dmabuf texture accepted an upload")
 	}
 	fb := framebuffer(t, g, image.Pt(16, 8))
-	paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 8)}, func(p render.Pass) {
+	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 8)}, func(p render.Pass) {
 		p.FillRect(image.Rect(0, 0, 16, 8), render.Color{G: 0xff, A: 0xff})
 		p.DrawTexture(tex, render.FRect{W: 8, H: 8}, image.Rect(8, 0, 16, 8), render.Flipped, 1)
 	})
@@ -293,41 +191,6 @@ func near(a, b [4]byte) bool {
 	return true
 }
 
-func parity(t *testing.T, g *gles.Renderer) {
-	t.Helper()
-	s := soft.New()
-	gtx, stx := load(t, g), load(t, s)
-	fb, buf := framebuffer(t, g, target), soft.NewBuffer(target.X, target.Y)
-	full := render.Region{image.Rectangle{Max: target}}
-	paint(t, g, fb, full, scene(gtx))
-	paint(t, s, buf, full, scene(stx))
-	compare(t, buf, fb, 1)
-
-	update := argb()
-	for i := range update {
-		update[i] = 0x10
-	}
-	damage := image.Rect(2, 1, 5, 3)
-	for _, tx := range []render.Texture{gtx.argb, stx.argb} {
-		if err := tx.Update(damage, texSize.X*4, update[damage.Min.Y*texSize.X*4+damage.Min.X*4:]); err != nil {
-			t.Fatal(err)
-		}
-	}
-	partial := render.Region{image.Rect(0, 0, 20, 12), image.Rect(30, 20, 64, 48)}
-	paint(t, g, fb, partial, scene(gtx))
-	paint(t, s, buf, partial, scene(stx))
-	compare(t, buf, fb, 1)
-
-	cleared := render.Region{image.Rect(3, 4, 21, 15)}
-	clear := func(p render.Pass) {
-		p.Clear(render.Color{B: 0x20, A: 0x40})
-		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0x40, A: 0x80})
-	}
-	paint(t, g, fb, cleared, clear)
-	paint(t, s, buf, cleared, clear)
-	compare(t, buf, fb, 1)
-}
-
 func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	g := renderer(t)
 	pix := make([]byte, 4*4*4)
@@ -340,7 +203,7 @@ func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	}
 	defer tx.Destroy()
 	fb := framebuffer(t, g, image.Pt(20, 20))
-	paint(t, g, fb, render.Region{image.Rect(0, 0, 20, 20)}, func(p render.Pass) {
+	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 20, 20)}, func(p render.Pass) {
 		p.FillRect(image.Rect(0, 0, 20, 20), render.Color{A: 0xff})
 		p.DrawTexture(tx, render.FRect{X: 0.5, Y: 0.5, W: 3, H: 3}, image.Rect(2, 2, 12, 17), render.Rotate270, 1)
 	})
@@ -358,46 +221,9 @@ func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	}
 }
 
-func paintMarked(t *testing.T, g *gles.Renderer, fb *gles.Framebuffer) {
-	t.Helper()
-	paint(t, g, fb, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 5, 3), render.Color{B: 0xff, A: 0xff})
-		p.FillRect(image.Rect(1, 0, 2, 1), render.Color{R: 0xff, A: 0xff})
-		p.FillRect(image.Rect(4, 2, 5, 3), render.Color{G: 0xff, A: 0xff})
-	})
-}
-
-const markedStride = 32
-
-func checkMarked(t *testing.T, got []byte) {
-	t.Helper()
-	for _, c := range []struct {
-		at   image.Point
-		want [4]byte
-	}{{image.Pt(0, 0), [4]byte{0xff, 0, 0, 0xff}}, {image.Pt(1, 0), [4]byte{0, 0, 0xff, 0xff}}, {image.Pt(4, 2), [4]byte{0, 0xff, 0, 0xff}}, {image.Pt(3, 1), [4]byte{0xff, 0, 0, 0xff}}} {
-		if px := [4]byte(got[c.at.Y*markedStride+c.at.X*4:]); px != c.want {
-			t.Errorf("%v: %v, want %v", c.at, px, c.want)
-		}
-	}
-	for y := range 3 {
-		if pad := got[y*markedStride+20 : (y+1)*markedStride]; !bytes.Equal(pad, bytes.Repeat([]byte{0xaa}, len(pad))) {
-			t.Errorf("row %d padding was overwritten: %v", y, pad)
-		}
-	}
-}
-
 func TestReadKeepsTheStridePadding(t *testing.T) {
 	g := renderer(t)
-	fb := framebuffer(t, g, image.Pt(5, 3))
-	paintMarked(t, g, fb)
-	got := bytes.Repeat([]byte{0xaa}, markedStride*3)
-	if err := fb.Read(got, markedStride); err != nil {
-		t.Fatal(err)
-	}
-	checkMarked(t, got)
-	if err := fb.Read(make([]byte, 21*3), 21); err == nil {
-		t.Error("a stride that is not a whole number of pixels was accepted")
-	}
+	rendertest.ReadKeepsTheStridePadding(t, g, framebuffer(t, g, image.Pt(5, 3)))
 }
 
 func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
@@ -419,7 +245,7 @@ func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 		}
 	})
 	for round := range 2 {
-		paintMarked(t, g, fb)
+		rendertest.PaintMarked(t, g, fb)
 		pending, err := fb.ReadAsync()
 		if err != nil {
 			t.Fatal(err)
@@ -427,7 +253,7 @@ func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 		if _, err := fb.ReadAsync(); err == nil {
 			t.Fatal("a second read was started while one was pending")
 		}
-		paint(t, g, fb, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
+		rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
 			p.FillRect(image.Rect(0, 0, 5, 3), render.Color{R: 0xff, G: 0xff, A: 0xff})
 		})
 		if err := pending.Wait(); err != nil {
@@ -440,14 +266,14 @@ func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 		if _, err := pending.Map(); err == nil {
 			t.Fatal("a mapped read was mapped again")
 		}
-		got := bytes.Repeat([]byte{0xaa}, markedStride*3)
+		got := bytes.Repeat([]byte{0xaa}, rendertest.MarkedStride*3)
 		for y := range 3 {
-			copy(got[y*markedStride:], m[y*20:(y+1)*20])
+			copy(got[y*rendertest.MarkedStride:], m[y*20:(y+1)*20])
 		}
 		if err := pending.Release(); err != nil {
 			t.Fatal(err)
 		}
-		checkMarked(t, got)
+		rendertest.CheckMarked(t, got)
 	}
 	pending, err := fb.ReadAsync()
 	if err != nil {
@@ -470,7 +296,7 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	if _, err := g.NewTexture(render.ARGB8888, image.Pt(4, 4), 8, make([]byte, 64)); err == nil {
 		t.Fatal("a stride shorter than a row was accepted")
 	}
-	tx := load(t, other).argb
+	tx := rendertest.Load(t, other).ARGB
 	fb := framebuffer(t, g, image.Pt(8, 8))
 	p, err := g.Begin(fb, render.Region{image.Rect(0, 0, 8, 8)})
 	if err != nil {
@@ -488,7 +314,7 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10})
-	p.DrawTexture(load(t, g).argb, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1)
+	p.DrawTexture(rendertest.Load(t, g).ARGB, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1)
 	if err := p.End(); err == nil || !strings.Contains(err.Error(), "not premultiplied") {
 		t.Fatalf("a straight-alpha color: %v", err)
 	}
@@ -549,7 +375,7 @@ func sampleNV12(t *testing.T, g *gles.Renderer, node string, y, cb, cr byte, yuv
 	}
 	defer tex.Destroy()
 	fb := framebuffer(t, g, image.Pt(16, 16))
-	paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 16)}, func(p render.Pass) {
+	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 16)}, func(p render.Pass) {
 		p.DrawTexture(tex, render.FRect{W: 16, H: 16}, image.Rect(0, 0, 16, 16), render.Normal, 1)
 	})
 	got := make([]byte, 16*16*4)
@@ -590,25 +416,25 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 	surfaceless := func(*gpu.Library) (*gpu.Display, error) { return lib.Surfaceless() }
 	r := rendererOn(t, surfaceless)
 	other := rendererOn(t, surfaceless)
-	tx := load(t, r)
-	fb := framebuffer(t, r, target)
-	otherFB := framebuffer(t, other, target)
-	pix := make([]byte, target.X*target.Y*4)
+	tx := rendertest.Load(t, r)
+	fb := framebuffer(t, r, rendertest.Size)
+	otherFB := framebuffer(t, other, rendertest.Size)
+	pix := make([]byte, rendertest.Size.X*rendertest.Size.Y*4)
 	frame := func(r *gles.Renderer, fb *gles.Framebuffer) error {
 		if r != other {
-			if err := tx.argb.Update(image.Rectangle{Max: texSize}, texSize.X*4, argb()); err != nil {
+			if err := tx.ARGB.Update(image.Rectangle{Max: rendertest.TexSize}, rendertest.TexSize.X*4, rendertest.ARGB()); err != nil {
 				return err
 			}
 		}
-		p, err := r.Begin(fb, render.Region{{Max: target}})
+		p, err := r.Begin(fb, render.Region{{Max: rendertest.Size}})
 		if err != nil {
 			return err
 		}
-		p.FillRect(image.Rectangle{Max: target}, render.Color{R: 0xff, A: 0xff})
+		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{R: 0xff, A: 0xff})
 		if err := p.End(); err != nil {
 			return err
 		}
-		return fb.Read(pix, target.X*4)
+		return fb.Read(pix, rendertest.Size.X*4)
 	}
 	done := make(chan error, 1)
 	var got struct{ first, steady, switched uint64 }
@@ -645,89 +471,13 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 	}
 }
 
-func encode(f render.Format, c render.Color) []byte {
-	lo, hi := c.B, c.R
-	if f.RGBOrder() {
-		lo, hi = hi, lo
-	}
-	a := c.A
-	if f.Opaque() {
-		a = 0
-	}
-	if !f.TenBit() {
-		return []byte{lo, c.G, hi, a}
-	}
-	ten := func(v uint8) uint32 { return uint32(v) * 0x3ff / 0xff }
-	return binary.LittleEndian.AppendUint32(nil, uint32(a>>6)<<30|ten(hi)<<20|ten(c.G)<<10|ten(lo))
-}
-
-func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
-	c := render.Color{R: 0xff, G: 0xaa, B: 0x55, A: 0xff}
-	want := [4]byte{c.B, c.G, c.R, c.A}
-	for _, r := range []render.Renderer{renderer(t), soft.New()} {
-		if !slices.Contains(r.Formats(), render.XBGR2101010) {
-			t.Errorf("%T offers %v, without 10-bit formats", r, r.Formats())
-		}
-		for _, f := range r.Formats() {
-			px := encode(f, c)
-			tex, err := r.NewTexture(f, image.Pt(1, 1), 4, px)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := drawn(t, r, tex); got != want {
-				t.Errorf("%T: format %d drew %v, want %v", r, f, got, want)
-			}
-			if err := tex.Update(image.Rect(0, 0, 1, 1), 4, encode(f, render.Color{A: 0xff})); err != nil {
-				t.Fatal(err)
-			}
-			if got := drawn(t, r, tex); got != [4]byte{0, 0, 0, 0xff} {
-				t.Errorf("%T: format %d updated to black drew %v", r, f, got)
-			}
-			if err := tex.Destroy(); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-}
-
-func drawn(t *testing.T, r render.Renderer, tex render.Texture) [4]byte {
-	t.Helper()
-	var target render.Target
-	var read func() [4]byte
-	switch r := r.(type) {
-	case *gles.Renderer:
-		fb := framebuffer(t, r, image.Pt(1, 1))
-		target = fb
-		read = func() [4]byte {
-			pix := make([]byte, 4)
-			if err := fb.Read(pix, 4); err != nil {
-				t.Fatal(err)
-			}
-			return [4]byte(pix)
-		}
-	case *soft.Renderer:
-		buf := soft.NewBuffer(1, 1)
-		target = buf
-		read = func() [4]byte { return [4]byte(buf.Pix) }
-	}
-	p, err := r.Begin(target, render.Region{image.Rect(0, 0, 1, 1)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
-	if err := p.End(); err != nil {
-		t.Fatal(err)
-	}
-	return read()
-}
-
 func TestASteadyPassDoesNotAllocate(t *testing.T) {
 	if raceEnabled {
 		t.Skip("the race detector allocates on its own")
 	}
 	g := renderer(t)
-	tex := load(t, g)
-	fb := framebuffer(t, g, target)
+	tex := rendertest.Load(t, g)
+	fb := framebuffer(t, g, rendertest.Size)
 	damage := render.Region{image.Rect(0, 0, 32, 32)}
 	var failed error
 	draw := func() {
@@ -737,8 +487,8 @@ func TestASteadyPassDoesNotAllocate(t *testing.T) {
 			return
 		}
 		p.FillRect(image.Rect(0, 0, 32, 32), render.Color{A: 0xff})
-		p.DrawTexture(tex.argb, render.FRect{W: float64(texSize.X), H: float64(texSize.Y)}, image.Rect(0, 0, texSize.X, texSize.Y), render.Normal, 1)
-		p.DrawTexture(tex.xrgb, render.FRect{W: float64(texSize.X), H: float64(texSize.Y)}, image.Rect(8, 8, 8+texSize.X, 8+texSize.Y), render.Normal, 1)
+		p.DrawTexture(tex.ARGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(0, 0, rendertest.TexSize.X, rendertest.TexSize.Y), render.Normal, 1)
+		p.DrawTexture(tex.XRGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(8, 8, 8+rendertest.TexSize.X, 8+rendertest.TexSize.Y), render.Normal, 1)
 		if err := p.End(); err != nil && failed == nil {
 			failed = err
 		}
@@ -765,10 +515,10 @@ func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
 	if !g.NativeFences() {
 		t.Skip("no native fences on this driver")
 	}
-	fb := framebuffer(t, g, target)
+	fb := framebuffer(t, g, rendertest.Size)
 	start := backend.Now()
-	paint(t, g, fb, render.Region{{Max: target}}, func(p render.Pass) {
-		p.FillRect(image.Rectangle{Max: target}, render.Color{G: 0xff, A: 0xff})
+	rendertest.Paint(t, g, fb, render.Region{{Max: rendertest.Size}}, func(p render.Pass) {
+		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{G: 0xff, A: 0xff})
 	})
 	fd, err := g.SyncFile()
 	if err != nil {
@@ -786,4 +536,14 @@ func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
 		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, backend.Now())
 	}
 	t.Logf("the GPU finished the frame %v after it started", done-start)
+}
+
+func parity(t *testing.T, g *gles.Renderer) {
+	t.Helper()
+	rendertest.Parity(t, g, framebuffer(t, g, rendertest.Size))
+}
+
+func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
+	g := renderer(t)
+	rendertest.EveryFormat(t, g, framebuffer(t, g, image.Pt(1, 1)))
 }

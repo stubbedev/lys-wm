@@ -16,6 +16,7 @@ import (
 	gtext "github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 	"github.com/stubbedev/lys-wm/internal/xcursor"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
@@ -46,6 +47,21 @@ func GPU(t testing.TB) *gpu.Library {
 		missing(t, "%v", err)
 	}
 	return l
+}
+
+func Vulkan(t testing.TB) *vulkan.Renderer {
+	t.Helper()
+	r, err := vulkan.OpenDefault()
+	if err != nil {
+		missing(t, "%v", err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	t.Logf("Vulkan device: %s", r.Device().Name())
+	return r
 }
 
 func XKBLibrary(t testing.TB) *xkb.Library {
