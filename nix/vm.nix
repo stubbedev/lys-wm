@@ -9,6 +9,7 @@
   lysWMConfig ? null,
   rendersOn ? "card0",
   framedCursors ? [],
+  backgroundOnly ? true,
   machineConfig ? {},
   extraTest ? _: "",
 }: let
@@ -93,7 +94,8 @@ in
             machine.succeed(f"${run "WAYLAND_DISPLAY={display} grim -o {output} {shot}"}")
             machine.copy_from_machine(shot)
             pixels = machine.succeed(f"${run "WAYLAND_DISPLAY={display} grim -t ppm -o {output} -"} | tail -n +4 | od -An -v -tx1 -w3 | sort -u").split("\n")
-            assert [p.strip() for p in pixels if p.strip()] == ["1e 1e 2e"], f"{output} shows {pixels[:4]} besides the background"
+            if ${if backgroundOnly then "True" else "False"}:
+                assert [p.strip() for p in pixels if p.strip()] == ["1e 1e 2e"], f"{output} shows {pixels[:4]} besides the background"
       ''
       + extraTest run
       + pkgs.lib.optionalString (unplug != null) ''

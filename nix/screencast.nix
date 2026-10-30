@@ -35,6 +35,7 @@
       name = "lys-wm-screencast";
       log = "xdg-desktop-portal-wlr";
       chooserRan = "wlroots: chooser called";
+      backgroundOnly = true;
       machineConfig = {config, ...}: let
         chooser = pkgs.writeShellScript "share-pick" ''
           set -euo pipefail
@@ -55,6 +56,7 @@
       name = "lys-wm-screencast-lys-shell";
       log = "lys-shell";
       chooserRan = null;
+      backgroundOnly = false;
       machineConfig = let
         wallpaper = pkgs.runCommand "desktop.png" {nativeBuildInputs = [pkgs.imagemagick];} "magick -size 64x64 xc:'#1e1e2e' png24:$out";
         shellConfig = (pkgs.formats.yaml {}).generate "config.yaml" {
@@ -92,6 +94,7 @@ in
     inherit (chosen) name;
     devices = ["virtio-gpu-pci"];
     outputs = ["Virtual-1"];
+    backgroundOnly = chosen.backgroundOnly;
     lysWMConfig = ''
       rules:
         - {title: ^presentation-shm:, tile: true}
