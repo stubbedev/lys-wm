@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/gles"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
+	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -24,7 +25,7 @@ type Backend struct {
 	shallow    bool
 	loop       *loop.Loop
 	renderer   render.Renderer
-	gpu        *gpuRenderer
+	closeGPU   func() error
 	handler    backend.Handler
 	outputs    []*Output
 	next       int
@@ -46,15 +47,6 @@ func New(l *loop.Loop) *Backend {
 	return b
 }
 
-type gpuRenderer struct {
-	display *gpu.Display
-	gles    *gles.Renderer
-}
-
-func (g *gpuRenderer) close() error {
-	return errors.Join(g.gles.Close(), g.display.Close())
-}
-
 func NewGLES(l *loop.Loop, paths gpu.Paths) (*Backend, error) {
 	lib, err := gpu.Load(paths)
 	if err != nil {
@@ -69,7 +61,17 @@ func NewGLES(l *loop.Loop, paths gpu.Paths) (*Backend, error) {
 		return nil, errors.Join(err, d.Close())
 	}
 	b := New(l)
-	b.renderer, b.gpu = r, &gpuRenderer{display: d, gles: r}
+	b.renderer, b.closeGPU = r, func() error { return errors.Join(r.Close(), d.Close()) }
+	return b, nil
+}
+
+func NewVulkan(l *loop.Loop) (*Backend, error) {
+	r, err := vulkan.OpenDefault()
+	if err != nil {
+		return nil, fmt.Errorf("headless: %w", err)
+	}
+	b := New(l)
+	b.renderer, b.closeGPU = r, r.Close
 	return b, nil
 }
 
@@ -79,25 +81,30 @@ func (o *Output) resize(size image.Point) error {
 	}
 	o.buffer = soft.NewBuffer(size.X, size.Y)
 	o.drawn, o.unread = false, false
-	if o.backend.gpu == nil {
+	if o.backend.closeGPU == nil {
 		o.target = o.buffer
 		return nil
 	}
-	fb, err := o.backend.gpu.gles.NewFramebuffer(size)
+	t, err := o.backend.renderer.NewTarget(size)
 	if err != nil {
 		return fmt.Errorf("headless: %s: %w", o.name, err)
 	}
-	o.target = fb
+	o.target = t
 	return nil
 }
 
+func (o *Output) gpuTarget() (render.ReadTarget, bool) {
+	t, ok := o.target.(render.ReadTarget)
+	return t, ok && o.backend.closeGPU != nil
+}
+
 func (o *Output) freeTarget() error {
-	fb, ok := o.target.(*gles.Framebuffer)
+	t, ok := o.gpuTarget()
 	o.target = nil
 	if !ok {
 		return nil
 	}
-	return fb.Destroy()
+	return t.Destroy()
 }
 
 func (b *Backend) Start(h backend.Handler) error {
@@ -140,8 +147,8 @@ func (b *Backend) Close() error {
 			errs = append(errs, b.handler.DeviceRemoved(d))
 		}
 	}
-	if b.gpu != nil {
-		errs = append(errs, b.gpu.close())
+	if b.closeGPU != nil {
+		errs = append(errs, b.closeGPU())
 	}
 	return errors.Join(errs...)
 }
@@ -444,7 +451,7 @@ func (o *Output) Present(damage render.Region) error {
 	}
 	o.drawn = true
 	o.damage = append(o.damage[:0], damage...)
-	_, o.unread = o.target.(*gles.Framebuffer)
+	_, o.unread = o.gpuTarget()
 	if o.inherited {
 		snap, err := o.Primary()
 		if err != nil {
@@ -514,8 +521,8 @@ func (o *Output) LastDamage() render.Region {
 }
 
 func (o *Output) Primary() (*soft.Buffer, error) {
-	if fb, ok := o.target.(*gles.Framebuffer); ok && o.unread {
-		if err := fb.Read(o.buffer.Pix, o.buffer.Stride); err != nil {
+	if t, ok := o.gpuTarget(); ok && o.unread {
+		if err := t.Read(o.buffer.Pix, o.buffer.Stride); err != nil {
 			return nil, fmt.Errorf("headless: read back %s: %w", o.name, err)
 		}
 		o.unread = false

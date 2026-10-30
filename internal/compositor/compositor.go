@@ -333,9 +333,13 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if imp, ok := c.renderer.(dmabufRenderer); ok {
-		c.importer = imp
-		if c.dmabuf, err = dmabuf.New(display, imp, c); err != nil {
+		switch c.dmabuf, err = dmabuf.New(display, imp, c); {
+		case errors.Is(err, gpu.ErrUnsupported):
+			c.dmabuf = nil
+		case err != nil:
 			return err
+		default:
+			c.importer = imp
 		}
 	}
 	if err := c.explicitSync(l, display); err != nil {

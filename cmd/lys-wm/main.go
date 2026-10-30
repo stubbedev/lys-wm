@@ -101,6 +101,7 @@ type rendererKind uint8
 const (
 	softRenderer rendererKind = iota + 1
 	glesRenderer
+	vulkanRenderer
 )
 
 func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
@@ -117,13 +118,21 @@ func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
 		return softRenderer, nil
 	case "gles":
 		return glesRenderer, nil
+	case "vulkan":
+		if kind != headlessBackend {
+			return 0, fmt.Errorf("only the headless backend renders with Vulkan so far, not the %s backend", kind)
+		}
+		return vulkanRenderer, nil
 	}
-	return 0, fmt.Errorf("unknown renderer %q (available: gles, soft)", requested)
+	return 0, fmt.Errorf("unknown renderer %q (available: gles, soft, vulkan)", requested)
 }
 
 func openHeadless(l *loop.Loop, renderer rendererKind, paths gpu.Paths) (*headless.Backend, error) {
-	if renderer == glesRenderer {
+	switch renderer {
+	case glesRenderer:
 		return headless.NewGLES(l, paths)
+	case vulkanRenderer:
+		return headless.NewVulkan(l)
 	}
 	return headless.New(l), nil
 }
@@ -153,7 +162,7 @@ func openBackend(kind backendKind, renderer rendererKind, l *loop.Loop, opts nat
 func openOther(kind backendKind, renderer rendererKind, l *loop.Loop) (backend.Backend, error) {
 	paths := gpu.PathsFromEnv(os.Getenv)
 	hint := func(err error) error {
-		if err != nil && renderer == glesRenderer {
+		if err != nil && renderer != softRenderer {
 			return fmt.Errorf("%w (run with --renderer soft to render in software)", err)
 		}
 		return err
@@ -340,7 +349,7 @@ func run(args []string) (err error) {
 	flags := flag.NewFlagSet("lys-wm", flag.ContinueOnError)
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
-	rendererName := flags.String("renderer", "", "gles or soft (default: gles for the nested backend, soft for headless)")
+	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; vulkan only on headless)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	if err := flags.Parse(args); err != nil {
 		return err

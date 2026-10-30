@@ -228,6 +228,9 @@ func onEachRenderer(t *testing.T, test func(t *testing.T, start starter)) {
 		{"gles", func(t *testing.T, modes ...backend.Mode) *Harness {
 			return StartGLES(t, func(*compositor.Config) {}, modes...)
 		}},
+		{"vulkan", func(t *testing.T, modes ...backend.Mode) *Harness {
+			return StartVulkan(t, func(*compositor.Config) {}, modes...)
+		}},
 	} {
 		t.Run(r.name, func(t *testing.T) { test(t, r.start) })
 	}

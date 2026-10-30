@@ -232,6 +232,9 @@ func (r *Renderer) CheckDMABUF(b gpu.DMABUF) error {
 }
 
 func (r *Renderer) DMABUFFormats() ([]gpu.FormatModifier, error) {
+	if !r.d.Exports() {
+		return nil, fmt.Errorf("%w: %s shares no dmabufs", gpu.ErrUnsupported, r.d.Name())
+	}
 	var out []gpu.FormatModifier
 	all := append(r.d.TextureFormats(), yuvFormats...)
 	for _, f := range all {

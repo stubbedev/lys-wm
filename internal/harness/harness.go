@@ -105,6 +105,16 @@ func StartGLES(t *testing.T, configure func(*compositor.Config), modes ...backen
 	return start(t, setup{open: glesBackend, configure: configure, traced: true}, modes...)
 }
 
+func vulkanBackend(l *loop.Loop) (*headless.Backend, error) {
+	return headless.NewVulkan(l)
+}
+
+func StartVulkan(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
+	t.Helper()
+	testenv.Vulkan(t)
+	return start(t, setup{open: vulkanBackend, configure: configure, traced: true}, modes...)
+}
+
 func StartGLESWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
 	testenv.GPU(t)
