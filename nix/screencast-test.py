@@ -4,7 +4,6 @@ import shlex
 import time
 
 ANIMATION = "presentation-shm"
-ANIMATION_PREVIEW = "ff0000"
 OUTPUT = "Virtual-1"
 OUTPUT_PIXELS = (1280, 800)
 OUTPUT_SIZE = "x".join(map(str, OUTPUT_PIXELS))
@@ -15,11 +14,13 @@ ABS_MAX = 0x7FFF
 CURSOR_BOX = 64
 PICKER_PANEL = "262638"
 PICKER_PROBE = (630, 630, 20, 10)
-PICKER_PAGE = (0, 260, 1280, 330)
-PICKER_PAGE_CENTER = (640, 420)
-PICKER_OUTPUTS_TAB = (560, 228)
 PICKER_APPEARS_S = 60
 PICKER_SERVICE = "dev.stubbe.lys.SharePicker1"
+SOURCE_MONITOR = 1
+SOURCE_WINDOW = 2
+PICKER_PAGES = [("Windows", SOURCE_WINDOW), ("Outputs", SOURCE_MONITOR), ("Region", SOURCE_MONITOR)]
+PICKER_OPENS_ON = "Windows"
+SELECT_SOURCES_TYPES = re.compile(r'string "types"\s+variant\s+uint32 (\d+)')
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
 
@@ -50,9 +51,18 @@ def chooser_runs():
     return int(machine.succeed(chooser_runs_command()).strip())
 
 
+def requested_types():
+    log = machine.succeed("cat /tmp/select-sources.log")
+    types = []
+    for call in log.split("method call ")[1:]:
+        found = SELECT_SOURCES_TYPES.search(call)
+        types.append(int(found.group(1)) if found else SOURCE_MONITOR)
+    return types
+
+
 def choose(label):
     if params["portal"] != "wlr":
-        return 0
+        return len(requested_types())
     machine.succeed(f"printf '%s\\n' {shlex.quote(label)} > /tmp/share-pick")
     return chooser_runs()
 
@@ -69,21 +79,6 @@ def move_pointer(x, y):
     ])
 
 
-def press(down):
-    pointer_events([{"type": "btn", "data": {"down": down, "button": "left"}}])
-
-
-def click(x, y, then=None):
-    move_pointer(x, y)
-    machine.sleep(0.5)
-    press(True)
-    machine.sleep(0.2)
-    press(False)
-    if then is not None:
-        move_pointer(*then)
-    machine.sleep(0.2)
-
-
 def locate(color, x, y, width, height):
     status, out = machine.execute(as_alice(f"WAYLAND_DISPLAY={display} grim -g \"{x},{y} {width}x{height}\" -t ppm - | {params['screencast']} locate {color}"))
     if status != 0:
@@ -97,15 +92,25 @@ def picker_shown():
     return found is not None and found[2] == PICKER_PROBE[2] * PICKER_PROBE[3]
 
 
-def pick_in_picker(label):
-    if label == MONITOR:
-        click(*PICKER_OUTPUTS_TAB)
-        machine.sleep(2)
-        click(*PICKER_PAGE_CENTER, then=POINTER_REST)
-        return
-    found = locate(ANIMATION_PREVIEW, *PICKER_PAGE)
-    assert found is not None, f"the share picker shows no card for {label}"
-    click(found[0], found[1], then=POINTER_REST)
+def keys(*names):
+    for name in names:
+        machine.send_key(name)
+        machine.sleep(0.3)
+
+
+def pick_in_picker(label, ran):
+    machine.wait_until_succeeds(f"[ $(grep -c '^method call ' /tmp/select-sources.log) -gt {ran} ]", timeout=PICKER_APPEARS_S)
+    types = requested_types()[-1]
+    pages = [name for name, source in PICKER_PAGES if types & source]
+    wanted = "Outputs" if label == MONITOR else "Windows"
+    assert wanted in pages, f"sharing {label} asked for source types {types:#x}, which the picker shows as {pages}"
+    opened = PICKER_OPENS_ON if PICKER_OPENS_ON in pages else pages[0]
+    keys(*["ctrl-pgdn"] * ((pages.index(wanted) - pages.index(opened)) % len(pages)))
+    if label == WINDOW:
+        shown = sorted(windows(), key=lambda w: w["id"])
+        assert shown[0]["title"].startswith(f"{ANIMATION}:"), f"{ANIMATION} is not the oldest window, so not the last card: {[w['title'] for w in shown]}"
+        keys(*["down"] * len(shown), *["right"] * len(shown))
+    keys("ret")
 
 
 def answer(label, ran, done, confirm):
@@ -122,7 +127,7 @@ def answer(label, ran, done, confirm):
             raise AssertionError(f"no share picker for {label} within {PICKER_APPEARS_S} s" if answered == 0 else f"sharing {label} did not finish after the pick")
         if picker_shown():
             machine.sleep(2)
-            pick_in_picker(label)
+            pick_in_picker(label, ran)
             answered += 1
             if answered == 1:
                 if confirm:
@@ -191,6 +196,8 @@ def share(app, label, confirm):
 
 
 if params["portal"] != "wlr":
+    machine.succeed(as_alice(f"{params['background']} select-sources {params['select_sources']}"))
+    machine.wait_until_succeeds("pgrep -u alice -x dbus-monitor", timeout=30)
     machine.wait_until_succeeds(as_alice(f"busctl --user list --no-legend | grep -q {PICKER_SERVICE}"), timeout=PICKER_APPEARS_S)
 launch("animation")
 machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'length == 1'", timeout=30)
