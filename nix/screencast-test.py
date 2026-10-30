@@ -19,6 +19,7 @@ PICKER_PAGE = (0, 260, 1280, 330)
 PICKER_PAGE_CENTER = (640, 420)
 PICKER_OUTPUTS_TAB = (560, 228)
 PICKER_APPEARS_S = 60
+PICKER_SERVICE = "dev.stubbe.lys.SharePicker1"
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
 
@@ -189,6 +190,8 @@ def share(app, label, confirm):
     machine.wait_until_fails(f"kill -0 {shown['pid']}", timeout=60)
 
 
+if params["portal"] != "wlr":
+    machine.wait_until_succeeds(as_alice(f"busctl --user list --no-legend | grep -q {PICKER_SERVICE}"), timeout=PICKER_APPEARS_S)
 launch("animation")
 machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'length == 1'", timeout=30)
 machine.sleep(3)
