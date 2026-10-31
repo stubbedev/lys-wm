@@ -27,12 +27,14 @@ type Rule struct {
 	Mode    RuleMode
 	Size    image.Point
 	Tearing RuleTearing
+	Opacity *float32
 }
 
 type Decision struct {
 	Mode    RuleMode
 	Size    image.Point
 	Tearing RuleTearing
+	Opacity *float32
 }
 
 func (r Rule) matches(appID, title string) bool {
@@ -53,6 +55,9 @@ func Decide(rules []Rule, appID, title string) Decision {
 		}
 		if r.Tearing != TearingUnset {
 			d.Tearing = r.Tearing
+		}
+		if r.Opacity != nil {
+			d.Opacity = r.Opacity
 		}
 	}
 	return d

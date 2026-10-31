@@ -23,9 +23,14 @@ type TabStyle struct {
 	Active, Inactive, Urgent                 TabColors
 }
 
+type Opacity struct {
+	Active, Inactive, Fullscreen float32
+}
+
 type Decor struct {
 	BorderWidth                  int
 	Rounding                     int
+	Opacity                      Opacity
 	ActiveBorder, InactiveBorder render.Color
 	Tab                          TabStyle
 }
@@ -41,6 +46,7 @@ var (
 func DefaultDecor() Decor {
 	return Decor{
 		BorderWidth:    1,
+		Opacity:        Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
 		ActiveBorder:   mauve,
 		InactiveBorder: crust,
 		Tab: TabStyle{
@@ -156,6 +162,19 @@ func (c *Compositor) evictLabels(o *output.Output) error {
 
 func deviceLength(o *output.Output, v int) float32 {
 	return float32(float64(v) * o.Scale().Float())
+}
+
+func (c *Compositor) opacity(w *window) float32 {
+	if o := c.decision(w).Opacity; o != nil {
+		return *o
+	}
+	switch {
+	case w.layer == wm.LayerFullscreen:
+		return c.decor.Opacity.Fullscreen
+	case w == c.active:
+		return c.decor.Opacity.Active
+	}
+	return c.decor.Opacity.Inactive
 }
 
 func (c *Compositor) rounded(w *window) bool {

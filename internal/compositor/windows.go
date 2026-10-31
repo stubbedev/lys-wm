@@ -28,6 +28,22 @@ type window struct {
 	scale   output.Scale
 	floated bool
 	motion  anim.Tween[image.Rectangle]
+	decided decided
+}
+
+type decided struct {
+	appID, title string
+	rules        uint64
+	d            wm.Decision
+}
+
+func (c *Compositor) decision(w *window) wm.Decision {
+	appID, title := w.top.AppID(), w.top.Title()
+	k := &w.decided
+	if k.rules != c.rulesGen || k.appID != appID || k.title != title {
+		*k = decided{appID: appID, title: title, rules: c.rulesGen, d: wm.Decide(c.rules, appID, title)}
+	}
+	return k.d
 }
 
 func (c *Compositor) windowOrigin(w *window) origin {

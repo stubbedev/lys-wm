@@ -123,9 +123,17 @@ decoration:
 | Key | Default |
 | --- | --- |
 | `rounding` | 0: the radius of window corners in logical pixels, scaled with the output. Surfaces are clipped to it, antialiased, and the border follows it with an outer radius of `rounding` plus the border width. Fullscreen windows stay square |
+| `active_opacity` | 1: the focused window's opacity, 0 to 1 |
+| `inactive_opacity` | 1: every other window's opacity |
+| `fullscreen_opacity` | 1: a fullscreen window's opacity, whether focused or not |
 
 A rounded window shows what is behind its corners, so it is always
 composited, never scanned out directly, unless it is fullscreen.
+
+Opacity multiplies what the client draws, including the alpha it asks for
+through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
+the place of these for the windows it matches. A translucent window shows
+what is below it, so it is never scanned out directly.
 
 ## gaps
 
@@ -253,7 +261,8 @@ rules:
 
 `app_id` and `title` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
 a rule needs at least one. `float: true` or `tile: true` decides where a new
-window goes; `size: <w>x<h>` sizes it when it floats. `tearing: true` or
+window goes; `size: <w>x<h>` sizes it when it floats. `opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
+`decoration`'s. `tearing: true` or
 `tearing: false` overrides what the window asks for through
 `wp_tearing_control_v1` (see [tearing](#tearing)). Later rules override
 earlier ones.

@@ -150,6 +150,7 @@ type Compositor struct {
 	wm              wm.State
 	settings        wm.Settings
 	rules           []wm.Rule
+	rulesGen        uint64
 	decor           Decor
 	font            *gtext.Typeface
 	icons           *icontheme.Theme
@@ -257,6 +258,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
 	c.animations, c.clock = cfg.Animations, cfg.Clock
+	c.rulesGen++
 }
 
 func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (*Compositor, error) {

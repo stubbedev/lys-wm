@@ -74,6 +74,12 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.BorderWidth != 2 || cfg.Decor.ActiveBorder != (render.Color{R: 0xff, G: 0x88, A: 0xff}) || cfg.Decor.Tab.Height != 18 || cfg.Decor.Tab.Urgent.Text != (render.Color{A: 0xff}) {
 		t.Errorf("decor %+v", cfg.Decor)
 	}
+	if cfg.Decor.Opacity != (compositor.Opacity{Active: 1, Inactive: 0.9, Fullscreen: 1}) {
+		t.Errorf("decoration opacity parsed to %+v", cfg.Decor.Opacity)
+	}
+	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, opacity: 0.8}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Opacity != 0.8 {
+		t.Errorf("a rule's opacity: %+v, %v", c.Rules, err)
+	}
 	if cfg.Decor.Rounding != 8 {
 		t.Errorf("decoration.rounding parsed to %d", cfg.Decor.Rounding)
 	}
@@ -191,6 +197,8 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"animations:\n  events:\n    windows: {curve: bouncy}\n":                `t.yaml:3: animations.events.windows.curve: "bouncy" is not a curve (known: ease,`,
 		"animations:\n  events:\n    windows: {duration: 0}\n":                  "t.yaml:3: animations.events.windows.duration: 0 is not a positive number of milliseconds",
 		"animations:\n  events:\n    windows: {curve: spring, duration: 100}\n": "t.yaml:3: animations.events.windows: event windows: anim: a spring settles in its own time",
+		"decoration:\n  active_opacity: 1.5\n":                                  "t.yaml:2: decoration.active_opacity: 1.5 is not from 0 to 1",
+		"rules:\n  - {app_id: a, opacity: -1}\n":                                "t.yaml:2: rules[0].opacity: -1 is not from 0 to 1",
 		"decoration:\n  rounding: -1\n":                                         "t.yaml:2: decoration.rounding: -1 is not zero or more",
 		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
 		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",

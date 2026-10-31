@@ -40,6 +40,7 @@ animations:
 
 decoration:
   rounding: 8
+  inactive_opacity: 0.9
 
 gaps:
   inner: 6

@@ -203,7 +203,10 @@ type rawEvent struct {
 }
 
 type rawDecoration struct {
-	Rounding *At[int] `yaml:"rounding"`
+	Rounding          *At[int]     `yaml:"rounding"`
+	ActiveOpacity     *At[float64] `yaml:"active_opacity"`
+	InactiveOpacity   *At[float64] `yaml:"inactive_opacity"`
+	FullscreenOpacity *At[float64] `yaml:"fullscreen_opacity"`
 }
 
 type rawGaps struct {
@@ -256,12 +259,13 @@ type rawBind struct {
 }
 
 type rawRule struct {
-	AppID   *At[string] `yaml:"app_id"`
-	Title   *At[string] `yaml:"title"`
-	Float   bool        `yaml:"float"`
-	Tile    bool        `yaml:"tile"`
-	Size    *At[string] `yaml:"size"`
-	Tearing *bool       `yaml:"tearing"`
+	AppID   *At[string]  `yaml:"app_id"`
+	Title   *At[string]  `yaml:"title"`
+	Float   bool         `yaml:"float"`
+	Tile    bool         `yaml:"tile"`
+	Size    *At[string]  `yaml:"size"`
+	Tearing *bool        `yaml:"tearing"`
+	Opacity *At[float64] `yaml:"opacity"`
 }
 
 type Error struct {
@@ -497,6 +501,13 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 	return table
 }
 
+func (p *parser) opacity(a *At[float64], key string, fallback float32) float32 {
+	if v := p.between(a, key, 0, 1, false); v != nil {
+		return float32(*v)
+	}
+	return fallback
+}
+
 func (p *parser) gaps(r rawGaps) wm.Gaps {
 	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
 	if r.Outer == nil {
@@ -722,6 +733,10 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	default:
 		rule.Tearing = wm.TearingDeny
 	}
+	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
+		o := float32(*v)
+		rule.Opacity = &o
+	}
 	if rule.AppID == nil && rule.Title == nil {
 		p.fail(at.Line, key, "matches every window; give app_id or title")
 	}
@@ -764,8 +779,13 @@ func Parse(file string, data []byte) (Config, error) {
 		RepeatDelay: p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
 		Input:       p.input(raw.Input),
 		Decor: compositor.Decor{
-			BorderWidth:    p.nonNegative(raw.Borders.Width, "borders.width", def.BorderWidth),
-			Rounding:       p.nonNegative(raw.Decoration.Rounding, "decoration.rounding", def.Rounding),
+			BorderWidth: p.nonNegative(raw.Borders.Width, "borders.width", def.BorderWidth),
+			Rounding:    p.nonNegative(raw.Decoration.Rounding, "decoration.rounding", def.Rounding),
+			Opacity: compositor.Opacity{
+				Active:     p.opacity(raw.Decoration.ActiveOpacity, "decoration.active_opacity", def.Opacity.Active),
+				Inactive:   p.opacity(raw.Decoration.InactiveOpacity, "decoration.inactive_opacity", def.Opacity.Inactive),
+				Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
+			},
 			ActiveBorder:   p.optColor(raw.Borders.Active, "borders.active", def.ActiveBorder),
 			InactiveBorder: p.optColor(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
 			Tab: compositor.TabStyle{
