@@ -396,3 +396,54 @@ func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
 		return true
 	})
 }
+
+func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
+	now := time.Hour
+	off, on := false, true
+	s, err := anim.NewSpring(300, 30, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.WindowsMove: {Enabled: &on, Shape: s}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
+	}, small)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("dragged", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("togglefloating")
+	c.DispatchUntil("a floating window", func() bool { return w.Logical == image.Pt(80, 50) })
+	at(2 * time.Hour)
+	h.Eventually("the floating window settled in the middle", showing(45, 30, blueColor))
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, p := b.Pointer(), b.Outputs()[0]
+		return errors.Join(o.MoveTo(p, 0.5, 0.5), o.Frame(), o.Button(btnLeft, true), o.Frame(), o.MoveTo(p, 100.0/160, 0.6), o.Frame())
+	})
+	h.Eventually("the window still where the drag began while the clock stands still", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		for _, win := range comp.Snapshot().Windows {
+			if win.Title == "dragged" && win.Rect.X == 60 {
+				return showing(45, 30, blueColor)(b, comp) && !showing(135, 80, blueColor)(b, comp)
+			}
+		}
+		return false
+	})
+	at(3 * time.Hour)
+	h.Eventually("the window caught up with the pointer", showing(135, 80, blueColor))
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		p := b.Pointer()
+		return errors.Join(p.Button(btnLeft, false), p.Frame())
+	})
+	h.key(keySuper, false)
+}

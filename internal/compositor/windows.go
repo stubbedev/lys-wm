@@ -28,7 +28,7 @@ type window struct {
 	hung        bool
 	scale       output.Scale
 	floated     bool
-	motion      anim.Tween[image.Rectangle]
+	motion      anim.RectMotion
 	fade        anim.Tween[float64]
 	appeared    bool
 	look        focusLook
@@ -228,11 +228,18 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 		if p.Visible {
 			c.appear(w, p.Rect, now)
 		}
+	case c.interaction != nil && c.interaction.w == w && c.springMoves():
+		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
 	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w):
 		w.motion.Jump(p.Rect)
 	case p.Rect != w.motion.Target():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
 	}
+}
+
+func (c *Compositor) springMoves() bool {
+	_, ok := c.animations.Curve(anim.WindowsMove).(anim.Spring)
+	return ok
 }
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
@@ -383,7 +390,7 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapToplevel(t toplevel) error {
-	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
+	w := &window{id: c.nextWindow, top: t, motion: anim.NewRectMotion(image.Rectangle{}), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
 	c.nextWindow++
 	var s wm.State
 	var err error

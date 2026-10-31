@@ -212,3 +212,57 @@ func TestEventsInheritFromTheirParents(t *testing.T) {
 		}
 	}
 }
+
+func TestSpringMotionKeepsItsVelocityAcrossARetarget(t *testing.T) {
+	for _, damping := range []float64{12, 2 * math.Sqrt(200), 60} {
+		s, err := NewSpring(200, damping, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := NewRectMotion(image.Rect(0, 0, 100, 100))
+		m.Set(image.Rect(500, 0, 600, 100), 0, s)
+		at := 80 * time.Millisecond
+		before := m.Velocity(at)
+		if before[0] <= 0 {
+			t.Fatalf("damping %v: the spring is not moving right after 80ms: %v", damping, before)
+		}
+		m.Set(image.Rect(500, 300, 600, 400), at, s)
+		after := m.Velocity(at)
+		if math.Abs(after[0]-before[0]) > 1e-6 || after[1] != before[1] {
+			t.Fatalf("damping %v: the retarget changed the velocity from %v to %v", damping, before, after)
+		}
+		if got := m.At(at + time.Millisecond); got.Min.X <= m.At(at).Min.X {
+			t.Fatalf("damping %v: the window stopped moving right on retarget: %v then %v", damping, m.At(at), got)
+		}
+		end := at
+		for !m.Done(end) {
+			end += time.Millisecond
+			if end > 30*time.Second {
+				t.Fatalf("damping %v: never settles", damping)
+			}
+		}
+		if got := m.At(end); got != image.Rect(500, 300, 600, 400) {
+			t.Fatalf("damping %v: settled at %v", damping, got)
+		}
+		p, _ := m.state(end - time.Millisecond)
+		if d := math.Abs(p[1] - 300); d > 2*FollowTolerance {
+			t.Fatalf("damping %v: jumped %v px at the settle time", damping, d)
+		}
+	}
+}
+
+func TestBezierMotionRetargetsFromWhereItIs(t *testing.T) {
+	c, err := Linear.Timed(time.Second, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewRectMotion(image.Rect(0, 0, 10, 10))
+	m.Set(image.Rect(100, 0, 110, 10), 0, c)
+	m.Set(image.Rect(0, 0, 10, 10), 500*time.Millisecond, c)
+	if got := m.At(500 * time.Millisecond); got != image.Rect(50, 0, 60, 10) {
+		t.Fatalf("the retarget starts at %v", got)
+	}
+	if !m.Done(1500*time.Millisecond) || m.At(time.Hour) != image.Rect(0, 0, 10, 10) {
+		t.Fatal("the retargeted motion does not end at its target")
+	}
+}

@@ -240,8 +240,11 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its
-animations end. A window being dragged or resized with the mouse follows the
-pointer without animating, and a window that comes back with its workspace
+animations end. A spring keeps its velocity when its target changes mid-flight, so a window
+retargeted while it moves carries on smoothly. A window being dragged or resized
+with the mouse follows the pointer without animating, unless `windows_move` uses
+a spring: then the window trails the pointer on that spring and settles where
+it is dropped, and a window that comes back with its workspace
 is drawn where it belongs at once.
 
 ## tabs
