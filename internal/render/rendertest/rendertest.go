@@ -119,6 +119,11 @@ func MaskScene(tx Textures) func(render.Pass) {
 			Falloff: render.Falloff{Range: 5.5, Power: 3},
 		}
 		p.FillRect(shadow.Keep.Rect.Inset(-6), render.Color{A: 0xc0}, shadow)
+		p.FillGoo(image.Rect(0, 24, 64, 48), render.Color{R: 0x60, G: 0x30, B: 0x10, A: 0xa0}, render.Goo{
+			A:      render.RoundRect{Rect: image.Rect(4, 28, 20, 44), Radius: 5},
+			B:      render.RoundRect{Rect: image.Rect(28, 32, 60, 42), Radius: 3},
+			Smooth: 9,
+		})
 	}
 }
 

@@ -246,7 +246,7 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | --- | --- | --- | --- |
 | `global` | | Defaults: `ease_out` over 250 ms | |
 | `windows` | `global` | Every window animation | |
-| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | |
+| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | `morph`: a blob in the window's border colour stretches ahead of it toward where it is going, melting into the window like a drop of liquid |
 | `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output |
 | `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide` |
 | `fade` | `global` | Every fade | |

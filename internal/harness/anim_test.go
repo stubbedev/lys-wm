@@ -447,3 +447,40 @@ func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
 	})
 	h.key(keySuper, false)
 }
+
+func TestAMorphingMoveStretchesTheWindowAheadOfItself(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	morph := anim.Style{Kind: anim.Morph}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.WindowsMove: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &morph}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth = 0
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	c := testclient.Connect(t, h.Socket())
+	l := c.Window("left", testclient.Fill(0x60, 0x60, 0x60))
+	c.DispatchUntil("left to map", l.Mapped)
+	r := c.Window("right", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("right to map", r.Mapped)
+	at(2 * time.Hour)
+	h.Eventually("the windows side by side", showing(140, 100, [3]byte{0xff, 0xff, 0xff}))
+	at(3 * time.Hour)
+	h.dispatch("move left")
+	at(3*time.Hour + 500*time.Millisecond)
+	mauve := compositor.DefaultDecor().ActiveBorder.Colors()[0]
+	h.Eventually("the blob reaching ahead of the moving window", showing(37, 100, [3]byte{mauve.R, mauve.G, mauve.B}))
+	at(4 * time.Hour)
+	h.Eventually("the blob gone once the move ends", showing(37, 100, [3]byte{0xff, 0xff, 0xff}))
+}

@@ -192,6 +192,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if c.decision(w).DimAround {
 		pass.FillRect(deviceRect(o, o.Logical()), c.dimAroundColor())
 	}
+	c.drawMorph(pass, o, w, v)
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)

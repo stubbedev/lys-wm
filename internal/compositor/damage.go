@@ -26,6 +26,7 @@ type drawOp struct {
 	opaque    bool
 	mask      render.Mask
 	gradient  render.Gradient
+	goo       render.Goo
 	version   uint64
 }
 
@@ -81,6 +82,10 @@ func (f *frame) fillMasked(r image.Rectangle, c render.Color, m render.Mask) {
 
 func (f *frame) fillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
 	f.ops = append(f.ops, drawOp{fill: true, gradient: g, dst: r, mask: m})
+}
+
+func (f *frame) fillGoo(r image.Rectangle, c render.Color, g render.Goo) {
+	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, goo: g})
 }
 
 func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
@@ -153,6 +158,11 @@ func (f *frame) replay(p render.Pass) {
 func (f *frame) replayFrom(p render.Pass, origin image.Point) {
 	for _, op := range f.ops {
 		m := shiftMask(op.mask, origin)
+		if g := op.goo; !g.A.Rect.Empty() {
+			g.A.Rect, g.B.Rect = g.A.Rect.Sub(origin), g.B.Rect.Sub(origin)
+			p.FillGoo(op.dst.Sub(origin), op.color, g)
+			continue
+		}
 		if op.gradient.Stops != nil {
 			p.FillGradient(op.dst.Sub(origin), mapGradient(op.gradient, func(v [2]float32) [2]float32 {
 				return [2]float32{v[0] - float32(origin.X), v[1] - float32(origin.Y)}

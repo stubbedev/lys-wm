@@ -209,3 +209,21 @@ func (c *Compositor) dropAllClosing() error {
 	c.closing = nil
 	return errors.Join(errs...)
 }
+
+const morphLead = 60 * time.Millisecond
+
+func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view) {
+	if c.animations.Style(anim.WindowsMove).Kind != anim.Morph || w.motion.Done(c.frameTime) {
+		return
+	}
+	area := o.Logical()
+	a := deviceRect(o, v.rect(w.motion.At(c.frameTime), area))
+	b := deviceRect(o, v.rect(w.motion.At(c.frameTime+morphLead), area))
+	if a == b || a.Empty() || b.Empty() {
+		return
+	}
+	radius := c.outerRadius(o, w)
+	color := c.borderTarget(w).colors[0].Premultiply()
+	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2
+	pass.fillGoo(a.Union(b), color, render.Goo{A: render.RoundRect{Rect: a, Radius: radius}, B: render.RoundRect{Rect: b, Radius: radius}, Smooth: smooth})
+}

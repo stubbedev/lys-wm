@@ -18,6 +18,7 @@ type (
 	Mask      = lgpu.Mask
 	RoundRect = lgpu.RoundRect
 	Falloff   = lgpu.Falloff
+	Goo       = lgpu.Goo
 )
 
 type Transform uint8
@@ -336,6 +337,7 @@ type Pass interface {
 	FillRect(r image.Rectangle, c Color, m Mask)
 	FillGradient(r image.Rectangle, g Gradient, m Mask)
 	Kawase(t Texture, dst image.Rectangle, offset float32, up bool)
+	FillGoo(r image.Rectangle, c Color, g Goo)
 	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
 	End() error
 }

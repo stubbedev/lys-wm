@@ -42,9 +42,10 @@ const (
 	FadeStyle
 	Once
 	Loop
+	Morph
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph"}
 
 type Style struct {
 	Kind    StyleKind
@@ -95,7 +96,7 @@ var events = [eventCount]struct {
 }{
 	Global:      {name: "global", parent: Global},
 	Windows:     {name: "windows", parent: Global},
-	WindowsMove: {name: "windows_move", parent: Windows},
+	WindowsMove: {name: "windows_move", parent: Windows, styles: []StyleKind{Morph}},
 	WindowsIn:   {name: "windows_in", parent: Windows, styles: []StyleKind{Popin, Slide}, style: Style{Kind: Popin, Percent: defaultPopin}},
 	WindowsOut:  {name: "windows_out", parent: Windows, styles: []StyleKind{Popin, Slide}, style: Style{Kind: Popin, Percent: defaultPopin}},
 	Fade:        {name: "fade", parent: Global},

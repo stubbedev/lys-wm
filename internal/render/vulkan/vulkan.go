@@ -375,6 +375,10 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	p.p.FillRect(r, rgba(c), m)
 }
 
+func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
+	p.p.FillGoo(r, rgba(c), g)
+}
+
 func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
 	tex, ok := t.(*texture)
 	switch {

@@ -53,6 +53,7 @@ var (
 	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
 	gradientShader = maskHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops)) * (alpha * " + coverage + "); }"
 	kawaseShader   = "#define SAMPLE texture2D\n" + maskHeader + "uniform sampler2D tex;\nuniform vec2 taps;\nuniform float up;\nvarying vec2 v_texcoord;\nvoid main() { gl_FragColor = up > 0.5 ? kawaseUp(tex, v_texcoord, taps) : kawaseDown(tex, v_texcoord, taps); }"
+	gooShader      = maskHeader + "uniform vec4 color;\nuniform vec4 merge;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
 
@@ -64,7 +65,7 @@ type program struct {
 	size, color, alpha int32
 	keep, cut, radii   int32
 	line, stops        int32
-	taps, up           int32
+	taps, up, merge    int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -79,6 +80,7 @@ type Renderer struct {
 	solid     program
 	gradient  program
 	kawase    program
+	goo       program
 	rgba      program
 	rgbx      program
 	external  program
@@ -121,7 +123,7 @@ func (r *Renderer) setup() error {
 	programs := []struct {
 		prog     *program
 		fragment string
-	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}, {&r.kawase, kawaseShader}}
+	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}, {&r.kawase, kawaseShader}, {&r.goo, gooShader}}
 	if slices.Contains(exts, "GL_OES_EGL_image_external") {
 		programs = append(programs, struct {
 			prog     *program
@@ -147,6 +149,7 @@ func (r *Renderer) setup() error {
 			stops:    r.gl.GetUniformLocation(id, "stops"),
 			taps:     r.gl.GetUniformLocation(id, "taps"),
 			up:       r.gl.GetUniformLocation(id, "up"),
+			merge:    r.gl.GetUniformLocation(id, "merge"),
 			alphaSet: -1,
 		}
 		r.gl.UseProgram(id)
@@ -744,6 +747,35 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		prog.colored, prog.colorSet = true, c
 		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
 	}
+	p.draw(r)
+}
+
+func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
+	switch {
+	case !p.active:
+		p.fail(errors.New("gles: FillGoo outside a pass"))
+		return
+	case !c.Premultiplied():
+		p.fail(fmt.Errorf("gles: color %+v is not premultiplied", c))
+		return
+	case g.A.Rect.Empty() || g.B.Rect.Empty() || !(g.Smooth >= 0) || !(g.A.Radius >= 0) || !(g.B.Radius >= 0):
+		p.fail(fmt.Errorf("gles: goo %+v is not two rounded rectangles with a smoothing of zero or more", g))
+		return
+	case r.Empty():
+		return
+	}
+	prog := &p.owner.goo
+	gl := p.owner.gl
+	p.use(prog)
+	for _, u := range [2]struct {
+		loc int32
+		r   image.Rectangle
+	}{{prog.keep, g.A.Rect}, {prog.merge, g.B.Rect}} {
+		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
+	}
+	gl.Uniform4f(prog.radii, g.A.Radius, g.B.Radius, g.Smooth, 0)
+	gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+	prog.colored = false
 	p.draw(r)
 }
 

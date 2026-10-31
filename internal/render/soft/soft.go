@@ -267,6 +267,35 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	}
 }
 
+func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: FillGoo outside a pass"))
+		return
+	case !c.Premultiplied():
+		p.fail(fmt.Errorf("soft: color %+v is not premultiplied", c))
+		return
+	case g.A.Rect.Empty() || g.B.Rect.Empty() || !(g.Smooth >= 0) || !(g.A.Radius >= 0) || !(g.B.Radius >= 0):
+		p.fail(fmt.Errorf("soft: goo %+v is not two rounded rectangles with a smoothing of zero or more", g))
+		return
+	}
+	for _, d := range p.damage.Rects() {
+		clip := r.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				switch k := toByte(lgpu.GooCoverage(g, float32(x)+0.5, float32(y)+0.5)); k {
+				case 0:
+				case 0xff:
+					over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)
+				default:
+					over(row[x*4:x*4+4], scale(c.B, k), scale(c.G, k), scale(c.R, k), scale(c.A, k))
+				}
+			}
+		}
+	}
+}
+
 func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
 	tex, ok := t.(*texture)
 	switch {
