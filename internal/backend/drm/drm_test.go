@@ -691,7 +691,10 @@ func TestModeChangesAndDisabling(t *testing.T) {
 	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[1])}); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the mode change", func() bool {
+		n := len(r.dev.commits)
+		return n > 0 && r.dev.commits[n-1].flags&kdrm.AtomicAllowModeset != 0 && r.dev.commits[n-1].values[[2]uint32{40, propCRTCW}] == 1280
+	})
 	last := r.dev.commits[len(r.dev.commits)-1]
 	if last.flags&kdrm.AtomicAllowModeset == 0 || last.values[[2]uint32{40, propCRTCW}] != 1280 || !slices.Contains(r.dev.destroyed, 601) {
 		t.Fatalf("mode change commit %+v, destroyed blobs %v", last, r.dev.destroyed)
@@ -757,7 +760,7 @@ func TestHotplugAndSessionPause(t *testing.T) {
 	if err := r.b.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the modeset and the held frame after resume", func() bool { return len(r.dev.commits) >= 2 })
 	if len(r.dev.commits) != 2 || r.dev.commits[1].flags&kdrm.AtomicAllowModeset == 0 {
 		t.Fatalf("after resume: %+v", r.dev.commits)
 	}
@@ -769,7 +772,7 @@ func TestPowerAndWake(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, 0)
 	state := o.State()
 	state.Power = backend.PoweredOff
 	if err := o.Commit(state); err != nil {
@@ -791,17 +794,20 @@ func TestPowerAndWake(t *testing.T) {
 	if err := o.Commit(state); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the power-on modeset", func() bool {
+		return r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{10, propActive}] == 1
+	})
 	on := r.dev.commits[len(r.dev.commits)-1]
 	if on.flags&kdrm.AtomicAllowModeset == 0 || on.values[[2]uint32{10, propActive}] != 1 || o.State().Power == backend.PoweredOff {
 		t.Fatalf("power on commit %+v", on)
 	}
 	r.dev.flip(t, 10, 5)
 	r.until("the flip", func() bool { return !o.flipping })
+	woken := len(r.dev.commits)
 	if err := r.b.Wake(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the modeset on wake", o, woken)
 	woke := r.dev.commits[len(r.dev.commits)-1]
 	if woke.flags&kdrm.AtomicAllowModeset == 0 || woke.values[[2]uint32{10, propModeID}] == 0 {
 		t.Fatalf("waking did not recommit the mode: %+v", woke)
@@ -1040,10 +1046,11 @@ func TestAFrameDropsACursorItsTestRefuses(t *testing.T) {
 		t.Fatalf("an untested cursor before the first frame: %v", err)
 	}
 	r.dev.refuseCursor = true
+	before := len(r.dev.commits)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, before)
 	last := r.dev.commits[len(r.dev.commits)-1]
 	if fb, _, _ := cursorAt(last); fb != 0 || last.values[[2]uint32{40, propFB}] == 0 || last.flags&kdrm.AtomicTestOnly != 0 {
 		t.Fatalf("the first frame: %+v", last)
@@ -1386,7 +1393,7 @@ func TestColorTransformsReachTheCRTC(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, 1)
 	if m, ok := ctmOf(r.dev.commits[1]); !ok || m != 0 {
 		t.Fatal("the first modeset kept whatever CTM the CRTC had")
 	}
@@ -1720,7 +1727,7 @@ func (r *rig) firstFrame(o *Output) []commit {
 	if err := o.ScheduleFrame(); err != nil {
 		r.t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, before)
 	frame := r.dev.commits[before:]
 	if len(frame) == 0 || frame[len(frame)-1].flags&kdrm.AtomicTestOnly != 0 {
 		r.t.Fatalf("the first frame committed %+v", frame)
