@@ -114,11 +114,13 @@ func (c *Compositor) dropJelly(w *window) error {
 func (c *Compositor) settleWobbles() error {
 	var errs []error
 	for _, w := range c.windows {
-		if w.wobble == nil || (c.interaction != nil && c.interaction.w == w) || !w.wobble.Resting() {
-			continue
+		dragged := c.interaction != nil && c.interaction.w == w
+		if w.wobble != nil && !dragged && w.wobble.Resting() {
+			w.wobble = nil
 		}
-		w.wobble = nil
-		errs = append(errs, c.dropJelly(w))
+		if w.jelly != nil && w.wobble == nil && w.motion.Done(c.frameTime) {
+			errs = append(errs, c.dropJelly(w))
+		}
 	}
 	return errors.Join(errs...)
 }

@@ -212,18 +212,44 @@ func (c *Compositor) dropAllClosing() error {
 
 const morphLead = 60 * time.Millisecond
 
-func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view) {
+func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view, from int) error {
 	if c.animations.Style(anim.WindowsMove).Kind != anim.Morph || w.motion.Done(c.frameTime) {
-		return
+		return nil
 	}
 	area := o.Logical()
-	a := deviceRect(o, v.rect(w.motion.At(c.frameTime), area))
+	now := v.rect(w.motion.At(c.frameTime), area)
+	a := deviceRect(o, now)
 	b := deviceRect(o, v.rect(w.motion.At(c.frameTime+morphLead), area))
 	if a == b || a.Empty() || b.Empty() {
-		return
+		return nil
 	}
-	radius := c.outerRadius(o, w)
-	color := c.borderTarget(w).colors[0].Premultiply()
+	if w.jelly == nil || w.jelly.Size() != a.Size() {
+		if err := c.dropJelly(w); err != nil {
+			return err
+		}
+		tt, err := c.renderer.NewTextureTarget(a.Size())
+		if err != nil {
+			return err
+		}
+		w.jelly = tt
+	}
+	f := frame{ops: pass.ops[from:]}
+	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: a.Size()}})
+	if err != nil {
+		return err
+	}
+	p.Clear(render.Color{})
+	f.replayFrom(p, a.Min)
+	if err := p.End(); err != nil {
+		return err
+	}
+	pass.ops = pass.ops[:from]
 	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2
-	pass.fillGoo(a.Union(b), color, render.Goo{A: render.RoundRect{Rect: a, Radius: radius}, B: render.RoundRect{Rect: b, Radius: radius}, Smooth: smooth})
+	size := w.jelly.Size()
+	c.jellyGen++
+	pass.ops = append(pass.ops, drawOp{
+		tex: w.jelly.Texture(), src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: a.Union(b), alpha: 1, version: c.jellyGen,
+		mask: render.Mask{Keep: render.RoundRect{Rect: a, Radius: c.outerRadius(o, w)}, Merge: b, Smooth: smooth},
+	})
+	return nil
 }

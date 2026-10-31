@@ -448,7 +448,7 @@ func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
 	h.key(keySuper, false)
 }
 
-func TestAMorphingMoveStretchesTheWindowAheadOfItself(t *testing.T) {
+func TestAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -479,8 +479,7 @@ func TestAMorphingMoveStretchesTheWindowAheadOfItself(t *testing.T) {
 	at(3 * time.Hour)
 	h.dispatch("move left")
 	at(3*time.Hour + 500*time.Millisecond)
-	mauve := compositor.DefaultDecor().ActiveBorder.Colors()[0]
-	h.Eventually("the blob reaching ahead of the moving window", showing(37, 100, [3]byte{mauve.R, mauve.G, mauve.B}))
+	h.Eventually("the window's own content stretching ahead of it", showing(37, 100, [3]byte{0xff, 0xff, 0xff}))
 	at(4 * time.Hour)
 	h.Eventually("the blob gone once the move ends", showing(37, 100, [3]byte{0xff, 0xff, 0xff}))
 }

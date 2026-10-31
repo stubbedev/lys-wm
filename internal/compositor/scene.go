@@ -197,7 +197,6 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if c.decision(w).DimAround {
 		pass.FillRect(deviceRect(o, o.Logical()), c.dimAroundColor())
 	}
-	c.drawMorph(pass, o, w, v)
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
@@ -217,8 +216,8 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if a := w.fade.At(c.frameTime) * v.alpha; a < 1 {
 		pass.fade(from, float32(max(a, 0)))
 	}
-	if err := c.drawWobble(pass, o, w, from); err != nil {
-		c.report(fmt.Errorf("compositor: wobble window %d: %w", w.id, err))
+	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from)); err != nil {
+		c.report(fmt.Errorf("compositor: deform window %d: %w", w.id, err))
 	}
 	return shown
 }

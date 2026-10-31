@@ -60,6 +60,9 @@ func shiftMask(m render.Mask, d image.Point) render.Mask {
 	if !m.Cut.Rect.Empty() {
 		m.Cut.Rect = m.Cut.Rect.Sub(d)
 	}
+	if !m.Merge.Empty() {
+		m.Merge = m.Merge.Sub(d)
+	}
 	return m
 }
 
@@ -115,7 +118,7 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]
-		op.dst, op.mask.Keep.Rect, op.mask.Cut.Rect = rect(op.dst), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect)
+		op.dst, op.mask.Keep.Rect, op.mask.Cut.Rect, op.mask.Merge = rect(op.dst), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect), rect(op.mask.Merge)
 		op.gradient = mapGradient(op.gradient, point)
 	}
 }
