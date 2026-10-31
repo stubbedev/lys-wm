@@ -190,14 +190,14 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		return shown
 	}
 	if c.decision(w).DimAround {
-		pass.FillRect(deviceRect(o, o.Logical()), c.dimColor(true))
+		pass.FillRect(deviceRect(o, o.Logical()), c.dimAroundColor())
 	}
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
-	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, mask, c.opacity(w))
+	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, mask, c.shownOpacity(w))
 	if c.decor.Dim.Inactive {
-		pass.fillMasked(deviceRect(o, w.rect), c.dimColor(w != c.active), mask)
+		pass.fillMasked(deviceRect(o, w.rect), c.shownDim(w), mask)
 	}
 	c.drawBorder(pass, o, w)
 	if at != w.tile {

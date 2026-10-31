@@ -24,6 +24,9 @@ const (
 	Layers
 	LayersIn
 	LayersOut
+	FadeSwitch
+	FadeDim
+	FadeShadow
 	eventCount
 )
 
@@ -98,6 +101,9 @@ var events = [eventCount]struct {
 	Layers:      {name: "layers", parent: Global},
 	LayersIn:    {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
 	LayersOut:   {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
+	FadeSwitch:  {name: "fade_switch", parent: Fade},
+	FadeDim:     {name: "fade_dim", parent: Fade},
+	FadeShadow:  {name: "fade_shadow", parent: Fade},
 }
 
 func (e Event) String() string {

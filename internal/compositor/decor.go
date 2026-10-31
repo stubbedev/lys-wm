@@ -245,10 +245,7 @@ func (c *Compositor) opacity(w *window) float32 {
 	return c.decor.Opacity.Inactive
 }
 
-func (c *Compositor) dimColor(dimmed bool) render.Color {
-	if !dimmed {
-		return render.Color{}
-	}
+func (c *Compositor) dimAroundColor() render.Color {
 	return render.Color{A: uint8(math.Round(float64(c.decor.Dim.Strength) * 0xff))}
 }
 
@@ -275,10 +272,7 @@ func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
 		falloff = render.Falloff{Range: deviceLength(o, sh.Range), Power: float32(sh.Power)}
 		reach = int(math.Ceil(float64(falloff.Range)))
 	}
-	color := sh.Inactive
-	if w == c.active {
-		color = sh.Active
-	}
+	color := c.shownShadow(w)
 	pass.fillMasked(base.Inset(-reach), color.Premultiply(), render.Mask{
 		Keep:    render.RoundRect{Rect: base, Radius: radius},
 		Cut:     render.RoundRect{Rect: tile, Radius: radius},

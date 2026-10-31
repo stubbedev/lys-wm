@@ -31,6 +31,8 @@ type window struct {
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 	appeared bool
+	look     focusLook
+	looked   bool
 	snapshot render.TextureTarget
 	decided  decided
 }
@@ -210,6 +212,7 @@ func (c *Compositor) reconcile() error {
 			errs = append(errs, target.top.ping())
 		}
 	}
+	c.refreshLooks(now)
 	return errors.Join(append(errs, c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())...)
 }
 
@@ -230,7 +233,7 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
 	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
@@ -376,7 +379,7 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapToplevel(t toplevel) error {
-	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
 	c.nextWindow++
 	var s wm.State
 	var err error

@@ -56,6 +56,14 @@ func lerpInt(from, to int, p float64) int {
 	return int(math.Round(Lerp(float64(from), float64(to), p)))
 }
 
+func LerpColor(from, to [4]uint8, p float64) [4]uint8 {
+	var out [4]uint8
+	for i := range out {
+		out[i] = uint8(min(max(math.Round(Lerp(float64(from[i]), float64(to[i]), p)), 0), 255))
+	}
+	return out
+}
+
 func LerpRect(from, to image.Rectangle, p float64) image.Rectangle {
 	x0, y0 := lerpInt(from.Min.X, to.Min.X, p), lerpInt(from.Min.Y, to.Min.Y, p)
 	x1, y1 := lerpInt(from.Max.X, to.Max.X, p), lerpInt(from.Max.Y, to.Max.Y, p)

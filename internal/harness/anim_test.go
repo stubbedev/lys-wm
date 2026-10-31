@@ -280,3 +280,47 @@ func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
 	at(3 * time.Second)
 	h.Eventually("the closed bar gone", showing(80, 15, bg))
 }
+
+func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.Fade: {Enabled: &on, Shape: anim.Linear, Duration: &d}, anim.FadeIn: {Enabled: &off}, anim.FadeOut: {Enabled: &off}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor.Opacity = compositor.Opacity{Active: 1, Inactive: 0.5, Fullscreen: 1}
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	white := [3]byte{0xff, 0xff, 0xff}
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	look := func(lx, rx float64) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(b *headless.Backend, _ *compositor.Compositor) bool {
+			buf := snapshot(b.Outputs()[0])
+			return near(pixel(buf, 20, 100), blend(white, bg, lx)) && near(pixel(buf, 140, 100), blend(white, bg, rx))
+		}
+	}
+	c := testclient.Connect(t, h.Socket())
+	l := c.Window("left", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("left to map", l.Mapped)
+	r := c.Window("right", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("right to map", r.Mapped)
+	c.DispatchUntil("both windows drawn at their tiles", func() bool { return l.Logical == image.Pt(80, 120) && r.Logical == image.Pt(80, 120) })
+	at(2 * time.Hour)
+	h.Eventually("left faded to inactive, right focused", look(0.5, 1))
+	at(3 * time.Hour)
+	h.dispatch("focus left")
+	h.Eventually("the focus change starting from what was shown", look(0.5, 1))
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("both halfway", look(0.75, 0.75))
+	at(3*time.Hour + time.Second)
+	h.Eventually("left focused, right inactive", look(1, 0.5))
+}

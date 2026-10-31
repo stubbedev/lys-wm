@@ -228,6 +228,9 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `fade` | `global` | Every fade | |
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
 | `fade_out` | `fade` | A closing window fading out | |
+| `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | |
+| `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | |
+| `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | |
 | `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out |
 | `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | |
 | `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` |
