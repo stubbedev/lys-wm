@@ -543,3 +543,50 @@ func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
 		return nil
 	})
 }
+
+func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	goo := anim.Style{Kind: anim.Goo}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.Workspaces: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &goo}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth = 0
+		cfg.WM.Autotile.Enabled = false
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	white := [3]byte{0xff, 0xff, 0xff}
+	c := testclient.Connect(t, h.Socket())
+	one := c.Window("one", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("one to map", one.Mapped)
+	h.dispatch("workspace 2")
+	at(2 * time.Hour)
+	left := c.Window("left", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("left to map", left.Mapped)
+	right := c.Window("right", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("right to map", right.Mapped)
+	c.DispatchUntil("two columns", func() bool { return left.Logical == image.Pt(80, 120) && right.Logical == image.Pt(80, 120) })
+	h.Eventually("the second workspace shown", showing(40, 100, white))
+	at(3 * time.Hour)
+	h.dispatch("workspace 1")
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("the blob showing through both half-faded workspaces", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		g := int(pixel(snapshot(b.Outputs()[0]), 40, 100)[1])
+		bg := int(compositor.Background.G)
+		without := (0xff*3 + bg) / 4
+		return g < without-4 || g > without+4
+	})
+	at(4 * time.Hour)
+	h.Eventually("the first workspace alone once the switch ends", showing(40, 100, white))
+}

@@ -44,9 +44,10 @@ const (
 	Loop
 	Morph
 	Elastic
+	Goo
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph", Elastic: "elastic"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph", Elastic: "elastic", Goo: "goo"}
 
 type Style struct {
 	Kind    StyleKind
@@ -103,7 +104,7 @@ var events = [eventCount]struct {
 	Fade:        {name: "fade", parent: Global},
 	FadeIn:      {name: "fade_in", parent: Fade},
 	FadeOut:     {name: "fade_out", parent: Fade},
-	Workspaces:  {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin}, style: Style{Kind: Slide}},
+	Workspaces:  {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin, Goo}, style: Style{Kind: Slide}},
 	Layers:      {name: "layers", parent: Global},
 	LayersIn:    {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
 	LayersOut:   {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
