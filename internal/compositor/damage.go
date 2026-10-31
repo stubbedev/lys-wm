@@ -24,6 +24,33 @@ type drawOp struct {
 	surface   *surface.Surface
 	size      image.Point
 	opaque    bool
+	mask      render.Mask
+}
+
+func (op drawOp) covers() bool {
+	return op.opaque && op.mask == (render.Mask{})
+}
+
+func (op drawOp) solid(add func(image.Rectangle)) {
+	switch {
+	case op.covers():
+		add(op.dst)
+	case op.opaque && op.mask.Cut.Rect.Empty() && !op.mask.Keep.Rect.Empty():
+		k := op.mask.Keep
+		r := int(math.Ceil(float64(k.Radius)))
+		add(image.Rect(k.Rect.Min.X+r, k.Rect.Min.Y, k.Rect.Max.X-r, k.Rect.Max.Y).Intersect(op.dst))
+		add(image.Rect(k.Rect.Min.X, k.Rect.Min.Y+r, k.Rect.Max.X, k.Rect.Max.Y-r).Intersect(op.dst))
+	}
+}
+
+func shiftMask(m render.Mask, d image.Point) render.Mask {
+	if !m.Keep.Rect.Empty() {
+		m.Keep.Rect = m.Keep.Rect.Sub(d)
+	}
+	if !m.Cut.Rect.Empty() {
+		m.Cut.Rect = m.Cut.Rect.Sub(d)
+	}
+	return m
 }
 
 type frame struct {
@@ -39,8 +66,12 @@ func (f *frame) DrawTexture(t render.Texture, src render.FRect, dst image.Rectan
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha})
 }
 
-func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool) {
-	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1})
+func (f *frame) fillMasked(r image.Rectangle, c render.Color, m render.Mask) {
+	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, opaque: c.A == 0xff, mask: m})
+}
+
+func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
+	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m})
 }
 
 func (f *frame) remap(from int, src, dst image.Rectangle) {
@@ -53,9 +84,15 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	at := func(p image.Point) image.Point {
 		return image.Pt(axis(p.X, src.Min.X, src.Dx(), dst.Min.X, dst.Dx()), axis(p.Y, src.Min.Y, src.Dy(), dst.Min.Y, dst.Dy()))
 	}
+	rect := func(r image.Rectangle) image.Rectangle {
+		if r.Empty() {
+			return r
+		}
+		return image.Rectangle{Min: at(r.Min), Max: at(r.Max)}
+	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]
-		op.dst = image.Rectangle{Min: at(op.dst.Min), Max: at(op.dst.Max)}
+		op.dst, op.mask.Keep.Rect, op.mask.Cut.Rect = rect(op.dst), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect)
 	}
 }
 
@@ -67,9 +104,7 @@ func (f *frame) cull(covered *region.Set) {
 		if covered.Covers(op.dst) {
 			continue
 		}
-		if op.opaque {
-			covered.Add(op.dst)
-		}
+		op.solid(covered.Add)
 		kept--
 		scene[kept] = op
 	}
@@ -84,11 +119,12 @@ func (f *frame) replay(p render.Pass) {
 
 func (f *frame) replayFrom(p render.Pass, origin image.Point) {
 	for _, op := range f.ops {
+		m := shiftMask(op.mask, origin)
 		if op.fill {
-			p.FillRect(op.dst.Sub(origin), op.color)
+			p.FillRect(op.dst.Sub(origin), op.color, m)
 			continue
 		}
-		p.DrawTexture(op.tex, op.src, op.dst.Sub(origin), op.transform, op.alpha)
+		p.DrawTexture(op.tex, op.src, op.dst.Sub(origin), op.transform, op.alpha, m)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/fourcc"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -29,25 +30,27 @@ void main() {
 }`
 
 const (
-	solidShader = `precision mediump float;
-uniform vec4 color;
-void main() { gl_FragColor = color; }`
-	rgbaShader = `precision mediump float;
-uniform sampler2D tex;
-uniform float alpha;
-varying vec2 v_texcoord;
-void main() { gl_FragColor = texture2D(tex, v_texcoord) * alpha; }`
-	externalShader = `#extension GL_OES_EGL_image_external : require
+	maskUniforms = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
-uniform samplerExternalOES tex;
-uniform float alpha;
+#endif
+uniform vec4 keep;
+uniform vec4 cut;
+uniform vec2 radii;
+`
+	coverage    = "maskCoverage(gl_FragCoord.xy, keep, cut, radii)"
+	textureMain = `uniform float alpha;
 varying vec2 v_texcoord;
-void main() { gl_FragColor = texture2D(tex, v_texcoord) * alpha; }`
-	rgbxShader = `precision mediump float;
-uniform sampler2D tex;
-uniform float alpha;
-varying vec2 v_texcoord;
-void main() { gl_FragColor = vec4(texture2D(tex, v_texcoord).rgb, 1.0) * alpha; }`
+void main() { gl_FragColor = %s * (alpha * ` + coverage + `); }`
+)
+
+var (
+	maskHeader     = maskUniforms + lgpu.MaskGLSL
+	solidShader    = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * " + coverage + "; }"
+	rgbaShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
+	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
+	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
 
 var requiredGL = []string{"GL_EXT_read_format_bgra", "GL_EXT_texture_format_BGRA8888", "GL_EXT_unpack_subimage", "GL_NV_pack_subimage", "GL_OES_EGL_image"}
@@ -56,10 +59,13 @@ type program struct {
 	id                 uint32
 	pos, texcoord      int32
 	size, color, alpha int32
+	keep, cut, radii   int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
 	colored            bool
+	maskSet            render.Mask
+	masked             bool
 }
 
 type Renderer struct {
@@ -127,6 +133,9 @@ func (r *Renderer) setup() error {
 			size:     r.gl.GetUniformLocation(id, "size"),
 			color:    r.gl.GetUniformLocation(id, "color"),
 			alpha:    r.gl.GetUniformLocation(id, "alpha"),
+			keep:     r.gl.GetUniformLocation(id, "keep"),
+			cut:      r.gl.GetUniformLocation(id, "cut"),
+			radii:    r.gl.GetUniformLocation(id, "radii"),
 			alphaSet: -1,
 		}
 		r.gl.UseProgram(id)
@@ -616,6 +625,21 @@ func (p *pass) use(prog *program) {
 	}
 }
 
+func (p *pass) setMask(prog *program, m render.Mask) {
+	if prog.masked && prog.maskSet == m {
+		return
+	}
+	prog.masked, prog.maskSet = true, m
+	gl := p.owner.gl
+	for _, u := range [2]struct {
+		loc int32
+		r   image.Rectangle
+	}{{prog.keep, m.Keep.Rect}, {prog.cut, m.Cut.Rect}} {
+		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
+	}
+	gl.Uniform2f(prog.radii, m.Keep.Radius, m.Cut.Radius)
+}
+
 func (p *pass) draw(dst image.Rectangle) {
 	gl := p.owner.gl
 	v := &p.owner.verts
@@ -649,7 +673,7 @@ func (p *pass) Clear(c render.Color) {
 	}
 }
 
-func (p *pass) FillRect(r image.Rectangle, c render.Color) {
+func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	switch {
 	case !p.active:
 		p.fail(errors.New("gles: FillRect outside a pass"))
@@ -660,8 +684,13 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color) {
 	case r.Empty():
 		return
 	}
+	if err := m.Check(); err != nil {
+		p.fail(err)
+		return
+	}
 	prog := &p.owner.solid
 	p.use(prog)
+	p.setMask(prog, m)
 	if !prog.colored || prog.colorSet != c {
 		prog.colored, prog.colorSet = true, c
 		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
@@ -669,7 +698,7 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color) {
 	p.draw(r)
 }
 
-func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
+func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, m render.Mask) {
 	tex, ok := t.(*texture)
 	switch {
 	case !p.active:
@@ -684,7 +713,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case dst.Empty():
 		return
 	}
-	if err := render.CheckDraw(tex.size, src, transform, alpha); err != nil {
+	if err := render.CheckDraw(tex.size, src, transform, alpha, m); err != nil {
 		p.fail(err)
 		return
 	}
@@ -700,6 +729,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	}
 	gl := p.owner.gl
 	p.use(prog)
+	p.setMask(prog, m)
 	if prog.alphaSet != alpha {
 		prog.alphaSet = alpha
 		gl.Uniform1f(prog.alpha, alpha)

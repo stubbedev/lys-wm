@@ -114,6 +114,7 @@ type rawConfig struct {
 	Palette    map[string]At[string] `yaml:"palette"`
 	Borders    rawBorders            `yaml:"borders"`
 	Gaps       rawGaps               `yaml:"gaps"`
+	Decoration rawDecoration         `yaml:"decoration"`
 	Animations rawAnimations         `yaml:"animations"`
 	Tabs       rawTabs               `yaml:"tabs"`
 	Autotile   rawAutotile           `yaml:"autotile"`
@@ -199,6 +200,10 @@ type rawEvent struct {
 	Enabled  *bool       `yaml:"enabled"`
 	Curve    *At[string] `yaml:"curve"`
 	Duration *At[int]    `yaml:"duration"`
+}
+
+type rawDecoration struct {
+	Rounding *At[int] `yaml:"rounding"`
 }
 
 type rawGaps struct {
@@ -760,6 +765,7 @@ func Parse(file string, data []byte) (Config, error) {
 		Input:       p.input(raw.Input),
 		Decor: compositor.Decor{
 			BorderWidth:    p.nonNegative(raw.Borders.Width, "borders.width", def.BorderWidth),
+			Rounding:       p.nonNegative(raw.Decoration.Rounding, "decoration.rounding", def.Rounding),
 			ActiveBorder:   p.optColor(raw.Borders.Active, "borders.active", def.ActiveBorder),
 			InactiveBorder: p.optColor(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
 			Tab: compositor.TabStyle{

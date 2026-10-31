@@ -68,17 +68,17 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	if _, err := r.Begin(tg, nil); err == nil {
 		t.Fatal("a second Begin was accepted")
 	}
-	p.DrawTexture(rendertest.Load(t, other).ARGB, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 1)
+	p.DrawTexture(rendertest.Load(t, other).ARGB, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 1, render.Mask{})
 	if err := p.End(); err == nil || !strings.Contains(err.Error(), "another renderer") {
 		t.Fatalf("a foreign texture: %v", err)
 	}
 	for name, draw := range map[string]func(render.Pass){
-		"not premultiplied": func(p render.Pass) { p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10}) },
+		"not premultiplied": func(p render.Pass) { p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10}, render.Mask{}) },
 		"source outside texture": func(p render.Pass) {
-			p.DrawTexture(rendertest.Load(t, r).ARGB, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1)
+			p.DrawTexture(rendertest.Load(t, r).ARGB, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1, render.Mask{})
 		},
 		"alpha above one": func(p render.Pass) {
-			p.DrawTexture(rendertest.Load(t, r).ARGB, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 2)
+			p.DrawTexture(rendertest.Load(t, r).ARGB, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 2, render.Mask{})
 		},
 	} {
 		p, err := r.Begin(tg, nil)
@@ -134,8 +134,8 @@ func TestScanoutTargetsRoundTripAsDMABUFsOnHardware(t *testing.T) {
 		}
 	})
 	rendertest.Paint(t, r, scanout, render.Region{{Max: size}}, func(p render.Pass) {
-		p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff})
-		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0xff, A: 0xff})
+		p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff}, render.Mask{})
+		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	})
 	if err := r.Finish(); err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestScanoutTargetsRoundTripAsDMABUFsOnHardware(t *testing.T) {
 	})
 	copied := target(t, r, size)
 	rendertest.Paint(t, r, copied, render.Region{{Max: size}}, func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: size}, render.Normal, 1)
+		p.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: size}, render.Normal, 1, render.Mask{})
 	})
 	pix := make([]byte, size.X*size.Y*4)
 	if err := copied.Read(pix, size.X*4); err != nil {

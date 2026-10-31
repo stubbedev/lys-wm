@@ -184,7 +184,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		return shown
 	}
 	from := len(pass.ops)
-	shown = c.drawTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown)
+	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, c.windowMask(o, w))
 	c.drawBorder(pass, o, w)
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))
@@ -216,10 +216,14 @@ func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPo
 }
 
 func (c *Compositor) drawTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface) []*surface.Surface {
+	return c.drawClippedTree(pass, o, s, org, shown, render.Mask{})
+}
+
+func (c *Compositor) drawClippedTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, m render.Mask) []*surface.Surface {
 	for member := range s.Stack() {
 		if member != s {
 			if sub := member.Subsurface(); sub != nil {
-				shown = c.drawTree(pass, o, member, org.child(sub.Position()), shown)
+				shown = c.drawClippedTree(pass, o, member, org.child(sub.Position()), shown, m)
 			}
 			continue
 		}
@@ -227,7 +231,7 @@ func (c *Compositor) drawTree(pass *frame, o *output.Output, s *surface.Surface,
 		if tex == nil {
 			continue
 		}
-		pass.drawSurface(s, tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s), c.opaque(s))
+		pass.drawSurface(s, tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s), c.opaque(s), m)
 		shown = append(shown, s)
 	}
 	return shown

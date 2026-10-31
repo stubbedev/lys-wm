@@ -416,7 +416,7 @@ func (r *recorder) Frame(o backend.Output) error {
 	if err != nil {
 		return err
 	}
-	p.FillRect(image.Rect(0, 0, 16, 16), render.Color{A: 0xff})
+	p.FillRect(image.Rect(0, 0, 16, 16), render.Color{A: 0xff}, render.Mask{})
 	return errors.Join(p.End(), o.Present(nil))
 }
 
@@ -828,7 +828,7 @@ func (r *rig) setCursor(o *Output, hotspot image.Point) error {
 		r.t.Fatal(err)
 	}
 	p.Clear(render.Color{})
-	p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	if err := p.End(); err != nil {
 		r.t.Fatal(err)
 	}
@@ -1093,7 +1093,7 @@ func TestSecondaryDevicesShowFramesThePrimaryRendered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.FillRect(image.Rect(0, 0, 4, 4), render.Color{R: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 0, 4, 4), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	if err := errors.Join(p.End(), o.Present(nil)); err != nil {
 		t.Fatal(err)
 	}

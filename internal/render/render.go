@@ -8,7 +8,14 @@ import (
 	"image"
 	"math"
 
+	lgpu "github.com/stubbedev/lys-lib/gpu"
+
 	"github.com/stubbedev/lys-wm/internal/region"
+)
+
+type (
+	Mask      = lgpu.Mask
+	RoundRect = lgpu.RoundRect
 )
 
 type Transform uint8
@@ -192,7 +199,10 @@ type FRect struct {
 	X, Y, W, H float64
 }
 
-func CheckDraw(texture image.Point, src FRect, transform Transform, alpha float32) error {
+func CheckDraw(texture image.Point, src FRect, transform Transform, alpha float32, m Mask) error {
+	if err := m.Check(); err != nil {
+		return err
+	}
 	switch {
 	case transform > Flipped270:
 		return fmt.Errorf("render: invalid transform %d", transform)
@@ -275,7 +285,7 @@ type Renderer interface {
 
 type Pass interface {
 	Clear(c Color)
-	FillRect(r image.Rectangle, c Color)
-	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32)
+	FillRect(r image.Rectangle, c Color, m Mask)
+	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
 	End() error
 }

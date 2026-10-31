@@ -264,6 +264,17 @@ frame rather than to lys-wm's empty background. If no client draws within
 frame anyway, so a greeter that never starts cannot freeze the display. The splash leaves its framebuffer on screen by closing it with
 `DRM_IOCTL_MODE_CLOSEFB` (Linux 6.8) rather than removing it.
 
+Every draw takes a coverage mask (#225): a rounded rectangle to keep and one to
+cut out, in target pixels, each antialiased by its signed distance at the pixel
+centre. lys-lib's `gpu` owns the formula once, as GLSL that compiles both as
+GLSL 4.50 for its Vulkan pass and as GLSL ES 1.00 for the GLES renderer
+(`gpu.MaskGLSL`), and as `gpu.Mask.Coverage` in float32 for the software
+renderer, so the three stay within the parity tolerance. Rounded windows draw
+their surfaces through their window's mask and their border as one ring.
+A masked op covers only its solid part, the keep rectangle less its corner
+squares, so culling still drops what lies under a window's middle, and direct
+scanout never takes a rounded window.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

@@ -2,6 +2,7 @@ package soft_test
 
 import (
 	"image"
+	"math"
 	"strings"
 	"testing"
 
@@ -79,7 +80,7 @@ func TestTransformsMoveCornersCounterClockwise(t *testing.T) {
 	for _, c := range cases {
 		b := soft.NewBuffer(2, 2)
 		frame(t, r, b, full(b), func(p render.Pass) {
-			p.DrawTexture(tex, render.FRect{W: 2, H: 2}, bounds(b), c.tr, 1)
+			p.DrawTexture(tex, render.FRect{W: 2, H: 2}, bounds(b), c.tr, 1, render.Mask{})
 		})
 		got := [4][4]byte{at(b, 0, 0), at(b, 1, 0), at(b, 0, 1), at(b, 1, 1)}
 		if want := [4][4]byte{c.tl, c.tr2, c.bl, c.br}; got != want {
@@ -93,7 +94,7 @@ func TestSwappedTransformsFillTheTransposedRect(t *testing.T) {
 	tex := newTex(t, r, render.ARGB8888, 3, 1, red, green, blue)
 	b := soft.NewBuffer(1, 3)
 	frame(t, r, b, full(b), func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: 3, H: 1}, bounds(b), render.Rotate90, 1)
+		p.DrawTexture(tex, render.FRect{W: 3, H: 1}, bounds(b), render.Rotate90, 1, render.Mask{})
 	})
 	if got := [3][4]byte{at(b, 0, 0), at(b, 0, 1), at(b, 0, 2)}; got != [3][4]byte{blue, green, red} {
 		t.Fatalf("a 3x1 row rotated 90 degrees counter-clockwise reads %v top to bottom", got)
@@ -103,9 +104,9 @@ func TestSwappedTransformsFillTheTransposedRect(t *testing.T) {
 func TestFillRectBlendsAndClipsToDamage(t *testing.T) {
 	r := soft.New()
 	b := soft.NewBuffer(4, 1)
-	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}) })
+	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}, render.Mask{}) })
 	frame(t, r, b, render.Region{image.Rect(1, 0, 3, 1)}, func(p render.Pass) {
-		p.FillRect(bounds(b), render.Color{R: 0x80, A: 0x80})
+		p.FillRect(bounds(b), render.Color{R: 0x80, A: 0x80}, render.Mask{})
 	})
 	want := [4][4]byte{black, px(0, 0, 0x80, 0xff), px(0, 0, 0x80, 0xff), black}
 	if got := [4][4]byte{at(b, 0, 0), at(b, 1, 0), at(b, 2, 0), at(b, 3, 0)}; got != want {
@@ -116,9 +117,9 @@ func TestFillRectBlendsAndClipsToDamage(t *testing.T) {
 func TestOverlappingDamageBlendsOnce(t *testing.T) {
 	r := soft.New()
 	b := soft.NewBuffer(4, 1)
-	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}) })
+	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}, render.Mask{}) })
 	frame(t, r, b, render.Region{image.Rect(0, 0, 3, 1), image.Rect(1, 0, 4, 1), image.Rect(1, 0, 2, 1)}, func(p render.Pass) {
-		p.FillRect(bounds(b), render.Color{R: 0x80, A: 0x80})
+		p.FillRect(bounds(b), render.Color{R: 0x80, A: 0x80}, render.Mask{})
 	})
 	for x := range 4 {
 		if got := at(b, x, 0); got != px(0, 0, 0x80, 0xff) {
@@ -130,7 +131,7 @@ func TestOverlappingDamageBlendsOnce(t *testing.T) {
 func TestClearReplacesTheDamageWithoutBlending(t *testing.T) {
 	r := soft.New()
 	b := soft.NewBuffer(4, 1)
-	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}) })
+	frame(t, r, b, full(b), func(p render.Pass) { p.FillRect(bounds(b), render.Color{A: 0xff}, render.Mask{}) })
 	frame(t, r, b, render.Region{image.Rect(1, 0, 3, 1)}, func(p render.Pass) { p.Clear(render.Color{G: 0x40, A: 0x40}) })
 	want := [4][4]byte{black, px(0, 0x40, 0, 0x40), px(0, 0x40, 0, 0x40), black}
 	if got := [4][4]byte{at(b, 0, 0), at(b, 1, 0), at(b, 2, 0), at(b, 3, 0)}; got != want {
@@ -160,10 +161,10 @@ func TestTextureAlphaAndFormats(t *testing.T) {
 	ignored := newTex(t, r, render.XRGB8888, 1, 1, px(0, 0xff, 0, 0))
 	b := soft.NewBuffer(3, 1)
 	frame(t, r, b, full(b), func(p render.Pass) {
-		p.FillRect(bounds(b), render.Color{B: 0xff, A: 0xff})
-		p.DrawTexture(translucent, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
-		p.DrawTexture(ignored, render.FRect{W: 1, H: 1}, image.Rect(1, 0, 2, 1), render.Normal, 1)
-		p.DrawTexture(ignored, render.FRect{W: 1, H: 1}, image.Rect(2, 0, 3, 1), render.Normal, 0.5)
+		p.FillRect(bounds(b), render.Color{B: 0xff, A: 0xff}, render.Mask{})
+		p.DrawTexture(translucent, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
+		p.DrawTexture(ignored, render.FRect{W: 1, H: 1}, image.Rect(1, 0, 2, 1), render.Normal, 1, render.Mask{})
+		p.DrawTexture(ignored, render.FRect{W: 1, H: 1}, image.Rect(2, 0, 3, 1), render.Normal, 0.5, render.Mask{})
 	})
 	want := [3][4]byte{px(0x7f, 0, 0x80, 0xff), green, px(0x7f, 0x80, 0, 0xff)}
 	if got := [3][4]byte{at(b, 0, 0), at(b, 1, 0), at(b, 2, 0)}; got != want {
@@ -180,7 +181,7 @@ func TestTextureUpdateCopiesOnlyDamage(t *testing.T) {
 	}
 	b := soft.NewBuffer(2, 1)
 	frame(t, r, b, full(b), func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: 2, H: 1}, bounds(b), render.Normal, 1)
+		p.DrawTexture(tex, render.FRect{W: 2, H: 1}, bounds(b), render.Normal, 1, render.Mask{})
 	})
 	if got := [2][4]byte{at(b, 0, 0), at(b, 1, 0)}; got != [2][4]byte{red, blue} {
 		t.Fatalf("pixels %v: only the damaged pixel should change, and XRGB stays opaque", got)
@@ -205,19 +206,24 @@ func TestInvalidDrawsFailAtEnd(t *testing.T) {
 	destroyed.Destroy()
 	cases := map[string]func(render.Pass){
 		"source outside texture": func(p render.Pass) {
-			p.DrawTexture(tex, render.FRect{X: 1, W: 2, H: 2}, image.Rect(0, 0, 1, 1), render.Normal, 1)
+			p.DrawTexture(tex, render.FRect{X: 1, W: 2, H: 2}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
 		},
 		"other renderer": func(p render.Pass) {
-			p.DrawTexture(other, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
+			p.DrawTexture(other, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
 		},
 		"destroyed": func(p render.Pass) {
-			p.DrawTexture(destroyed, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
+			p.DrawTexture(destroyed, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
 		},
 		"alpha above one": func(p render.Pass) {
-			p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 2)
+			p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 2, render.Mask{})
 		},
-		"invalid transform": func(p render.Pass) { p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), 9, 1) },
-		"not premultiplied": func(p render.Pass) { p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10}) },
+		"invalid transform": func(p render.Pass) {
+			p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), 9, 1, render.Mask{})
+		},
+		"not premultiplied": func(p render.Pass) { p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10}, render.Mask{}) },
+		"negative radius": func(p render.Pass) {
+			p.FillRect(image.Rect(0, 0, 1, 1), red4, render.Mask{Keep: render.RoundRect{Rect: image.Rect(0, 0, 1, 1), Radius: -1}})
+		},
 	}
 	for name, draw := range cases {
 		b := soft.NewBuffer(2, 2)
@@ -242,6 +248,46 @@ func TestInvalidDrawsFailAtEnd(t *testing.T) {
 	}
 }
 
+var red4 = render.Color{R: 0xff, A: 0xff}
+
+func TestMasksScaleEachPixelByItsCoverage(t *testing.T) {
+	r := soft.New()
+	b := soft.NewBuffer(32, 24)
+	white := newTex(t, r, render.XRGB8888, 1, 1, px(0xff, 0xff, 0xff, 0))
+	window := render.Mask{Keep: render.RoundRect{Rect: image.Rect(2, 2, 14, 22), Radius: 5}}
+	ring := render.Mask{Keep: render.RoundRect{Rect: image.Rect(16, 2, 30, 22), Radius: 6}, Cut: render.RoundRect{Rect: image.Rect(18, 4, 28, 20), Radius: 4}}
+	frame(t, r, b, full(b), func(p render.Pass) {
+		p.DrawTexture(white, render.FRect{W: 1, H: 1}, window.Keep.Rect, render.Normal, 1, window)
+		p.FillRect(ring.Keep.Rect, red4, ring)
+	})
+	edges := 0
+	for y := range b.H {
+		for x := range b.W {
+			m, c := window, [4]byte{0xff, 0xff, 0xff, 0xff}
+			if x >= 16 {
+				m, c = ring, [4]byte{0, 0, 0xff, 0xff}
+			}
+			k := m.Coverage(float32(x)+0.5, float32(y)+0.5)
+			if !image.Pt(x, y).In(m.Keep.Rect) {
+				k = 0
+			}
+			if k > 0 && k < 1 {
+				edges++
+			}
+			var want [4]byte
+			for i := range want {
+				want[i] = byte(math.Round(float64(c[i]) * float64(byte(math.Round(float64(k)*255))) / 255))
+			}
+			if got := at(b, x, y); got != want {
+				t.Fatalf("(%d,%d) at coverage %v: %v, want %v", x, y, k, got, want)
+			}
+		}
+	}
+	if edges == 0 {
+		t.Fatal("no pixel was partly covered, so nothing was antialiased")
+	}
+}
+
 func checker(t *testing.T, r *soft.Renderer, w, h int) render.Texture {
 	t.Helper()
 	pixels := make([][4]byte, 0, w*h)
@@ -259,24 +305,24 @@ func TestGoldenScene(t *testing.T) {
 	tex := checker(t, r, 8, 6)
 	glass := newTex(t, r, render.ARGB8888, 2, 1, px(0, 0x40, 0, 0x40), px(0x40, 0, 0, 0x80))
 	frame(t, r, b, full(b), func(p render.Pass) {
-		p.FillRect(bounds(b), render.Color{R: 0x20, G: 0x20, B: 0x30, A: 0xff})
+		p.FillRect(bounds(b), render.Color{R: 0x20, G: 0x20, B: 0x30, A: 0xff}, render.Mask{})
 		for i, tr := range []render.Transform{render.Normal, render.Rotate90, render.Rotate180, render.Rotate270, render.Flipped, render.Flipped90, render.Flipped180, render.Flipped270} {
 			size := image.Pt(16, 12)
 			if tr.SwapsAxes() {
 				size = image.Pt(12, 16)
 			}
 			origin := image.Pt(4+(i%4)*22, 4+(i/4)*22)
-			p.DrawTexture(tex, render.FRect{W: 8, H: 6}, image.Rectangle{Min: origin, Max: origin.Add(size)}, tr, 1)
+			p.DrawTexture(tex, render.FRect{W: 8, H: 6}, image.Rectangle{Min: origin, Max: origin.Add(size)}, tr, 1, render.Mask{})
 		}
-		p.DrawTexture(tex, render.FRect{X: 2, Y: 1, W: 3.5, H: 2.5}, image.Rect(4, 48, 32, 60), render.Normal, 1)
-		p.DrawTexture(tex, render.FRect{W: 8, H: 6}, image.Rect(36, 48, 52, 60), render.Normal, 0.5)
-		p.DrawTexture(glass, render.FRect{W: 2, H: 1}, image.Rect(56, 48, 92, 60), render.Normal, 1)
-		p.FillRect(image.Rect(0, 0, 96, 2), render.Color{R: 0x80, G: 0x40, A: 0x80})
+		p.DrawTexture(tex, render.FRect{X: 2, Y: 1, W: 3.5, H: 2.5}, image.Rect(4, 48, 32, 60), render.Normal, 1, render.Mask{})
+		p.DrawTexture(tex, render.FRect{W: 8, H: 6}, image.Rect(36, 48, 52, 60), render.Normal, 0.5, render.Mask{})
+		p.DrawTexture(glass, render.FRect{W: 2, H: 1}, image.Rect(56, 48, 92, 60), render.Normal, 1, render.Mask{})
+		p.FillRect(image.Rect(0, 0, 96, 2), render.Color{R: 0x80, G: 0x40, A: 0x80}, render.Mask{})
 	})
 	golden.Assert(t, "scene", b)
 	frame(t, r, b, render.Region{image.Rect(10, 10, 40, 30), image.Rect(60, 40, 90, 60)}, func(p render.Pass) {
-		p.FillRect(bounds(b), render.Color{G: 0x60, A: 0x80})
-		p.DrawTexture(tex, render.FRect{W: 8, H: 6}, bounds(b), render.Rotate180, 1)
+		p.FillRect(bounds(b), render.Color{G: 0x60, A: 0x80}, render.Mask{})
+		p.DrawTexture(tex, render.FRect{W: 8, H: 6}, bounds(b), render.Rotate180, 1, render.Mask{})
 	})
 	golden.Assert(t, "damage", b)
 }
@@ -295,7 +341,7 @@ func BenchmarkDrawTexture(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		p.DrawTexture(tex, render.FRect{W: 1920, H: 1080}, bounds(out), render.Normal, 1)
+		p.DrawTexture(tex, render.FRect{W: 1920, H: 1080}, bounds(out), render.Normal, 1, render.Mask{})
 		if err := p.End(); err != nil {
 			b.Fatal(err)
 		}

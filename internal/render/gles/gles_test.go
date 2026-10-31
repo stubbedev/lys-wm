@@ -75,9 +75,9 @@ func TestOverlappingDamageBlendsOnce(t *testing.T) {
 		}
 	})
 	all := image.Rect(0, 0, 4, 1)
-	rendertest.Paint(t, r, fb, render.Region{all}, func(p render.Pass) { p.FillRect(all, render.Color{A: 0xff}) })
+	rendertest.Paint(t, r, fb, render.Region{all}, func(p render.Pass) { p.FillRect(all, render.Color{A: 0xff}, render.Mask{}) })
 	rendertest.Paint(t, r, fb, render.Region{image.Rect(0, 0, 3, 1), image.Rect(1, 0, 4, 1), image.Rect(1, 0, 2, 1)}, func(p render.Pass) {
-		p.FillRect(all, render.Color{R: 0x80, A: 0x80})
+		p.FillRect(all, render.Color{R: 0x80, A: 0x80}, render.Mask{})
 	})
 	pix := make([]byte, 16)
 	if err := fb.Read(pix, 16); err != nil {
@@ -148,8 +148,8 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 	}
 	defer client.Destroy()
 	rendertest.Paint(t, g, client, render.Region{image.Rect(0, 0, 8, 8)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 8, 8), render.Color{B: 0x80, A: 0x80})
-		p.FillRect(image.Rect(0, 0, 4, 8), render.Color{R: 0xff, A: 0xff})
+		p.FillRect(image.Rect(0, 0, 8, 8), render.Color{B: 0x80, A: 0x80}, render.Mask{})
+		p.FillRect(image.Rect(0, 0, 4, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	})
 	if err := g.Finish(); err != nil {
 		t.Fatal(err)
@@ -164,8 +164,8 @@ func TestDMABUFTexturesOnHardware(t *testing.T) {
 	}
 	fb := framebuffer(t, g, image.Pt(16, 8))
 	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 8)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 16, 8), render.Color{G: 0xff, A: 0xff})
-		p.DrawTexture(tex, render.FRect{W: 8, H: 8}, image.Rect(8, 0, 16, 8), render.Flipped, 1)
+		p.FillRect(image.Rect(0, 0, 16, 8), render.Color{G: 0xff, A: 0xff}, render.Mask{})
+		p.DrawTexture(tex, render.FRect{W: 8, H: 8}, image.Rect(8, 0, 16, 8), render.Flipped, 1, render.Mask{})
 	})
 	got := make([]byte, 16*8*4)
 	if err := fb.Read(got, 64); err != nil {
@@ -204,8 +204,8 @@ func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	defer tx.Destroy()
 	fb := framebuffer(t, g, image.Pt(20, 20))
 	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 20, 20)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 20, 20), render.Color{A: 0xff})
-		p.DrawTexture(tx, render.FRect{X: 0.5, Y: 0.5, W: 3, H: 3}, image.Rect(2, 2, 12, 17), render.Rotate270, 1)
+		p.FillRect(image.Rect(0, 0, 20, 20), render.Color{A: 0xff}, render.Mask{})
+		p.DrawTexture(tx, render.FRect{X: 0.5, Y: 0.5, W: 3, H: 3}, image.Rect(2, 2, 12, 17), render.Rotate270, 1, render.Mask{})
 	})
 	got := make([]byte, 20*20*4)
 	if err := fb.Read(got, 80); err != nil {
@@ -254,7 +254,7 @@ func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 			t.Fatal("a second read was started while one was pending")
 		}
 		rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
-			p.FillRect(image.Rect(0, 0, 5, 3), render.Color{R: 0xff, G: 0xff, A: 0xff})
+			p.FillRect(image.Rect(0, 0, 5, 3), render.Color{R: 0xff, G: 0xff, A: 0xff}, render.Mask{})
 		})
 		if err := pending.Wait(); err != nil {
 			t.Fatal(err)
@@ -305,7 +305,7 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	if _, err := g.Begin(fb, nil); err == nil {
 		t.Fatal("a second Begin was accepted")
 	}
-	p.DrawTexture(tx, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 1)
+	p.DrawTexture(tx, render.FRect{W: 7, H: 5}, image.Rect(0, 0, 7, 5), render.Normal, 1, render.Mask{})
 	if err := p.End(); err == nil || !strings.Contains(err.Error(), "another renderer") {
 		t.Fatalf("a foreign texture: %v", err)
 	}
@@ -313,8 +313,8 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10})
-	p.DrawTexture(rendertest.Load(t, g).ARGB, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1)
+	p.FillRect(image.Rect(0, 0, 1, 1), render.Color{R: 0xff, A: 0x10}, render.Mask{})
+	p.DrawTexture(rendertest.Load(t, g).ARGB, render.FRect{W: 8, H: 5}, image.Rect(0, 0, 8, 5), render.Normal, 1, render.Mask{})
 	if err := p.End(); err == nil || !strings.Contains(err.Error(), "not premultiplied") {
 		t.Fatalf("a straight-alpha color: %v", err)
 	}
@@ -376,7 +376,7 @@ func sampleNV12(t *testing.T, g *gles.Renderer, node string, y, cb, cr byte, yuv
 	defer tex.Destroy()
 	fb := framebuffer(t, g, image.Pt(16, 16))
 	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 16)}, func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: 16, H: 16}, image.Rect(0, 0, 16, 16), render.Normal, 1)
+		p.DrawTexture(tex, render.FRect{W: 16, H: 16}, image.Rect(0, 0, 16, 16), render.Normal, 1, render.Mask{})
 	})
 	got := make([]byte, 16*16*4)
 	if err := fb.Read(got, 64); err != nil {
@@ -430,7 +430,7 @@ func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{R: 0xff, A: 0xff})
+		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{R: 0xff, A: 0xff}, render.Mask{})
 		if err := p.End(); err != nil {
 			return err
 		}
@@ -486,9 +486,9 @@ func TestASteadyPassDoesNotAllocate(t *testing.T) {
 			failed = err
 			return
 		}
-		p.FillRect(image.Rect(0, 0, 32, 32), render.Color{A: 0xff})
-		p.DrawTexture(tex.ARGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(0, 0, rendertest.TexSize.X, rendertest.TexSize.Y), render.Normal, 1)
-		p.DrawTexture(tex.XRGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(8, 8, 8+rendertest.TexSize.X, 8+rendertest.TexSize.Y), render.Normal, 1)
+		p.FillRect(image.Rect(0, 0, 32, 32), render.Color{A: 0xff}, render.Mask{})
+		p.DrawTexture(tex.ARGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(0, 0, rendertest.TexSize.X, rendertest.TexSize.Y), render.Normal, 1, render.Mask{})
+		p.DrawTexture(tex.XRGB, render.FRect{W: float64(rendertest.TexSize.X), H: float64(rendertest.TexSize.Y)}, image.Rect(8, 8, 8+rendertest.TexSize.X, 8+rendertest.TexSize.Y), render.Normal, 1, render.Mask{})
 		if err := p.End(); err != nil && failed == nil {
 			failed = err
 		}
@@ -518,7 +518,7 @@ func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
 	fb := framebuffer(t, g, rendertest.Size)
 	start := backend.Now()
 	rendertest.Paint(t, g, fb, render.Region{{Max: rendertest.Size}}, func(p render.Pass) {
-		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{G: 0xff, A: 0xff})
+		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{G: 0xff, A: 0xff}, render.Mask{})
 	})
 	fd, err := g.SyncFile()
 	if err != nil {

@@ -113,6 +113,20 @@ palette:
 | `active` | `mauve` |
 | `inactive` | `crust` |
 
+## decoration
+
+```yaml
+decoration:
+  rounding: 8
+```
+
+| Key | Default |
+| --- | --- |
+| `rounding` | 0: the radius of window corners in logical pixels, scaled with the output. Surfaces are clipped to it, antialiased, and the border follows it with an outer radius of `rounding` plus the border width. Fullscreen windows stay square |
+
+A rounded window shows what is behind its corners, so it is always
+composited, never scanned out directly, unless it is fullscreen.
+
 ## gaps
 
 ```yaml

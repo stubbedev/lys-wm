@@ -35,7 +35,7 @@ func TestRectAgreesWithTheRenderer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: out}, tr, 1)
+		p.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: out}, tr, 1, render.Mask{})
 		if err := p.End(); err != nil {
 			t.Fatal(err)
 		}

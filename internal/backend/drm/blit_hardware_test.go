@@ -55,7 +55,7 @@ func drawQuadrants(t *testing.T, r render.Renderer, target render.Target) {
 		t.Fatal(err)
 	}
 	for i, c := range quadrantColors {
-		p.FillRect(quadrant(i, size), c)
+		p.FillRect(quadrant(i, size), c, render.Mask{})
 	}
 	if err := p.End(); err != nil {
 		t.Fatal(err)

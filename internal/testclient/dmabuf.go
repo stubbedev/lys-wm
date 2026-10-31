@@ -206,7 +206,7 @@ func readBack(r *gles.Renderer, b gpu.DMABUF) (pix []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	p.DrawTexture(tex, render.FRect{W: float64(b.Size.X), H: float64(b.Size.Y)}, all, render.Normal, 1)
+	p.DrawTexture(tex, render.FRect{W: float64(b.Size.X), H: float64(b.Size.Y)}, all, render.Normal, 1, render.Mask{})
 	if err := p.End(); err != nil {
 		return nil, err
 	}

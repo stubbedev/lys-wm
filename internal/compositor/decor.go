@@ -25,6 +25,7 @@ type TabStyle struct {
 
 type Decor struct {
 	BorderWidth                  int
+	Rounding                     int
 	ActiveBorder, InactiveBorder render.Color
 	Tab                          TabStyle
 }
@@ -153,6 +154,21 @@ func (c *Compositor) evictLabels(o *output.Output) error {
 	return errors.Join(errs...)
 }
 
+func deviceLength(o *output.Output, v int) float32 {
+	return float32(float64(v) * o.Scale().Float())
+}
+
+func (c *Compositor) rounded(w *window) bool {
+	return c.decor.Rounding > 0 && w.layer != wm.LayerFullscreen
+}
+
+func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
+	if !c.rounded(w) {
+		return render.Mask{}
+	}
+	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.decor.Rounding)}}
+}
+
 func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if c.decor.BorderWidth <= 0 || w.layer == wm.LayerFullscreen {
 		return
@@ -163,6 +179,14 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	}
 	outer := deviceRect(o, w.tile)
 	inner := deviceRect(o, w.rect)
+	if c.rounded(w) {
+		radius := deviceLength(o, c.decor.Rounding)
+		pass.fillMasked(outer, color, render.Mask{
+			Keep: render.RoundRect{Rect: outer, Radius: radius + deviceLength(o, c.decor.BorderWidth)},
+			Cut:  render.RoundRect{Rect: inner, Radius: radius},
+		})
+		return
+	}
 	for _, strip := range []image.Rectangle{
 		{Min: outer.Min, Max: image.Pt(outer.Max.X, inner.Min.Y)},
 		{Min: image.Pt(outer.Min.X, inner.Max.Y), Max: outer.Max},

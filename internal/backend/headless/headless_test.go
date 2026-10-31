@@ -143,7 +143,7 @@ func TestFramesArePacedByRefresh(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{G: byte(frames), A: 0xff})
+		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{G: byte(frames), A: 0xff}, render.Mask{})
 		if err := p.End(); err != nil {
 			t.Fatal(err)
 		}

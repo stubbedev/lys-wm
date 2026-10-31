@@ -63,7 +63,7 @@ func cursorImage(t *testing.T, o *Output) {
 		t.Fatal(err)
 	}
 	p.Clear(render.Color{})
-	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	if err := errors.Join(p.End(), cp.SetCursor(image.Pt(1, 1)), cp.MoveCursor(image.Pt(50, 50))); err != nil {
 		t.Fatal(err)
 	}
@@ -162,8 +162,8 @@ func scanoutFrame(t *testing.T, b *Backend, o *Output) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff})
-	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff})
+	p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff}, render.Mask{})
+	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 	if err := p.End(); err != nil {
 		t.Fatal(err)
 	}

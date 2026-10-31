@@ -196,7 +196,7 @@ func (r *rig) texel(tex *spyTexture, x, y int) [4]byte {
 		r.t.Error(err)
 		return [4]byte{}
 	}
-	p.DrawTexture(tex.Texture, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: size}, render.Normal, 1)
+	p.DrawTexture(tex.Texture, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: size}, render.Normal, 1, render.Mask{})
 	if err := p.End(); err != nil {
 		r.t.Error(err)
 	}

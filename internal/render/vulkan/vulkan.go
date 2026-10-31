@@ -346,11 +346,11 @@ func (p *pass) Clear(c render.Color) {
 	p.p.Clear(rgba(c))
 }
 
-func (p *pass) FillRect(r image.Rectangle, c render.Color) {
-	p.p.FillRect(r, rgba(c), lgpu.Mask{})
+func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
+	p.p.FillRect(r, rgba(c), m)
 }
 
-func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
+func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, m render.Mask) {
 	tex, ok := t.(*texture)
 	switch {
 	case !ok || tex.r != p.r:
@@ -359,11 +359,11 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case p.err != nil:
 		return
 	}
-	if err := render.CheckDraw(tex.Size(), src, transform, alpha); err != nil {
+	if err := render.CheckDraw(tex.Size(), src, transform, alpha, m); err != nil {
 		p.fail(err)
 		return
 	}
-	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha, lgpu.Mask{})
+	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha, m)
 }
 
 func (p *pass) fail(err error) {

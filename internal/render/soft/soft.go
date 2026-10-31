@@ -193,7 +193,15 @@ func (p *pass) Clear(c render.Color) {
 	}
 }
 
-func (p *pass) FillRect(r image.Rectangle, c render.Color) {
+func coverage(m render.Mask, x, y int) float32 {
+	return m.Coverage(float32(x)+0.5, float32(y)+0.5)
+}
+
+func toByte(f float32) uint32 {
+	return uint32(math.Round(float64(f) * 255))
+}
+
+func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	if !p.active {
 		p.fail(errors.New("soft: FillRect outside a pass"))
 		return
@@ -202,18 +210,33 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color) {
 		p.fail(fmt.Errorf("soft: color %+v is not premultiplied", c))
 		return
 	}
+	if err := m.Check(); err != nil {
+		p.fail(err)
+		return
+	}
+	masked := m != (render.Mask{})
 	for _, d := range p.damage.Rects() {
 		clip := r.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			row := p.buf.Pix[y*p.buf.Stride:]
 			for x := clip.Min.X; x < clip.Max.X; x++ {
-				over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)
+				k := uint32(0xff)
+				if masked {
+					k = toByte(coverage(m, x, y))
+				}
+				switch k {
+				case 0:
+				case 0xff:
+					over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)
+				default:
+					over(row[x*4:x*4+4], scale(c.B, k), scale(c.G, k), scale(c.R, k), scale(c.A, k))
+				}
 			}
 		}
 	}
 }
 
-func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
+func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, m render.Mask) {
 	tex, ok := t.(*texture)
 	switch {
 	case !p.active:
@@ -228,14 +251,15 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case dst.Empty():
 		return
 	}
-	if err := render.CheckDraw(tex.size, src, transform, alpha); err != nil {
+	if err := render.CheckDraw(tex.size, src, transform, alpha, m); err != nil {
 		p.fail(err)
 		return
 	}
-	a := uint32(math.Round(float64(alpha) * 255))
-	if a == 0 {
+	full := toByte(alpha)
+	if full == 0 {
 		return
 	}
+	masked := m != (render.Mask{})
 	horizontal, vertical := transform.Axes()
 	p.cols = sampleMap(p.cols[:0], dst.Dx(), horizontal, src, tex.size)
 	p.rows = sampleMap(p.rows[:0], dst.Dy(), vertical, src, tex.size)
@@ -252,9 +276,15 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 					sx, sy = row, col
 				}
 				px := tex.pix[sy*tex.stride+sx*4:]
-				if a == 0xff {
+				a := full
+				if masked {
+					a = toByte(alpha * coverage(m, x, y))
+				}
+				switch a {
+				case 0:
+				case 0xff:
 					over(out[x*4:x*4+4], px[0], px[1], px[2], px[3])
-				} else {
+				default:
 					over(out[x*4:x*4+4], scale(px[0], a), scale(px[1], a), scale(px[2], a), scale(px[3], a))
 				}
 			}

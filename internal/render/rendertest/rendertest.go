@@ -76,16 +76,39 @@ func Paint(t *testing.T, r render.Renderer, target render.Target, damage render.
 
 func Scene(tx Textures) func(render.Pass) {
 	return func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff})
-		p.FillRect(image.Rect(4, 30, 40, 46), render.Color{R: 0x40, G: 0x20, B: 0x00, A: 0x80})
+		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}, render.Mask{})
+		p.FillRect(image.Rect(4, 30, 40, 46), render.Color{R: 0x40, G: 0x20, B: 0x00, A: 0x80}, render.Mask{})
 		for i := range render.Flipped270 + 1 {
 			size := i.Size(TexSize)
 			at := image.Pt(1+(int(i)%4)*9, 1+int(i)/4*9)
-			p.DrawTexture(tx.ARGB, render.FRect{W: 7, H: 5}, image.Rectangle{Min: at, Max: at.Add(size)}, i, 1)
+			p.DrawTexture(tx.ARGB, render.FRect{W: 7, H: 5}, image.Rectangle{Min: at, Max: at.Add(size)}, i, 1, render.Mask{})
 		}
-		p.DrawTexture(tx.XRGB, render.FRect{W: 7, H: 5}, image.Rect(40, 2, 47, 7), render.Normal, 0.5)
-		p.DrawTexture(tx.ARGB, render.FRect{X: 1, Y: 1, W: 4, H: 3}, image.Rect(40, 10, 44, 13), render.Normal, 1)
-		p.DrawTexture(tx.XRGB, render.FRect{W: 7, H: 5}, image.Rect(50, 20, 55, 27), render.Rotate90, 1)
+		p.DrawTexture(tx.XRGB, render.FRect{W: 7, H: 5}, image.Rect(40, 2, 47, 7), render.Normal, 0.5, render.Mask{})
+		p.DrawTexture(tx.ARGB, render.FRect{X: 1, Y: 1, W: 4, H: 3}, image.Rect(40, 10, 44, 13), render.Normal, 1, render.Mask{})
+		p.DrawTexture(tx.XRGB, render.FRect{W: 7, H: 5}, image.Rect(50, 20, 55, 27), render.Rotate90, 1, render.Mask{})
+	}
+}
+
+func MaskScene(tx Textures) func(render.Pass) {
+	return func(p render.Pass) {
+		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}, render.Mask{})
+		window := render.Mask{Keep: render.RoundRect{Rect: image.Rect(3, 4, 31, 29), Radius: 7.5}}
+		pill := render.Mask{Keep: render.RoundRect{Rect: image.Rect(3, 31, 33, 45), Radius: 30}}
+		for x := 3; x < 31; x += 7 {
+			for y := 4; y < 29; y += 5 {
+				p.DrawTexture(tx.XRGB, render.FRect{W: 7, H: 5}, image.Rect(x, y, x+7, y+5), render.Normal, 1, window)
+			}
+		}
+		for x := 3; x < 33; x += 5 {
+			p.DrawTexture(tx.ARGB, render.FRect{W: 7, H: 5}, image.Rect(x, 31, x+5, 38), render.Rotate90, 0.75, pill)
+			p.DrawTexture(tx.ARGB, render.FRect{W: 7, H: 5}, image.Rect(x, 38, x+5, 45), render.Rotate90, 0.75, pill)
+		}
+		ring := render.Mask{
+			Keep: render.RoundRect{Rect: image.Rect(34, 3, 61, 45), Radius: 9},
+			Cut:  render.RoundRect{Rect: image.Rect(37, 6, 58, 42), Radius: 6},
+		}
+		p.FillRect(ring.Keep.Rect, render.Color{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, ring)
+		p.FillRect(image.Rect(40, 10, 56, 38), render.Color{R: 0x20, G: 0x40, B: 0x10, A: 0x80}, render.Mask{Keep: render.RoundRect{Rect: image.Rect(40, 10, 56, 38), Radius: 4.25}})
 	}
 }
 
@@ -140,10 +163,14 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 	Paint(t, s, buf, partial, Scene(stx))
 	Compare(t, buf, target, 1)
 
+	Paint(t, r, target, full, MaskScene(rtx))
+	Paint(t, s, buf, full, MaskScene(stx))
+	Compare(t, buf, target, 1)
+
 	cleared := render.Region{image.Rect(3, 4, 21, 15)}
 	clear := func(p render.Pass) {
 		p.Clear(render.Color{B: 0x20, A: 0x40})
-		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0x40, A: 0x80})
+		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0x40, A: 0x80}, render.Mask{})
 	}
 	Paint(t, r, target, cleared, clear)
 	Paint(t, s, buf, cleared, clear)
@@ -153,9 +180,9 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 func PaintMarked(t *testing.T, r render.Renderer, target render.Target) {
 	t.Helper()
 	Paint(t, r, target, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 5, 3), render.Color{B: 0xff, A: 0xff})
-		p.FillRect(image.Rect(1, 0, 2, 1), render.Color{R: 0xff, A: 0xff})
-		p.FillRect(image.Rect(4, 2, 5, 3), render.Color{G: 0xff, A: 0xff})
+		p.FillRect(image.Rect(0, 0, 5, 3), render.Color{B: 0xff, A: 0xff}, render.Mask{})
+		p.FillRect(image.Rect(1, 0, 2, 1), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+		p.FillRect(image.Rect(4, 2, 5, 3), render.Color{G: 0xff, A: 0xff}, render.Mask{})
 	})
 }
 
@@ -237,7 +264,7 @@ func EveryFormat(t *testing.T, r render.Renderer, target render.ReadTarget) {
 func drawn(t *testing.T, r render.Renderer, target render.ReadTarget, tex render.Texture) [4]byte {
 	t.Helper()
 	Paint(t, r, target, render.Region{image.Rect(0, 0, 1, 1)}, func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1)
+		p.DrawTexture(tex, render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
 	})
 	pix := make([]byte, 4)
 	if err := target.Read(pix, 4); err != nil {

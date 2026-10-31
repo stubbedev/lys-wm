@@ -225,7 +225,7 @@ func (a *blitAllocator) blit(s *shared, dst render.Target, size image.Point) err
 	if err != nil {
 		return err
 	}
-	p.DrawTexture(s.tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, all, render.Normal, 1)
+	p.DrawTexture(s.tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, all, render.Normal, 1, render.Mask{})
 	return p.End()
 }
 
