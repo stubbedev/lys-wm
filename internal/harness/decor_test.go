@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/golden"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -118,4 +119,32 @@ func TestARoundedWindowThatFillsTheOutputIsComposited(t *testing.T) {
 	h.dispatch("fullscreen")
 	c.DispatchUntil("the fullscreen configure", func() bool { return w.Logical == small.Size })
 	s.show(t, "the same buffer once fullscreen, which is never rounded", c.DMABUF(small.Size, testclient.Fill(0, 0xff, 0)))
+}
+
+func TestATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T) {
+	var r reports
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Report = r.report
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth = 4
+		cfg.Decor.ActiveBorder = render.Color{R: 0xff, A: 0x80}
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("bordered", testclient.Fill(0x60, 0x60, 0x60))
+	c.DispatchUntil("the window to map", w.Mapped)
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	over := func(src int, dst byte) byte { return byte(src + (int(dst)*0x7f+127)/255) }
+	want := [3]byte{over(0x80, bg[0]), over(0, bg[1]), over(0, bg[2])}
+	h.Eventually("the half-transparent red border over the background", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		got := pixel(snapshot(b.Outputs()[0]), 1, 60)
+		for i := range got {
+			if d := int(got[i]) - int(want[i]); d < -1 || d > 1 {
+				return false
+			}
+		}
+		return true
+	})
+	if errs := r.take(); len(errs) != 0 {
+		t.Fatalf("reports %v", errs)
+	}
 }

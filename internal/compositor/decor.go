@@ -211,6 +211,7 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if w == c.active {
 		color = c.decor.ActiveBorder
 	}
+	color = color.Premultiply()
 	outer := deviceRect(o, w.tile)
 	inner := deviceRect(o, w.rect)
 	if c.rounded(w) {

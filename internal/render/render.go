@@ -9,6 +9,7 @@ import (
 	"math"
 
 	lgpu "github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/intconv"
 
 	"github.com/stubbedev/lys-wm/internal/region"
 )
@@ -203,6 +204,11 @@ func tenToEight(v uint32) uint8 {
 
 type Color struct {
 	R, G, B, A uint8
+}
+
+func (c Color) Premultiply() Color {
+	k := func(v uint8) uint8 { return intconv.Must[uint8]((uint32(v)*uint32(c.A) + 127) / 255) }
+	return Color{R: k(c.R), G: k(c.G), B: k(c.B), A: c.A}
 }
 
 func (c Color) Premultiplied() bool {
