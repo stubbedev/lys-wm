@@ -174,9 +174,23 @@ type rawKeyboard struct {
 }
 
 type rawBorders struct {
-	Width    *At[int]    `yaml:"width"`
-	Active   *At[string] `yaml:"active"`
-	Inactive *At[string] `yaml:"inactive"`
+	Width    *At[int]       `yaml:"width"`
+	Active   *At[rawBorder] `yaml:"active"`
+	Inactive *At[rawBorder] `yaml:"inactive"`
+}
+
+type rawBorder struct {
+	Colors []At[string] `yaml:"colors"`
+	Angle  float64      `yaml:"angle"`
+}
+
+func (b *rawBorder) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		b.Colors = []At[string]{{V: n.Value, Line: n.Line}}
+		return nil
+	}
+	type plain rawBorder
+	return n.Decode((*plain)(b))
 }
 
 type rawAnimations struct {
@@ -547,6 +561,29 @@ func (p *parser) shadow(r rawShadow, def compositor.Shadow) compositor.Shadow {
 	return s
 }
 
+func (p *parser) border(a *At[rawBorder], key string, fallback compositor.Border) compositor.Border {
+	if a == nil {
+		return fallback
+	}
+	colors := make([]render.Color, 0, len(a.V.Colors))
+	for i, c := range a.V.Colors {
+		k := key
+		if len(a.V.Colors) > 1 {
+			k = fmt.Sprintf("%s.colors[%d]", key, i)
+		}
+		colors = append(colors, p.color(c, k, render.Color{}))
+	}
+	if len(colors) == 1 {
+		return compositor.SolidBorder(colors[0])
+	}
+	b, err := compositor.GradientBorder(colors, a.V.Angle)
+	if err != nil {
+		p.fail(a.Line, key, "%v", err)
+		return fallback
+	}
+	return b
+}
+
 func (p *parser) gaps(r rawGaps) wm.Gaps {
 	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
 	if r.Outer == nil {
@@ -831,8 +868,8 @@ func Parse(file string, data []byte) (Config, error) {
 				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
 				Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),
 			},
-			ActiveBorder:   p.optColor(raw.Borders.Active, "borders.active", def.ActiveBorder),
-			InactiveBorder: p.optColor(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
+			ActiveBorder:   p.border(raw.Borders.Active, "borders.active", def.ActiveBorder),
+			InactiveBorder: p.border(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
 			Tab: compositor.TabStyle{
 				Height:      p.positive(raw.Tabs.Height, "tabs.height", def.Tab.Height),
 				Padding:     p.nonNegative(raw.Tabs.Padding, "tabs.padding", def.Tab.Padding),

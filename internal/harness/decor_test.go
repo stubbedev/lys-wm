@@ -27,8 +27,9 @@ func TestBordersAndTabBars(t *testing.T) {
 	}
 	right := c.Window("right", gray)
 	c.DispatchUntil("right to map", right.Mapped)
-	active := [3]byte{decor.ActiveBorder.R, decor.ActiveBorder.G, decor.ActiveBorder.B}
-	inactive := [3]byte{decor.InactiveBorder.R, decor.InactiveBorder.G, decor.InactiveBorder.B}
+	a, i := decor.ActiveBorder.Colors()[0], decor.InactiveBorder.Colors()[0]
+	active := [3]byte{a.R, a.G, a.B}
+	inactive := [3]byte{i.R, i.G, i.B}
 	h.Eventually("the focused window's border", showing(80, 100, active))
 	h.Eventually("the other window's border", showing(79, 100, inactive))
 
@@ -128,7 +129,7 @@ func TestATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T) {
 		cfg.Report = r.report
 		cfg.Decor = compositor.DefaultDecor()
 		cfg.Decor.BorderWidth = 4
-		cfg.Decor.ActiveBorder = render.Color{R: 0xff, A: 0x80}
+		cfg.Decor.ActiveBorder = compositor.SolidBorder(render.Color{R: 0xff, A: 0x80})
 	}, tall)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("bordered", testclient.Fill(0x60, 0x60, 0x60))
@@ -166,4 +167,27 @@ func TestAFloatingWindowCastsARoundedShadow(t *testing.T) {
 		return got[0] < bg[0] && got != [3]byte{}
 	})
 	golden.Assert(t, "shadow", h.Rendered(0))
+}
+
+func TestAGradientBorderRunsAlongItsAngle(t *testing.T) {
+	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
+	border, err := compositor.GradientBorder([]render.Color{red, blue}, 45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 4, 10
+		cfg.Decor.ActiveBorder = border
+		cfg.WM.Gaps = wm.Gaps{Outer: wm.Insets{Top: 8, Right: 8, Bottom: 8, Left: 8}}
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("gradient", testclient.Fill(0x30, 0x30, 0x30))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.Eventually("red at the top left and blue at the bottom right", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		buf := snapshot(b.Outputs()[0])
+		tl, br := pixel(buf, 30, 9), pixel(buf, 130, 110)
+		return tl[0] > 0xc0 && tl[2] < 0x40 && br[2] > 0xc0 && br[0] < 0x40
+	})
+	golden.Assert(t, "gradient", h.Rendered(0))
 }

@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"slices"
+
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -253,6 +256,49 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 					k = toByte(coverage(m, x, y))
 				}
 				switch k {
+				case 0:
+				case 0xff:
+					over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)
+				default:
+					over(row[x*4:x*4+4], scale(c.B, k), scale(c.G, k), scale(c.R, k), scale(c.A, k))
+				}
+			}
+		}
+	}
+}
+
+func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
+	tex, ok := g.Stops.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: FillGradient outside a pass"))
+		return
+	case !ok || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: gradient stops %T belong to another renderer", g.Stops))
+		return
+	case tex.pix == nil:
+		p.fail(errors.New("soft: gradient stops used after Destroy"))
+		return
+	case tex.drawn == p.buf:
+		p.fail(errors.New("soft: FillGradient with the pass's own target as stops"))
+		return
+	}
+	if err := render.CheckGradient(g, m); err != nil {
+		p.fail(err)
+		return
+	}
+	stops := make([]color.RGBA, tex.size.X)
+	for i := range stops {
+		px := tex.pix[i*4:]
+		stops[i] = color.RGBA{R: px[2], G: px[1], B: px[0], A: px[3]}
+	}
+	for _, d := range p.damage.Rects() {
+		clip := r.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				c := lgpu.GradientAt(g.From, g.To, stops, float32(x)+0.5, float32(y)+0.5)
+				switch k := toByte(g.Alpha * coverage(m, x, y)); k {
 				case 0:
 				case 0xff:
 					over(row[x*4:x*4+4], c.B, c.G, c.R, c.A)

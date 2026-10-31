@@ -375,6 +375,22 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	p.p.FillRect(r, rgba(c), m)
 }
 
+func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
+	tex, ok := g.Stops.(*texture)
+	switch {
+	case !ok || tex.r != p.r:
+		p.fail(fmt.Errorf("vulkan: gradient stops of another renderer (%T)", g.Stops))
+		return
+	case p.err != nil:
+		return
+	}
+	if err := render.CheckGradient(g, m); err != nil {
+		p.fail(err)
+		return
+	}
+	p.p.FillGradient(r, lgpu.Gradient{Stops: tex.t, From: g.From, To: g.To, Alpha: g.Alpha}, m)
+}
+
 func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, m render.Mask) {
 	tex, ok := t.(*texture)
 	switch {

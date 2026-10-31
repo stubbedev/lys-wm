@@ -25,6 +25,7 @@ type drawOp struct {
 	size      image.Point
 	opaque    bool
 	mask      render.Mask
+	gradient  render.Gradient
 }
 
 func (op drawOp) covers() bool {
@@ -41,6 +42,13 @@ func (op drawOp) solid(add func(image.Rectangle)) {
 		add(image.Rect(k.Rect.Min.X+r, k.Rect.Min.Y, k.Rect.Max.X-r, k.Rect.Max.Y).Intersect(op.dst))
 		add(image.Rect(k.Rect.Min.X, k.Rect.Min.Y+r, k.Rect.Max.X, k.Rect.Max.Y-r).Intersect(op.dst))
 	}
+}
+
+func mapGradient(g render.Gradient, at func([2]float32) [2]float32) render.Gradient {
+	if g.Stops != nil {
+		g.From, g.To = at(g.From), at(g.To)
+	}
+	return g
 }
 
 func shiftMask(m render.Mask, d image.Point) render.Mask {
@@ -70,6 +78,10 @@ func (f *frame) fillMasked(r image.Rectangle, c render.Color, m render.Mask) {
 	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, opaque: c.A == 0xff, mask: m})
 }
 
+func (f *frame) fillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
+	f.ops = append(f.ops, drawOp{fill: true, gradient: g, dst: r, mask: m})
+}
+
 func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m})
 }
@@ -90,9 +102,14 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 		}
 		return image.Rectangle{Min: at(r.Min), Max: at(r.Max)}
 	}
+	sx, sy := float32(dst.Dx())/float32(src.Dx()), float32(dst.Dy())/float32(src.Dy())
+	point := func(v [2]float32) [2]float32 {
+		return [2]float32{float32(dst.Min.X) + (v[0]-float32(src.Min.X))*sx, float32(dst.Min.Y) + (v[1]-float32(src.Min.Y))*sy}
+	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]
 		op.dst, op.mask.Keep.Rect, op.mask.Cut.Rect = rect(op.dst), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect)
+		op.gradient = mapGradient(op.gradient, point)
 	}
 }
 
@@ -120,6 +137,12 @@ func (f *frame) replay(p render.Pass) {
 func (f *frame) replayFrom(p render.Pass, origin image.Point) {
 	for _, op := range f.ops {
 		m := shiftMask(op.mask, origin)
+		if op.gradient.Stops != nil {
+			p.FillGradient(op.dst.Sub(origin), mapGradient(op.gradient, func(v [2]float32) [2]float32 {
+				return [2]float32{v[0] - float32(origin.X), v[1] - float32(origin.Y)}
+			}), m)
+			continue
+		}
 		if op.fill && op.color == (render.Color{}) {
 			continue
 		}

@@ -42,7 +42,7 @@ func XRGB() []byte {
 	return pix
 }
 
-type Textures struct{ ARGB, XRGB render.Texture }
+type Textures struct{ ARGB, XRGB, Stops render.Texture }
 
 func Load(t *testing.T, r render.Renderer) Textures {
 	t.Helper()
@@ -54,12 +54,16 @@ func Load(t *testing.T, r render.Renderer) Textures {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s, err := r.NewTexture(render.ARGB8888, image.Pt(3, 1), 12, []byte{0, 0, 0xc8, 0xff, 0, 0xb4, 0, 0xff, 0x78, 0, 0, 0x78})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
-		if err := errors.Join(a.Destroy(), x.Destroy()); err != nil {
+		if err := errors.Join(a.Destroy(), x.Destroy(), s.Destroy()); err != nil {
 			t.Error(err)
 		}
 	})
-	return Textures{a, x}
+	return Textures{a, x, s}
 }
 
 func Paint(t *testing.T, r render.Renderer, target render.Target, damage render.Region, draw func(render.Pass)) {
@@ -115,6 +119,17 @@ func MaskScene(tx Textures) func(render.Pass) {
 			Falloff: render.Falloff{Range: 5.5, Power: 3},
 		}
 		p.FillRect(shadow.Keep.Rect.Inset(-6), render.Color{A: 0xc0}, shadow)
+	}
+}
+
+const GradientTolerance = 2
+
+func GradientScene(tx Textures) func(render.Pass) {
+	return func(p render.Pass) {
+		p.FillRect(image.Rect(0, 0, 64, 48), render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}, render.Mask{})
+		border := render.Mask{Keep: render.RoundRect{Rect: image.Rect(2, 2, 62, 46), Radius: 5}, Cut: render.RoundRect{Rect: image.Rect(4, 4, 60, 44), Radius: 3}}
+		p.FillGradient(border.Keep.Rect, render.Gradient{Stops: tx.Stops, From: [2]float32{10, 40}, To: [2]float32{54, 8}, Alpha: 1}, border)
+		p.FillGradient(image.Rect(10, 10, 30, 30), render.Gradient{Stops: tx.Stops, From: [2]float32{30, 10}, To: [2]float32{10, 10}, Alpha: 0.6}, render.Mask{})
 	}
 }
 
@@ -221,6 +236,10 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 	Paint(t, r, target, full, MaskScene(rtx))
 	Paint(t, s, buf, full, MaskScene(stx))
 	Compare(t, buf, target, 1)
+
+	Paint(t, r, target, full, GradientScene(rtx))
+	Paint(t, s, buf, full, GradientScene(stx))
+	Compare(t, buf, target, GradientTolerance)
 
 	offscreen(t, r, target, rtx, s, buf, stx)
 

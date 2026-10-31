@@ -50,6 +50,7 @@ var (
 	solidShader    = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * " + coverage + "; }"
 	rgbaShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
+	gradientShader = maskHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops)) * (alpha * " + coverage + "); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
 
@@ -60,6 +61,7 @@ type program struct {
 	pos, texcoord      int32
 	size, color, alpha int32
 	keep, cut, radii   int32
+	line, stops        int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -72,6 +74,7 @@ type Renderer struct {
 	d         *gpu.Display
 	gl        *gpu.GL
 	solid     program
+	gradient  program
 	rgba      program
 	rgbx      program
 	external  program
@@ -114,7 +117,7 @@ func (r *Renderer) setup() error {
 	programs := []struct {
 		prog     *program
 		fragment string
-	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}}
+	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}}
 	if slices.Contains(exts, "GL_OES_EGL_image_external") {
 		programs = append(programs, struct {
 			prog     *program
@@ -136,6 +139,8 @@ func (r *Renderer) setup() error {
 			keep:     r.gl.GetUniformLocation(id, "keep"),
 			cut:      r.gl.GetUniformLocation(id, "cut"),
 			radii:    r.gl.GetUniformLocation(id, "radii"),
+			line:     r.gl.GetUniformLocation(id, "line"),
+			stops:    r.gl.GetUniformLocation(id, "stops"),
 			alphaSet: -1,
 		}
 		r.gl.UseProgram(id)
@@ -732,6 +737,47 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	if !prog.colored || prog.colorSet != c {
 		prog.colored, prog.colorSet = true, c
 		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+	}
+	p.draw(r)
+}
+
+func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
+	tex, ok := g.Stops.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("gles: FillGradient outside a pass"))
+		return
+	case !ok || tex.r != p.owner || tex.target != gpu.Texture2D:
+		p.fail(fmt.Errorf("gles: gradient stops %T are not this renderer's RGB texture", g.Stops))
+		return
+	case tex.id == 0:
+		p.fail(errors.New("gles: gradient stops used after Destroy"))
+		return
+	case tex.drawn == p.fb:
+		p.fail(errors.New("gles: FillGradient with the pass's own target as stops"))
+		return
+	case r.Empty():
+		return
+	}
+	if err := render.CheckGradient(g, m); err != nil {
+		p.fail(err)
+		return
+	}
+	prog := &p.owner.gradient
+	gl := p.owner.gl
+	p.use(prog)
+	p.setMask(prog, m)
+	gl.Uniform4f(prog.line, g.From[0], g.From[1], g.To[0], g.To[1])
+	gl.Uniform1f(prog.stops, float32(tex.size.X))
+	if prog.alphaSet != g.Alpha {
+		prog.alphaSet = g.Alpha
+		gl.Uniform1f(prog.alpha, g.Alpha)
+	}
+	gl.BindTexture(tex.target, tex.id)
+	if tex.filter != gpu.Linear {
+		tex.filter = gpu.Linear
+		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
+		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
 	p.draw(r)
 }

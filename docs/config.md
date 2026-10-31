@@ -113,6 +113,15 @@ palette:
 | `active` | `mauve` |
 | `inactive` | `crust` |
 
+`active` and `inactive` take a colour, or a gradient of 2 to 10 colours spread
+evenly across the border along `angle` degrees (0, the default, runs left to
+right; angles turn clockwise):
+
+```yaml
+borders:
+  active: {colors: [mauve, blue], angle: 45}
+```
+
 ## decoration
 
 ```yaml

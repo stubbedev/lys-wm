@@ -71,7 +71,7 @@ func TestExampleConfig(t *testing.T) {
 	if mx := in.Devices["Logitech MX Master 3"]; len(in.Devices) != 1 || *mx.AccelProfile != session.AccelAdaptive || !*mx.NaturalScroll {
 		t.Errorf("devices %+v", in.Devices)
 	}
-	if cfg.Decor.BorderWidth != 2 || cfg.Decor.ActiveBorder != (render.Color{R: 0xff, G: 0x88, A: 0xff}) || cfg.Decor.Tab.Height != 18 || cfg.Decor.Tab.Urgent.Text != (render.Color{A: 0xff}) {
+	if cfg.Decor.BorderWidth != 2 || cfg.Decor.ActiveBorder != compositor.SolidBorder(render.Color{R: 0xff, G: 0x88, A: 0xff}) || cfg.Decor.Tab.Height != 18 || cfg.Decor.Tab.Urgent.Text != (render.Color{A: 0xff}) {
 		t.Errorf("decor %+v", cfg.Decor)
 	}
 	if cfg.Decor.Opacity != (compositor.Opacity{Active: 1, Inactive: 0.9, Fullscreen: 1}) {
@@ -88,6 +88,9 @@ func TestExampleConfig(t *testing.T) {
 	}
 	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != 3 || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
 		t.Errorf("decoration.shadow parsed to %+v", s)
+	}
+	if c, err := Parse("t.yaml", []byte("borders:\n  active: {colors: [mauve, \"#00ff0080\"], angle: 45}\n")); err != nil || !slices.Equal(c.Decor.ActiveBorder.Colors(), []render.Color{{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, {G: 0xff, A: 0x80}}) {
+		t.Errorf("a gradient border: %+v, %v", c.Decor.ActiveBorder, err)
 	}
 	if cfg.Decor.Rounding != 8 {
 		t.Errorf("decoration.rounding parsed to %d", cfg.Decor.Rounding)
@@ -212,6 +215,9 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"decoration:\n  shadow:\n    render_power: 5\n":                         "t.yaml:3: decoration.shadow.render_power: 5 is not from 1 to 4",
 		"decoration:\n  shadow:\n    offset: [1]\n":                             "t.yaml:3: decoration.shadow.offset: [1] is not [x, y]",
 		"decoration:\n  shadow:\n    scale: 0\n":                                "t.yaml:3: decoration.shadow.scale: 0 is not above 0 to 1",
+		"borders:\n  active: {colors: [red, blue], angel: 4}\n":                 "t.yaml:2: borders.active.angel: unknown key",
+		"borders:\n  active: {colors: [red, nope]}\n":                           `t.yaml:2: borders.active.colors[1]: "nope" is neither`,
+		"borders:\n  active: {colors: []}\n":                                    "t.yaml:2: borders.active: compositor: a gradient border takes 2 to 10 colours, not 0",
 		"decoration:\n  rounding: -1\n":                                         "t.yaml:2: decoration.rounding: -1 is not zero or more",
 		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
 		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",

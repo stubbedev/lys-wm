@@ -43,13 +43,57 @@ type Shadow struct {
 	Active, Inactive render.Color
 }
 
+const MaxBorderColors = 10
+
+type Border struct {
+	colors [MaxBorderColors]render.Color
+	n      int
+	angle  float64
+}
+
+func SolidBorder(c render.Color) Border {
+	return Border{colors: [MaxBorderColors]render.Color{c}, n: 1}
+}
+
+func GradientBorder(colors []render.Color, degrees float64) (Border, error) {
+	if len(colors) < 2 || len(colors) > MaxBorderColors {
+		return Border{}, fmt.Errorf("compositor: a gradient border takes 2 to %d colours, not %d", MaxBorderColors, len(colors))
+	}
+	if math.IsNaN(degrees) || math.IsInf(degrees, 0) {
+		return Border{}, fmt.Errorf("compositor: gradient angle %v is not finite", degrees)
+	}
+	b := Border{n: len(colors), angle: degrees}
+	copy(b.colors[:], colors)
+	return b, nil
+}
+
+func (b Border) Colors() []render.Color {
+	return b.colors[:b.n]
+}
+
+func (b Border) stops() stopsKey {
+	return stopsKey{colors: b.colors, n: b.n}
+}
+
+type stopsKey struct {
+	colors [MaxBorderColors]render.Color
+	n      int
+}
+
+func (b Border) line(r image.Rectangle) (from, to [2]float32) {
+	s, c := math.Sincos(b.angle * math.Pi / 180)
+	cx, cy := float64(r.Min.X+r.Max.X)/2, float64(r.Min.Y+r.Max.Y)/2
+	h := math.Abs(float64(r.Dx())/2*c) + math.Abs(float64(r.Dy())/2*s)
+	return [2]float32{float32(cx - h*c), float32(cy - h*s)}, [2]float32{float32(cx + h*c), float32(cy + h*s)}
+}
+
 type Decor struct {
 	BorderWidth                  int
 	Rounding                     int
 	Opacity                      Opacity
 	Dim                          Dim
 	Shadow                       Shadow
-	ActiveBorder, InactiveBorder render.Color
+	ActiveBorder, InactiveBorder Border
 	Tab                          TabStyle
 }
 
@@ -71,8 +115,8 @@ func DefaultDecor() Decor {
 			Active:   render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
 			Inactive: render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
 		},
-		ActiveBorder:   mauve,
-		InactiveBorder: crust,
+		ActiveBorder:   SolidBorder(mauve),
+		InactiveBorder: SolidBorder(crust),
 		Tab: TabStyle{
 			Height: 15, Padding: 5, TextHeight: 8, TextPadding: 3,
 			Active:   TabColors{Background: mauve, Text: crust},
@@ -257,19 +301,29 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if c.decor.BorderWidth <= 0 || w.layer == wm.LayerFullscreen {
 		return
 	}
-	color := c.decor.InactiveBorder
+	border := c.decor.InactiveBorder
 	if w == c.active {
-		color = c.decor.ActiveBorder
+		border = c.decor.ActiveBorder
 	}
-	color = color.Premultiply()
 	outer := deviceRect(o, w.tile)
 	inner := deviceRect(o, w.rect)
+	ring := render.Mask{Keep: render.RoundRect{Rect: outer}, Cut: render.RoundRect{Rect: inner}}
 	if c.rounded(w) {
-		radius := deviceLength(o, c.decor.Rounding)
-		pass.fillMasked(outer, color, render.Mask{
-			Keep: render.RoundRect{Rect: outer, Radius: c.outerRadius(o, w)},
-			Cut:  render.RoundRect{Rect: inner, Radius: radius},
-		})
+		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.decor.Rounding)
+	}
+	if border.n > 1 {
+		stops, err := c.borderStops(border)
+		if err != nil {
+			c.report(err)
+			return
+		}
+		from, to := border.line(outer)
+		pass.fillGradient(outer, render.Gradient{Stops: stops, From: from, To: to, Alpha: 1}, ring)
+		return
+	}
+	color := border.colors[0].Premultiply()
+	if c.rounded(w) {
+		pass.fillMasked(outer, color, ring)
 		return
 	}
 	for _, strip := range []image.Rectangle{
@@ -282,6 +336,33 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 			pass.FillRect(strip, color)
 		}
 	}
+}
+
+func (c *Compositor) borderStops(b Border) (render.Texture, error) {
+	key := b.stops()
+	if t, ok := c.stops[key]; ok {
+		return t, nil
+	}
+	pix := make([]byte, 0, 4*b.n)
+	for _, col := range b.Colors() {
+		p := col.Premultiply()
+		pix = append(pix, p.B, p.G, p.R, p.A)
+	}
+	t, err := c.renderer.NewTexture(render.ARGB8888, image.Pt(b.n, 1), 4*b.n, pix)
+	if err != nil {
+		return nil, fmt.Errorf("compositor: border gradient stops %v: %w", b.Colors(), err)
+	}
+	c.stops[key] = t
+	return t, nil
+}
+
+func (c *Compositor) dropStops() error {
+	var errs []error
+	for key, t := range c.stops {
+		errs = append(errs, c.destroyTexture(t))
+		delete(c.stops, key)
+	}
+	return errors.Join(errs...)
 }
 
 func (c *Compositor) tabColors(id wm.WindowID, active bool) TabColors {

@@ -310,9 +310,31 @@ type Renderer interface {
 	Begin(target Target, damage Region) (Pass, error)
 }
 
+type Gradient struct {
+	Stops    Texture
+	From, To [2]float32
+	Alpha    float32
+}
+
+func CheckGradient(g Gradient, m Mask) error {
+	if err := m.Check(); err != nil {
+		return err
+	}
+	switch size := g.Stops.Size(); {
+	case size.Y != 1 || size.X < 2:
+		return fmt.Errorf("render: gradient stops are an N x 1 texture with N >= 2, not %v", size)
+	case g.From == g.To:
+		return fmt.Errorf("render: a gradient from %v to itself has no direction", g.From)
+	case !(g.Alpha >= 0 && g.Alpha <= 1):
+		return fmt.Errorf("render: gradient alpha %v outside [0, 1]", g.Alpha)
+	}
+	return nil
+}
+
 type Pass interface {
 	Clear(c Color)
 	FillRect(r image.Rectangle, c Color, m Mask)
+	FillGradient(r image.Rectangle, g Gradient, m Mask)
 	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
 	End() error
 }
