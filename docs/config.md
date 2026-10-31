@@ -229,6 +229,9 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
 | `fade_out` | `fade` | A closing window fading out | |
 | `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out |
+| `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | |
+| `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` |
+| `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` |
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its

@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -231,4 +232,51 @@ func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	fade := anim.Style{Kind: anim.FadeStyle}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
+		anim.Global:    {Enabled: &off},
+		anim.Layers:    {Enabled: &on, Shape: anim.Linear, Duration: &d},
+		anim.LayersOut: {Style: &fade},
+	})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = time.Hour + d
+			return nil
+		})
+	}
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	shell := testclient.Connect(t, h.Socket())
+	bar := shell.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	shell.DispatchUntil("the bar to map", bar.Mapped)
+	h.Eventually("the bar above the output at the start", showing(80, 5, bg))
+	at(500 * time.Millisecond)
+	h.Eventually("the bar halfway in from the top", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return showing(80, 5, barColor)(b, c) && showing(80, 15, bg)(b, c)
+	})
+	at(time.Second)
+	h.Eventually("the bar in place", showing(80, 15, barColor))
+
+	at(2 * time.Second)
+	if err := errors.Join(bar.Destroy(), shell.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	at(2500 * time.Millisecond)
+	h.Eventually("the closed bar half faded where it was", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return near(pixel(snapshot(b.Outputs()[0]), 80, 15), blend(barColor, bg, 0.5))
+	})
+	at(3 * time.Second)
+	h.Eventually("the closed bar gone", showing(80, 15, bg))
 }

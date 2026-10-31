@@ -6,17 +6,23 @@ import (
 	"iter"
 	"slices"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	swlr "github.com/stubbedev/lys-wm/internal/protocol/server/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
 type layer struct {
-	surface *shell.LayerSurface
-	output  *output.Output
-	box     image.Rectangle
-	placed  bool
+	surface  *shell.LayerSurface
+	output   *output.Output
+	box      image.Rectangle
+	placed   bool
+	appeared bool
+	motion   anim.Tween[image.Rectangle]
+	fade     anim.Tween[float64]
+	snapshot render.TextureTarget
 }
 
 func (e *layer) bounds() image.Rectangle {
@@ -68,6 +74,12 @@ func (c *Compositor) arrange(o *output.Output) (bool, error) {
 		if !e.placed {
 			continue
 		}
+		switch {
+		case !e.appeared && e.shown():
+			c.layerAppear(e, c.clock())
+		case moved:
+			e.motion.Jump(e.bounds())
+		}
 		errs = append(errs, e.surface.Configure(e.box.Size()))
 		if moved {
 			for _, p := range c.layerPopups(e) {
@@ -114,10 +126,12 @@ func (c *Compositor) LayerUnmapped(l *shell.LayerSurface) error {
 		c.layerFocus = nil
 	}
 	var o *output.Output
+	var err error
 	if e := c.layerOf(l); e != nil {
 		o = e.output
+		err = c.layerClosing(e, c.clock())
 	}
-	return c.layersChanged(o)
+	return errors.Join(err, c.layersChanged(o))
 }
 
 func (c *Compositor) LayerDestroyed(l *shell.LayerSurface) error {
@@ -128,8 +142,15 @@ func (c *Compositor) LayerDestroyed(l *shell.LayerSurface) error {
 	if e == nil {
 		return nil
 	}
+	var err error
+	if e.appeared {
+		err = c.layerClosing(e, c.clock())
+	}
+	if e.snapshot != nil {
+		err = errors.Join(err, e.snapshot.Destroy())
+	}
 	c.layers = slices.DeleteFunc(c.layers, func(x *layer) bool { return x == e })
-	return c.layersChanged(e.output)
+	return errors.Join(err, c.layersChanged(e.output))
 }
 
 func (c *Compositor) closeLayers(o *output.Output) error {
@@ -156,8 +177,18 @@ func (c *Compositor) layersAt(o *output.Output, levels []shell.Layer) iter.Seq[*
 }
 
 func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.Layer, shown []*surface.Surface) []*surface.Surface {
-	for e := range c.layersAt(o, levels) {
-		shown = c.drawTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown)
+	for _, lv := range levels {
+		for e := range c.layersAt(o, []shell.Layer{lv}) {
+			from := len(pass.ops)
+			shown = c.drawTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown)
+			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {
+				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at))
+			}
+			if a := e.fade.At(c.frameTime); e.appeared && a < 1 {
+				pass.fade(from, float32(max(a, 0)))
+			}
+		}
+		c.drawClosing(pass, o, level{layer: lv})
 	}
 	return shown
 }

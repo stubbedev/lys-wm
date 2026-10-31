@@ -11,15 +11,24 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
 type closing struct {
 	snapshot render.TextureTarget
 	output   *output.Output
+	level    level
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 }
+
+type level struct {
+	layer  shell.Layer
+	window bool
+}
+
+var windowLevel = level{window: true}
 
 func (cl *closing) done(now time.Duration) bool {
 	return cl.motion.Done(now) && cl.fade.Done(now)
@@ -72,29 +81,47 @@ func (c *Compositor) snapshot(w *window) (render.TextureTarget, error) {
 		return nil, nil
 	}
 	var f frame
-	tile := deviceRect(o, w.tile)
 	c.drawClippedTree(&f, o, w.top.Surface(), c.windowOrigin(w), nil, c.windowMask(o, w), c.opacity(w))
-	if !slices.ContainsFunc(f.ops, func(op drawOp) bool { return op.surface != nil }) || tile.Empty() {
+	if !slices.ContainsFunc(f.ops, func(op drawOp) bool { return op.surface != nil }) {
 		return nil, nil
 	}
 	c.drawBorder(&f, o, w)
-	tt, err := c.renderer.NewTextureTarget(tile.Size())
+	tt, err := c.renderOffscreen(&f, deviceRect(o, w.tile))
 	if err != nil {
 		return nil, fmt.Errorf("compositor: snapshot window %d: %w", w.id, err)
 	}
-	p, err := c.renderer.Begin(tt, render.Region{{Max: tile.Size()}})
+	return tt, nil
+}
+
+func (c *Compositor) renderOffscreen(f *frame, area image.Rectangle) (render.TextureTarget, error) {
+	if area.Empty() {
+		return nil, nil
+	}
+	tt, err := c.renderer.NewTextureTarget(area.Size())
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("compositor: snapshot window %d: %w", w.id, err), tt.Destroy())
+		return nil, err
+	}
+	p, err := c.renderer.Begin(tt, render.Region{{Max: area.Size()}})
+	if err != nil {
+		return nil, errors.Join(err, tt.Destroy())
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, tile.Min)
+	f.replayFrom(p, area.Min)
 	if err := p.End(); err != nil {
-		return nil, errors.Join(fmt.Errorf("compositor: snapshot window %d: %w", w.id, err), tt.Destroy())
+		return nil, errors.Join(err, tt.Destroy())
 	}
 	return tt, nil
 }
 
 func (c *Compositor) keepSnapshot(s *surface.Surface) error {
+	if e := c.layerWithSurface(s); e != nil && c.animations.Curve(anim.LayersOut) != anim.Instant {
+		tt, err := c.layerSnapshot(e)
+		if err != nil || tt == nil {
+			return err
+		}
+		e.snapshot = tt
+		return nil
+	}
 	w := c.windowWithSurface(s)
 	if w == nil || !c.closeAnimated() {
 		return nil
@@ -119,16 +146,16 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 		}
 	}
 	w.snapshot = nil
-	cl := &closing{snapshot: tt, output: w.output, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	cl := &closing{snapshot: tt, output: w.output, level: windowLevel, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	cl.motion.Set(c.styled(anim.WindowsOut, w.output, w.tile), now, c.animations.Curve(anim.WindowsOut))
 	cl.fade.Set(0, now, c.animations.Curve(anim.FadeOut))
 	c.closing = append(c.closing, cl)
 	return c.scheduleAll()
 }
 
-func (c *Compositor) drawClosing(pass *frame, o *output.Output) {
+func (c *Compositor) drawClosing(pass *frame, o *output.Output, at level) {
 	for _, cl := range c.closing {
-		if cl.output != o || cl.done(c.frameTime) {
+		if cl.output != o || cl.level != at || cl.done(c.frameTime) {
 			continue
 		}
 		size := cl.snapshot.Size()

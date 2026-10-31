@@ -154,7 +154,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 			}
 		}
 	}
-	c.drawClosing(pass, o)
+	c.drawClosing(pass, o, windowLevel)
 	for _, w := range c.stack {
 		if w.layer != wm.LayerFullscreen {
 			shown = c.drawWindowPopups(pass, o, w, shown)
