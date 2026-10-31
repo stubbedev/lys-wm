@@ -484,3 +484,62 @@ func TestAMorphingMoveStretchesTheWindowAheadOfItself(t *testing.T) {
 	at(4 * time.Hour)
 	h.Eventually("the blob gone once the move ends", showing(37, 100, [3]byte{0xff, 0xff, 0xff}))
 }
+
+func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
+	now := time.Hour
+	off, on := false, true
+	elastic := anim.Style{Kind: anim.Elastic}
+	d := time.Second
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.WindowsMove: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &elastic}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
+	}, small)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("jelly", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("togglefloating")
+	c.DispatchUntil("a floating window", func() bool { return w.Logical == image.Pt(80, 50) })
+	at(2 * time.Hour)
+	h.Eventually("the floating window in the middle", showing(45, 30, blueColor))
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, p := b.Pointer(), b.Outputs()[0]
+		return errors.Join(o.MoveTo(p, 45.0/160, 30.0/100), o.Frame(), o.Button(btnLeft, true), o.Frame(), o.MoveTo(p, 75.0/160, 30.0/100), o.Frame())
+	})
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	h.Eventually("the grabbed corner at the pointer while the far corner lags", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		return showing(72, 27, blueColor)(b, comp) && showing(146, 72, bg)(b, comp)
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		p := b.Pointer()
+		return errors.Join(p.Button(btnLeft, false), p.Frame())
+	})
+	h.key(keySuper, false)
+	at(3 * time.Hour)
+	h.Eventually("the window flat at its new place", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		return showing(146, 72, blueColor)(b, comp) && showing(71, 26, blueColor)(b, comp)
+	})
+	var before uint64
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		before = b.Outputs()[0].Frames()
+		return nil
+	})
+	time.Sleep(200 * time.Millisecond)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if n := b.Outputs()[0].Frames(); n != before {
+			t.Errorf("%d frames ran after the wobble settled", n-before)
+		}
+		return nil
+	})
+}

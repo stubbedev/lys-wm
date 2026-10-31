@@ -220,6 +220,7 @@ type Compositor struct {
 	frameTime       time.Duration
 	closing         []*closing
 	blurGen         uint64
+	jellyGen        uint64
 	blurLayers      []string
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID
@@ -473,6 +474,9 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 
 func (c *Compositor) Close() error {
 	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs()}
+	for _, w := range c.windows {
+		errs = append(errs, c.dropJelly(w))
+	}
 	for b, cached := range c.imported {
 		errs = append(errs, cached.tex.Destroy())
 		delete(c.imported, b)

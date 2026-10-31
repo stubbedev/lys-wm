@@ -27,6 +27,9 @@ func (c *Compositor) Frame(b backend.Output) error {
 		return err
 	}
 	c.finishSwitches(o, c.frameTime)
+	if err := c.settleWobbles(); err != nil {
+		return err
+	}
 	if c.animating(o, c.frameTime) {
 		if err := c.schedule(o); err != nil {
 			return err
@@ -211,6 +214,9 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	}
 	if a := w.fade.At(c.frameTime) * v.alpha; a < 1 {
 		pass.fade(from, float32(max(a, 0)))
+	}
+	if err := c.drawWobble(pass, o, w, from); err != nil {
+		c.report(fmt.Errorf("compositor: wobble window %d: %w", w.id, err))
 	}
 	return shown
 }

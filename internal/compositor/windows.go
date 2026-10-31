@@ -40,6 +40,8 @@ type window struct {
 	snapshot    render.TextureTarget
 	decided     decided
 	blur        *blurCache
+	wobble      *anim.Wobble
+	jelly       render.TextureTarget
 }
 
 type decided struct {
@@ -229,6 +231,9 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 		if p.Visible {
 			c.appear(w, p.Rect, now)
 		}
+	case c.interaction != nil && c.interaction.w == w && c.animations.Style(anim.WindowsMove).Kind == anim.Elastic:
+		c.wobbleWith(w, p.Rect, now)
+		w.motion.Jump(p.Rect)
 	case c.interaction != nil && c.interaction.w == w && c.springMoves():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
 	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w):
@@ -245,7 +250,7 @@ func (c *Compositor) springMoves() bool {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
 	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
@@ -430,6 +435,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	if w.blur != nil {
 		closeErr = errors.Join(closeErr, w.blur.destroy())
 	}
+	closeErr = errors.Join(closeErr, c.dropJelly(w))
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	if c.active == w {
 		c.active = nil

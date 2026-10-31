@@ -43,9 +43,10 @@ const (
 	Once
 	Loop
 	Morph
+	Elastic
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph", Elastic: "elastic"}
 
 type Style struct {
 	Kind    StyleKind
@@ -96,7 +97,7 @@ var events = [eventCount]struct {
 }{
 	Global:      {name: "global", parent: Global},
 	Windows:     {name: "windows", parent: Global},
-	WindowsMove: {name: "windows_move", parent: Windows, styles: []StyleKind{Morph}},
+	WindowsMove: {name: "windows_move", parent: Windows, styles: []StyleKind{Morph, Elastic}},
 	WindowsIn:   {name: "windows_in", parent: Windows, styles: []StyleKind{Popin, Slide}, style: Style{Kind: Popin, Percent: defaultPopin}},
 	WindowsOut:  {name: "windows_out", parent: Windows, styles: []StyleKind{Popin, Slide}, style: Style{Kind: Popin, Percent: defaultPopin}},
 	Fade:        {name: "fade", parent: Global},
@@ -155,6 +156,7 @@ var (
 	EaseOut   = Bezier{0, 0, 0.58, 1}
 	EaseInOut = Bezier{0.42, 0, 0.58, 1}
 	Smooth    = mustSpring(170, 26, 1)
+	Wobbly    = mustSpring(200, 10, 1)
 )
 
 func mustSpring(stiffness, damping, mass float64) Spring {

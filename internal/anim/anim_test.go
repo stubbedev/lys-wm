@@ -266,3 +266,41 @@ func TestBezierMotionRetargetsFromWhereItIs(t *testing.T) {
 		t.Fatal("the retargeted motion does not end at its target")
 	}
 }
+
+func TestAWobbleLagsAwayFromTheGrabAndSettles(t *testing.T) {
+	s, err := NewSpring(200, 14, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := NewWobble(s, 8, 8, 0)
+	w.Shift(100, 0, 0, 0)
+	if dx, _ := w.Offset(0, 0); math.Abs(dx) > 1e-9 {
+		t.Fatalf("the grabbed corner lags by %v", dx)
+	}
+	far, _ := w.Offset(8, 8)
+	mid, _ := w.Offset(4, 4)
+	if !(far < mid && mid < 0) {
+		t.Fatalf("lag at the middle %v and the far corner %v, want both behind, the far one more", mid, far)
+	}
+	if w.Resting() {
+		t.Fatal("a shifted wobble claims to rest")
+	}
+	w.Advance(50 * time.Millisecond)
+	moved, _ := w.Offset(8, 8)
+	if !(moved > far) {
+		t.Fatalf("the far corner did not spring back: %v then %v", far, moved)
+	}
+	end := 50 * time.Millisecond
+	for !w.Resting() {
+		end += 10 * time.Millisecond
+		w.Advance(end)
+		if end > 10*time.Second {
+			t.Fatal("the wobble never settles")
+		}
+	}
+	w.Shift(0, 40, 1, 1)
+	w.Advance(time.Hour)
+	if !w.Resting() {
+		t.Fatal("a wobble an hour on has not settled, or ran unbounded")
+	}
+}
