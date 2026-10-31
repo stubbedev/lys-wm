@@ -29,6 +29,15 @@ input:
       natural_scroll: true
 palette:
   accent: "#ff8800"
+animations:
+  enabled: true
+  curves:
+    snappy: {bezier: [0.05, 0.9, 0.1, 1.05]}
+    wobbly: {spring: {stiffness: 200, damping: 12}}
+  events:
+    global: {curve: snappy, duration: 300}
+    windows_move: {curve: wobbly}
+
 gaps:
   inner: 6
   outer: [12, 8, 12, 8]

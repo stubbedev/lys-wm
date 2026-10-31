@@ -7,7 +7,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -75,6 +77,18 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.Tab.Padding != compositor.DefaultDecor().Tab.Padding {
 		t.Error("an unset tab field lost its default")
 	}
+	if c := cfg.Animations.Curve(anim.Global); c.Duration() != 300*time.Millisecond || c.At(150*time.Millisecond) <= 0.5 {
+		t.Errorf("global animates %v over %v", c, c.Duration())
+	}
+	if wobbly, err := anim.NewSpring(200, 12, 1); err != nil || cfg.Animations.Curve(anim.WindowsMove) != anim.Curve(wobbly) {
+		t.Errorf("windows_move animates with %v, want the wobbly spring (%v)", cfg.Animations.Curve(anim.WindowsMove), err)
+	}
+	if cfg.Animations.Curve(anim.Windows).Duration() != 300*time.Millisecond {
+		t.Error("windows does not inherit from global")
+	}
+	if c, err := Parse("t.yaml", []byte("animations:\n  events:\n    global: {curve: linear, duration: 100}\n")); err != nil || c.Animations.Curve(anim.Global) != anim.Instant {
+		t.Errorf("animations are on without enabled: true: %v, %v", c.Animations, err)
+	}
 	if cfg.WM.Gaps != (wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 12, Right: 8, Bottom: 12, Left: 8}}) {
 		t.Errorf("gaps %+v", cfg.WM.Gaps)
 	}
@@ -129,6 +143,9 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 	if cfg.Input.Devices != nil || cfg.Input.Pointer != (session.DeviceConfig{}) || cfg.Input.Touchpad != (session.DeviceConfig{}) {
 		t.Fatalf("input %+v", cfg.Input)
 	}
+	if cfg.Animations != (anim.Table{}) {
+		t.Fatalf("animations %+v without config", cfg.Animations)
+	}
 	if cfg.Decor != compositor.DefaultDecor() || cfg.WM != compositor.DefaultSettings() || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
 		t.Fatalf("defaults %+v", cfg)
 	}
@@ -136,42 +153,52 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 
 func TestErrorsNameFileLineAndKey(t *testing.T) {
 	cases := map[string]string{
-		"borders:\n  colour: red\n":                                 "t.yaml:2: borders.colour: unknown key (known: active, inactive, width)",
-		"binds:\n  - chord: Q\n    acton: kill\n":                   "t.yaml:3: binds[0].acton: unknown key (known: action, chord, flags)",
-		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":    "t.yaml:3: submaps.r[0].x: unknown key",
-		"tabs:\n  urgent:\n    fg: red\n":                           "t.yaml:3: tabs.urgent.fg: unknown key (known: background, text)",
-		"rules:\n  - {app_id: a, floating: true}\n":                 "t.yaml:2: rules[0].floating: unknown key",
-		"env:\n  LYS_WM_SOCKET: /x\n":                               "t.yaml:2: env.LYS_WM_SOCKET: is set by lys-wm",
-		"env:\n  A=B: c\n":                                          "t.yaml:2: env.A=B: is not a valid environment variable",
-		"tabs:\n  height: tall\n":                                   "t.yaml: yaml: unmarshal errors:\n  line 2: cannot unmarshal",
-		"borders:\n  active: chartreuse\n":                          `t.yaml:2: borders.active: "chartreuse" is neither`,
-		"binds:\n  - chord: SUPER + Q\n    action: teleport\n":      `t.yaml:3: binds[0].action: bad action: unknown action "teleport"`,
-		"binds:\n  - chord: Q\n    action: kill\n    flags: [x]\n":  `t.yaml:4: binds[0].flags: unknown flag "x"`,
-		"binds:\n  - chord: SUPER + R\n    action: submap resise\n": `t.yaml:3: binds[0].action: submap "resise" is not defined under submaps`,
-		"rules:\n  - title: '('\n":                                  "t.yaml:2: rules[0].title: error parsing regexp",
-		"rules:\n  - app_id: a\n    float: true\n    tile: true\n":  "t.yaml:2: rules[0]: cannot both float and tile",
-		"rules:\n  - float: true\n":                                 "t.yaml:2: rules[0]: matches every window",
-		"outputs:\n  - match: DP-1\n    mode: big\n":                `t.yaml:3: outputs[0].mode: "big" is not`,
-		"outputs:\n  - match: '*'\n  - match: '*'\n":                `t.yaml:3: outputs[1].match: a second "*" rule`,
-		"outputs:\n  - match: DP-1\n    scale: 20\n":                "t.yaml:3: outputs[0].scale: output: scale 20 is outside",
-		"outputs:\n  - match: DP-1\n    scale: .nan\n":              "t.yaml:3: outputs[0].scale: output: scale NaN is outside",
-		"outputs:\n  - match: DP-1\n    bitdepth: 12\n":             "t.yaml:3: outputs[0].bitdepth: 12 is not 8 or 10",
-		"outputs:\n  - match: DP-1\n    mode: 1x1@nan\n":            `t.yaml:3: outputs[0].mode: "1x1@nan" is not`,
-		"outputs:\n  - match: DP-1\n    mode: 1x1@inf\n":            `t.yaml:3: outputs[0].mode: "1x1@inf" is not`,
-		"outputs:\n  - match: DP-1\n    mode: 1x1@1e12\n":           `t.yaml:3: outputs[0].mode: "1x1@1e12" is not`,
-		"tabs:\n  height: 0\n":                                      "t.yaml:2: tabs.height: 0 is not a positive number",
-		"borders:\n  width: -1\n":                                   "t.yaml:2: borders.width: -1 is not zero or more",
-		"gaps:\n  inner: -2\n":                                      "t.yaml:2: gaps.inner: -2 is not zero or more",
-		"gaps:\n  outer: [1, 2]\n":                                  "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",
-		"gaps:\n  outer: [1, 2, -3, 4]\n":                           "t.yaml:2: gaps.outer: [1 2 -3 4] is not zero or more",
-		"palette:\n  accent: orange\n":                              `t.yaml:2: palette.accent: "orange" is not #rrggbb[aa]`,
-		"input:\n  touchpad:\n    tapping: true\n":                  "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
-		"input:\n  devices:\n    mouse:\n      speed: 1\n":          `t.yaml:4: input.devices.mouse.speed: unknown key`,
-		"input:\n  touchpad:\n    click_method: tap\n":              `t.yaml:3: input.touchpad.click_method: "tap" is not one of button_areas, clickfinger, none`,
-		"input:\n  pointer:\n    accel_speed: 2\n":                  "t.yaml:3: input.pointer.accel_speed: 2 is not from -1 to 1",
-		"input:\n  pointer:\n    scroll_factor: 0\n":                "t.yaml:3: input.pointer.scroll_factor: 0 is not above 0 to 100",
-		"input:\n  devices:\n    mouse:\n      accel_profile: x\n":  `t.yaml:4: input.devices."mouse".accel_profile: "x" is not one of adaptive, flat`,
-		"gpu: renderD128\n":                                         `t.yaml:1: gpu: "renderD128" is not a DRM card such as card1 or /dev/dri/card1`,
+		"borders:\n  colour: red\n":                                             "t.yaml:2: borders.colour: unknown key (known: active, inactive, width)",
+		"binds:\n  - chord: Q\n    acton: kill\n":                               "t.yaml:3: binds[0].acton: unknown key (known: action, chord, flags)",
+		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":                "t.yaml:3: submaps.r[0].x: unknown key",
+		"tabs:\n  urgent:\n    fg: red\n":                                       "t.yaml:3: tabs.urgent.fg: unknown key (known: background, text)",
+		"rules:\n  - {app_id: a, floating: true}\n":                             "t.yaml:2: rules[0].floating: unknown key",
+		"env:\n  LYS_WM_SOCKET: /x\n":                                           "t.yaml:2: env.LYS_WM_SOCKET: is set by lys-wm",
+		"env:\n  A=B: c\n":                                                      "t.yaml:2: env.A=B: is not a valid environment variable",
+		"tabs:\n  height: tall\n":                                               "t.yaml: yaml: unmarshal errors:\n  line 2: cannot unmarshal",
+		"borders:\n  active: chartreuse\n":                                      `t.yaml:2: borders.active: "chartreuse" is neither`,
+		"binds:\n  - chord: SUPER + Q\n    action: teleport\n":                  `t.yaml:3: binds[0].action: bad action: unknown action "teleport"`,
+		"binds:\n  - chord: Q\n    action: kill\n    flags: [x]\n":              `t.yaml:4: binds[0].flags: unknown flag "x"`,
+		"binds:\n  - chord: SUPER + R\n    action: submap resise\n":             `t.yaml:3: binds[0].action: submap "resise" is not defined under submaps`,
+		"rules:\n  - title: '('\n":                                              "t.yaml:2: rules[0].title: error parsing regexp",
+		"rules:\n  - app_id: a\n    float: true\n    tile: true\n":              "t.yaml:2: rules[0]: cannot both float and tile",
+		"rules:\n  - float: true\n":                                             "t.yaml:2: rules[0]: matches every window",
+		"outputs:\n  - match: DP-1\n    mode: big\n":                            `t.yaml:3: outputs[0].mode: "big" is not`,
+		"outputs:\n  - match: '*'\n  - match: '*'\n":                            `t.yaml:3: outputs[1].match: a second "*" rule`,
+		"outputs:\n  - match: DP-1\n    scale: 20\n":                            "t.yaml:3: outputs[0].scale: output: scale 20 is outside",
+		"outputs:\n  - match: DP-1\n    scale: .nan\n":                          "t.yaml:3: outputs[0].scale: output: scale NaN is outside",
+		"outputs:\n  - match: DP-1\n    bitdepth: 12\n":                         "t.yaml:3: outputs[0].bitdepth: 12 is not 8 or 10",
+		"outputs:\n  - match: DP-1\n    mode: 1x1@nan\n":                        `t.yaml:3: outputs[0].mode: "1x1@nan" is not`,
+		"outputs:\n  - match: DP-1\n    mode: 1x1@inf\n":                        `t.yaml:3: outputs[0].mode: "1x1@inf" is not`,
+		"outputs:\n  - match: DP-1\n    mode: 1x1@1e12\n":                       `t.yaml:3: outputs[0].mode: "1x1@1e12" is not`,
+		"tabs:\n  height: 0\n":                                                  "t.yaml:2: tabs.height: 0 is not a positive number",
+		"borders:\n  width: -1\n":                                               "t.yaml:2: borders.width: -1 is not zero or more",
+		"animations:\n  curves:\n    a: {bezier: [2, 0, 1, 1]}\n":               "t.yaml:3: animations.curves.a.bezier: anim: bézier x coordinates",
+		"animations:\n  curves:\n    a: {bezier: [1, 1]}\n":                     "t.yaml:3: animations.curves.a.bezier: [1 1] is not [x1, y1, x2, y2]",
+		"animations:\n  curves:\n    a: {}\n":                                   "t.yaml:3: animations.curves.a: give exactly one of bezier and spring",
+		"animations:\n  curves:\n    a: {spring: {stiffness: 1}}\n":             "t.yaml:3: animations.curves.a.spring: anim: spring stiffness 1, damping 0",
+		"animations:\n  curves:\n    linear: {bezier: [0, 0, 1, 1]}\n":          "t.yaml:3: animations.curves.linear: is a built-in curve",
+		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n":   "t.yaml:3: animations.curves.a.tension: unknown key",
+		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move)",
+		"animations:\n  events:\n    windows: {curve: bouncy}\n":                `t.yaml:3: animations.events.windows.curve: "bouncy" is not a curve (known: ease,`,
+		"animations:\n  events:\n    windows: {duration: 0}\n":                  "t.yaml:3: animations.events.windows.duration: 0 is not a positive number of milliseconds",
+		"animations:\n  events:\n    windows: {curve: spring, duration: 100}\n": "t.yaml:3: animations.events.windows: event windows: anim: a spring settles in its own time",
+		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
+		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",
+		"gaps:\n  outer: [1, 2, -3, 4]\n":                                       "t.yaml:2: gaps.outer: [1 2 -3 4] is not zero or more",
+		"palette:\n  accent: orange\n":                                          `t.yaml:2: palette.accent: "orange" is not #rrggbb[aa]`,
+		"input:\n  touchpad:\n    tapping: true\n":                              "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
+		"input:\n  devices:\n    mouse:\n      speed: 1\n":                      `t.yaml:4: input.devices.mouse.speed: unknown key`,
+		"input:\n  touchpad:\n    click_method: tap\n":                          `t.yaml:3: input.touchpad.click_method: "tap" is not one of button_areas, clickfinger, none`,
+		"input:\n  pointer:\n    accel_speed: 2\n":                              "t.yaml:3: input.pointer.accel_speed: 2 is not from -1 to 1",
+		"input:\n  pointer:\n    scroll_factor: 0\n":                            "t.yaml:3: input.pointer.scroll_factor: 0 is not above 0 to 100",
+		"input:\n  devices:\n    mouse:\n      accel_profile: x\n":              `t.yaml:4: input.devices."mouse".accel_profile: "x" is not one of adaptive, flat`,
+		"gpu: renderD128\n":                                                     `t.yaml:1: gpu: "renderD128" is not a DRM card such as card1 or /dev/dri/card1`,
 	}
 	for text, want := range cases {
 		_, err := Parse("t.yaml", []byte(text))

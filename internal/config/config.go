@@ -18,11 +18,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-ui/icontheme"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -112,6 +114,7 @@ type rawConfig struct {
 	Palette    map[string]At[string] `yaml:"palette"`
 	Borders    rawBorders            `yaml:"borders"`
 	Gaps       rawGaps               `yaml:"gaps"`
+	Animations rawAnimations         `yaml:"animations"`
 	Tabs       rawTabs               `yaml:"tabs"`
 	Autotile   rawAutotile           `yaml:"autotile"`
 	Binds      []rawBind             `yaml:"binds"`
@@ -173,6 +176,29 @@ type rawBorders struct {
 	Width    *At[int]    `yaml:"width"`
 	Active   *At[string] `yaml:"active"`
 	Inactive *At[string] `yaml:"inactive"`
+}
+
+type rawAnimations struct {
+	Enabled *bool                   `yaml:"enabled"`
+	Curves  map[string]At[rawCurve] `yaml:"curves"`
+	Events  map[string]At[rawEvent] `yaml:"events"`
+}
+
+type rawCurve struct {
+	Bezier *At[[]float64] `yaml:"bezier"`
+	Spring *rawSpring     `yaml:"spring"`
+}
+
+type rawSpring struct {
+	Stiffness float64  `yaml:"stiffness"`
+	Damping   float64  `yaml:"damping"`
+	Mass      *float64 `yaml:"mass"`
+}
+
+type rawEvent struct {
+	Enabled  *bool       `yaml:"enabled"`
+	Curve    *At[string] `yaml:"curve"`
+	Duration *At[int]    `yaml:"duration"`
 }
 
 type rawGaps struct {
@@ -276,6 +302,7 @@ type Config struct {
 	GPU         string
 	Tearing     bool
 	LidSuspend  bool
+	Animations  anim.Table
 }
 
 var mocha = map[string]render.Color{
@@ -377,6 +404,92 @@ func (p *parser) repeat(a *At[int], key string, fallback int32) int32 {
 		return fallback
 	}
 	return int32(a.V)
+}
+
+func (p *parser) curve(name string, at At[rawCurve]) anim.Shape {
+	key := "animations.curves." + name
+	r := at.V
+	switch {
+	case (r.Bezier == nil) == (r.Spring == nil):
+		p.fail(at.Line, key, "give exactly one of bezier and spring")
+	case r.Bezier != nil:
+		v := r.Bezier.V
+		if len(v) != 4 {
+			p.fail(r.Bezier.Line, key+".bezier", "%v is not [x1, y1, x2, y2]", v)
+			return nil
+		}
+		b, err := anim.NewBezier(v[0], v[1], v[2], v[3])
+		if err != nil {
+			p.fail(r.Bezier.Line, key+".bezier", "%v", err)
+			return nil
+		}
+		return b
+	default:
+		mass := 1.0
+		if r.Spring.Mass != nil {
+			mass = *r.Spring.Mass
+		}
+		s, err := anim.NewSpring(r.Spring.Stiffness, r.Spring.Damping, mass)
+		if err != nil {
+			p.fail(at.Line, key+".spring", "%v", err)
+			return nil
+		}
+		return s
+	}
+	return nil
+}
+
+func (p *parser) animations(r rawAnimations) anim.Table {
+	shapes := anim.Builtins()
+	for _, name := range slices.Sorted(maps.Keys(r.Curves)) {
+		at := r.Curves[name]
+		if _, ok := shapes[name]; ok {
+			p.fail(at.Line, "animations.curves."+name, "is a built-in curve")
+			continue
+		}
+		if s := p.curve(name, at); s != nil {
+			shapes[name] = s
+		}
+	}
+	settings := map[anim.Event]anim.Setting{}
+	lines := map[anim.Event]int{}
+	for _, name := range slices.Sorted(maps.Keys(r.Events)) {
+		at := r.Events[name]
+		key := "animations.events." + name
+		e, ok := anim.EventNamed(name)
+		if !ok {
+			known := make([]string, 0, len(anim.Events()))
+			for _, e := range anim.Events() {
+				known = append(known, e.String())
+			}
+			p.fail(at.Line, key, "unknown event (known: %s)", strings.Join(known, ", "))
+			continue
+		}
+		lines[e] = at.Line
+		s := anim.Setting{Enabled: at.V.Enabled}
+		if c := at.V.Curve; c != nil {
+			if s.Shape, ok = shapes[c.V]; !ok {
+				p.fail(c.Line, key+".curve", "%q is not a curve (known: %s)", c.V, strings.Join(slices.Sorted(maps.Keys(shapes)), ", "))
+				continue
+			}
+		}
+		if d := at.V.Duration; d != nil {
+			if d.V <= 0 {
+				p.fail(d.Line, key+".duration", "%d is not a positive number of milliseconds", d.V)
+				continue
+			}
+			ms := time.Duration(d.V) * time.Millisecond
+			s.Duration = &ms
+		}
+		settings[e] = s
+	}
+	table, errs := anim.Resolve(r.Enabled != nil && *r.Enabled, settings)
+	for _, e := range anim.Events() {
+		if err := errs[e]; err != nil {
+			p.fail(lines[e], "animations.events."+e.String(), "%v", err)
+		}
+	}
+	return table
 }
 
 func (p *parser) gaps(r rawGaps) wm.Gaps {
@@ -684,6 +797,7 @@ func Parse(file string, data []byte) (Config, error) {
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
 	cfg.WM.Gaps = p.gaps(raw.Gaps)
+	cfg.Animations = p.animations(raw.Animations)
 	fallback := false
 	for i, o := range raw.Outputs {
 		rule := p.output(i, o.V)
@@ -760,6 +874,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
+	cfg.Animations = c.Animations
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

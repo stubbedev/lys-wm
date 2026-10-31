@@ -23,6 +23,11 @@ func (c *Compositor) Frame(b backend.Output) error {
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
+	if c.animating(o, c.frameTime) {
+		if err := c.schedule(o); err != nil {
+			return err
+		}
+	}
 	if n := c.dropped[o]; n > 0 {
 		delete(c.dropped, o)
 		c.report(fmt.Errorf("compositor: %s draws again after %d dropped frames", b.Name(), n))
@@ -63,6 +68,7 @@ func (c *Compositor) sceneOf(o *output.Output) *scene {
 }
 
 func (c *Compositor) render(o *output.Output) error {
+	c.frameTime = c.clock()
 	sc := c.sceneOf(o)
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	pass := sc.begin()
@@ -146,14 +152,14 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	}
 	for _, w := range c.stack {
 		if w.layer != wm.LayerFullscreen {
-			shown = c.drawPopups(pass, o, c.popups(w), shown)
+			shown = c.drawWindowPopups(pass, o, w, shown)
 		}
 	}
 	shown = c.drawLayers(pass, o, aboveWindows, shown)
 	for _, w := range c.stack {
 		if w.layer == wm.LayerFullscreen {
 			shown = c.drawWindow(pass, o, w, shown)
-			shown = c.drawPopups(pass, o, c.popups(w), shown)
+			shown = c.drawWindowPopups(pass, o, w, shown)
 		}
 	}
 	if err := c.evictLabels(o); err != nil {
@@ -173,12 +179,31 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 }
 
 func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
-	if !w.visible || !w.tile.Overlaps(o.Logical()) {
+	at := w.motion.At(c.frameTime)
+	if !w.visible || !at.Overlaps(o.Logical()) {
 		return shown
 	}
+	from := len(pass.ops)
 	shown = c.drawTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown)
 	c.drawBorder(pass, o, w)
+	if at != w.tile {
+		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))
+	}
 	return shown
+}
+
+func (c *Compositor) drawWindowPopups(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
+	from := len(pass.ops)
+	shown = c.drawPopups(pass, o, c.popups(w), shown)
+	if at := w.motion.At(c.frameTime); at.Min != w.tile.Min {
+		goal := deviceRect(o, w.tile)
+		pass.remap(from, goal, goal.Add(deviceRect(o, at).Min.Sub(goal.Min)))
+	}
+	return shown
+}
+
+func deviceRect(o *output.Output, r image.Rectangle) image.Rectangle {
+	return o.Scale().Rect(r.Sub(o.Position()))
 }
 
 func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPopup, shown []*surface.Surface) []*surface.Surface {

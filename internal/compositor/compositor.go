@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/colorrep"
@@ -66,6 +67,8 @@ type Config struct {
 	Tearing        bool
 	Hooks          Hooks
 	InheritTimeout time.Duration
+	Animations     anim.Table
+	Clock          func() time.Duration
 }
 
 type Hooks struct {
@@ -104,6 +107,7 @@ func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Font:           font,
 		Icons:          icontheme.New("", nil),
 		InheritTimeout: DefaultInheritTimeout,
+		Clock:          backend.Now,
 	}
 }
 
@@ -208,6 +212,9 @@ type Compositor struct {
 	cursorGen       uint64
 	cursorOps       frame
 	cursorShown     []*surface.Surface
+	animations      anim.Table
+	clock           func() time.Duration
+	frameTime       time.Duration
 }
 
 type entered struct {
@@ -224,6 +231,9 @@ func validate(cfg Config) (binds.Map, error) {
 	}
 	if cfg.Icons == nil {
 		return binds.Map{}, errors.New("compositor: Config.Icons is nil")
+	}
+	if cfg.Clock == nil {
+		return binds.Map{}, errors.New("compositor: Config.Clock is nil")
 	}
 	if cfg.InheritTimeout <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
@@ -246,6 +256,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
+	c.animations, c.clock = cfg.Animations, cfg.Clock
 }
 
 func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (*Compositor, error) {

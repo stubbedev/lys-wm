@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"image"
+	"math"
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -40,6 +41,22 @@ func (f *frame) DrawTexture(t render.Texture, src render.FRect, dst image.Rectan
 
 func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool) {
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1})
+}
+
+func (f *frame) remap(from int, src, dst image.Rectangle) {
+	if src.Empty() {
+		return
+	}
+	axis := func(v, s0, sn, d0, dn int) int {
+		return d0 + int(math.Round(float64(v-s0)*float64(dn)/float64(sn)))
+	}
+	at := func(p image.Point) image.Point {
+		return image.Pt(axis(p.X, src.Min.X, src.Dx(), dst.Min.X, dst.Dx()), axis(p.Y, src.Min.Y, src.Dy(), dst.Min.Y, dst.Dy()))
+	}
+	for i := range f.ops[from:] {
+		op := &f.ops[from+i]
+		op.dst = image.Rectangle{Min: at(op.dst.Min), Max: at(op.dst.Max)}
+	}
 }
 
 func (f *frame) cull(covered *region.Set) {

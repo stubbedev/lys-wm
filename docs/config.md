@@ -129,6 +129,46 @@ gaps:
 Floating and fullscreen windows ignore gaps; a tab group's strip and its windows
 sit inside the group's tile.
 
+## animations
+
+```yaml
+animations:
+  enabled: true
+  curves:
+    snappy: {bezier: [0.05, 0.9, 0.1, 1.05]}
+    wobbly: {spring: {stiffness: 200, damping: 12, mass: 1}}
+  events:
+    global: {curve: snappy, duration: 300}
+    windows_move: {curve: wobbly}
+```
+
+Off unless `enabled: true`.
+
+`curves` names curves for the events to use. A curve is either a cubic
+`bezier: [x1, y1, x2, y2]`, as in CSS `cubic-bezier()`, whose x coordinates lie
+in 0 to 1 and whose y coordinates may leave 0 to 1 to overshoot, or a damped
+`spring: {stiffness, damping, mass}` (all above 0; `mass` defaults to 1), which
+settles in its own time: lower damping bounces, `damping` near
+`2 * sqrt(stiffness * mass)` settles fastest without overshooting. Built in, and
+not redefinable: `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out` (the CSS
+curves) and `spring` (stiffness 170, damping 26).
+
+`events` configures each event with `enabled`, `curve` and `duration`
+(milliseconds, for bézier curves; a spring takes none). Each key an event leaves
+out comes from its parent:
+
+| Event | Parent | Animates |
+| --- | --- | --- |
+| `global` | | Defaults: `ease_out` over 250 ms |
+| `windows` | `global` | Every window animation |
+| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once |
+
+Animations run on each output's frame clock: every frame shows the animation
+at the time it starts drawing, and an output stops drawing once its
+animations end. A window being dragged or resized with the mouse follows the
+pointer without animating, and a window that appears, or comes back with its
+workspace, is drawn where it belongs at once.
+
 ## tabs
 
 | Key | Default |

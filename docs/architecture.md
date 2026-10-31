@@ -149,6 +149,20 @@ if it was dropped, so repeating it toggles between the two. Outputs are
 known by name: unplugging one moves its workspaces to the focused output,
 and plugging it back returns them and shows the one it was showing.
 
+### Animations
+
+`internal/anim` (#223) is pure like `wm`: bézier easings, springs solved in
+closed form, tweens that sample a curve at a monotonic time and retarget from
+the value they show, and the event table the config resolves through parent
+events. The compositor keeps a tween per window over its tile, sets it in
+`reconcile`, and samples it once per frame at the frame's start time
+(`Config.Clock`, so tests drive time themselves). A window's draw ops are
+recorded at its goal geometry and then mapped onto the tile the animation
+shows, so its surfaces, border and popups move as one and the op diff damages
+exactly what moved. After drawing, an output schedules its next frame for as
+long as an animation overlaps it, whether or not the frame changed anything,
+so an animation slower than a pixel per frame still reaches its end.
+
 ## Dispatch
 
 One typed `Action` set and one dispatcher, in `wm` (#66). Keybinds,
@@ -414,6 +428,7 @@ Everything lives under `internal/` except the commands.
 | `xkb` | Keymap compilation, sealed keymap fds and modifier state through libxkbcommon (#13) |
 | `shell` | xdg-shell and layer-shell glue between clients and `wm`: toplevels, popups placed by their positioner, explicit popup grabs, server-side decorations (xdg-decoration, and KDE's server-decoration for GTK3 clients, both always server-side; #180), activation tokens, and xdg-foreign handles that make another client's toplevel, such as a portal dialog, a child of the exported window, and xdg-dialog's modal hint; focus that would land on a window with a mapped modal dialog goes to the dialog, for X windows with `_NET_WM_STATE_MODAL` too (#15, #16, #17, #20, #48, #110, #111); `xdg_toplevel_icon_v1` icons, copied out of their shm buffers when assigned and latched with the toplevel's commit, for IPC and the tab bar (#154) |
 | `wm` | The pure core and the dispatcher (#21, #66) |
+| `anim` | Easing curves, springs, tweens and the per-event animation table (#223) |
 | `binds` | Typed chords (modifiers with a keycode from the first layout, a button or a scroll direction), submaps and bind flags, matched to `wm` actions (#29) |
 | `xwm` | The X11 window manager for XWayland (#45) |
 | `config` | The typed config, its validation and reload (#30) |
@@ -424,7 +439,7 @@ Everything lives under `internal/` except the commands.
 | `testenv` | Whether a test skips or fails when a dev-shell tool or library is missing |
 | `golden` | Golden-image comparison for software-rendered frames |
 
-Dependencies point inward: `wm` imports nothing from lys-wm; `wire` and
+Dependencies point inward: `wm` and `anim` import nothing from lys-wm; `wire` and
 `loop` import nothing from lys-wm; `protocol/...` imports only `wire` and
 other protocol packages of the same side, since extensions name core
 interfaces;

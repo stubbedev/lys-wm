@@ -161,8 +161,8 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if w == c.active {
 		color = c.decor.ActiveBorder
 	}
-	outer := o.Scale().Rect(w.tile.Sub(o.Position()))
-	inner := o.Scale().Rect(w.rect.Sub(o.Position()))
+	outer := deviceRect(o, w.tile)
+	inner := deviceRect(o, w.rect)
 	for _, strip := range []image.Rectangle{
 		{Min: outer.Min, Max: image.Pt(outer.Max.X, inner.Min.Y)},
 		{Min: image.Pt(outer.Min.X, inner.Max.Y), Max: outer.Max},

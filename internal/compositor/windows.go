@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"image"
 	"slices"
+	"time"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/shell"
@@ -25,6 +27,7 @@ type window struct {
 	hung    bool
 	scale   output.Scale
 	floated bool
+	motion  anim.Tween[image.Rectangle]
 }
 
 func (c *Compositor) windowOrigin(w *window) origin {
@@ -153,6 +156,7 @@ func (c *Compositor) reconcile() error {
 		}
 	}
 	var errs []error
+	now := c.clock()
 	a := c.wm.Arrange(c.spacing())
 	c.tabBars = a.TabBars
 	c.stack = c.stack[:0]
@@ -164,6 +168,7 @@ func (c *Compositor) reconcile() error {
 		c.stack = append(c.stack, w)
 		rect := c.content(p.Rect, p.Layer)
 		moved := rect != w.rect
+		c.move(w, p, now)
 		w.tile, w.rect, w.visible, w.layer = p.Rect, rect, p.Visible, p.Layer
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
@@ -185,6 +190,21 @@ func (c *Compositor) reconcile() error {
 		}
 	}
 	return errors.Join(append(errs, c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())...)
+}
+
+func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
+	switch {
+	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w):
+		w.motion.Jump(p.Rect)
+	case p.Rect != w.motion.Target():
+		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
+	}
+}
+
+func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
+	return slices.ContainsFunc(c.windows, func(w *window) bool {
+		return w.visible && !w.motion.Done(now) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+	})
 }
 
 func (c *Compositor) content(tile image.Rectangle, layer wm.PlacementLayer) image.Rectangle {
@@ -327,7 +347,7 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapToplevel(t toplevel) error {
-	w := &window{id: c.nextWindow, top: t}
+	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect)}
 	c.nextWindow++
 	var s wm.State
 	var err error
