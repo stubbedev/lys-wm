@@ -11,13 +11,20 @@ const tolerance = 8;
 const surfaces = {m: "monitor", w: "window"};
 let busy = false;
 
+const sampleWidth = 160;
+const sampleCanvas = document.createElement("canvas");
+const sampleContext = sampleCanvas.getContext("2d", {willReadFrequently: true});
+
 function sample(video) {
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const context = canvas.getContext("2d", {willReadFrequently: true});
-  context.drawImage(video, 0, 0);
-  const {data} = context.getImageData(0, 0, canvas.width, canvas.height);
+  const width = Math.min(sampleWidth, video.videoWidth);
+  const height = Math.max(1, Math.round(video.videoHeight * width / video.videoWidth));
+  if (sampleCanvas.width !== width || sampleCanvas.height !== height) {
+    sampleCanvas.width = width;
+    sampleCanvas.height = height;
+  }
+  sampleContext.imageSmoothingEnabled = false;
+  sampleContext.drawImage(video, 0, 0, width, height);
+  const {data} = sampleContext.getImageData(0, 0, width, height);
   let matching = 0;
   let hash = 0;
   for (let at = 0; at < data.length; at += 4) {
