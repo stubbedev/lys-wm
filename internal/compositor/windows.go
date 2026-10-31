@@ -17,24 +17,28 @@ import (
 )
 
 type window struct {
-	id       wm.WindowID
-	top      toplevel
-	tile     image.Rectangle
-	rect     image.Rectangle
-	visible  bool
-	layer    wm.PlacementLayer
-	output   *output.Output
-	urgent   bool
-	hung     bool
-	scale    output.Scale
-	floated  bool
-	motion   anim.Tween[image.Rectangle]
-	fade     anim.Tween[float64]
-	appeared bool
-	look     focusLook
-	looked   bool
-	snapshot render.TextureTarget
-	decided  decided
+	id          wm.WindowID
+	top         toplevel
+	tile        image.Rectangle
+	rect        image.Rectangle
+	visible     bool
+	layer       wm.PlacementLayer
+	output      *output.Output
+	urgent      bool
+	hung        bool
+	scale       output.Scale
+	floated     bool
+	motion      anim.Tween[image.Rectangle]
+	fade        anim.Tween[float64]
+	appeared    bool
+	look        focusLook
+	looked      bool
+	borderFrom  Border
+	borderTo    Border
+	borderFade  anim.Tween[float64]
+	borderAngle anim.Tween[float64]
+	snapshot    render.TextureTarget
+	decided     decided
 }
 
 type decided struct {
@@ -233,7 +237,7 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
 	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})

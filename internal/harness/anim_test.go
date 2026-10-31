@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -323,4 +324,75 @@ func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
 	h.Eventually("both halfway", look(0.75, 0.75))
 	at(3*time.Hour + time.Second)
 	h.Eventually("left focused, right inactive", look(1, 0.5))
+}
+
+func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	loop := anim.Style{Kind: anim.Loop}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
+		anim.Global:      {Enabled: &off},
+		anim.Border:      {Enabled: &on, Shape: anim.Linear, Duration: &d},
+		anim.BorderAngle: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &loop},
+	})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
+	gradient, err := compositor.GradientBorder([]render.Color{red, blue}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var next compositor.Config
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth = 4
+		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(red), compositor.SolidBorder(blue)
+		next = *cfg
+		next.Decor.ActiveBorder = gradient
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	c := testclient.Connect(t, h.Socket())
+	l := c.Window("left", testclient.Fill(0x30, 0x30, 0x30))
+	c.DispatchUntil("left to map", l.Mapped)
+	r := c.Window("right", testclient.Fill(0x30, 0x30, 0x30))
+	c.DispatchUntil("right to map", r.Mapped)
+	at(2 * time.Hour)
+	h.Eventually("the left border inactive", showing(1, 100, [3]byte{0, 0, 0xff}))
+	at(3 * time.Hour)
+	h.dispatch("focus left")
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("the left border halfway from blue to red", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return near(pixel(snapshot(b.Outputs()[0]), 1, 100), [3]byte{0x80, 0, 0x7f})
+	})
+	at(4 * time.Hour)
+	h.Eventually("the left border red", showing(1, 100, [3]byte{0xff, 0, 0}))
+
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(next) })
+	at(5 * time.Hour)
+	h.Eventually("the gradient border drawn", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return pixel(snapshot(b.Outputs()[0]), 1, 100) != [3]byte{0xff, 0, 0}
+	})
+	at(5*time.Hour + 250*time.Millisecond)
+	inner := image.Rect(4, 4, 76, 116)
+	h.Eventually("the turned gradient repainting the ring alone", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		damage := b.Outputs()[0].LastDamage()
+		if len(damage) == 0 {
+			return false
+		}
+		for _, d := range damage {
+			if d.Intersect(inner.Inset(1)).Dx() > 2 && d.Intersect(inner.Inset(1)).Dy() > 2 {
+				return false
+			}
+		}
+		return true
+	})
 }

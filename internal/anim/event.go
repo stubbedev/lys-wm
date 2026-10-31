@@ -27,6 +27,8 @@ const (
 	FadeSwitch
 	FadeDim
 	FadeShadow
+	Border
+	BorderAngle
 	eventCount
 )
 
@@ -38,9 +40,11 @@ const (
 	Slide
 	SlideVert
 	FadeStyle
+	Once
+	Loop
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop"}
 
 type Style struct {
 	Kind    StyleKind
@@ -104,6 +108,8 @@ var events = [eventCount]struct {
 	FadeSwitch:  {name: "fade_switch", parent: Fade},
 	FadeDim:     {name: "fade_dim", parent: Fade},
 	FadeShadow:  {name: "fade_shadow", parent: Fade},
+	Border:      {name: "border", parent: Global},
+	BorderAngle: {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
 }
 
 func (e Event) String() string {

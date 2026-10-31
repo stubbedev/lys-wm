@@ -291,13 +291,25 @@ func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
 	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.decor.Rounding)}}
 }
 
+func ringStrips(outer, inner image.Rectangle, cut float32) [4]image.Rectangle {
+	r := int(math.Ceil(float64(cut)))
+	top := image.Rect(outer.Min.X, outer.Min.Y, outer.Max.X, min(inner.Min.Y+r, outer.Max.Y))
+	bottom := image.Rect(outer.Min.X, max(inner.Max.Y-r, top.Max.Y), outer.Max.X, outer.Max.Y)
+	return [4]image.Rectangle{
+		top, bottom,
+		image.Rect(outer.Min.X, top.Max.Y, min(inner.Min.X+r, outer.Max.X), bottom.Min.Y),
+		image.Rect(max(inner.Max.X-r, outer.Min.X), top.Max.Y, outer.Max.X, bottom.Min.Y),
+	}
+}
+
+func scaleColor(c render.Color, a float32) render.Color {
+	k := func(v uint8) uint8 { return uint8(math.Round(float64(v) * float64(a))) }
+	return render.Color{R: k(c.R), G: k(c.G), B: k(c.B), A: k(c.A)}
+}
+
 func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if c.decor.BorderWidth <= 0 || w.layer == wm.LayerFullscreen {
 		return
-	}
-	border := c.decor.InactiveBorder
-	if w == c.active {
-		border = c.decor.ActiveBorder
 	}
 	outer := deviceRect(o, w.tile)
 	inner := deviceRect(o, w.rect)
@@ -305,28 +317,38 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if c.rounded(w) {
 		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.decor.Rounding)
 	}
+	turn := c.borderTurn(w)
+	if p := w.borderFade.At(c.frameTime); p < 1 {
+		c.paintBorder(pass, w.borderFrom, outer, inner, ring, 1, turn)
+		c.paintBorder(pass, w.borderTo, outer, inner, ring, float32(max(p, 0)), turn)
+		return
+	}
+	c.paintBorder(pass, w.borderTo, outer, inner, ring, 1, turn)
+}
+
+func (c *Compositor) paintBorder(pass *frame, border Border, outer, inner image.Rectangle, ring render.Mask, alpha float32, turn float64) {
 	if border.n > 1 {
 		stops, err := c.borderStops(border)
 		if err != nil {
 			c.report(err)
 			return
 		}
+		border.angle += turn
 		from, to := border.line(outer)
-		pass.fillGradient(outer, render.Gradient{Stops: stops, From: from, To: to, Alpha: 1}, ring)
+		for _, strip := range ringStrips(outer, inner, ring.Cut.Radius) {
+			if !strip.Empty() {
+				pass.fillGradient(strip, render.Gradient{Stops: stops, From: from, To: to, Alpha: alpha}, ring)
+			}
+		}
 		return
 	}
-	color := border.colors[0].Premultiply()
-	if c.rounded(w) {
-		pass.fillMasked(outer, color, ring)
-		return
-	}
-	for _, strip := range []image.Rectangle{
-		{Min: outer.Min, Max: image.Pt(outer.Max.X, inner.Min.Y)},
-		{Min: image.Pt(outer.Min.X, inner.Max.Y), Max: outer.Max},
-		{Min: image.Pt(outer.Min.X, inner.Min.Y), Max: image.Pt(inner.Min.X, inner.Max.Y)},
-		{Min: image.Pt(inner.Max.X, inner.Min.Y), Max: image.Pt(outer.Max.X, inner.Max.Y)},
-	} {
-		if !strip.Empty() {
+	color := scaleColor(border.colors[0].Premultiply(), alpha)
+	for _, strip := range ringStrips(outer, inner, ring.Cut.Radius) {
+		switch {
+		case strip.Empty():
+		case ring.Cut.Radius > 0:
+			pass.fillMasked(strip, color, ring)
+		default:
 			pass.FillRect(strip, color)
 		}
 	}

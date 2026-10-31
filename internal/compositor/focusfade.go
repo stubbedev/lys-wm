@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type focusLook struct {
@@ -51,6 +52,7 @@ func (c *Compositor) refreshLooks(now time.Duration) {
 		retarget(&w.look.opacity, float64(c.opacity(w)), now, c.animations.Curve(anim.FadeSwitch), jump)
 		retarget(&w.look.dim, c.dimTarget(w), now, c.animations.Curve(anim.FadeDim), jump)
 		retarget(&w.look.shadow, c.shadowTarget(w), now, c.animations.Curve(anim.FadeShadow), jump)
+		c.refreshBorder(w, now, jump)
 	}
 }
 
@@ -69,4 +71,46 @@ func (c *Compositor) shownDim(w *window) render.Color {
 func (c *Compositor) shownShadow(w *window) render.Color {
 	v := w.look.shadow.At(c.frameTime)
 	return render.Color{R: v[0], G: v[1], B: v[2], A: v[3]}
+}
+
+func (c *Compositor) borderTarget(w *window) Border {
+	if w == c.active {
+		return c.decor.ActiveBorder
+	}
+	return c.decor.InactiveBorder
+}
+
+func (c *Compositor) refreshBorder(w *window, now time.Duration, jump bool) {
+	to := c.borderTarget(w)
+	switch {
+	case jump:
+		w.borderFrom, w.borderTo = to, to
+		w.borderFade = anim.NewTween(1.0, anim.Lerp)
+		w.borderAngle = anim.NewTween(1.0, anim.Lerp)
+	case to != w.borderTo:
+		w.borderFrom, w.borderTo = w.borderTo, to
+		w.borderFade = anim.NewTween(0.0, anim.Lerp)
+		w.borderFade.Set(1, now, c.animations.Curve(anim.Border))
+		if to.n > 1 {
+			w.borderAngle = anim.NewTween(0.0, anim.Lerp)
+			w.borderAngle.Set(1, now, c.animations.Curve(anim.BorderAngle))
+		}
+	}
+}
+
+func (c *Compositor) loopingBorders() bool {
+	curve := c.animations.Curve(anim.BorderAngle)
+	return curve != anim.Instant && c.animations.Style(anim.BorderAngle).Kind == anim.Loop && curve.Duration() > 0
+}
+
+func (c *Compositor) borderTurn(w *window) float64 {
+	if !c.loopingBorders() {
+		return 360 * w.borderAngle.At(c.frameTime)
+	}
+	period := c.animations.Curve(anim.BorderAngle).Duration()
+	return 360 * float64(c.frameTime%period) / float64(period)
+}
+
+func (c *Compositor) borderMoving(w *window, now time.Duration) bool {
+	return !w.borderFade.Done(now) || !w.borderAngle.Done(now) || (c.loopingBorders() && w.borderTo.n > 1 && w.layer != wm.LayerFullscreen)
 }
