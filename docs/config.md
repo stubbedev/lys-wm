@@ -132,6 +132,33 @@ decoration:
 A rounded window shows what is behind its corners, so it is always
 composited, never scanned out directly, unless it is fullscreen.
 
+`decoration.shadow` draws a soft shadow under every window but fullscreen
+ones, following its rounded corners:
+
+```yaml
+decoration:
+  shadow:
+    enabled: true
+    range: 12
+    render_power: 3
+    offset: [2, 4]
+    color: "#1a1a1aee"
+```
+
+| Key | Default |
+| --- | --- |
+| `enabled` | `false` |
+| `range` | 4: how far the shadow fades out beyond its edge, in logical pixels |
+| `render_power` | 3: how fast it fades, 1 (linearly) to 4 (quickly, with a darker core) |
+| `sharp` | `false`: `true` gives a hard-edged shadow with no fade |
+| `offset` | `[0, 0]`: where the shadow sits relative to the window, in logical pixels |
+| `scale` | 1: the shadow's size relative to the window, above 0 to 1 |
+| `color` | `#1a1a1aee` |
+| `color_inactive` | `color`: the shadow of windows that are not focused |
+
+The shadow is cut out under the window, so a translucent window does not show
+its own shadow through itself.
+
 Opacity multiplies what the client draws, including the alpha it asks for
 through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
 the place of these for the windows it matches. A translucent window shows

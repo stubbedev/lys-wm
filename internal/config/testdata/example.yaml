@@ -43,6 +43,11 @@ decoration:
   inactive_opacity: 0.9
   dim_inactive: true
   dim_strength: 0.2
+  shadow:
+    enabled: true
+    range: 12
+    offset: [2, 4]
+    color: "#00000080"
 
 gaps:
   inner: 6

@@ -3,6 +3,7 @@ package harness
 import (
 	"errors"
 	"image"
+	"regexp"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -147,4 +148,22 @@ func TestATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T) {
 	if errs := r.take(); len(errs) != 0 {
 		t.Fatalf("reports %v", errs)
 	}
+}
+
+func TestAFloatingWindowCastsARoundedShadow(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 1, 6
+		cfg.Decor.Shadow = compositor.Shadow{Enabled: true, Range: 12, Power: 2, Offset: image.Pt(3, 5), Scale: 1, Active: render.Color{A: 0xc0}, Inactive: render.Color{A: 0xc0}}
+		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^float$`), Mode: wm.RuleFloat, Size: image.Pt(70, 40)}}
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("float", testclient.Fill(0xe0, 0xe0, 0xe0))
+	c.DispatchUntil("the floating window to map", w.Mapped)
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	h.Eventually("the shadow darkens the background below the window", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		got := pixel(snapshot(b.Outputs()[0]), 80, 88)
+		return got[0] < bg[0] && got != [3]byte{}
+	})
+	golden.Assert(t, "shadow", h.Rendered(0))
 }

@@ -33,11 +33,22 @@ type Dim struct {
 	Strength float32
 }
 
+type Shadow struct {
+	Enabled          bool
+	Range            int
+	Power            int
+	Sharp            bool
+	Offset           image.Point
+	Scale            float64
+	Active, Inactive render.Color
+}
+
 type Decor struct {
 	BorderWidth                  int
 	Rounding                     int
 	Opacity                      Opacity
 	Dim                          Dim
+	Shadow                       Shadow
 	ActiveBorder, InactiveBorder render.Color
 	Tab                          TabStyle
 }
@@ -52,9 +63,14 @@ var (
 
 func DefaultDecor() Decor {
 	return Decor{
-		BorderWidth:    1,
-		Opacity:        Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
-		Dim:            Dim{Strength: 0.5},
+		BorderWidth: 1,
+		Opacity:     Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
+		Dim:         Dim{Strength: 0.5},
+		Shadow: Shadow{
+			Range: 4, Power: 3, Scale: 1,
+			Active:   render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
+			Inactive: render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
+		},
 		ActiveBorder:   mauve,
 		InactiveBorder: crust,
 		Tab: TabStyle{
@@ -192,6 +208,40 @@ func (c *Compositor) dimColor(dimmed bool) render.Color {
 	return render.Color{A: uint8(math.Round(float64(c.decor.Dim.Strength) * 0xff))}
 }
 
+func (c *Compositor) outerRadius(o *output.Output, w *window) float32 {
+	if !c.rounded(w) {
+		return 0
+	}
+	return deviceLength(o, c.decor.Rounding+c.decor.BorderWidth)
+}
+
+func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
+	sh := c.decor.Shadow
+	if !sh.Enabled || w.layer == wm.LayerFullscreen {
+		return
+	}
+	tile := deviceRect(o, w.tile)
+	size := image.Pt(int(math.Round(float64(tile.Dx())*sh.Scale)), int(math.Round(float64(tile.Dy())*sh.Scale)))
+	corner := tile.Min.Add(tile.Size().Sub(size).Div(2)).Add(image.Pt(o.Scale().ToDevice(sh.Offset.X), o.Scale().ToDevice(sh.Offset.Y)))
+	base := image.Rectangle{Min: corner, Max: corner.Add(size)}
+	radius := c.outerRadius(o, w)
+	var falloff render.Falloff
+	reach := 0
+	if !sh.Sharp && sh.Range > 0 {
+		falloff = render.Falloff{Range: deviceLength(o, sh.Range), Power: float32(sh.Power)}
+		reach = int(math.Ceil(float64(falloff.Range)))
+	}
+	color := sh.Inactive
+	if w == c.active {
+		color = sh.Active
+	}
+	pass.fillMasked(base.Inset(-reach), color.Premultiply(), render.Mask{
+		Keep:    render.RoundRect{Rect: base, Radius: radius},
+		Cut:     render.RoundRect{Rect: tile, Radius: radius},
+		Falloff: falloff,
+	})
+}
+
 func (c *Compositor) rounded(w *window) bool {
 	return c.decor.Rounding > 0 && w.layer != wm.LayerFullscreen
 }
@@ -217,7 +267,7 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 	if c.rounded(w) {
 		radius := deviceLength(o, c.decor.Rounding)
 		pass.fillMasked(outer, color, render.Mask{
-			Keep: render.RoundRect{Rect: outer, Radius: radius + deviceLength(o, c.decor.BorderWidth)},
+			Keep: render.RoundRect{Rect: outer, Radius: c.outerRadius(o, w)},
 			Cut:  render.RoundRect{Rect: inner, Radius: radius},
 		})
 		return

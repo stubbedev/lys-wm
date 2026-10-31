@@ -187,6 +187,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		pass.FillRect(deviceRect(o, o.Logical()), c.dimColor(true))
 	}
 	from := len(pass.ops)
+	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
 	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, mask, c.opacity(w))
 	if c.decor.Dim.Inactive {

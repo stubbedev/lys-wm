@@ -17,6 +17,7 @@ import (
 type (
 	Mask      = lgpu.Mask
 	RoundRect = lgpu.RoundRect
+	Falloff   = lgpu.Falloff
 )
 
 type Transform uint8

@@ -209,6 +209,18 @@ type rawDecoration struct {
 	FullscreenOpacity *At[float64] `yaml:"fullscreen_opacity"`
 	DimInactive       *bool        `yaml:"dim_inactive"`
 	DimStrength       *At[float64] `yaml:"dim_strength"`
+	Shadow            rawShadow    `yaml:"shadow"`
+}
+
+type rawShadow struct {
+	Enabled       *bool        `yaml:"enabled"`
+	Range         *At[int]     `yaml:"range"`
+	RenderPower   *At[int]     `yaml:"render_power"`
+	Sharp         *bool        `yaml:"sharp"`
+	Offset        *At[sides]   `yaml:"offset"`
+	Scale         *At[float64] `yaml:"scale"`
+	Color         *At[string]  `yaml:"color"`
+	ColorInactive *At[string]  `yaml:"color_inactive"`
 }
 
 type rawGaps struct {
@@ -511,6 +523,30 @@ func (p *parser) opacity(a *At[float64], key string, fallback float32) float32 {
 	return fallback
 }
 
+func (p *parser) shadow(r rawShadow, def compositor.Shadow) compositor.Shadow {
+	s := def
+	s.Enabled = r.Enabled != nil && *r.Enabled
+	s.Sharp = r.Sharp != nil && *r.Sharp
+	s.Range = p.nonNegative(r.Range, "decoration.shadow.range", def.Range)
+	s.Power = p.atLeast(r.RenderPower, "decoration.shadow.render_power", def.Power, 1, "from 1 to 4")
+	if s.Power > 4 {
+		p.fail(r.RenderPower.Line, "decoration.shadow.render_power", "%d is not from 1 to 4", s.Power)
+	}
+	if r.Offset != nil {
+		if v := r.Offset.V; len(v) == 2 {
+			s.Offset = image.Pt(v[0], v[1])
+		} else {
+			p.fail(r.Offset.Line, "decoration.shadow.offset", "%v is not [x, y]", v)
+		}
+	}
+	if v := p.between(r.Scale, "decoration.shadow.scale", 0, 1, true); v != nil {
+		s.Scale = *v
+	}
+	s.Active = p.optColor(r.Color, "decoration.shadow.color", def.Active)
+	s.Inactive = p.optColor(r.ColorInactive, "decoration.shadow.color_inactive", s.Active)
+	return s
+}
+
 func (p *parser) gaps(r rawGaps) wm.Gaps {
 	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
 	if r.Outer == nil {
@@ -790,6 +826,7 @@ func Parse(file string, data []byte) (Config, error) {
 				Inactive:   p.opacity(raw.Decoration.InactiveOpacity, "decoration.inactive_opacity", def.Opacity.Inactive),
 				Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
 			},
+			Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
 			Dim: compositor.Dim{
 				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
 				Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),

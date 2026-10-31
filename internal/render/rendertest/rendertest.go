@@ -109,6 +109,12 @@ func MaskScene(tx Textures) func(render.Pass) {
 		}
 		p.FillRect(ring.Keep.Rect, render.Color{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, ring)
 		p.FillRect(image.Rect(40, 10, 56, 38), render.Color{R: 0x20, G: 0x40, B: 0x10, A: 0x80}, render.Mask{Keep: render.RoundRect{Rect: image.Rect(40, 10, 56, 38), Radius: 4.25}})
+		shadow := render.Mask{
+			Keep:    render.RoundRect{Rect: image.Rect(12, 12, 24, 22), Radius: 3},
+			Cut:     render.RoundRect{Rect: image.Rect(14, 13, 22, 20), Radius: 2},
+			Falloff: render.Falloff{Range: 5.5, Power: 3},
+		}
+		p.FillRect(shadow.Keep.Rect.Inset(-6), render.Color{A: 0xc0}, shadow)
 	}
 }
 

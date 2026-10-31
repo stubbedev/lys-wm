@@ -86,6 +86,9 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {title: ^Open, dim_around: true}\n")); err != nil || !wm.Decide(c.Rules, "", "Open File").DimAround {
 		t.Errorf("a rule's dim_around: %+v, %v", c.Rules, err)
 	}
+	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != 3 || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
+		t.Errorf("decoration.shadow parsed to %+v", s)
+	}
 	if cfg.Decor.Rounding != 8 {
 		t.Errorf("decoration.rounding parsed to %d", cfg.Decor.Rounding)
 	}
@@ -206,6 +209,9 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"decoration:\n  active_opacity: 1.5\n":                                  "t.yaml:2: decoration.active_opacity: 1.5 is not from 0 to 1",
 		"rules:\n  - {app_id: a, opacity: -1}\n":                                "t.yaml:2: rules[0].opacity: -1 is not from 0 to 1",
 		"decoration:\n  dim_strength: 2\n":                                      "t.yaml:2: decoration.dim_strength: 2 is not from 0 to 1",
+		"decoration:\n  shadow:\n    render_power: 5\n":                         "t.yaml:3: decoration.shadow.render_power: 5 is not from 1 to 4",
+		"decoration:\n  shadow:\n    offset: [1]\n":                             "t.yaml:3: decoration.shadow.offset: [1] is not [x, y]",
+		"decoration:\n  shadow:\n    scale: 0\n":                                "t.yaml:3: decoration.shadow.scale: 0 is not above 0 to 1",
 		"decoration:\n  rounding: -1\n":                                         "t.yaml:2: decoration.rounding: -1 is not zero or more",
 		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
 		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",
