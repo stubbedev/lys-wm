@@ -120,6 +120,9 @@ func (f *frame) replay(p render.Pass) {
 func (f *frame) replayFrom(p render.Pass, origin image.Point) {
 	for _, op := range f.ops {
 		m := shiftMask(op.mask, origin)
+		if op.fill && op.color == (render.Color{}) {
+			continue
+		}
 		if op.fill {
 			p.FillRect(op.dst.Sub(origin), op.color, m)
 			continue

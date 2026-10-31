@@ -207,6 +207,8 @@ type rawDecoration struct {
 	ActiveOpacity     *At[float64] `yaml:"active_opacity"`
 	InactiveOpacity   *At[float64] `yaml:"inactive_opacity"`
 	FullscreenOpacity *At[float64] `yaml:"fullscreen_opacity"`
+	DimInactive       *bool        `yaml:"dim_inactive"`
+	DimStrength       *At[float64] `yaml:"dim_strength"`
 }
 
 type rawGaps struct {
@@ -259,13 +261,14 @@ type rawBind struct {
 }
 
 type rawRule struct {
-	AppID   *At[string]  `yaml:"app_id"`
-	Title   *At[string]  `yaml:"title"`
-	Float   bool         `yaml:"float"`
-	Tile    bool         `yaml:"tile"`
-	Size    *At[string]  `yaml:"size"`
-	Tearing *bool        `yaml:"tearing"`
-	Opacity *At[float64] `yaml:"opacity"`
+	AppID     *At[string]  `yaml:"app_id"`
+	Title     *At[string]  `yaml:"title"`
+	Float     bool         `yaml:"float"`
+	Tile      bool         `yaml:"tile"`
+	Size      *At[string]  `yaml:"size"`
+	Tearing   *bool        `yaml:"tearing"`
+	Opacity   *At[float64] `yaml:"opacity"`
+	DimAround bool         `yaml:"dim_around"`
 }
 
 type Error struct {
@@ -733,6 +736,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	default:
 		rule.Tearing = wm.TearingDeny
 	}
+	rule.DimAround = r.DimAround
 	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
 		o := float32(*v)
 		rule.Opacity = &o
@@ -785,6 +789,10 @@ func Parse(file string, data []byte) (Config, error) {
 				Active:     p.opacity(raw.Decoration.ActiveOpacity, "decoration.active_opacity", def.Opacity.Active),
 				Inactive:   p.opacity(raw.Decoration.InactiveOpacity, "decoration.inactive_opacity", def.Opacity.Inactive),
 				Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
+			},
+			Dim: compositor.Dim{
+				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
+				Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),
 			},
 			ActiveBorder:   p.optColor(raw.Borders.Active, "borders.active", def.ActiveBorder),
 			InactiveBorder: p.optColor(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),

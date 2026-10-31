@@ -22,19 +22,21 @@ const (
 )
 
 type Rule struct {
-	AppID   *regexp.Regexp
-	Title   *regexp.Regexp
-	Mode    RuleMode
-	Size    image.Point
-	Tearing RuleTearing
-	Opacity *float32
+	AppID     *regexp.Regexp
+	Title     *regexp.Regexp
+	Mode      RuleMode
+	Size      image.Point
+	Tearing   RuleTearing
+	Opacity   *float32
+	DimAround bool
 }
 
 type Decision struct {
-	Mode    RuleMode
-	Size    image.Point
-	Tearing RuleTearing
-	Opacity *float32
+	Mode      RuleMode
+	Size      image.Point
+	Tearing   RuleTearing
+	Opacity   *float32
+	DimAround bool
 }
 
 func (r Rule) matches(appID, title string) bool {
@@ -59,6 +61,7 @@ func Decide(rules []Rule, appID, title string) Decision {
 		if r.Opacity != nil {
 			d.Opacity = r.Opacity
 		}
+		d.DimAround = d.DimAround || r.DimAround
 	}
 	return d
 }

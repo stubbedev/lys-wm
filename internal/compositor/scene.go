@@ -183,8 +183,15 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if !w.visible || !at.Overlaps(o.Logical()) {
 		return shown
 	}
+	if c.decision(w).DimAround {
+		pass.FillRect(deviceRect(o, o.Logical()), c.dimColor(true))
+	}
 	from := len(pass.ops)
-	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, c.windowMask(o, w), c.opacity(w))
+	mask := c.windowMask(o, w)
+	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, mask, c.opacity(w))
+	if c.decor.Dim.Inactive {
+		pass.fillMasked(deviceRect(o, w.rect), c.dimColor(w != c.active), mask)
+	}
 	c.drawBorder(pass, o, w)
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))

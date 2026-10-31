@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-ui/icontheme"
@@ -27,10 +28,16 @@ type Opacity struct {
 	Active, Inactive, Fullscreen float32
 }
 
+type Dim struct {
+	Inactive bool
+	Strength float32
+}
+
 type Decor struct {
 	BorderWidth                  int
 	Rounding                     int
 	Opacity                      Opacity
+	Dim                          Dim
 	ActiveBorder, InactiveBorder render.Color
 	Tab                          TabStyle
 }
@@ -47,6 +54,7 @@ func DefaultDecor() Decor {
 	return Decor{
 		BorderWidth:    1,
 		Opacity:        Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
+		Dim:            Dim{Strength: 0.5},
 		ActiveBorder:   mauve,
 		InactiveBorder: crust,
 		Tab: TabStyle{
@@ -175,6 +183,13 @@ func (c *Compositor) opacity(w *window) float32 {
 		return c.decor.Opacity.Active
 	}
 	return c.decor.Opacity.Inactive
+}
+
+func (c *Compositor) dimColor(dimmed bool) render.Color {
+	if !dimmed {
+		return render.Color{}
+	}
+	return render.Color{A: uint8(math.Round(float64(c.decor.Dim.Strength) * 0xff))}
 }
 
 func (c *Compositor) rounded(w *window) bool {
