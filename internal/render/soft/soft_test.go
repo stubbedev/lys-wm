@@ -351,3 +351,39 @@ func BenchmarkDrawTexture(b *testing.B) {
 func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
 	rendertest.EveryFormat(t, soft.New(), soft.NewBuffer(1, 1))
 }
+
+func BenchmarkUpdate(b *testing.B) {
+	r := soft.New()
+	size := image.Pt(640, 400)
+	data := make([]byte, size.X*size.Y*4)
+	for i := range data {
+		data[i] = byte(i * 7)
+	}
+	for _, f := range []struct {
+		name   string
+		format render.Format
+	}{
+		{"ARGB8888", render.ARGB8888},
+		{"XRGB8888", render.XRGB8888},
+		{"ABGR8888", render.ABGR8888},
+		{"XBGR8888", render.XBGR8888},
+		{"ARGB2101010", render.ARGB2101010},
+		{"XRGB2101010", render.XRGB2101010},
+		{"ABGR2101010", render.ABGR2101010},
+		{"XBGR2101010", render.XBGR2101010},
+	} {
+		b.Run(f.name, func(b *testing.B) {
+			tex, err := r.NewTexture(f.format, size, size.X*4, data)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := tex.Update(image.Rectangle{Max: size}, size.X*4, data); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

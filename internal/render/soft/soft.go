@@ -67,10 +67,7 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	for y := dst.Min.Y; y < dst.Max.Y; y++ {
 		row := t.pix[y*t.stride+dst.Min.X*4 : y*t.stride+dst.Max.X*4]
 		copy(row, data[(y-dst.Min.Y)*stride:])
-		for i := 0; i < len(row); i += 4 {
-			c := t.format.Decode(row[i : i+4])
-			row[i], row[i+1], row[i+2], row[i+3] = c.B, c.G, c.R, c.A
-		}
+		t.format.DecodeRow(row)
 	}
 	return nil
 }

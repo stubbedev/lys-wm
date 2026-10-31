@@ -183,6 +183,20 @@ func (f Format) Decode(px []byte) Color {
 	return c
 }
 
+func (f Format) DecodeRow(row []byte) {
+	switch {
+	case f.TenBit() || f.RGBOrder():
+		for i := 0; i < len(row); i += 4 {
+			c := f.Decode(row[i : i+4])
+			row[i], row[i+1], row[i+2], row[i+3] = c.B, c.G, c.R, c.A
+		}
+	case f.Opaque():
+		for i := 3; i < len(row); i += 4 {
+			row[i] = 0xff
+		}
+	}
+}
+
 func tenToEight(v uint32) uint8 {
 	return uint8(((v&0x3ff)*0xff + 0x3ff/2) / 0x3ff)
 }
