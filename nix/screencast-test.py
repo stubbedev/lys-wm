@@ -15,6 +15,8 @@ CURSOR_BOX = 64
 PICKER_PANEL = "262638"
 PICKER_PROBE = (630, 630, 20, 10)
 PICKER_APPEARS_S = 60
+DIALOG_READY_S = 60
+CAST_LINKED = "jq -e '([.[] | select(.type == \"PipeWire:Interface:Node\" and .info.props[\"media.class\"] == \"Stream/Input/Video\") | .id]) as $viewers | any(.[]; .type == \"PipeWire:Interface:Link\" and .info.state == \"active\" and (.info[\"input-node-id\"] as $node | $viewers | index($node)))'"
 PICKER_SERVICE = "dev.stubbe.lys.SharePicker1"
 SOURCE_MONITOR = 1
 SOURCE_WINDOW = 2
@@ -113,12 +115,32 @@ def pick_in_picker(label, ran):
     keys("ret")
 
 
+def cast_linked():
+    return machine.execute(as_alice("pw-dump") + " | " + CAST_LINKED)[0] == 0
+
+
+def confirm_in_dialog(window_id):
+    deadline = time.monotonic() + DIALOG_READY_S
+    while True:
+        window = next((w for w in windows() if w["id"] == window_id), None)
+        if window is None:
+            raise AssertionError(f"window {window_id} closed before its share dialog could be confirmed")
+        linked = cast_linked()
+        if window["focused"] and linked:
+            break
+        if time.monotonic() > deadline:
+            machine.screenshot("confirm-dialog")
+            print(machine.execute(as_alice("pw-dump") + " | jq -c '.[] | select(.type | test(\"Node|Link\")) | {id, type, state: .info.state, class: .info.props[\"media.class\"], app: .info.props[\"application.name\"], out: .info[\"output-node-id\"], in: .info[\"input-node-id\"]}'")[1])
+            raise AssertionError(f"window {window_id} was {'' if window['focused'] else 'not '}focused and its share dialog's preview {'was' if linked else 'was not'} linked to a screen cast within {DIALOG_READY_S} s: {window}")
+        machine.sleep(0.5)
+    machine.send_key("ret")
+
+
 def answer(label, ran, done, confirm):
     if params["portal"] == "wlr":
         if confirm:
-            machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=120)
-            machine.sleep(3)
-            machine.send_key("ret")
+            machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=PICKER_APPEARS_S)
+            confirm()
         return
     answered = 0
     deadline = time.monotonic() + PICKER_APPEARS_S
@@ -131,8 +153,7 @@ def answer(label, ran, done, confirm):
             answered += 1
             if answered == 1:
                 if confirm:
-                    machine.sleep(3)
-                    machine.send_key("ret")
+                    confirm()
                 deadline = time.monotonic() + params["seconds"] + PICKER_APPEARS_S
         machine.sleep(1)
 
@@ -141,7 +162,7 @@ def capture(name, source, cursor, label):
     ran = choose(label)
     machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}"))
     try:
-        answer(label, ran, lambda: machine.execute(f"test -s /tmp/{name}.status")[0] == 0, False)
+        answer(label, ran, lambda: machine.execute(f"test -s /tmp/{name}.status")[0] == 0, None)
         machine.wait_until_succeeds(f"test -s /tmp/{name}.status", timeout=300)
         print(machine.succeed(f"cat /tmp/{name}.log"))
         machine.succeed(f"grep -qx 0 /tmp/{name}.status")
@@ -155,7 +176,7 @@ def check_cursor(hidden, embedded, rect, px, py):
     print(machine.succeed(as_alice(f"{params['screencast']} cursor /tmp/{hidden} /tmp/{embedded} {rect['x']} {rect['y']} {rect['width']} {rect['height']} {px} {py}")))
 
 
-def share(app, label, confirm):
+def share(app, label, confirms):
     before = {w["id"] for w in windows()}
     launch(app)
     try:
@@ -167,6 +188,7 @@ def share(app, label, confirm):
     [shown] = [w for w in windows() if w["id"] not in before]
     ran = choose(label)
     machine.send_key(KEYS[label])
+    confirm = (lambda: confirm_in_dialog(shown["id"])) if confirms else None
     finished = as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'"
     try:
         answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
@@ -216,6 +238,6 @@ capture("window-embedded", "window", "embedded", WINDOW)
 check_cursor("window-hidden", "window-embedded", {**around, "x": around["x"] - rect["x"], "y": around["y"] - rect["y"]}, POINTER_REST[0] - rect["x"], POINTER_REST[1] - rect["y"])
 
 machine.succeed(as_alice(f"mkdir -p /tmp/firefox && cp {params['firefox_prefs']} /tmp/firefox/user.js"))
-for app, confirm in [("firefox", False), ("chromium", True), ("electron", False)]:
+for app, confirms in [("firefox", False), ("chromium", True), ("electron", False)]:
     for label in [MONITOR, WINDOW]:
-        share(app, label, confirm)
+        share(app, label, confirms)
