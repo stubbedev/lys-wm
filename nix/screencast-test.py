@@ -38,7 +38,18 @@ def launch(name):
     machine.succeed(as_alice(f"lys-wmctl dispatch exec {params['launchers'][name]}"))
 
 
+def cpu_times():
+    fields = [int(v) for v in machine.succeed("grep '^cpu ' /proc/stat").split()[1:]]
+    return fields[7], sum(fields)
+
+
+def stolen(since=(0, 0)):
+    steal, total = (now - then for now, then in zip(cpu_times(), since))
+    return f"host stole {100 * steal / max(total, 1):.1f}% of the guest's CPU time"
+
+
 def dump(*logs):
+    print(f"{stolen()} since boot")
     print(machine.execute(as_alice("lys-wmctl windows") + " | jq -c '.[] | {id, app_id, title, rect}'")[1])
     for log in logs:
         print(machine.execute(f"tail -60 /tmp/{log}.log")[1])
@@ -146,7 +157,10 @@ def answer(label, ran, done, confirm):
     deadline = time.monotonic() + PICKER_APPEARS_S
     while not done():
         if time.monotonic() > deadline:
-            raise AssertionError(f"no share picker for {label} within {PICKER_APPEARS_S} s" if answered == 0 else f"sharing {label} did not finish after the pick")
+            if answered == 0:
+                machine.screenshot("no-picker")
+                raise AssertionError(f"no share picker for {label} within {PICKER_APPEARS_S} s, after {len(requested_types()) - ran} SelectSources calls; windows: {[(w['title'], w['focused']) for w in windows()]}")
+            raise AssertionError(f"sharing {label} did not finish after the pick")
         if picker_shown():
             machine.sleep(2)
             pick_in_picker(label, ran)
@@ -178,6 +192,7 @@ def check_cursor(hidden, embedded, rect, px, py):
 
 def share(app, label, confirms):
     before = {w["id"] for w in windows()}
+    started = cpu_times()
     launch(app)
     try:
         machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"waiting\"))'", timeout=600)
@@ -199,7 +214,7 @@ def share(app, label, confirms):
     finally:
         machine.screenshot(f"{app}-{KEYS[label]}")
     title = next(w for w in windows() if w["id"] == shown["id"])["title"]
-    print(f"{app} shared {label}: {title}")
+    print(f"{app} shared {label}: {title}; {stolen(started)} while it ran")
     fields = SHARE_FIELDS.match(title)
     if fields is None:
         dump(app)
