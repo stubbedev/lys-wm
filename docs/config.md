@@ -213,21 +213,27 @@ settles in its own time: lower damping bounces, `damping` near
 not redefinable: `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out` (the CSS
 curves) and `spring` (stiffness 170, damping 26).
 
-`events` configures each event with `enabled`, `curve` and `duration`
-(milliseconds, for bézier curves; a spring takes none). Each key an event leaves
-out comes from its parent:
+`events` configures each event with `enabled`, `curve`, `duration`
+(milliseconds, for bézier curves; a spring takes none) and, where the table
+lists styles, `style`. Each key an event leaves out comes from its parent;
+`style` comes from the event's own default:
 
-| Event | Parent | Animates |
-| --- | --- | --- |
-| `global` | | Defaults: `ease_out` over 250 ms |
-| `windows` | `global` | Every window animation |
-| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once |
+| Event | Parent | Animates | Styles |
+| --- | --- | --- | --- |
+| `global` | | Defaults: `ease_out` over 250 ms | |
+| `windows` | `global` | Every window animation | |
+| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | |
+| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output |
+| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide` |
+| `fade` | `global` | Every fade | |
+| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
+| `fade_out` | `fade` | A closing window fading out | |
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its
 animations end. A window being dragged or resized with the mouse follows the
-pointer without animating, and a window that appears, or comes back with its
-workspace, is drawn where it belongs at once.
+pointer without animating, and a window that comes back with its workspace
+is drawn where it belongs at once.
 
 ## tabs
 

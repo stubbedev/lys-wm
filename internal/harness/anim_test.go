@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"errors"
 	"image"
 	"testing"
@@ -15,7 +16,8 @@ import (
 
 func linearMoves(t *testing.T, d time.Duration) anim.Table {
 	t.Helper()
-	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.WindowsMove: {Shape: anim.Linear, Duration: &d}})
+	off, on := false, true
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.WindowsMove: {Enabled: &on, Shape: anim.Linear, Duration: &d}})
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
@@ -110,4 +112,72 @@ func TestADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T) {
 		return errors.Join(p.Button(btnLeft, false), p.Frame())
 	})
 	h.key(keySuper, false)
+}
+
+func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	half := anim.Style{Kind: anim.Popin, Percent: 50}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
+		anim.Global:     {Shape: anim.Linear, Duration: &d},
+		anim.WindowsIn:  {Style: &half},
+		anim.WindowsOut: {Style: &half},
+	})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = time.Hour + d
+			return nil
+		})
+	}
+	white := [3]byte{0xff, 0xff, 0xff}
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	showingNear := func(x, y int, want [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return near(pixel(snapshot(b.Outputs()[0]), x, y), want)
+		}
+	}
+	both := func(a, b func(*headless.Backend, *compositor.Compositor) bool) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(x *headless.Backend, c *compositor.Compositor) bool { return a(x, c) && b(x, c) }
+	}
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("popping", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.Eventually("nothing drawn at the start of the open", both(showingNear(25, 20, bg), showingNear(100, 80, bg)))
+	at(500 * time.Millisecond)
+	h.Eventually("the window three quarters grown and half faded in", both(showingNear(25, 20, blend(white, bg, 0.5)), showingNear(5, 5, bg)))
+	at(time.Second)
+	h.Eventually("the window open and opaque", showingNear(5, 5, white))
+
+	at(2 * time.Second)
+	open := h.Rendered(0)
+	if err := errors.Join(w.Destroy(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the closed window still shown at its start", showingNear(5, 5, white))
+	if closed := h.Rendered(0); !bytes.Equal(closed.Pix, open.Pix) {
+		t.Fatal("the closing window's snapshot does not match the window it replaced pixel for pixel")
+	}
+	at(2500 * time.Millisecond)
+	h.Eventually("the closing window three quarters shrunk and half faded out", both(showingNear(25, 20, blend(white, bg, 0.5)), showingNear(5, 5, bg)))
+	at(3 * time.Second)
+	h.Eventually("the closed window gone", showingNear(100, 80, bg))
+	var before uint64
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		before = b.Outputs()[0].Frames()
+		return nil
+	})
+	time.Sleep(200 * time.Millisecond)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if after := b.Outputs()[0].Frames(); after != before {
+			t.Errorf("%d frames ran after the close animation ended", after-before)
+		}
+		return nil
+	})
 }

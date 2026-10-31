@@ -214,6 +214,7 @@ type rawEvent struct {
 	Enabled  *bool       `yaml:"enabled"`
 	Curve    *At[string] `yaml:"curve"`
 	Duration *At[int]    `yaml:"duration"`
+	Style    *At[string] `yaml:"style"`
 }
 
 type rawDecoration struct {
@@ -510,6 +511,14 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 				p.fail(c.Line, key+".curve", "%q is not a curve (known: %s)", c.V, strings.Join(slices.Sorted(maps.Keys(shapes)), ", "))
 				continue
 			}
+		}
+		if st := at.V.Style; st != nil {
+			style, err := anim.ParseStyle(st.V)
+			if err != nil {
+				p.fail(st.Line, key+".style", "%v", err)
+				continue
+			}
+			s.Style = &style
 		}
 		if d := at.V.Duration; d != nil {
 			if d.V <= 0 {

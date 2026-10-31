@@ -217,6 +217,7 @@ type Compositor struct {
 	animations      anim.Table
 	clock           func() time.Duration
 	frameTime       time.Duration
+	closing         []*closing
 }
 
 type entered struct {
@@ -464,7 +465,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.endReads(), c.dropDecor()}
+	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing()}
 	for b, cached := range c.imported {
 		errs = append(errs, cached.tex.Destroy())
 		delete(c.imported, b)

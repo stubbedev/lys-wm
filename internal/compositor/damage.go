@@ -113,6 +113,22 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	}
 }
 
+func (f *frame) fade(from int, a float32) {
+	for i := range f.ops[from:] {
+		op := &f.ops[from+i]
+		op.opaque = false
+		switch {
+		case op.gradient.Stops != nil:
+			op.gradient.Alpha *= a
+		case op.fill:
+			k := func(v uint8) uint8 { return uint8(math.Round(float64(v) * float64(a))) }
+			op.color = render.Color{R: k(op.color.R), G: k(op.color.G), B: k(op.color.B), A: k(op.color.A)}
+		default:
+			op.alpha *= a
+		}
+	}
+}
+
 func (f *frame) cull(covered *region.Set) {
 	covered.Reset()
 	scene := f.ops[:f.cursorFrom]

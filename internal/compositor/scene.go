@@ -23,6 +23,9 @@ func (c *Compositor) Frame(b backend.Output) error {
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
+	if err := c.finishClosing(o, c.frameTime); err != nil {
+		return err
+	}
 	if c.animating(o, c.frameTime) {
 		if err := c.schedule(o); err != nil {
 			return err
@@ -150,6 +153,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 			}
 		}
 	}
+	c.drawClosing(pass, o)
 	for _, w := range c.stack {
 		if w.layer != wm.LayerFullscreen {
 			shown = c.drawWindowPopups(pass, o, w, shown)
@@ -196,6 +200,9 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	c.drawBorder(pass, o, w)
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))
+	}
+	if a := w.fade.At(c.frameTime); a < 1 {
+		pass.fade(from, float32(max(a, 0)))
 	}
 	return shown
 }

@@ -78,7 +78,7 @@ func (c *Compositor) attach(s *surface.Surface) error {
 	}
 	switch b := s.Buffer().(type) {
 	case nil:
-		return c.dropTexture(s)
+		return errors.Join(c.keepSnapshot(s), c.dropTexture(s))
 	case *shm.Buffer:
 		if err := c.upload(s, b); err != nil {
 			return err

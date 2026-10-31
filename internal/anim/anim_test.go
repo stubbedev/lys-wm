@@ -136,6 +136,27 @@ func TestTweensRetargetFromWhatTheyShow(t *testing.T) {
 	}
 }
 
+func TestStylesParseAndDefaultPerEvent(t *testing.T) {
+	for text, want := range map[string]Style{"popin": {Popin, 80}, "popin 60%": {Popin, 60}, "slide": {Slide, 0}} {
+		if got, err := ParseStyle(text); err != nil || got != want {
+			t.Errorf("%q parsed to %+v, %v", text, got, err)
+		}
+	}
+	for _, text := range []string{"", "popin 60", "popin -1%", "slide left", "spin"} {
+		if _, err := ParseStyle(text); err == nil {
+			t.Errorf("%q accepted", text)
+		}
+	}
+	if s := (Table{}).Style(WindowsIn); s != (Style{Popin, 80}) {
+		t.Errorf("windows_in defaults to %+v", s)
+	}
+	slide := Style{Kind: Slide}
+	table, errs := Resolve(true, map[Event]Setting{WindowsOut: {Style: &slide}, FadeIn: {Style: &slide}})
+	if table.Style(WindowsOut) != slide || errs[FadeIn] == nil || errs[WindowsOut] != nil {
+		t.Errorf("windows_out %+v, errors %v", table.Style(WindowsOut), errs)
+	}
+}
+
 func TestLerpRectRoundsAndNeverInverts(t *testing.T) {
 	from, to := image.Rect(0, 0, 100, 100), image.Rect(50, 10, 60, 30)
 	if got := LerpRect(from, to, 0.5); got != image.Rect(25, 5, 80, 65) {

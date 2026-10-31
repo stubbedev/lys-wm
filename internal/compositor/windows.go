@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -16,19 +17,22 @@ import (
 )
 
 type window struct {
-	id      wm.WindowID
-	top     toplevel
-	tile    image.Rectangle
-	rect    image.Rectangle
-	visible bool
-	layer   wm.PlacementLayer
-	output  *output.Output
-	urgent  bool
-	hung    bool
-	scale   output.Scale
-	floated bool
-	motion  anim.Tween[image.Rectangle]
-	decided decided
+	id       wm.WindowID
+	top      toplevel
+	tile     image.Rectangle
+	rect     image.Rectangle
+	visible  bool
+	layer    wm.PlacementLayer
+	output   *output.Output
+	urgent   bool
+	hung     bool
+	scale    output.Scale
+	floated  bool
+	motion   anim.Tween[image.Rectangle]
+	fade     anim.Tween[float64]
+	appeared bool
+	snapshot render.TextureTarget
+	decided  decided
 }
 
 type decided struct {
@@ -210,6 +214,12 @@ func (c *Compositor) reconcile() error {
 
 func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 	switch {
+	case !w.appeared:
+		w.appeared = true
+		w.motion.Jump(p.Rect)
+		if p.Visible {
+			c.appear(w, p.Rect, now)
+		}
 	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w):
 		w.motion.Jump(p.Rect)
 	case p.Rect != w.motion.Target():
@@ -219,8 +229,8 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && !w.motion.Done(now) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	})
+		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o })
 }
 
 func (c *Compositor) content(tile image.Rectangle, layer wm.PlacementLayer) image.Rectangle {
@@ -363,7 +373,7 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapToplevel(t toplevel) error {
-	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect)}
+	w := &window{id: c.nextWindow, top: t, motion: anim.NewTween(image.Rectangle{}, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	c.nextWindow++
 	var s wm.State
 	var err error
@@ -398,6 +408,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	if w == nil {
 		return nil
 	}
+	closeErr := c.startClosing(w, c.clock())
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	if c.active == w {
 		c.active = nil
@@ -405,7 +416,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	if c.interaction != nil && c.interaction.w == w {
 		c.interaction = nil
 	}
-	return c.update(c.wm.UnmapWindow(w.id))
+	return errors.Join(closeErr, c.update(c.wm.UnmapWindow(w.id)))
 }
 
 func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {

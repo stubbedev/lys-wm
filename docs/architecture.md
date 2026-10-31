@@ -163,6 +163,15 @@ exactly what moved. After drawing, an output schedules its next frame for as
 long as an animation overlaps it, whether or not the frame changed anything,
 so an animation slower than a pixel per frame still reaches its end.
 
+A window that appears starts from its `windows_in` style and fades in; its
+ops are scaled by the fade, borders and shadows included (#231). A closing
+window is gone from the window list at once, so it takes no input and leaves
+the layout; what plays out is a snapshot: its surface tree and border drawn
+into an offscreen texture target at unmap, or at the null attach that unmaps
+it, whichever comes first, while its textures still exist. The snapshot is
+drawn above the windows of its output until its animation ends, and dropped
+then without a frame of its own.
+
 ## Dispatch
 
 One typed `Action` set and one dispatcher, in `wm` (#66). Keybinds,
