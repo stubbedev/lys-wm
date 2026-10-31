@@ -261,6 +261,11 @@ func (o *Output) bind(c *server.Client, id wire.ObjectID, version uint32) error 
 		return err
 	}
 	server.Track(b.wl, &o.bindings, b)
+	if version >= wlNameSince {
+		if err := b.wl.SendName(o.backend.Name()); err != nil {
+			return err
+		}
+	}
 	return o.send(b)
 }
 
@@ -295,10 +300,7 @@ func (o *Output) send(b *binding) error {
 			return err
 		}
 	}
-	if v >= 4 {
-		if err := b.wl.SendName(o.backend.Name()); err != nil {
-			return err
-		}
+	if v >= wlNameSince {
 		if err := b.wl.SendDescription(o.backend.Description()); err != nil {
 			return err
 		}
@@ -319,7 +321,11 @@ func (o *Output) send(b *binding) error {
 	return nil
 }
 
-const xdgDoneOnWlOutput = 3
+const (
+	wlNameSince       = 4
+	xdgNameSince      = 2
+	xdgDoneOnWlOutput = 3
+)
 
 func xdgDone(wl *sw.WlOutput, x *sxo.ZxdgOutputV1) error {
 	switch {
@@ -343,10 +349,7 @@ func (o *Output) sendXdg(c *server.Client, x *sxo.ZxdgOutputV1) error {
 	if err := x.SendLogicalSize(v32[2], v32[3]); err != nil {
 		return err
 	}
-	if v := x.Base().Version(); v >= 2 {
-		if err := x.SendName(o.backend.Name()); err != nil {
-			return err
-		}
+	if x.Base().Version() >= xdgNameSince {
 		if err := x.SendDescription(o.backend.Description()); err != nil {
 			return err
 		}
@@ -378,6 +381,11 @@ func (r xdgManagerRequests) GetXdgOutput(_ *sxo.ZxdgOutputManagerV1, x *sxo.Zxdg
 				continue
 			}
 			server.Track(x, &b.xdg, x)
+			if x.Base().Version() >= xdgNameSince {
+				if err := x.SendName(o.backend.Name()); err != nil {
+					return nil, err
+				}
+			}
 			if err := o.sendXdg(b.client, x); err != nil {
 				return nil, err
 			}

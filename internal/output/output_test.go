@@ -147,7 +147,11 @@ func (e *xdgEvents) Done(*cxo.ZxdgOutputV1) error {
 	return nil
 }
 
-func (e *xdgEvents) Name(*cxo.ZxdgOutputV1, string) error        { return nil }
+func (e *xdgEvents) Name(_ *cxo.ZxdgOutputV1, n string) error {
+	e.log = append(e.log, "name "+n)
+	return nil
+}
+
 func (e *xdgEvents) Description(*cxo.ZxdgOutputV1, string) error { return nil }
 
 type outputRig struct {
@@ -231,7 +235,7 @@ func TestXdgOutputDoneFollowsItsVersion(t *testing.T) {
 	r := serveOutput(t)
 	oe, xe := &outputEvents{}, &xdgEvents{}
 	r.bind(t, 1, 2, oe, xe)
-	if want := []string{"position 1", "size 2x2", "done"}; !slices.Equal(xe.log, want) {
+	if want := []string{"name FAKE-1", "position 1", "size 2x2", "done"}; !slices.Equal(xe.log, want) {
 		t.Fatalf("xdg_output v2 events %v, want %v", xe.log, want)
 	}
 	r.on(func() {
@@ -242,7 +246,7 @@ func TestXdgOutputDoneFollowsItsVersion(t *testing.T) {
 	if err := r.d.Roundtrip(); err != nil {
 		t.Fatal(err)
 	}
-	if got := xe.log[3:]; !slices.Equal(got, []string{"position 0", "size 1x1", "done"}) {
+	if got := xe.log[4:]; !slices.Equal(got, []string{"position 0", "size 1x1", "done"}) {
 		t.Fatalf("xdg_output v2 after an update: %v", got)
 	}
 	r.bind(t, 1, 3, &outputEvents{}, &xdgEvents{})
@@ -253,11 +257,11 @@ func TestOutputAndXdgOutputEvents(t *testing.T) {
 	o, on, d := r.o, r.on, r.d
 	oe, xe := &outputEvents{}, &xdgEvents{}
 	r.bind(t, 4, 3, oe, xe)
-	wantOut := []string{"geometry", "mode", "scale 2", "name FAKE-1", "description", "done", "done"}
+	wantOut := []string{"name FAKE-1", "geometry", "mode", "scale 2", "description", "done", "done"}
 	if !slices.Equal(oe.log, wantOut) {
 		t.Fatalf("wl_output events %v, want %v (the second done closes the xdg_output's first burst)", oe.log, wantOut)
 	}
-	if want := []string{"position 1", "size 2x2"}; !slices.Equal(xe.log, want) {
+	if want := []string{"name FAKE-1", "position 1", "size 2x2"}; !slices.Equal(xe.log, want) {
 		t.Fatalf("xdg_output events %v, want %v: logical 200x200 at 100,0 and no xdg done at version 3", xe.log, want)
 	}
 	on(func() {
@@ -268,11 +272,11 @@ func TestOutputAndXdgOutputEvents(t *testing.T) {
 	if err := d.Roundtrip(); err != nil {
 		t.Fatal(err)
 	}
-	if got := oe.log[len(wantOut):]; !slices.Equal(got, []string{"geometry", "mode", "scale 3", "name FAKE-1", "description", "done"}) {
-		t.Fatalf("after an update: %v", got)
+	if got := oe.log[len(wantOut):]; !slices.Equal(got, []string{"geometry", "mode", "scale 3", "description", "done"}) {
+		t.Fatalf("after an update, which sends no second name: %v", got)
 	}
-	if got := xe.log[2:]; !slices.Equal(got, []string{"position 0", "size 1x1"}) {
-		t.Fatalf("xdg_output after an update: %v", got)
+	if got := xe.log[3:]; !slices.Equal(got, []string{"position 0", "size 1x1"}) {
+		t.Fatalf("xdg_output after an update, which sends no second name: %v", got)
 	}
 }
 
