@@ -159,7 +159,7 @@ func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
 
 	at(2 * time.Second)
 	open := h.Rendered(0)
-	if err := errors.Join(w.Destroy(), c.Display.Flush()); err != nil {
+	if err := errors.Join(w.Destroy(), c.Display.Roundtrip()); err != nil {
 		t.Fatal(err)
 	}
 	h.Eventually("the closed window still shown at its start", showingNear(5, 5, white))
@@ -271,7 +271,7 @@ func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
 	h.Eventually("the bar in place", showing(80, 15, barColor))
 
 	at(2 * time.Second)
-	if err := errors.Join(bar.Destroy(), shell.Display.Flush()); err != nil {
+	if err := errors.Join(bar.Destroy(), shell.Display.Roundtrip()); err != nil {
 		t.Fatal(err)
 	}
 	at(2500 * time.Millisecond)
