@@ -41,6 +41,7 @@ type window struct {
 	decided     decided
 	blur        *blurCache
 	wobble      *anim.Wobble
+	bud         image.Rectangle
 	jelly       render.TextureTarget
 }
 

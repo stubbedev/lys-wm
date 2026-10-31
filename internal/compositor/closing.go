@@ -13,12 +13,14 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type closing struct {
 	snapshot render.TextureTarget
 	output   *output.Output
 	level    level
+	bud      image.Rectangle
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 }
@@ -35,7 +37,11 @@ func (cl *closing) done(now time.Duration) bool {
 }
 
 func (c *Compositor) styled(e anim.Event, o *output.Output, goal image.Rectangle) image.Rectangle {
-	switch st := c.animations.Style(e); st.Kind {
+	st := c.animations.Style(e)
+	if st.Kind == anim.Bud {
+		st = anim.Style{Kind: anim.Popin, Percent: budFallback}
+	}
+	switch st.Kind {
 	case anim.Popin:
 		k := st.Percent / 100
 		size := image.Pt(int(math.Round(float64(goal.Dx())*k)), int(math.Round(float64(goal.Dy())*k)))
@@ -60,9 +66,72 @@ func slideOff(area, r image.Rectangle) image.Rectangle {
 	return r.Add(moves[i])
 }
 
+const (
+	budShare    = 0.1
+	budFallback = 80
+)
+
+func budRect(neighbour, goal image.Rectangle) image.Rectangle {
+	size := image.Pt(max(int(float64(goal.Dx())*budShare), 1), max(int(float64(goal.Dy())*budShare), 1))
+	corner := neighbour.Min.Add(neighbour.Size().Div(2)).Sub(size.Div(2))
+	return image.Rectangle{Min: corner, Max: corner.Add(size)}
+}
+
+func travelled(from, at, to image.Rectangle) float64 {
+	centre := func(r image.Rectangle) (float64, float64) {
+		return float64(r.Min.X+r.Max.X) / 2, float64(r.Min.Y+r.Max.Y) / 2
+	}
+	fx, fy := centre(from)
+	ax, ay := centre(at)
+	tx, ty := centre(to)
+	total := math.Hypot(tx-fx, ty-fy)
+	if total == 0 {
+		return 1
+	}
+	return min(max(1-math.Hypot(tx-ax, ty-ay)/total, 0), 1)
+}
+
+func (c *Compositor) drawBud(pass *frame, o *output.Output, neighbour, at image.Rectangle, strength float64) {
+	a, b := deviceRect(o, neighbour), deviceRect(o, at)
+	if strength <= 0 || a.Empty() || b.Empty() {
+		return
+	}
+	color := scaleColor(c.decor.InactiveBorder.colors[0].Premultiply(), float32(strength))
+	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy()))
+	pass.fillGoo(a.Union(b), color, render.Goo{A: render.RoundRect{Rect: a, Radius: c.decorRadius(o)}, B: render.RoundRect{Rect: b, Radius: c.decorRadius(o)}, Smooth: smooth})
+}
+
+func (c *Compositor) decorRadius(o *output.Output) float32 {
+	if c.decor.Rounding <= 0 {
+		return 0
+	}
+	return deviceLength(o, c.decor.Rounding+c.decor.BorderWidth)
+}
+
+func (c *Compositor) neighbour(w *window, r image.Rectangle) (image.Rectangle, bool) {
+	o := c.outputAtRect(r)
+	var others []*window
+	for _, x := range c.windows {
+		if x != w && x.visible && o != nil && x.output == o && x.layer != wm.LayerFullscreen {
+			others = append(others, x)
+		}
+	}
+	if len(others) == 0 {
+		return image.Rectangle{}, false
+	}
+	return nearest(others, r).tile, true
+}
+
 func (c *Compositor) appear(w *window, goal image.Rectangle, now time.Duration) {
+	w.bud = image.Rectangle{}
 	if o := c.outputAtRect(goal); o != nil {
-		w.motion.Jump(c.styled(anim.WindowsIn, o, goal))
+		start := c.styled(anim.WindowsIn, o, goal)
+		if c.animations.Style(anim.WindowsIn).Kind == anim.Bud {
+			if n, ok := c.neighbour(w, goal); ok {
+				w.bud, start = n, budRect(n, goal)
+			}
+		}
+		w.motion.Jump(start)
 		w.motion.Set(goal, now, c.animations.Curve(anim.WindowsIn))
 	}
 	if fade := c.animations.Curve(anim.FadeIn); fade != anim.Instant {
@@ -147,7 +216,13 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 	}
 	w.snapshot = nil
 	cl := &closing{snapshot: tt, output: w.output, level: windowLevel, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
-	cl.motion.Set(c.styled(anim.WindowsOut, w.output, w.tile), now, c.animations.Curve(anim.WindowsOut))
+	end := c.styled(anim.WindowsOut, w.output, w.tile)
+	if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
+		if n, ok := c.neighbour(w, w.tile); ok {
+			cl.bud, end = n, budRect(n, w.tile)
+		}
+	}
+	cl.motion.Set(end, now, c.animations.Curve(anim.WindowsOut))
 	cl.fade.Set(0, now, c.animations.Curve(anim.FadeOut))
 	c.closing = append(c.closing, cl)
 	return c.scheduleAll()
@@ -160,6 +235,10 @@ func (c *Compositor) drawClosing(pass *frame, o *output.Output, at level) {
 		}
 		size := cl.snapshot.Size()
 		a := float32(min(max(cl.fade.At(c.frameTime), 0), 1))
+		if !cl.bud.Empty() {
+			now := cl.motion.At(c.frameTime)
+			c.drawBud(pass, o, cl.bud, now, travelled(cl.motion.Source(), now, cl.motion.Target()))
+		}
 		pass.DrawTexture(cl.snapshot.Texture(), render.FRect{W: float64(size.X), H: float64(size.Y)}, deviceRect(o, cl.motion.At(c.frameTime)), render.Normal, a)
 	}
 }

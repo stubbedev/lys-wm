@@ -252,10 +252,10 @@ func (c *Compositor) dimAroundColor() render.Color {
 }
 
 func (c *Compositor) outerRadius(o *output.Output, w *window) float32 {
-	if !c.rounded(w) {
+	if w.layer == wm.LayerFullscreen {
 		return 0
 	}
-	return deviceLength(o, c.decor.Rounding+c.decor.BorderWidth)
+	return c.decorRadius(o)
 }
 
 func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {

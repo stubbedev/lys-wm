@@ -589,3 +589,52 @@ func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
 	at(4 * time.Hour)
 	h.Eventually("the first workspace alone once the switch ends", showing(40, 100, white))
 }
+
+func TestANewWindowBudsOffItsNeighbour(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	bud := anim.Style{Kind: anim.Bud}
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.WindowsIn: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &bud}, anim.WindowsOut: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &bud}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor.BorderWidth = 0
+		cfg.WM.Autotile.Enabled = false
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	white := [3]byte{0xff, 0xff, 0xff}
+	c := testclient.Connect(t, h.Socket())
+	a := c.Window("parent", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("the first window to map", a.Mapped)
+	at(2 * time.Hour)
+	h.Eventually("the first window open", showing(70, 100, white))
+	b := c.Window("bud", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("the second window to map", b.Mapped)
+	c.DispatchUntil("the first window halved", func() bool { return a.Logical == image.Pt(80, 120) })
+	at(2*time.Hour + 500*time.Millisecond)
+	h.Eventually("a blob joining the new window to its neighbour", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return pixel(snapshot(b.Outputs()[0]), 70, 100)[0] < 0xe0
+	})
+	at(3 * time.Hour)
+	h.Eventually("both windows plain once the bud is grown", showing(70, 100, white))
+	if err := errors.Join(b.Destroy(), c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the first window whole again", func() bool { return a.Logical == image.Pt(160, 120) })
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("the closing window flowing back into its neighbour", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return pixel(snapshot(b.Outputs()[0]), 70, 100)[0] < 0xe0
+	})
+	at(4 * time.Hour)
+	h.Eventually("the neighbour plain once the bud is gone", showing(70, 100, white))
+}

@@ -248,8 +248,8 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `global` | | Defaults: `ease_out` over 250 ms | |
 | `windows` | `global` | Every window animation | |
 | `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | `morph`: the window stretches ahead of itself toward where it is going, its content filling a liquid blob that melts the rectangle it is at into the one it is about to reach; `elastic`: a window dragged with the mouse bends like jelly, the part under the pointer following it and the rest catching up on a spring (`windows_move`'s, when its curve is a spring) until it settles flat |
-| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output |
-| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide` |
+| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows |
+| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window |
 | `fade` | `global` | Every fade | |
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
 | `fade_out` | `fade` | A closing window fading out | |

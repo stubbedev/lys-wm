@@ -197,6 +197,9 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if c.decision(w).DimAround {
 		pass.FillRect(deviceRect(o, o.Logical()), c.dimAroundColor())
 	}
+	if !w.bud.Empty() && !w.motion.Done(c.frameTime) {
+		c.drawBud(pass, o, w.bud, at, 1-travelled(w.motion.Source(), w.motion.At(c.frameTime), w.motion.Target()))
+	}
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
