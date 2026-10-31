@@ -284,6 +284,10 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.scenes, o)
 	delete(c.dropped, o)
 	delete(c.switches, o)
+	if b, ok := c.xray[o]; ok {
+		errs = append(errs, b.destroy())
+		delete(c.xray, o)
+	}
 	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.dropClosingOn(o), c.power.Removed(o), c.gamma.Removed(o))
 	c.ctm.Removed(o)
 	for _, e := range c.entered {

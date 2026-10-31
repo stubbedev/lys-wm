@@ -222,6 +222,7 @@ type Compositor struct {
 	blurGen         uint64
 	jellyGen        uint64
 	blurLayers      []string
+	xray            map[*output.Output]*blurCache
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID
 }
@@ -290,6 +291,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		labels:         map[*output.Output]map[labelKey]*label{},
 		stops:          map[stopsKey]render.Texture{},
 		switches:       map[*output.Output]*workspaceSwitch{},
+		xray:           map[*output.Output]*blurCache{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},

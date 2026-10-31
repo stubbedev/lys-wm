@@ -186,6 +186,7 @@ decoration:
 | `size` | 8: the distance between the blur's taps, in logical pixels |
 | `passes` | 1: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
 | `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves |
+| `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows and top layer surfaces, never the windows below them; every window then shares one blur per output, which windows moving underneath never redraw |
 
 A window rule's `blur: true` or `blur: false` overrides `enabled` for the
 windows it matches. The blur follows the window's rounded corners. It is

@@ -145,6 +145,7 @@ var windowLayers = []wm.PlacementLayer{wm.LayerTiled, wm.LayerFloating}
 
 func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface.Surface) ([]*surface.Surface, error) {
 	shown = c.drawLayers(pass, o, belowWindows, shown)
+	pass.background = len(pass.ops)
 	for _, layer := range windowLayers {
 		for _, w := range c.stack {
 			if w.layer == layer {

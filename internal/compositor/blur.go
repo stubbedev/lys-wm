@@ -14,6 +14,7 @@ type Blur struct {
 	Enabled bool
 	Size    int
 	Passes  int
+	XRay    bool
 }
 
 type blurCache struct {
@@ -44,6 +45,10 @@ func (c *Compositor) dropBlurs() error {
 			errs = append(errs, e.blur.destroy())
 		}
 	}
+	for o, b := range c.xray {
+		errs = append(errs, b.destroy())
+		delete(c.xray, o)
+	}
 	return errors.Join(errs...)
 }
 
@@ -73,12 +78,22 @@ func blurChanged(sc *scene, cache *blurCache, area image.Rectangle, below []draw
 }
 
 func (c *Compositor) drawBlur(pass *frame, o *output.Output, cache **blurCache, under image.Rectangle, m render.Mask) error {
-	area := under.Inset(-c.blurReach(o)).Intersect(image.Rectangle{Max: o.Backend().State().Mode.Size})
-	if area.Empty() {
+	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	area := under.Inset(-c.blurReach(o)).Intersect(bounds)
+	ops := pass.ops
+	if c.decor.Blur.XRay && pass.background >= 0 {
+		area, ops = bounds, pass.ops[:pass.background]
+		if c.xray[o] == nil {
+			c.xray[o] = &blurCache{}
+		}
+		shared := c.xray[o]
+		cache = &shared
+	}
+	if area.Empty() || !under.Overlaps(area) {
 		return nil
 	}
-	below := make([]drawOp, 0, len(pass.ops))
-	for _, op := range pass.ops {
+	below := make([]drawOp, 0, len(ops))
+	for _, op := range ops {
 		if op.dst.Overlaps(area) {
 			below = append(below, op)
 		}

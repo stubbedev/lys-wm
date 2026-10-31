@@ -233,6 +233,7 @@ type rawBlur struct {
 	Size    *At[int]     `yaml:"size"`
 	Passes  *At[int]     `yaml:"passes"`
 	Layers  []At[string] `yaml:"layers"`
+	XRay    *bool        `yaml:"xray"`
 }
 
 type rawShadow struct {
@@ -896,6 +897,7 @@ func Parse(file string, data []byte) (Config, error) {
 				Enabled: raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
 				Size:    p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
 				Passes:  p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
+				XRay:    raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
 			},
 			Dim: compositor.Dim{
 				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,

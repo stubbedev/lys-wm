@@ -92,6 +92,9 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("borders:\n  active: {colors: [mauve, \"#00ff0080\"], angle: 45}\n")); err != nil || !slices.Equal(c.Decor.ActiveBorder.Colors(), []render.Color{{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, {G: 0xff, A: 0x80}}) {
 		t.Errorf("a gradient border: %+v, %v", c.Decor.ActiveBorder, err)
 	}
+	if c, err := Parse("t.yaml", []byte("decoration:\n  blur:\n    xray: true\n")); err != nil || !c.Decor.Blur.XRay {
+		t.Errorf("decoration.blur.xray: %+v, %v", c.Decor.Blur, err)
+	}
 	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: 8, Passes: 2}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
 		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
 	}

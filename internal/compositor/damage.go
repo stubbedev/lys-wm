@@ -66,6 +66,7 @@ func shiftMask(m render.Mask, d image.Point) render.Mask {
 type frame struct {
 	ops        []drawOp
 	cursorFrom int
+	background int
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
@@ -287,7 +288,7 @@ func (sc *scene) draws(t render.Texture) bool {
 }
 
 func (sc *scene) begin() *frame {
-	sc.cur.ops, sc.cur.cursorFrom = sc.cur.ops[:0], 0
+	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background = sc.cur.ops[:0], 0, -1
 	return &sc.cur
 }
 
