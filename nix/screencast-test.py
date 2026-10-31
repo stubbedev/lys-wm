@@ -15,6 +15,7 @@ CURSOR_BOX = 64
 PICKER_PANEL = "262638"
 PICKER_PROBE = (630, 630, 20, 10)
 PICKER_APPEARS_S = 60
+PAGE_LOADS_S = 300
 DIALOG_READY_S = 60
 CAST_LINKED = "jq -e '([.[] | select(.type == \"PipeWire:Interface:Node\" and .info.props[\"media.class\"] == \"Stream/Input/Video\") | .id]) as $viewers | any(.[]; .type == \"PipeWire:Interface:Link\" and .info.state == \"active\" and (.info[\"input-node-id\"] as $node | $viewers | index($node)))'"
 PICKER_SERVICE = "dev.stubbe.lys.SharePicker1"
@@ -53,6 +54,7 @@ def dump(*logs):
     print(machine.execute(as_alice("lys-wmctl windows") + " | jq -c '.[] | {id, app_id, title, rect}'")[1])
     for log in logs:
         print(machine.execute(f"tail -60 /tmp/{log}.log")[1])
+        print(machine.execute(f"grep -n -B60 -m1 'Network service crashed' /tmp/{log}.log | cut -c1-260")[1])
     print(machine.execute(f"journalctl -b --no-pager _UID=1000 | grep -e {params['portal_log']} -e pipewire | tail -150")[1])
 
 
@@ -195,10 +197,11 @@ def share(app, label, confirms):
     started = cpu_times()
     launch(app)
     try:
-        machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"waiting\"))'", timeout=600)
-    except Exception:
+        machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"waiting\"))'", timeout=PAGE_LOADS_S)
+    except Exception as e:
         dump(app)
-        raise
+        crashed = machine.execute(f"grep -c 'Network service crashed' /tmp/{app}.log")[1].strip()
+        raise AssertionError(f"{app} did not load the test page within {PAGE_LOADS_S} s; {stolen(started)} meanwhile; its network service crashed {crashed} times") from e
     machine.sleep(5)
     [shown] = [w for w in windows() if w["id"] not in before]
     ran = choose(label)

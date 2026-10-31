@@ -85,7 +85,7 @@
   launchers = builtins.mapAttrs launch {
     animation = "${pkgs.weston}/bin/weston-presentation-shm";
     firefox = "${pkgs.firefox}/bin/firefox --no-remote --profile /tmp/firefox '${page}'";
-    chromium = "${pkgs.chromium}/bin/chromium --no-first-run --user-data-dir=/tmp/chromium '${page}'";
+    chromium = "${pkgs.chromium}/bin/chromium --enable-logging=stderr --v=1 --no-first-run --user-data-dir=/tmp/chromium '${page}'";
     electron = "${pkgs.electron}/bin/electron --ozone-platform=wayland ${electronApp} ${toString seconds}";
   };
 in
