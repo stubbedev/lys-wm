@@ -39,8 +39,10 @@ precision mediump float;
 uniform vec4 keep;
 uniform vec4 cut;
 uniform vec4 radii;
+uniform vec4 merge;
+uniform float smoothing;
 `
-	coverage    = "maskCoverage(gl_FragCoord.xy, keep, cut, radii)"
+	coverage    = "maskCoverage(gl_FragCoord.xy, keep, cut, radii, merge, smoothing)"
 	textureMain = `uniform float alpha;
 varying vec2 v_texcoord;
 void main() { gl_FragColor = %s * (alpha * ` + coverage + `); }`
@@ -53,7 +55,7 @@ var (
 	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
 	gradientShader = maskHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops)) * (alpha * " + coverage + "); }"
 	kawaseShader   = "#define SAMPLE texture2D\n" + maskHeader + "uniform sampler2D tex;\nuniform vec2 taps;\nuniform float up;\nvarying vec2 v_texcoord;\nvoid main() { gl_FragColor = up > 0.5 ? kawaseUp(tex, v_texcoord, taps) : kawaseDown(tex, v_texcoord, taps); }"
-	gooShader      = maskHeader + "uniform vec4 color;\nuniform vec4 merge;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
+	gooShader      = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
 
@@ -66,6 +68,7 @@ type program struct {
 	keep, cut, radii   int32
 	line, stops        int32
 	taps, up, merge    int32
+	smoothing          int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -136,21 +139,22 @@ func (r *Renderer) setup() error {
 			return err
 		}
 		*p.prog = program{
-			id:       id,
-			pos:      r.gl.GetAttribLocation(id, "pos"),
-			texcoord: r.gl.GetAttribLocation(id, "texcoord"),
-			size:     r.gl.GetUniformLocation(id, "size"),
-			color:    r.gl.GetUniformLocation(id, "color"),
-			alpha:    r.gl.GetUniformLocation(id, "alpha"),
-			keep:     r.gl.GetUniformLocation(id, "keep"),
-			cut:      r.gl.GetUniformLocation(id, "cut"),
-			radii:    r.gl.GetUniformLocation(id, "radii"),
-			line:     r.gl.GetUniformLocation(id, "line"),
-			stops:    r.gl.GetUniformLocation(id, "stops"),
-			taps:     r.gl.GetUniformLocation(id, "taps"),
-			up:       r.gl.GetUniformLocation(id, "up"),
-			merge:    r.gl.GetUniformLocation(id, "merge"),
-			alphaSet: -1,
+			id:        id,
+			pos:       r.gl.GetAttribLocation(id, "pos"),
+			texcoord:  r.gl.GetAttribLocation(id, "texcoord"),
+			size:      r.gl.GetUniformLocation(id, "size"),
+			color:     r.gl.GetUniformLocation(id, "color"),
+			alpha:     r.gl.GetUniformLocation(id, "alpha"),
+			keep:      r.gl.GetUniformLocation(id, "keep"),
+			cut:       r.gl.GetUniformLocation(id, "cut"),
+			radii:     r.gl.GetUniformLocation(id, "radii"),
+			line:      r.gl.GetUniformLocation(id, "line"),
+			stops:     r.gl.GetUniformLocation(id, "stops"),
+			taps:      r.gl.GetUniformLocation(id, "taps"),
+			up:        r.gl.GetUniformLocation(id, "up"),
+			merge:     r.gl.GetUniformLocation(id, "merge"),
+			smoothing: r.gl.GetUniformLocation(id, "smoothing"),
+			alphaSet:  -1,
 		}
 		r.gl.UseProgram(id)
 		r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
@@ -683,13 +687,14 @@ func (p *pass) setMask(prog *program, m render.Mask) {
 	}
 	prog.masked, prog.maskSet = true, m
 	gl := p.owner.gl
-	for _, u := range [2]struct {
+	for _, u := range [3]struct {
 		loc int32
 		r   image.Rectangle
-	}{{prog.keep, m.Keep.Rect}, {prog.cut, m.Cut.Rect}} {
+	}{{prog.keep, m.Keep.Rect}, {prog.cut, m.Cut.Rect}, {prog.merge, m.Merge}} {
 		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
 	}
 	gl.Uniform4f(prog.radii, m.Keep.Radius, m.Cut.Radius, m.Falloff.Range, m.Falloff.Power)
+	gl.Uniform1f(prog.smoothing, m.Smooth)
 }
 
 func (p *pass) draw(dst image.Rectangle) {
