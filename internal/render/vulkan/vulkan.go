@@ -181,6 +181,28 @@ func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	return &Target{r: r, t: t}, nil
 }
 
+type TextureTarget struct {
+	*Target
+	tex *texture
+}
+
+func (t *TextureTarget) Texture() render.Texture {
+	return t.tex
+}
+
+func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	t, err := r.d.NewOffscreen(size.X, size.Y)
+	if err != nil {
+		return nil, err
+	}
+	tex, err := t.Texture()
+	if err != nil {
+		t.Close()
+		return nil, err
+	}
+	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex}}, nil
+}
+
 func (r *Renderer) NewScanoutTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*Target, error) {
 	t, err := r.d.NewTarget(size.X, size.Y, format, modifiers)
 	if err != nil {
@@ -322,6 +344,9 @@ type pass struct {
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
 	t, ok := target.(*Target)
+	if tt, isTT := target.(*TextureTarget); isTT {
+		t, ok = tt.Target, true
+	}
 	switch {
 	case !ok:
 		return nil, fmt.Errorf("vulkan: cannot render into %T", target)

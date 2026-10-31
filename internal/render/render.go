@@ -268,6 +268,11 @@ type ReadTarget interface {
 	Destroy() error
 }
 
+type TextureTarget interface {
+	ReadTarget
+	Texture() Texture
+}
+
 type PendingRead interface {
 	Wait() error
 	Map() ([]byte, error)
@@ -294,6 +299,7 @@ type Renderer interface {
 	Formats() []Format
 	NewTexture(format Format, size image.Point, stride int, data []byte) (Texture, error)
 	NewTarget(size image.Point) (ReadTarget, error)
+	NewTextureTarget(size image.Point) (TextureTarget, error)
 	Begin(target Target, damage Region) (Pass, error)
 }
 

@@ -211,6 +211,7 @@ type texture struct {
 	img    *gpu.Image
 	filter int32
 	upload pixelUpload
+	drawn  *Framebuffer
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -396,6 +397,9 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if t.img != nil {
 		return errors.New("gles: a dmabuf texture is updated by its client, not uploaded")
 	}
+	if t.drawn != nil {
+		return errors.New("gles: a target's texture is drawn by a pass, not uploaded")
+	}
 	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
 	}
@@ -411,7 +415,7 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 }
 
 func (t *texture) Destroy() error {
-	if t.id == 0 {
+	if t.id == 0 || t.drawn != nil {
 		return nil
 	}
 	err := t.r.enter()
@@ -457,6 +461,37 @@ func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	return r.NewFramebuffer(size)
+}
+
+type TextureTarget struct {
+	*Framebuffer
+	tex *texture
+}
+
+func (t *TextureTarget) Texture() render.Texture {
+	return t.tex
+}
+
+func (t *TextureTarget) Destroy() error {
+	t.tex.id = 0
+	return t.Framebuffer.Destroy()
+}
+
+func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	f, err := r.NewFramebuffer(size)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.enter(); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	r.gl.BindTexture(gpu.Texture2D, f.tex)
+	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
+	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
+	if err := r.leave("gles: a texture target"); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	return &TextureTarget{Framebuffer: f, tex: &texture{r: r, id: f.tex, size: size, target: gpu.Texture2D, drawn: f}}, nil
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
@@ -560,6 +595,9 @@ type pass struct {
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
 	fb, ok := target.(*Framebuffer)
+	if tt, isTT := target.(*TextureTarget); isTT {
+		fb, ok = tt.Framebuffer, true
+	}
 	switch {
 	case !ok:
 		return nil, fmt.Errorf("gles: cannot render into %T", target)
@@ -709,6 +747,9 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		return
 	case tex.id == 0:
 		p.fail(errors.New("gles: texture used after Destroy"))
+		return
+	case tex.drawn == p.fb:
+		p.fail(errors.New("gles: DrawTexture of the pass's own target"))
 		return
 	case dst.Empty():
 		return

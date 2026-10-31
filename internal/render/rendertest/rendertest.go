@@ -112,6 +112,55 @@ func MaskScene(tx Textures) func(render.Pass) {
 	}
 }
 
+func newTextureTarget(t *testing.T, r render.Renderer) render.TextureTarget {
+	t.Helper()
+	tt, err := r.NewTextureTarget(Size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := tt.Destroy(); err != nil {
+			t.Error(err)
+		}
+	})
+	return tt
+}
+
+func offscreen(t *testing.T, r render.Renderer, target render.ReadTarget, rtx Textures, s *soft.Renderer, buf *soft.Buffer, stx Textures) {
+	t.Helper()
+	rtt, stt := newTextureTarget(t, r), newTextureTarget(t, s)
+	full := render.Region{image.Rectangle{Max: Size}}
+	Paint(t, r, rtt, full, Scene(rtx))
+	Paint(t, s, stt, full, Scene(stx))
+	want, ok := stt.(*soft.TextureTarget)
+	if !ok {
+		t.Fatalf("the software renderer made a %T", stt)
+	}
+	Compare(t, want.Buffer, rtt, 1)
+	sample := func(tt render.TextureTarget) func(render.Pass) {
+		return func(p render.Pass) {
+			p.Clear(render.Color{R: 0x10, G: 0x20, B: 0x30, A: 0xff})
+			window := image.Rect(6, 5, 6+Size.X/2, 5+Size.Y/2)
+			p.DrawTexture(tt.Texture(), render.FRect{W: float64(Size.X / 2), H: float64(Size.Y / 2)}, window, render.Normal, 0.75, render.Mask{Keep: render.RoundRect{Rect: window, Radius: 6}})
+			p.DrawTexture(tt.Texture(), render.FRect{X: 10, Y: 8, W: 16, H: 20}, image.Rect(40, 20, 60, 36), render.Rotate90, 1, render.Mask{})
+		}
+	}
+	Paint(t, r, target, full, sample(rtt))
+	Paint(t, s, buf, full, sample(stt))
+	Compare(t, buf, target, 1)
+	p, err := r.Begin(rtt, full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.DrawTexture(rtt.Texture(), render.FRect{W: 1, H: 1}, image.Rect(0, 0, 1, 1), render.Normal, 1, render.Mask{})
+	if err := p.End(); err == nil {
+		t.Fatalf("%T drew a target into itself", r)
+	}
+	if err := rtt.Texture().Update(image.Rect(0, 0, 1, 1), 4, make([]byte, 4)); err == nil {
+		t.Fatalf("%T uploaded into a target's texture", r)
+	}
+}
+
 func Compare(t *testing.T, want *soft.Buffer, got render.ReadTarget, tolerance int) {
 	t.Helper()
 	pix := make([]byte, len(want.Pix))
@@ -166,6 +215,8 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 	Paint(t, r, target, full, MaskScene(rtx))
 	Paint(t, s, buf, full, MaskScene(stx))
 	Compare(t, buf, target, 1)
+
+	offscreen(t, r, target, rtx, s, buf, stx)
 
 	cleared := render.Region{image.Rect(3, 4, 21, 15)}
 	clear := func(p render.Pass) {

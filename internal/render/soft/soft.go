@@ -51,6 +51,7 @@ type texture struct {
 	stride int
 	size   image.Point
 	format render.Format
+	drawn  *Buffer
 }
 
 func (t *texture) Size() image.Point {
@@ -60,6 +61,9 @@ func (t *texture) Size() image.Point {
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if t.pix == nil {
 		return errors.New("soft: update of a destroyed texture")
+	}
+	if t.drawn != nil {
+		return errors.New("soft: a target's texture is drawn by a pass, not uploaded")
 	}
 	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
@@ -73,7 +77,9 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 }
 
 func (t *texture) Destroy() error {
-	t.pix = nil
+	if t.drawn == nil {
+		t.pix = nil
+	}
 	return nil
 }
 
@@ -117,8 +123,33 @@ func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	return NewBuffer(size.X, size.Y), nil
 }
 
+type TextureTarget struct {
+	*Buffer
+	tex *texture
+}
+
+func (t *TextureTarget) Texture() render.Texture {
+	return t.tex
+}
+
+func (t *TextureTarget) Destroy() error {
+	t.tex.pix = nil
+	return t.Buffer.Destroy()
+}
+
+func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	if size.X <= 0 || size.Y <= 0 {
+		return nil, fmt.Errorf("soft: cannot make a %v target", size)
+	}
+	b := NewBuffer(size.X, size.Y)
+	return &TextureTarget{Buffer: b, tex: &texture{owner: r, pix: b.Pix, stride: b.Stride, size: size, format: render.ARGB8888, drawn: b}}, nil
+}
+
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
 	buf, ok := target.(*Buffer)
+	if tt, isTT := target.(*TextureTarget); isTT {
+		buf, ok = tt.Buffer, true
+	}
 	if !ok {
 		return nil, fmt.Errorf("soft: cannot render into %T", target)
 	}
@@ -244,6 +275,9 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		return
 	case tex.pix == nil:
 		p.fail(errors.New("soft: texture used after Destroy"))
+		return
+	case tex.drawn == p.buf:
+		p.fail(errors.New("soft: DrawTexture of the pass's own target"))
 		return
 	case dst.Empty():
 		return

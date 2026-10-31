@@ -275,6 +275,14 @@ A masked op covers only its solid part, the keep rectangle less its corner
 squares, so culling still drops what lies under a window's middle, and direct
 scanout never takes a rounded window.
 
+Effects draw part of a frame offscreen and then draw it back (#226).
+`Renderer.NewTextureTarget` makes a target a later pass samples as a texture:
+the software renderer's buffer itself, a GLES framebuffer's colour texture, and
+a lys-lib offscreen target whose image the next sampling pass moves to its
+shader-read layout. Passes stay one at a time, so an effect is a pass into its
+target followed by the frame that samples it; a pass refuses to draw its own
+target, and the target's texture takes no uploads.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach
