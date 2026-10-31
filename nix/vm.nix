@@ -80,6 +80,11 @@ in
             print(machine.execute("journalctl -b --no-pager -t lys-wm -t greetd")[1])
             raise
         import re
+        try:
+            machine.wait_until_succeeds("journalctl -b --no-pager -t lys-wm | grep -q 'lys-wm: listening on '", timeout=30)
+        except Exception:
+            print(machine.execute("journalctl -b --no-pager -t lys-wm -t greetd")[1])
+            raise
         journal = machine.succeed("journalctl -b --no-pager -t lys-wm")
         print(journal)
         framed = sorted(set(re.findall(r"drawing the cursor in the frame on ([^:]+):", journal)))
