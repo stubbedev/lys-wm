@@ -1,0 +1,37 @@
+Source: lys-wm
+Section: x11
+Priority: optional
+Maintainer: @MAINTAINER@
+Build-Depends:
+ debhelper-compat (= 13)
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/stubbedev/lys-wm
+Vcs-Git: https://github.com/stubbedev/lys-wm.git
+Vcs-Browser: https://github.com/stubbedev/lys-wm
+
+Package: lys-wm
+Architecture: amd64 arm64
+Depends:
+ ${misc:Depends},
+ fonts-dejavu-core,
+ hwdata,
+ libegl1,
+ libgbm1,
+ libgles2,
+ libinput10,
+ libxkbcommon0
+Recommends:
+ xwayland,
+ xdg-desktop-portal,
+ lys-shell,
+ libvulkan1,
+ mesa-vulkan-drivers
+Description: pure-Go tiling Wayland compositor for the lys desktop
+ lys-wm is the lys desktop's compositor: a tiling Wayland compositor on
+ DRM/KMS through logind and libinput, with Xwayland for X11 clients.
+ .
+ It installs a lys-wm session for display managers, the
+ lys-wm-session.target user unit the session starts, and the portal
+ configuration that routes screen sharing and screenshots to lys-shell.
+ lys-wmctl queries and drives a running lys-wm over its IPC socket.

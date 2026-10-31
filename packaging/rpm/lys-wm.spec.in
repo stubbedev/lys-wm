@@ -1,0 +1,60 @@
+%global debug_package %{nil}
+%global _build_id_links none
+
+Name:           lys-wm
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Pure-Go tiling Wayland compositor for the lys desktop
+License:        MIT AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND LGPL-2.1-or-later AND (Unlicense OR BSD-3-Clause)
+URL:            https://github.com/stubbedev/lys-wm
+Source0:        https://github.com/stubbedev/lys-wm/releases/download/v%{version}/lys-wm-%{version}-%{_arch}-linux.tar.gz
+ExclusiveArch:  x86_64
+
+BuildRequires:  systemd-rpm-macros
+Requires:       dejavu-sans-fonts
+Requires:       hwdata
+Requires:       libglvnd-egl
+Requires:       libglvnd-gles
+Requires:       libinput
+Requires:       libxkbcommon
+Requires:       mesa-libgbm
+Recommends:     xorg-x11-server-Xwayland
+Recommends:     xdg-desktop-portal
+Recommends:     lys-shell
+Recommends:     vulkan-loader
+Recommends:     mesa-vulkan-drivers
+
+%description
+lys-wm is the lys desktop's compositor: a tiling Wayland compositor on DRM/KMS through logind and libinput, with Xwayland for X11 clients.
+
+It installs a lys-wm session for display managers, the lys-wm-session.target user unit the session starts, and the portal configuration that routes screen sharing and screenshots to lys-shell. lys-wmctl queries and drives a running lys-wm over its IPC socket.
+
+%prep
+%setup -q -n lys-wm-%{version}-%{_arch}-linux
+
+%build
+
+%install
+install -d %{buildroot}%{_bindir}
+install -m 0755 lys-wm lys-wmctl %{buildroot}%{_bindir}/
+
+install -D -m 0644 lys-wm-session.target %{buildroot}%{_userunitdir}/lys-wm-session.target
+install -D -m 0644 lys-wm-portals.conf %{buildroot}%{_datadir}/xdg-desktop-portal/lys-wm-portals.conf
+install -D -m 0644 lys-wm.desktop %{buildroot}%{_datadir}/wayland-sessions/lys-wm.desktop
+
+install -d %{buildroot}%{_datadir}/lys-wm
+ln -s ../fonts/dejavu-sans-fonts/DejaVuSans.ttf %{buildroot}%{_datadir}/lys-wm/DejaVuSans.ttf
+
+%files
+%license LICENSE xgb.LICENSE
+%doc THIRD_PARTY.md
+%{_bindir}/lys-wm
+%{_bindir}/lys-wmctl
+%{_userunitdir}/lys-wm-session.target
+%{_datadir}/xdg-desktop-portal/lys-wm-portals.conf
+%{_datadir}/wayland-sessions/lys-wm.desktop
+%{_datadir}/lys-wm
+
+%changelog
+* @DATE@ @MAINTAINER@ - @VERSION@-1
+- Packaged upstream binary release

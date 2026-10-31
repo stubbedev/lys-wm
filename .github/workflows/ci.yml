@@ -68,3 +68,8 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VM sharing the screen through lys-shell's portal
         run: nix build -L .#checks.x86_64-linux.vm-screencast-lys-shell
+
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      version: 0~git${{ github.sha }}

@@ -3,3 +3,7 @@
 /result
 *.test
 /.direnv
+/dist
+/debbuild
+/rpmbuild
+/lys-wm-*-linux.tar.gz

@@ -159,6 +159,23 @@ test:
 build:
     go build -o /dev/null ./...
 
+# The program interpreter the dist/ binaries request: the distro's loader
+# at its standard path. purego links them dynamically, and a Go toolchain
+# from Nix would otherwise name its own /nix/store loader, which exists
+# only on NixOS.
+fhs_interpreter := if arch() == "aarch64" { "/lib/ld-linux-aarch64.so.1" } else { "/lib64/ld-linux-x86-64.so.2" }
+
+# The tab font the dist/ compositor reads: the Debian and RPM packages link
+# it to their distro's DejaVu Sans.
+dist_font := "/usr/share/lys-wm/DejaVuSans.ttf"
+
+# Build the release binaries into dist/, as the archive and the Debian and
+# RPM packages ship them: pure Go (the GPU, input and keymap libraries load
+# at runtime through purego by soname), stripped, asking for the standard
+# loader.
+dist:
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -I {{fhs_interpreter}} -X main.defaultFont={{dist_font}}" -o dist/ ./cmd/lys-wm ./cmd/lys-wmctl
+
 # Regenerate the protocol bindings from the vendored XML.
 generate:
     go generate ./internal/scanner
