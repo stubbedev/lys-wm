@@ -56,6 +56,7 @@ def dump(*logs):
         print(machine.execute(f"tail -60 /tmp/{log}.log")[1])
         print(machine.execute(f"grep -n -B60 -m1 'Network service crashed' /tmp/{log}.log | cut -c1-260")[1])
     print(machine.execute(f"journalctl -b --no-pager _UID=1000 | grep -e {params['portal_log']} -e pipewire | tail -150")[1])
+    print(machine.execute("journalctl -b --no-pager -t lys-wm | grep -v -e xkbcomp -e 'Virtual modifier' -e 'Using 0' -e 'X11 cannot' -e 'keycode' | tail -40")[1])
 
 
 def chooser_runs_command():
