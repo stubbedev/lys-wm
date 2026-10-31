@@ -347,7 +347,7 @@ func (p *pass) Clear(c render.Color) {
 }
 
 func (p *pass) FillRect(r image.Rectangle, c render.Color) {
-	p.p.FillRect(r, rgba(c))
+	p.p.FillRect(r, rgba(c), lgpu.Mask{})
 }
 
 func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32) {
@@ -363,7 +363,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		p.fail(err)
 		return
 	}
-	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha)
+	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha, lgpu.Mask{})
 }
 
 func (p *pass) fail(err error) {
