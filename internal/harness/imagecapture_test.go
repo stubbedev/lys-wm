@@ -102,12 +102,21 @@ func grab(t *testing.T, c *testclient.Client, session *ceic.ExtImageCopyCaptureS
 
 func captureInto(t *testing.T, c *testclient.Client, session *ceic.ExtImageCopyCaptureSessionV1, wl *cw.WlBuffer, size image.Point) (*capturedFrame, *ceic.ExtImageCopyCaptureFrameV1) {
 	t.Helper()
+	f, frame := requestCapture(t, session, wl, size)
+	if err := c.Display.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	return f, frame
+}
+
+func requestCapture(t *testing.T, session *ceic.ExtImageCopyCaptureSessionV1, wl *cw.WlBuffer, size image.Point) (*capturedFrame, *ceic.ExtImageCopyCaptureFrameV1) {
+	t.Helper()
 	f := &capturedFrame{}
 	frame, err := session.CreateFrame(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := errors.Join(frame.AttachBuffer(wl), frame.DamageBuffer(0, 0, int32(size.X), int32(size.Y)), frame.Capture(), c.Display.Flush()); err != nil {
+	if err := errors.Join(frame.AttachBuffer(wl), frame.DamageBuffer(0, 0, int32(size.X), int32(size.Y)), frame.Capture()); err != nil {
 		t.Fatal(err)
 	}
 	return f, frame
@@ -476,7 +485,8 @@ func TestAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T)
 	quiesce(t, h, c, w)
 	r := newCaptureRig(t, h, c)
 	session, view := r.outputSession(0)
-	gone, frame, gonePix := grab(t, c, session, view.size)
+	wl, gonePix := c.Target(view.size)
+	gone, frame := requestCapture(t, session, wl, view.size)
 	if err := errors.Join(frame.Destroy(), c.Display.Roundtrip()); err != nil {
 		t.Fatal(err)
 	}
