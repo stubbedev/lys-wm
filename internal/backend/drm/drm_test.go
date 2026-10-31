@@ -500,6 +500,13 @@ func (r *rig) now() time.Duration {
 
 func (r *rig) until(what string, done func() bool) {
 	r.t.Helper()
+	if err := r.runUntil(what, done); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+func (r *rig) runUntil(what string, done func() bool) error {
+	r.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	var check *loop.Timer
 	check, err := r.l.AddTimer(func() error {
@@ -517,11 +524,12 @@ func (r *rig) until(what string, done func() bool) {
 		r.t.Fatal(err)
 	}
 	if err := r.l.Run(); err != nil {
-		r.t.Fatal(err)
+		return err
 	}
 	if !done() {
-		r.t.Fatalf("waited 10 s for %s", what)
+		r.t.Fatalf("waited 10 s for %s: %d commits, %d presents, reports %v, log %v", what, len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
 	}
+	return nil
 }
 
 func TestOutputsPickACRTCAndPrimaryPlane(t *testing.T) {
@@ -544,7 +552,7 @@ func TestFramesCommitAndFlip(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, 0)
 	if len(r.dev.commits) != 2 {
 		t.Fatalf("%d commits after the first frame", len(r.dev.commits))
 	}
@@ -577,7 +585,7 @@ func TestFramesCommitAndFlip(t *testing.T) {
 		t.Fatal("a frame was drawn while the previous flip was pending")
 	}
 	r.dev.flip(t, 10, 77)
-	r.settle()
+	r.committedSince("the queued frame after the flip", o, 2)
 	if len(r.rec.presents) != 1 || r.rec.presents[0].Seq != 77 || r.rec.presents[0].Time == 0 {
 		t.Fatalf("presents %+v", r.rec.presents)
 	}
@@ -637,7 +645,7 @@ func TestAnEmptyFrameLetsTheNextRunAndReportsAnIdleRefresh(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the idle refresh after both frames", func() bool { return len(r.rec.presents) > 0 })
 	if len(r.rec.log) < 3 || !slices.Equal(r.rec.log[:3], []string{"frame", "frame", "presented 0"}) {
 		t.Fatalf("log %v, want both frames before one idle presentation", r.rec.log)
 	}
@@ -789,7 +797,7 @@ func TestPowerAndWake(t *testing.T) {
 		t.Fatalf("power on commit %+v", on)
 	}
 	r.dev.flip(t, 10, 5)
-	r.settle()
+	r.until("the flip", func() bool { return !o.flipping })
 	if err := r.b.Wake(); err != nil {
 		t.Fatal(err)
 	}
@@ -802,15 +810,27 @@ func TestPowerAndWake(t *testing.T) {
 
 func (r *rig) lit() *Output {
 	r.t.Helper()
+	o := r.flipFirstFrame()
+	r.until("the first flip's latch", func() bool { return o.latchWait() <= 0 })
+	return o
+}
+
+func (r *rig) flipFirstFrame() *Output {
+	r.t.Helper()
 	o := r.b.Outputs()[0]
 	if err := o.ScheduleFrame(); err != nil {
 		r.t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, 0)
 	r.dev.flip(r.t, 10, 1)
-	r.settle()
+	r.until("the first frame's flip", func() bool { return !o.flipping })
 	r.dev.commits = nil
 	return o
+}
+
+func (r *rig) committedSince(what string, o *Output, n int) {
+	r.t.Helper()
+	r.until(what, func() bool { return len(r.dev.commits) > n && o.flipping })
 }
 
 func (r *rig) setCursor(o *Output, hotspot image.Point) error {
@@ -846,7 +866,7 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the cursor's first commit", func() bool { return o.flipping })
 	if len(r.dev.commits) != 3 || r.dev.commits[0].flags != kdrm.AtomicTestOnly || r.dev.commits[2].flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent {
 		t.Fatalf("setting the cursor committed %+v", r.dev.commits)
 	}
@@ -870,7 +890,7 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 		t.Fatal("the cursor moved while its last update was still flipping")
 	}
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the moved cursor's commit after the flip", func() bool { return len(r.dev.commits) >= 5 })
 	if len(r.dev.commits) != 5 || len(r.rec.presents) != 1 {
 		t.Fatalf("%d commits and %d presents after the flip", len(r.dev.commits), len(r.rec.presents))
 	}
@@ -878,19 +898,21 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 		t.Fatalf("the cursor landed at %v", at)
 	}
 	r.dev.flip(t, 10, 3)
-	r.settle()
+	r.until("the moved cursor's flip", func() bool { return !o.flipping })
+	sent := len(r.dev.commits)
 	if err := cp.HideCursor(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the hidden cursor's commit", func() bool { return len(r.dev.commits) > sent && o.flipping })
 	if fb, _, ok := cursorAt(r.dev.commits[len(r.dev.commits)-1]); !ok || fb != 0 {
 		t.Fatal("hiding the cursor did not clear its plane")
 	}
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
+	sent = len(r.dev.commits)
 	r.dev.flip(t, 10, 4)
-	r.settle()
+	r.until("the frame after the hidden cursor's flip", func() bool { return len(r.dev.commits) > sent && o.flipping })
 	if fb, _, ok := cursorAt(r.dev.commits[len(r.dev.commits)-1]); !ok || fb != 0 {
 		t.Fatal("a frame brought a hidden cursor back")
 	}
@@ -910,8 +932,9 @@ func TestFramesCarryTheCursor(t *testing.T) {
 	if err := cp.MoveCursor(image.Pt(30, 40)); err != nil {
 		t.Fatal(err)
 	}
+	n := len(r.dev.commits)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.committedSince("the frame after the flip", o, n)
 	last := r.dev.commits[len(r.dev.commits)-1]
 	if _, at, _ := cursorAt(last); at != image.Pt(30, 40) || last.values[[2]uint32{40, propFB}] == 0 {
 		t.Fatalf("the frame after the move: %+v", last.values)
@@ -930,16 +953,16 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 	if err := r.setCursor(o, image.Point{}); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the cursor", o, 0)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the cursor's flip", func() bool { return !o.flipping })
 	r.dev.commits = nil
 	cp, _ := o.CursorPlane()
 	r.rec.during = func(backend.Output) error { return cp.MoveCursor(image.Pt(9, 9)) }
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the frame", o, 0)
 	if len(r.dev.commits) != 2 || r.dev.commits[1].values[[2]uint32{40, propFB}] == 0 {
 		t.Fatalf("a move inside a frame committed %+v", r.dev.commits)
 	}
@@ -951,7 +974,7 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	r := start(t)
 	r.pinned = backend.Now()
-	o := r.lit()
+	o := r.flipFirstFrame()
 	half := modeOf(o.mode).Interval() / 2
 	r.pinned += half
 	if err := r.setCursor(o, image.Point{}); err != nil {
@@ -1160,16 +1183,17 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 		t.Fatalf("a second scanout during the flip = %t, %v", again, err)
 	}
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the client buffer's flip", func() bool { return !o.flipping })
 	if released != 0 {
 		t.Fatal("the client buffer was released while on screen")
 	}
+	n := len(r.dev.commits)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the frame replacing the client buffer", o, n)
 	r.dev.flip(t, 10, 3)
-	r.settle()
+	r.until("the frame's flip", func() bool { return !o.flipping })
 	if released != 1 {
 		t.Fatalf("the client buffer was released %d times after a frame replaced it", released)
 	}
@@ -1191,7 +1215,7 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 		}
 		fbs = append(fbs, r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}])
 		r.dev.flip(t, 10, seq)
-		r.settle()
+		r.until("the client buffer's flip", func() bool { return !o.flipping })
 	}
 	if fbs[0] == 0 || fbs[1] != fbs[0] || fbs[2] != fbs[0] {
 		t.Fatalf("three scanouts of one buffer used framebuffers %v, want one framebuffer reused", fbs)
@@ -1203,12 +1227,13 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 	if r.dev.removedFBs != removed {
 		t.Fatal("a framebuffer still on screen was removed when its buffer was forgotten")
 	}
+	n := len(r.dev.commits)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the frame replacing the forgotten buffer", o, n)
 	r.dev.flip(t, 10, 5)
-	r.settle()
+	r.until("the frame's flip", func() bool { return !o.flipping })
 	if r.dev.removedFBs != removed+1 {
 		t.Fatalf("%d framebuffers removed once the forgotten buffer left the screen, want 1", r.dev.removedFBs-removed)
 	}
@@ -1275,12 +1300,12 @@ func TestGammaLUTsReachTheCRTC(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the first frame", o, 0)
 	if lut, ok := gammaOf(r.dev.commits[1]); !ok || lut != 0 {
 		t.Fatal("the first modeset kept whatever LUT the CRTC had")
 	}
 	r.dev.flip(t, 10, 1)
-	r.settle()
+	r.until("the first frame's flip", func() bool { return !o.flipping })
 	r.dev.commits = nil
 	if n := o.GammaSize(); n != 4 {
 		t.Fatalf("gamma size %d, want the CRTC's GAMMA_LUT_SIZE 4", n)
@@ -1314,8 +1339,9 @@ func TestGammaLUTsReachTheCRTC(t *testing.T) {
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
+	n := len(r.dev.commits)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.committedSince("the frame after the flip", o, n)
 	frame := r.dev.commits[len(r.dev.commits)-1]
 	second, ok := gammaOf(frame)
 	if _, primary := frame.values[[2]uint32{40, propFB}]; !primary || !ok || second == 0 || second == first {
@@ -1326,7 +1352,7 @@ func TestGammaLUTsReachTheCRTC(t *testing.T) {
 	}
 
 	r.dev.flip(t, 10, 3)
-	r.settle()
+	r.until("the frame's flip", func() bool { return !o.flipping })
 	if err := o.SetGamma(nil); err != nil {
 		t.Fatal(err)
 	}
@@ -1335,7 +1361,7 @@ func TestGammaLUTsReachTheCRTC(t *testing.T) {
 	}
 
 	r.dev.flip(t, 10, 4)
-	r.settle()
+	r.until("the identity LUT's flip", func() bool { return !o.flipping })
 	r.dev.refuseGamma = true
 	before := len(r.dev.commits)
 	if err := o.SetGamma([]uint16{0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3}); err == nil {
@@ -1365,7 +1391,7 @@ func TestColorTransformsReachTheCRTC(t *testing.T) {
 		t.Fatal("the first modeset kept whatever CTM the CRTC had")
 	}
 	r.dev.flip(t, 10, 1)
-	r.settle()
+	r.until("the flip", func() bool { return !o.flipping })
 	r.dev.commits = nil
 	if !o.HasColorTransform() {
 		t.Fatal("a CRTC with a CTM property reports no colour transform")
@@ -1392,7 +1418,7 @@ func TestColorTransformsReachTheCRTC(t *testing.T) {
 	}
 
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the flip", func() bool { return !o.flipping })
 	if err := o.SetColorTransform(backend.Identity); err != nil {
 		t.Fatal(err)
 	}
@@ -1400,7 +1426,7 @@ func TestColorTransformsReachTheCRTC(t *testing.T) {
 		t.Fatalf("the identity committed CTM %d (%v), want no blob", m, ok)
 	}
 	r.dev.flip(t, 10, 3)
-	r.settle()
+	r.until("the flip", func() bool { return !o.flipping })
 	if !slices.Contains(r.dev.destroyed, uint32(blob)) {
 		t.Fatal("the replaced CTM blob was not destroyed")
 	}
@@ -1449,8 +1475,9 @@ func TestTearingScanoutsFlipAsync(t *testing.T) {
 	if len(torn.values) != 1 || r.dev.scanouts[uint32(torn.values[[2]uint32{40, propFB}])] != primeHandles+7 {
 		t.Fatalf("an async flip carried %v, want the primary plane's FB_ID alone", torn.values)
 	}
+	presents := len(r.rec.presents)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the flip's presentation", func() bool { return len(r.rec.presents) > presents })
 	if p := r.rec.presents[len(r.rec.presents)-1]; !p.Torn {
 		t.Fatalf("the async flip was presented as %+v, not torn", p)
 	}
@@ -1458,8 +1485,9 @@ func TestTearingScanoutsFlipAsync(t *testing.T) {
 	if vsync := scanout(8, false); vsync.flags&kdrm.AtomicPageFlipAsync != 0 {
 		t.Fatal("a scanout that does not tear flipped async")
 	}
+	presents = len(r.rec.presents)
 	r.dev.flip(t, 10, 3)
-	r.settle()
+	r.until("the flip's presentation", func() bool { return len(r.rec.presents) > presents })
 	if p := r.rec.presents[len(r.rec.presents)-1]; p.Torn {
 		t.Fatal("a vblank flip was presented as torn")
 	}
@@ -1476,14 +1504,14 @@ func TestCursorAndGammaWaitingOnAFlipShareOneCommit(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the cursor", o, 0)
 	cp, _ := o.CursorPlane()
 	if err := errors.Join(cp.MoveCursor(image.Pt(30, 20)), o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23})); err != nil {
 		t.Fatal(err)
 	}
 	before := len(r.dev.commits)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.committedSince("the commit after the flip", o, before)
 	var shown []commit
 	for _, c := range r.dev.commits[before:] {
 		if c.flags&kdrm.AtomicTestOnly == 0 {
@@ -1505,7 +1533,7 @@ func TestACursorRefusedAfterAFlipLetsTheLUTThrough(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the cursor", o, 0)
 	cp, _ := o.CursorPlane()
 	if err := errors.Join(cp.MoveCursor(image.Pt(30, 20)), o.SetGamma([]uint16{0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23})); err != nil {
 		t.Fatal(err)
@@ -1513,7 +1541,7 @@ func TestACursorRefusedAfterAFlipLetsTheLUTThrough(t *testing.T) {
 	r.dev.refuseCursor = true
 	before := len(r.dev.commits)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.committedSince("the commit after the flip", o, before)
 	last := r.dev.commits[len(r.dev.commits)-1]
 	if lut, ok := gammaOf(last); len(r.dev.commits) == before || last.flags&kdrm.AtomicTestOnly != 0 || !ok || lut == 0 {
 		t.Fatalf("the LUT did not go out after the cursor was refused: %+v", last)
@@ -1532,24 +1560,14 @@ func (r *rig) planesAfterAFlip(fail error) error {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		r.t.Fatal(err)
 	}
+	r.until("the cursor's first commit", func() bool { return o.flipping })
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(30, 20)); err != nil {
 		r.t.Fatal(err)
 	}
 	r.dev.failCommits = fail
 	r.dev.flip(r.t, 10, 2)
-	timer, err := r.l.AddTimer(func() error {
-		r.l.Stop()
-		return nil
-	})
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	defer timer.Remove()
-	if err := timer.Arm(20 * time.Millisecond); err != nil {
-		r.t.Fatal(err)
-	}
-	return r.l.Run()
+	return r.runUntil("the rejected plane commit's report", func() bool { return len(r.reports) > 0 })
 }
 
 func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
@@ -1617,12 +1635,13 @@ func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
 	o := r.lit()
 	frame := func(seq uint32) {
 		t.Helper()
+		n := len(r.dev.commits)
 		if err := o.ScheduleFrame(); err != nil {
 			t.Fatal(err)
 		}
-		r.settle()
+		r.committedSince("the frame", o, n)
 		r.dev.flip(t, 10, seq)
-		r.settle()
+		r.until("the frame's flip", func() bool { return !o.flipping })
 	}
 	tests := func() int {
 		n := 0
@@ -1643,12 +1662,13 @@ func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
 	if n := tests(); n != 0 {
 		t.Fatalf("%d test commits for frames on buffers that already passed, want none", n)
 	}
+	n := len(r.dev.commits)
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the cursor", o, n)
 	r.dev.flip(t, 10, 14)
-	r.settle()
+	r.until("the cursor's flip", func() bool { return !o.flipping })
 	r.dev.commits = nil
 	frame(15)
 	if n := tests(); n == 0 {
@@ -1663,9 +1683,9 @@ func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.committedSince("the cursor", o, 0)
 	r.dev.flip(t, 10, 2)
-	r.settle()
+	r.until("the cursor's flip", func() bool { return !o.flipping })
 	presents := len(r.rec.presents)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
@@ -1674,7 +1694,9 @@ func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	if err := cp.MoveCursor(image.Pt(40, 30)); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
+	r.until("the empty frame's refresh", func() bool {
+		return slices.ContainsFunc(r.rec.presents[presents:], func(p backend.Presentation) bool { return p.Idle })
+	})
 	if !o.flipping || o.queued != nil {
 		t.Fatalf("want a cursor-only flip pending at the refresh: flipping %v, queued %v", o.flipping, o.queued != nil)
 	}
