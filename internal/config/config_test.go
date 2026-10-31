@@ -75,6 +75,12 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.Tab.Padding != compositor.DefaultDecor().Tab.Padding {
 		t.Error("an unset tab field lost its default")
 	}
+	if cfg.WM.Gaps != (wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 12, Right: 8, Bottom: 12, Left: 8}}) {
+		t.Errorf("gaps %+v", cfg.WM.Gaps)
+	}
+	if c, err := Parse("t.yaml", []byte("gaps:\n  outer: 10\n")); err != nil || c.WM.Gaps.Outer != (wm.Insets{Top: 10, Right: 10, Bottom: 10, Left: 10}) {
+		t.Errorf("one outer gap gives %+v, %v", c.WM.Gaps, err)
+	}
 	if cfg.WM.Autotile.MinTrigger != 500 || !cfg.WM.Autotile.Enabled {
 		t.Errorf("autotile %+v", cfg.WM.Autotile)
 	}
@@ -155,6 +161,9 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"outputs:\n  - match: DP-1\n    mode: 1x1@1e12\n":           `t.yaml:3: outputs[0].mode: "1x1@1e12" is not`,
 		"tabs:\n  height: 0\n":                                      "t.yaml:2: tabs.height: 0 is not a positive number",
 		"borders:\n  width: -1\n":                                   "t.yaml:2: borders.width: -1 is not zero or more",
+		"gaps:\n  inner: -2\n":                                      "t.yaml:2: gaps.inner: -2 is not zero or more",
+		"gaps:\n  outer: [1, 2]\n":                                  "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",
+		"gaps:\n  outer: [1, 2, -3, 4]\n":                           "t.yaml:2: gaps.outer: [1 2 -3 4] is not zero or more",
 		"palette:\n  accent: orange\n":                              `t.yaml:2: palette.accent: "orange" is not #rrggbb[aa]`,
 		"input:\n  touchpad:\n    tapping: true\n":                  "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
 		"input:\n  devices:\n    mouse:\n      speed: 1\n":          `t.yaml:4: input.devices.mouse.speed: unknown key`,

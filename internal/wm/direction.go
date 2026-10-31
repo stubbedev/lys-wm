@@ -221,7 +221,7 @@ func (s State) outputToward(from string, d Direction) (string, bool) {
 func (s State) nearest(id WindowID, d Direction) (WindowID, bool) {
 	var from image.Rectangle
 	var visible []Placement
-	for _, p := range s.Arrange(0).Windows {
+	for _, p := range s.Arrange(Spacing{}).Windows {
 		if p.ID == id {
 			from = p.Rect
 		} else if p.Visible {
@@ -301,7 +301,7 @@ func (s State) MoveDirection(d Direction, policy CollapsePolicy) (State, error) 
 func (t Tree) InsertAt(id WindowID, area image.Rectangle, at image.Point, auto Autotile) (Tree, error) {
 	var target Placement
 	found := false
-	for _, p := range t.Arrange(area, 0).Windows {
+	for _, p := range t.Arrange(area, Spacing{}).Windows {
 		if p.Visible && at.In(p.Rect) {
 			target, found = p, true
 		}

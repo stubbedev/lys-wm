@@ -138,7 +138,7 @@ func TestCollapseOnRemoval(t *testing.T) {
 
 func TestArrangeRoundsEdgesDeterministically(t *testing.T) {
 	tree := build(t, 1, 2, 3)
-	a := tree.Arrange(image.Rect(0, 0, 100, 50), 10)
+	a := tree.Arrange(image.Rect(0, 0, 100, 50), Spacing{TabBar: 10})
 	want := []Placement{
 		{ID: 1, Rect: image.Rect(0, 0, 33, 50), Visible: true},
 		{ID: 2, Rect: image.Rect(33, 0, 67, 50), Visible: true},
@@ -149,12 +149,40 @@ func TestArrangeRoundsEdgesDeterministically(t *testing.T) {
 	}
 	tree = on(t)(tree.Wrap(3, Tabbed, false))
 	tree = on(t)(tree.Insert(4, SplitH))
-	a = tree.Arrange(image.Rect(0, 0, 100, 50), 10)
+	a = tree.Arrange(image.Rect(0, 0, 100, 50), Spacing{TabBar: 10})
 	if want := (TabBar{Rect: image.Rect(67, 0, 100, 10), Tabs: []WindowID{3, 4}, Active: 1}); len(a.TabBars) != 1 || a.TabBars[0].Rect != want.Rect || !slices.Equal(a.TabBars[0].Tabs, want.Tabs) || a.TabBars[0].Active != 1 {
 		t.Fatalf("tab bars %v, want %v", a.TabBars, want)
 	}
 	if got := a.Windows[2:]; got[0] != (Placement{ID: 3, Rect: image.Rect(67, 10, 100, 50), Visible: false}) || got[1] != (Placement{ID: 4, Rect: image.Rect(67, 10, 100, 50), Visible: true}) {
 		t.Fatalf("tabs placed %v", got)
+	}
+}
+
+func TestArrangeSeparatesTilesByTheGaps(t *testing.T) {
+	tree := build(t, 1, 2)
+	tree = on(t)(tree.Wrap(2, SplitV, false))
+	tree = on(t)(tree.Insert(3, SplitH))
+	sp := Spacing{Gaps: Gaps{Inner: 5, Outer: Insets{Top: 10, Right: 4, Bottom: 6, Left: 2}}}
+	a := tree.Arrange(image.Rect(0, 0, 103, 80), sp)
+	want := []Placement{
+		{ID: 1, Rect: image.Rect(2, 10, 49, 74), Visible: true},
+		{ID: 2, Rect: image.Rect(54, 10, 99, 40), Visible: true},
+		{ID: 3, Rect: image.Rect(54, 45, 99, 74), Visible: true},
+	}
+	if !slices.Equal(a.Windows, want) {
+		t.Fatalf("%s arranged %v, want %v", tree, a.Windows, want)
+	}
+	if b := tree.Arrange(image.Rect(0, 0, 103, 80), Spacing{}); b.Windows[0].Rect.Max.X != b.Windows[1].Rect.Min.X {
+		t.Fatalf("without gaps neighbours share an edge: %v", b.Windows)
+	}
+}
+
+func TestArrangeKeepsTilesValidWhenGapsExceedTheArea(t *testing.T) {
+	a := build(t, 1, 2, 3).Arrange(image.Rect(0, 0, 20, 10), Spacing{Gaps: Gaps{Inner: 30, Outer: Insets{Top: 8, Bottom: 8}}})
+	for _, p := range a.Windows {
+		if p.Rect.Dx() < 0 || p.Rect.Dy() < 0 || p.Rect != p.Rect.Canon() {
+			t.Fatalf("placed %v", a.Windows)
+		}
 	}
 }
 
@@ -192,8 +220,8 @@ func checkInvariants(t *testing.T, tree Tree, live []WindowID) {
 		}
 	}
 	area := image.Rect(3, 7, 1283, 727)
-	a := tree.Arrange(area, 0)
-	if b := tree.Arrange(area, 0); !slices.Equal(a.Windows, b.Windows) {
+	a := tree.Arrange(area, Spacing{})
+	if b := tree.Arrange(area, Spacing{}); !slices.Equal(a.Windows, b.Windows) {
 		t.Fatalf("arranging %s twice gave different placements", tree)
 	}
 	covered := 0

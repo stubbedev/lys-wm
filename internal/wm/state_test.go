@@ -127,7 +127,7 @@ func TestMoveToWorkspaceKeepsFocusHere(t *testing.T) {
 	if f, _ := s.Focused(); f != 1 || active(s)[0] != 1 {
 		t.Fatalf("focus %d on workspace %v after moving 2 away", f, active(s))
 	}
-	a := s.Arrange(0)
+	a := s.Arrange(Spacing{})
 	for _, p := range a.Windows {
 		if p.ID == 2 && p.Visible {
 			t.Fatal("a window on a hidden workspace is visible")
@@ -166,7 +166,7 @@ func TestOutputsComeAndGo(t *testing.T) {
 	s = ok(t)(s.RemoveOutput("DP-1"))
 	s = ok(t)(s.MapWindow(4, Autotile{}))
 	s = ok(t)(s.AddOutput("eDP-1", left, left))
-	if got := len(s.Arrange(0).Windows); got != 4 {
+	if got := len(s.Arrange(Spacing{}).Windows); got != 4 {
 		t.Fatalf("%d windows survive losing every output, want 4", got)
 	}
 	if _, err := s.RemoveOutput("nope"); !errors.Is(err, ErrUnknownOutput) {

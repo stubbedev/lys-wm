@@ -6,7 +6,7 @@ import (
 )
 
 func layerOf(s State, id WindowID) (PlacementLayer, image.Rectangle, bool) {
-	for _, p := range s.Arrange(0).Windows {
+	for _, p := range s.Arrange(Spacing{}).Windows {
 		if p.ID == id {
 			return p.Layer, p.Rect, p.Visible
 		}

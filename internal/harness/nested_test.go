@@ -185,7 +185,7 @@ func (n *nestedLysWM) state() wm.State {
 
 func placementsOf(s wm.State) map[wm.WindowID]wm.Placement {
 	out := map[wm.WindowID]wm.Placement{}
-	for _, p := range s.Arrange(0).Windows {
+	for _, p := range s.Arrange(wm.Spacing{}).Windows {
 		out[p.ID] = p
 	}
 	return out
@@ -277,7 +277,7 @@ func TestNestedTilingSession(t *testing.T) {
 	})
 
 	host.chord(keySuper, keyW)
-	n.eventually("a tab group", func(c *compositor.Compositor) bool { return len(c.WM().Arrange(20).TabBars) == 1 })
+	n.eventually("a tab group", func(c *compositor.Compositor) bool { return len(c.WM().Arrange(wm.Spacing{TabBar: 20}).TabBars) == 1 })
 
 	host.chord(keySuper, keyT)
 	n.eventually("the focused terminal floating", func(c *compositor.Compositor) bool {
@@ -290,7 +290,7 @@ func TestNestedTilingSession(t *testing.T) {
 	host.chord(keySuper, keyCtrl, keyEnter)
 	mapped(5)
 	n.eventually("the rule-floated terminal", func(c *compositor.Compositor) bool {
-		for _, pl := range c.WM().Arrange(0).Windows {
+		for _, pl := range c.WM().Arrange(wm.Spacing{}).Windows {
 			if pl.Layer == wm.LayerFloating && pl.Visible && pl.Rect.Size() == image.Pt(302, 202) {
 				return true
 			}

@@ -113,6 +113,22 @@ palette:
 | `active` | `mauve` |
 | `inactive` | `crust` |
 
+## gaps
+
+```yaml
+gaps:
+  inner: 6
+  outer: [12, 8, 12, 8]
+```
+
+| Key | Default |
+| --- | --- |
+| `inner` | 0: logical pixels between neighbouring tiled windows, borders included |
+| `outer` | 0: logical pixels between the tiled windows and the edges of the output's usable area; one number for every side, or `[top, right, bottom, left]` |
+
+Floating and fullscreen windows ignore gaps; a tab group's strip and its windows
+sit inside the group's tile.
+
 ## tabs
 
 | Key | Default |

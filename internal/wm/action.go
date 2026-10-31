@@ -49,6 +49,7 @@ func emit(s State, e Effect) (State, []Effect, error) {
 type Settings struct {
 	Collapse CollapsePolicy
 	Autotile Autotile
+	Gaps     Gaps
 }
 
 type WorkspaceTarget interface {

@@ -51,8 +51,8 @@ func DefaultDecor() Decor {
 	}
 }
 
-func (d Decor) reserved() int {
-	return d.Tab.Height + d.Tab.Padding
+func (c *Compositor) spacing() wm.Spacing {
+	return wm.Spacing{TabBar: c.decor.Tab.Height + c.decor.Tab.Padding, Gaps: c.settings.Gaps}
 }
 
 const (

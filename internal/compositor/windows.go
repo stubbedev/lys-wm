@@ -153,7 +153,7 @@ func (c *Compositor) reconcile() error {
 		}
 	}
 	var errs []error
-	a := c.wm.Arrange(c.decor.reserved())
+	a := c.wm.Arrange(c.spacing())
 	c.tabBars = a.TabBars
 	c.stack = c.stack[:0]
 	for _, p := range a.Windows {
@@ -226,7 +226,7 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	if err != nil {
 		return err
 	}
-	for _, p := range s.Arrange(c.decor.reserved()).Windows {
+	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == c.nextWindow {
 			return t.apply(c.wanted(c.content(p.Rect, p.Layer), p.Layer, true))
 		}
@@ -344,7 +344,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	if s, err = s.SetLimits(w.id, c.frameLimits(t)); err != nil {
 		return err
 	}
-	for _, p := range s.Arrange(c.decor.reserved()).Windows {
+	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == w.id && t.scaled() {
 			w.scale = c.scaleOver(p.Rect)
 		}

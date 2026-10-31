@@ -111,6 +111,7 @@ type rawConfig struct {
 	Input      rawInput              `yaml:"input"`
 	Palette    map[string]At[string] `yaml:"palette"`
 	Borders    rawBorders            `yaml:"borders"`
+	Gaps       rawGaps               `yaml:"gaps"`
 	Tabs       rawTabs               `yaml:"tabs"`
 	Autotile   rawAutotile           `yaml:"autotile"`
 	Binds      []rawBind             `yaml:"binds"`
@@ -172,6 +173,25 @@ type rawBorders struct {
 	Width    *At[int]    `yaml:"width"`
 	Active   *At[string] `yaml:"active"`
 	Inactive *At[string] `yaml:"inactive"`
+}
+
+type rawGaps struct {
+	Inner *At[int]   `yaml:"inner"`
+	Outer *At[sides] `yaml:"outer"`
+}
+
+type sides []int
+
+func (s *sides) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var v int
+		if err := n.Decode(&v); err != nil {
+			return err
+		}
+		*s = sides{v}
+		return nil
+	}
+	return n.Decode((*[]int)(s))
 }
 
 type rawTabColors struct {
@@ -357,6 +377,23 @@ func (p *parser) repeat(a *At[int], key string, fallback int32) int32 {
 		return fallback
 	}
 	return int32(a.V)
+}
+
+func (p *parser) gaps(r rawGaps) wm.Gaps {
+	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
+	if r.Outer == nil {
+		return g
+	}
+	v := r.Outer.V
+	if len(v) == 1 {
+		v = sides{v[0], v[0], v[0], v[0]}
+	}
+	if len(v) != 4 || slices.Min(v) < 0 {
+		p.fail(r.Outer.Line, "gaps.outer", "%v is not zero or more, or a list of four such numbers (top, right, bottom, left)", r.Outer.V)
+		return g
+	}
+	g.Outer = wm.Insets{Top: v[0], Right: v[1], Bottom: v[2], Left: v[3]}
+	return g
 }
 
 func parsePair(s string) (image.Point, bool) {
@@ -646,6 +683,7 @@ func Parse(file string, data []byte) (Config, error) {
 	}
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
+	cfg.WM.Gaps = p.gaps(raw.Gaps)
 	fallback := false
 	for i, o := range raw.Outputs {
 		rule := p.output(i, o.V)

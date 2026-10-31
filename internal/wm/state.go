@@ -550,7 +550,7 @@ const (
 	LayerFullscreen
 )
 
-func (s State) Arrange(tabBarHeight int) Arrangement {
+func (s State) Arrange(sp Spacing) Arrangement {
 	var all Arrangement
 	for _, w := range s.workspaces {
 		o := s.output(w.Output)
@@ -565,7 +565,7 @@ func (s State) Arrange(tabBarHeight int) Arrangement {
 		}
 		shown := o.Active == w.ID
 		covered := w.Fullscreen != 0
-		a := w.Tree.Arrange(o.Area, tabBarHeight)
+		a := w.Tree.Arrange(o.Area, sp)
 		for _, p := range a.Windows {
 			if p.ID == w.Fullscreen {
 				continue

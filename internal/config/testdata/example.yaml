@@ -29,6 +29,10 @@ input:
       natural_scroll: true
 palette:
   accent: "#ff8800"
+gaps:
+  inner: 6
+  outer: [12, 8, 12, 8]
+
 borders:
   width: 2
   active: accent

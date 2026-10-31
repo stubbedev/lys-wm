@@ -129,9 +129,13 @@ were read from hy3 at the pinned commit; its code is not ported.
 - An ephemeral group made around one window is staged, becomes active once
   it holds two children, and then dissolves when it drops back to one.
 
-Layout is a pure function from tree and area to placements. Split edges
-are rounded from cumulative ratios, so neighbours share an edge and the
-children always cover the area exactly.
+Layout is a pure function from tree, area and spacing to placements. Split
+edges are rounded from cumulative ratios, so without gaps neighbours share an
+edge and the children always cover the area exactly. Gaps (#224) shrink the
+area by the outer gap and then take the inner gap out around each split
+edge, half on each side with the odd pixel after the edge, so every pair of
+neighbours is exactly the inner gap apart at any depth. Directional focus,
+moves and drops work on the gapless arrangement, which is the topology.
 
 ### Workspaces
 
