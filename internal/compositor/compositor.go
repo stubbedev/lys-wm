@@ -68,6 +68,7 @@ type Config struct {
 	Hooks          Hooks
 	InheritTimeout time.Duration
 	Animations     anim.Table
+	BlurLayers     []string
 	Clock          func() time.Duration
 }
 
@@ -218,6 +219,8 @@ type Compositor struct {
 	clock           func() time.Duration
 	frameTime       time.Duration
 	closing         []*closing
+	blurGen         uint64
+	blurLayers      []string
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID
 }
@@ -266,7 +269,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
-	c.animations, c.clock = cfg.Animations, cfg.Clock
+	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.rulesGen++
 }
 
@@ -469,7 +472,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing()}
+	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs()}
 	for b, cached := range c.imported {
 		errs = append(errs, cached.tex.Destroy())
 		delete(c.imported, b)

@@ -168,6 +168,30 @@ decoration:
 The shadow is cut out under the window, so a translucent window does not show
 its own shadow through itself.
 
+`decoration.blur` blurs what lies behind translucent windows, and behind the
+layer surfaces whose namespace it lists:
+
+```yaml
+decoration:
+  blur:
+    enabled: true
+    size: 8
+    passes: 2
+    layers: [waybar, rofi]
+```
+
+| Key | Default |
+| --- | --- |
+| `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha |
+| `size` | 8: the distance between the blur's taps, in logical pixels |
+| `passes` | 1: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
+| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves |
+
+A window rule's `blur: true` or `blur: false` overrides `enabled` for the
+windows it matches. The blur follows the window's rounded corners. It is
+redrawn only when what lies behind the window, within the blur's reach,
+changes, and then the whole window is repainted.
+
 Opacity multiplies what the client draws, including the alpha it asks for
 through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
 the place of these for the windows it matches. A translucent window shows
@@ -319,6 +343,7 @@ rules:
 a rule needs at least one. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
 `decoration.dim_strength`, as for a dialog that should hold the attention.
+`blur: true` or `blur: false` turns `decoration.blur` on or off for the window.
 `opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
 `decoration`'s. `tearing: true` or
 `tearing: false` overrides what the window asks for through

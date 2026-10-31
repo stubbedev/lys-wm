@@ -169,6 +169,7 @@ func offscreen(t *testing.T, r render.Renderer, target render.ReadTarget, rtx Te
 	Paint(t, r, target, full, sample(rtt))
 	Paint(t, s, buf, full, sample(stt))
 	Compare(t, buf, target, 1)
+	kawase(t, r, rtt, s, stt)
 	p, err := r.Begin(rtt, full)
 	if err != nil {
 		t.Fatal(err)
@@ -179,6 +180,51 @@ func offscreen(t *testing.T, r render.Renderer, target render.ReadTarget, rtx Te
 	}
 	if err := rtt.Texture().Update(image.Rect(0, 0, 1, 1), 4, make([]byte, 4)); err == nil {
 		t.Fatalf("%T uploaded into a target's texture", r)
+	}
+}
+
+const KawaseTolerance = 3
+
+func kawase(t *testing.T, r render.Renderer, rtt render.TextureTarget, s *soft.Renderer, stt render.TextureTarget) {
+	t.Helper()
+	rprev, sprev := rtt, stt
+	for _, step := range []struct {
+		size image.Point
+		up   bool
+	}{{image.Pt(32, 24), false}, {image.Pt(16, 12), false}, {image.Pt(32, 24), true}, {Size, true}} {
+		rnext, err := r.NewTextureTarget(step.size)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snext, err := s.NewTextureTarget(step.size)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := errors.Join(rnext.Destroy(), snext.Destroy()); err != nil {
+				t.Error(err)
+			}
+		})
+		area := render.Region{image.Rectangle{Max: step.size}}
+		Paint(t, r, rnext, area, func(p render.Pass) {
+			p.Clear(render.Color{})
+			p.Kawase(rprev.Texture(), image.Rectangle{Max: step.size}, 1.5, step.up)
+		})
+		want, ok := snext.(*soft.TextureTarget)
+		if !ok {
+			t.Fatalf("the software renderer made a %T", snext)
+		}
+		Paint(t, s, snext, area, func(p render.Pass) {
+			p.Clear(render.Color{})
+			p.Kawase(sprev.Texture(), image.Rectangle{Max: step.size}, 1.5, step.up)
+		})
+		Compare(t, want.Buffer, rnext, KawaseTolerance)
+		pix := make([]byte, step.size.X*step.size.Y*4)
+		if err := rnext.Read(pix, step.size.X*4); err != nil {
+			t.Fatal(err)
+		}
+		copy(want.Pix, pix)
+		rprev, sprev = rnext, snext
 	}
 }
 

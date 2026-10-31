@@ -335,6 +335,7 @@ type Pass interface {
 	Clear(c Color)
 	FillRect(r image.Rectangle, c Color, m Mask)
 	FillGradient(r image.Rectangle, g Gradient, m Mask)
+	Kawase(t Texture, dst image.Rectangle, offset float32, up bool)
 	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
 	End() error
 }

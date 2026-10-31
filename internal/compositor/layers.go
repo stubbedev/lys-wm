@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"iter"
 	"slices"
@@ -23,6 +24,7 @@ type layer struct {
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 	snapshot render.TextureTarget
+	blur     *blurCache
 }
 
 func (e *layer) bounds() image.Rectangle {
@@ -149,6 +151,9 @@ func (c *Compositor) LayerDestroyed(l *shell.LayerSurface) error {
 	if e.snapshot != nil {
 		err = errors.Join(err, e.snapshot.Destroy())
 	}
+	if e.blur != nil {
+		err = errors.Join(err, e.blur.destroy())
+	}
 	c.layers = slices.DeleteFunc(c.layers, func(x *layer) bool { return x == e })
 	return errors.Join(err, c.layersChanged(e.output))
 }
@@ -180,6 +185,11 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 	for _, lv := range levels {
 		for e := range c.layersAt(o, []shell.Layer{lv}) {
 			from := len(pass.ops)
+			if slices.Contains(c.blurLayers, e.surface.Namespace()) {
+				if err := c.drawBlur(pass, o, &e.blur, deviceRect(o, e.bounds()), render.Mask{}); err != nil {
+					c.report(fmt.Errorf("compositor: blur behind the %q layer surface: %w", e.surface.Namespace(), err))
+				}
+			}
 			shown = c.drawTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown)
 			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {
 				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at))

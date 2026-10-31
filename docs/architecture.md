@@ -292,6 +292,14 @@ shader-read layout. Passes stay one at a time, so an effect is a pass into its
 target followed by the frame that samples it; a pass refuses to draw its own
 target, and the target's texture takes no uploads.
 
+Blur (#234) renders the ops already recorded under a window, within the
+blur's reach, into an offscreen target, halves it through `passes` dual Kawase
+steps and doubles it back, and draws the result under the window through its
+mask. The blurred ops and their surfaces' pending damage are kept per window;
+the chain is redrawn only when they change, and then the blur op's version
+changes, so the op diff repaints the whole window: damage below a blurred
+window grows to the window by the blur's reach.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

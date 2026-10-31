@@ -267,6 +267,44 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	}
 }
 
+func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: Kawase outside a pass"))
+		return
+	case !ok || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
+		return
+	case tex.pix == nil:
+		p.fail(errors.New("soft: texture used after Destroy"))
+		return
+	case tex.drawn == p.buf:
+		p.fail(errors.New("soft: Kawase of the pass's own target"))
+		return
+	case !(offset >= 0) || math.IsInf(float64(offset), 0):
+		p.fail(fmt.Errorf("soft: Kawase offset %v is not zero or more", offset))
+		return
+	case dst.Empty():
+		return
+	}
+	sample := func(u, v float32) [4]float32 { return lgpu.Bilinear(tex.pix, tex.stride, tex.size.X, tex.size.Y, u, v) }
+	hx, hy := 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset
+	for _, d := range p.damage.Rects() {
+		clip := dst.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				u := (float32(x-dst.Min.X) + 0.5) / float32(dst.Dx())
+				v := (float32(y-dst.Min.Y) + 0.5) / float32(dst.Dy())
+				c := lgpu.KawaseAt(sample, up, u, v, hx, hy)
+				b := func(f float32) byte { return byte(min(max(math.Round(float64(f)), 0), 255)) }
+				over(row[x*4:x*4+4], b(c[0]), b(c[1]), b(c[2]), b(c[3]))
+			}
+		}
+	}
+}
+
 func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
 	tex, ok := g.Stops.(*texture)
 	switch {

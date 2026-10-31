@@ -29,6 +29,7 @@ type Rule struct {
 	Tearing   RuleTearing
 	Opacity   *float32
 	DimAround bool
+	Blur      *bool
 }
 
 type Decision struct {
@@ -37,6 +38,7 @@ type Decision struct {
 	Tearing   RuleTearing
 	Opacity   *float32
 	DimAround bool
+	Blur      *bool
 }
 
 func (r Rule) matches(appID, title string) bool {
@@ -62,6 +64,9 @@ func Decide(rules []Rule, appID, title string) Decision {
 			d.Opacity = r.Opacity
 		}
 		d.DimAround = d.DimAround || r.DimAround
+		if r.Blur != nil {
+			d.Blur = r.Blur
+		}
 	}
 	return d
 }

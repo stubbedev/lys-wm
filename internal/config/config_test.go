@@ -92,6 +92,12 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("borders:\n  active: {colors: [mauve, \"#00ff0080\"], angle: 45}\n")); err != nil || !slices.Equal(c.Decor.ActiveBorder.Colors(), []render.Color{{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, {G: 0xff, A: 0x80}}) {
 		t.Errorf("a gradient border: %+v, %v", c.Decor.ActiveBorder, err)
 	}
+	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: 8, Passes: 2}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
+		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
+	}
+	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Blur {
+		t.Errorf("a rule's blur: %+v, %v", c.Rules, err)
+	}
 	if cfg.Decor.Rounding != 8 {
 		t.Errorf("decoration.rounding parsed to %d", cfg.Decor.Rounding)
 	}
@@ -221,6 +227,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"borders:\n  active: {colors: [red, blue], angel: 4}\n":                 "t.yaml:2: borders.active.angel: unknown key",
 		"borders:\n  active: {colors: [red, nope]}\n":                           `t.yaml:2: borders.active.colors[1]: "nope" is neither`,
 		"borders:\n  active: {colors: []}\n":                                    "t.yaml:2: borders.active: compositor: a gradient border takes 2 to 10 colours, not 0",
+		"decoration:\n  blur:\n    passes: 5\n":                                 "t.yaml:3: decoration.blur.passes: 5 is not from 1 to 4",
 		"decoration:\n  rounding: -1\n":                                         "t.yaml:2: decoration.rounding: -1 is not zero or more",
 		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
 		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",

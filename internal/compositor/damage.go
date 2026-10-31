@@ -26,6 +26,7 @@ type drawOp struct {
 	opaque    bool
 	mask      render.Mask
 	gradient  render.Gradient
+	version   uint64
 }
 
 func (op drawOp) covers() bool {

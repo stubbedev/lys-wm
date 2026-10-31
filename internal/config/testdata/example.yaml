@@ -48,6 +48,10 @@ decoration:
     range: 12
     offset: [2, 4]
     color: "#00000080"
+  blur:
+    enabled: true
+    passes: 2
+    layers: [waybar]
 
 gaps:
   inner: 6

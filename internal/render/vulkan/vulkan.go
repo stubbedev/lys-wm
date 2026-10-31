@@ -375,6 +375,18 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	p.p.FillRect(r, rgba(c), m)
 }
 
+func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	tex, ok := t.(*texture)
+	switch {
+	case !ok || tex.r != p.r:
+		p.fail(fmt.Errorf("vulkan: a texture of another renderer (%T)", t))
+		return
+	case p.err != nil:
+		return
+	}
+	p.p.Kawase(tex.t, dst, offset, up)
+}
+
 func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {
 	tex, ok := g.Stops.(*texture)
 	switch {

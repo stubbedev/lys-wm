@@ -195,6 +195,11 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
+	if c.blurred(w) && (c.shownOpacity(w) < 1 || !c.opaque(w.top.Surface())) {
+		if err := c.drawBlur(pass, o, &w.blur, deviceRect(o, w.rect), mask); err != nil {
+			c.report(fmt.Errorf("compositor: blur behind window %d: %w", w.id, err))
+		}
+	}
 	shown = c.drawClippedTree(pass, o, w.top.Surface(), c.windowOrigin(w), shown, mask, c.shownOpacity(w))
 	if c.decor.Dim.Inactive {
 		pass.fillMasked(deviceRect(o, w.rect), c.shownDim(w), mask)

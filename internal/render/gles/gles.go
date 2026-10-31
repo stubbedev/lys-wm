@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"runtime"
 	"slices"
 	"strings"
@@ -51,6 +52,7 @@ var (
 	rgbaShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
 	gradientShader = maskHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops)) * (alpha * " + coverage + "); }"
+	kawaseShader   = "#define SAMPLE texture2D\n" + maskHeader + "uniform sampler2D tex;\nuniform vec2 taps;\nuniform float up;\nvarying vec2 v_texcoord;\nvoid main() { gl_FragColor = up > 0.5 ? kawaseUp(tex, v_texcoord, taps) : kawaseDown(tex, v_texcoord, taps); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
 
@@ -62,6 +64,7 @@ type program struct {
 	size, color, alpha int32
 	keep, cut, radii   int32
 	line, stops        int32
+	taps, up           int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -75,6 +78,7 @@ type Renderer struct {
 	gl        *gpu.GL
 	solid     program
 	gradient  program
+	kawase    program
 	rgba      program
 	rgbx      program
 	external  program
@@ -117,7 +121,7 @@ func (r *Renderer) setup() error {
 	programs := []struct {
 		prog     *program
 		fragment string
-	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}}
+	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}, {&r.kawase, kawaseShader}}
 	if slices.Contains(exts, "GL_OES_EGL_image_external") {
 		programs = append(programs, struct {
 			prog     *program
@@ -141,6 +145,8 @@ func (r *Renderer) setup() error {
 			radii:    r.gl.GetUniformLocation(id, "radii"),
 			line:     r.gl.GetUniformLocation(id, "line"),
 			stops:    r.gl.GetUniformLocation(id, "stops"),
+			taps:     r.gl.GetUniformLocation(id, "taps"),
+			up:       r.gl.GetUniformLocation(id, "up"),
 			alphaSet: -1,
 		}
 		r.gl.UseProgram(id)
@@ -739,6 +745,49 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
 	}
 	p.draw(r)
+}
+
+func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("gles: Kawase outside a pass"))
+		return
+	case !ok || tex.r != p.owner || tex.target != gpu.Texture2D:
+		p.fail(fmt.Errorf("gles: %T is not this renderer's RGB texture", t))
+		return
+	case tex.id == 0:
+		p.fail(errors.New("gles: texture used after Destroy"))
+		return
+	case tex.drawn == p.fb:
+		p.fail(errors.New("gles: Kawase of the pass's own target"))
+		return
+	case !(offset >= 0) || math.IsInf(float64(offset), 0):
+		p.fail(fmt.Errorf("gles: Kawase offset %v is not zero or more", offset))
+		return
+	case dst.Empty():
+		return
+	}
+	prog := &p.owner.kawase
+	gl := p.owner.gl
+	p.use(prog)
+	gl.Uniform2f(prog.taps, 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset)
+	mode := float32(0)
+	if up {
+		mode = 1
+	}
+	gl.Uniform1f(prog.up, mode)
+	gl.BindTexture(tex.target, tex.id)
+	if tex.filter != gpu.Linear {
+		tex.filter = gpu.Linear
+		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
+		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
+	}
+	verts := &p.owner.verts
+	for i, uv := range [4][2]float32{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
+		verts[i*4+2], verts[i*4+3] = uv[0], uv[1]
+	}
+	p.draw(dst)
 }
 
 func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {

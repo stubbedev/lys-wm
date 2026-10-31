@@ -93,6 +93,7 @@ type Decor struct {
 	Opacity                      Opacity
 	Dim                          Dim
 	Shadow                       Shadow
+	Blur                         Blur
 	ActiveBorder, InactiveBorder Border
 	Tab                          TabStyle
 }
@@ -110,6 +111,7 @@ func DefaultDecor() Decor {
 		BorderWidth: 1,
 		Opacity:     Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
 		Dim:         Dim{Strength: 0.5},
+		Blur:        Blur{Size: 8, Passes: 1},
 		Shadow: Shadow{
 			Range: 4, Power: 3, Scale: 1,
 			Active:   render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},

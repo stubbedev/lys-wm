@@ -225,6 +225,14 @@ type rawDecoration struct {
 	DimInactive       *bool        `yaml:"dim_inactive"`
 	DimStrength       *At[float64] `yaml:"dim_strength"`
 	Shadow            rawShadow    `yaml:"shadow"`
+	Blur              rawBlur      `yaml:"blur"`
+}
+
+type rawBlur struct {
+	Enabled *bool        `yaml:"enabled"`
+	Size    *At[int]     `yaml:"size"`
+	Passes  *At[int]     `yaml:"passes"`
+	Layers  []At[string] `yaml:"layers"`
 }
 
 type rawShadow struct {
@@ -296,6 +304,7 @@ type rawRule struct {
 	Tearing   *bool        `yaml:"tearing"`
 	Opacity   *At[float64] `yaml:"opacity"`
 	DimAround bool         `yaml:"dim_around"`
+	Blur      *bool        `yaml:"blur"`
 }
 
 type Error struct {
@@ -342,6 +351,7 @@ type Config struct {
 	Tearing     bool
 	LidSuspend  bool
 	Animations  anim.Table
+	BlurLayers  []string
 }
 
 var mocha = map[string]render.Color{
@@ -593,6 +603,15 @@ func (p *parser) border(a *At[rawBorder], key string, fallback compositor.Border
 	return b
 }
 
+func (p *parser) blurPasses(a *At[int], fallback int) int {
+	v := p.positive(a, "decoration.blur.passes", fallback)
+	if v > 4 {
+		p.fail(a.Line, "decoration.blur.passes", "%d is not from 1 to 4", v)
+		return fallback
+	}
+	return v
+}
+
 func (p *parser) gaps(r rawGaps) wm.Gaps {
 	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
 	if r.Outer == nil {
@@ -818,7 +837,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	default:
 		rule.Tearing = wm.TearingDeny
 	}
-	rule.DimAround = r.DimAround
+	rule.DimAround, rule.Blur = r.DimAround, r.Blur
 	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
 		o := float32(*v)
 		rule.Opacity = &o
@@ -873,6 +892,11 @@ func Parse(file string, data []byte) (Config, error) {
 				Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
 			},
 			Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
+			Blur: compositor.Blur{
+				Enabled: raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
+				Size:    p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
+				Passes:  p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
+			},
 			Dim: compositor.Dim{
 				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
 				Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),
@@ -915,6 +939,9 @@ func Parse(file string, data []byte) (Config, error) {
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
 	cfg.WM.Gaps = p.gaps(raw.Gaps)
 	cfg.Animations = p.animations(raw.Animations)
+	for _, l := range raw.Decoration.Blur.Layers {
+		cfg.BlurLayers = append(cfg.BlurLayers, l.V)
+	}
 	fallback := false
 	for i, o := range raw.Outputs {
 		rule := p.output(i, o.V)
@@ -991,7 +1018,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
-	cfg.Animations = c.Animations
+	cfg.Animations, cfg.BlurLayers = c.Animations, c.BlurLayers
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

@@ -39,6 +39,7 @@ type window struct {
 	borderAngle anim.Tween[float64]
 	snapshot    render.TextureTarget
 	decided     decided
+	blur        *blurCache
 }
 
 type decided struct {
@@ -426,6 +427,9 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 		return nil
 	}
 	closeErr := c.startClosing(w, c.clock())
+	if w.blur != nil {
+		closeErr = errors.Join(closeErr, w.blur.destroy())
+	}
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	if c.active == w {
 		c.active = nil
