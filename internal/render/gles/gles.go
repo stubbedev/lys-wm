@@ -37,7 +37,7 @@ precision mediump float;
 #endif
 uniform vec4 keep;
 uniform vec4 cut;
-uniform vec2 radii;
+uniform vec4 radii;
 `
 	coverage    = "maskCoverage(gl_FragCoord.xy, keep, cut, radii)"
 	textureMain = `uniform float alpha;
@@ -675,7 +675,7 @@ func (p *pass) setMask(prog *program, m render.Mask) {
 	}{{prog.keep, m.Keep.Rect}, {prog.cut, m.Cut.Rect}} {
 		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
 	}
-	gl.Uniform2f(prog.radii, m.Keep.Radius, m.Cut.Radius)
+	gl.Uniform4f(prog.radii, m.Keep.Radius, m.Cut.Radius, m.Falloff.Range, m.Falloff.Power)
 }
 
 func (p *pass) draw(dst image.Rectangle) {
