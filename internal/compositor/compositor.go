@@ -218,6 +218,8 @@ type Compositor struct {
 	clock           func() time.Duration
 	frameTime       time.Duration
 	closing         []*closing
+	switches        map[*output.Output]*workspaceSwitch
+	shownWorkspace  map[string]wm.WorkspaceID
 }
 
 type entered struct {
@@ -283,6 +285,8 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		touches:        map[int32]touchAt{},
 		labels:         map[*output.Output]map[labelKey]*label{},
 		stops:          map[stopsKey]render.Texture{},
+		switches:       map[*output.Output]*workspaceSwitch{},
+		shownWorkspace: map[string]wm.WorkspaceID{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},
 		inherited:      map[*output.Output]*loop.Timer{},

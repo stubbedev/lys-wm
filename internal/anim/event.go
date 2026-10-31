@@ -20,6 +20,7 @@ const (
 	Fade
 	FadeIn
 	FadeOut
+	Workspaces
 	eventCount
 )
 
@@ -29,9 +30,11 @@ const (
 	NoStyle StyleKind = iota
 	Popin
 	Slide
+	SlideVert
+	FadeStyle
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade"}
 
 type Style struct {
 	Kind    StyleKind
@@ -88,6 +91,7 @@ var events = [eventCount]struct {
 	Fade:        {name: "fade", parent: Global},
 	FadeIn:      {name: "fade_in", parent: Fade},
 	FadeOut:     {name: "fade_out", parent: Fade},
+	Workspaces:  {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin}, style: Style{Kind: Slide}},
 }
 
 func (e Event) String() string {

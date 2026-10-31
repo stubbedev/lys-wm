@@ -181,3 +181,54 @@ func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
 		return nil
 	})
 }
+
+func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.Workspaces: {Enabled: &on, Shape: anim.Linear, Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	red, blue := [3]byte{0xff, 0, 0}, [3]byte{0, 0, 0xff}
+	c := testclient.Connect(t, h.Socket())
+	r := c.Window("red", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("red to map", r.Mapped)
+	h.dispatch("workspace 2")
+	at(2 * time.Hour)
+	b := c.Window("blue", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("blue to map", b.Mapped)
+	h.Eventually("the second workspace shown", showing(20, 60, blue))
+
+	at(3 * time.Hour)
+	h.dispatch("workspace 1")
+	h.Eventually("the switch starting from the workspace it leaves", showing(20, 60, blue))
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("both workspaces halfway", func(x *headless.Backend, comp *compositor.Compositor) bool {
+		return showing(20, 60, red)(x, comp) && showing(140, 60, blue)(x, comp)
+	})
+	at(3*time.Hour + time.Second)
+	h.Eventually("the first workspace in place", showing(140, 60, red))
+	var before uint64
+	h.Do(func(x *headless.Backend, _ *compositor.Compositor) error {
+		before = x.Outputs()[0].Frames()
+		return nil
+	})
+	time.Sleep(200 * time.Millisecond)
+	h.Do(func(x *headless.Backend, _ *compositor.Compositor) error {
+		if n := x.Outputs()[0].Frames(); n != before {
+			t.Errorf("%d frames ran after the switch ended", n-before)
+		}
+		return nil
+	})
+}

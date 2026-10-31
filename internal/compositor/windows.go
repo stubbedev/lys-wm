@@ -198,6 +198,7 @@ func (c *Compositor) reconcile() error {
 		}
 		errs = append(errs, c.settle(w, hasFocus && focused == w.id))
 	}
+	c.trackSwitches(now)
 	var target *window
 	if hasFocus {
 		target = c.windowByID(focused)
@@ -230,7 +231,7 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now)) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o })
+	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil
 }
 
 func (c *Compositor) content(tile image.Rectangle, layer wm.PlacementLayer) image.Rectangle {

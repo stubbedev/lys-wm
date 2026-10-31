@@ -228,6 +228,7 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `fade` | `global` | Every fade | |
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
 | `fade_out` | `fade` | A closing window fading out | |
+| `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out |
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its
