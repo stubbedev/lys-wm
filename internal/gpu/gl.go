@@ -108,7 +108,7 @@ type GL struct {
 	pTexParameteri           uintptr
 	texImage2D               func(target uint32, level, internalFormat, width, height, border int32, format, typ uint32, pixels *byte)
 	texSubImage2D            func(target uint32, level, x, y, width, height int32, format, typ uint32, pixels *byte)
-	texSubImage2DAt          func(target uint32, level, x, y, width, height int32, format, typ uint32, offset uintptr)
+	texSubImage2DAt          uintptr
 	PixelStorei              func(pname uint32, param int32)
 	GenFramebuffers          func(n int32, fbs *uint32)
 	DeleteFramebuffers       func(n int32, fbs *uint32)
@@ -157,11 +157,11 @@ type GL struct {
 	pEnableVertexAttribArray uintptr
 	DisableVertexAttribArray func(index uint32)
 	drawArrays               uintptr
-	args                     [6]uintptr
+	args                     [9]uintptr
 	floats                   [4]float32
 	readPixels               func(x, y, width, height int32, format, typ uint32, pixels *byte)
-	mapBufferRange           func(target uint32, offset, length int, access uint32) unsafe.Pointer
-	unmapBuffer              func(target uint32) uint8
+	mapBufferRange           uintptr
+	unmapBuffer              uintptr
 	pFlush                   uintptr
 	Finish                   func()
 	imageTargetTexture2D     func(target uint32, image uintptr)
@@ -272,7 +272,8 @@ func (gl *GL) TexSubImage2D(target uint32, x, y, width, height int32, format, ty
 }
 
 func (gl *GL) TexSubImage2DFromBuffer(target uint32, x, y, width, height int32, format, typ uint32, offset int) {
-	gl.texSubImage2DAt(target, 0, x, y, width, height, format, typ, uintptr(offset))
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3], gl.args[4], gl.args[5], gl.args[6], gl.args[7], gl.args[8] = uintptr(target), 0, uintptr(x), uintptr(y), uintptr(width), uintptr(height), uintptr(format), uintptr(typ), uintptr(offset) //nolint:gosec // GLint arguments travel in full registers
+	gl.call(gl.texSubImage2DAt, 9)
 }
 
 func (gl *GL) ReadPixels(x, y, width, height int32, format uint32, pixels []byte) {
@@ -290,11 +291,7 @@ func (gl *GL) AllocateBuffer(target uint32, size int, usage uint32) {
 }
 
 func (gl *GL) MapBufferForReading(target uint32, size int) []byte {
-	p := gl.mapBufferRange(target, 0, size, MapReadBit)
-	if p == nil {
-		return nil
-	}
-	return unsafe.Slice((*byte)(p), size) //nolint:gosec // glMapBufferRange mapped size bytes at p
+	return gl.mapRange(target, 0, size, MapReadBit)
 }
 
 func (gl *GL) MapBufferRangeForWriting(target uint32, offset, size int, invalidate bool) []byte {
@@ -302,15 +299,22 @@ func (gl *GL) MapBufferRangeForWriting(target uint32, offset, size int, invalida
 	if invalidate {
 		access = mapWriteBit | mapInvalidateBufferBit
 	}
-	p := gl.mapBufferRange(target, offset, size, access)
-	if p == nil {
+	return gl.mapRange(target, offset, size, access)
+}
+
+func (gl *GL) mapRange(target uint32, offset, size int, access uint32) []byte {
+	gl.args[0], gl.args[1], gl.args[2], gl.args[3] = uintptr(target), uintptr(offset), uintptr(size), uintptr(access)
+	r, _, _ := purego.SyscallN(gl.mapBufferRange, gl.args[:4]...)
+	if r == 0 {
 		return nil
 	}
-	return unsafe.Slice((*byte)(p), size) //nolint:gosec // glMapBufferRange mapped size bytes at p
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&r)), size) //nolint:gosec // glMapBufferRange mapped size bytes at r
 }
 
 func (gl *GL) UnmapBuffer(target uint32) bool {
-	return gl.unmapBuffer(target) != 0
+	gl.args[0] = uintptr(target)
+	r, _, _ := purego.SyscallN(gl.unmapBuffer, gl.args[:1]...)
+	return uint8(r) != 0 //nolint:gosec // a GLboolean is the low byte
 }
 
 func (gl *GL) getError() uint32 {

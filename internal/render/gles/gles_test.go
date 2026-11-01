@@ -529,6 +529,41 @@ func TestASteadyPassDoesNotAllocate(t *testing.T) {
 	}
 }
 
+func TestASteadyTextureUpdateDoesNotAllocate(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates on its own")
+	}
+	g := renderer(t)
+	size := image.Pt(256, 256)
+	stride := size.X * 4
+	pixels := make([]byte, stride*size.Y)
+	tex, err := g.NewTexture(render.ARGB8888, size, stride, pixels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failed error
+	update := func() {
+		if err := tex.Update(image.Rectangle{Max: size}, stride, pixels); err != nil && failed == nil {
+			failed = err
+		}
+	}
+	allocs := make(chan float64, 1)
+	unpinned := make(chan error, 1)
+	go func() {
+		unpin := gpu.PinThread()
+		update()
+		allocs <- testing.AllocsPerRun(50, update)
+		unpinned <- unpin()
+	}()
+	n := <-allocs
+	if err := errors.Join(failed, <-unpinned); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("a steady texture update on a pinned thread allocated %v times", n)
+	}
+}
+
 func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
 	g, _ := hardware(t)
 	if !g.NativeFences() {

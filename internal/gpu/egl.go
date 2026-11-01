@@ -189,6 +189,10 @@ func (l *Library) proc(s symbol) error {
 	if p == 0 {
 		return fmt.Errorf("gpu: eglGetProcAddress(%s) found nothing", s.name)
 	}
+	if raw, ok := s.fn.(*uintptr); ok {
+		*raw = p
+		return nil
+	}
 	purego.RegisterFunc(s.fn, p)
 	return nil
 }
