@@ -31,6 +31,7 @@ var formats = []gpu.FormatModifier{
 }
 
 type importer struct {
+	extra   []gpu.FormatModifier
 	device  error
 	mu      sync.Mutex
 	checked []gpu.DMABUF
@@ -40,7 +41,9 @@ type importer struct {
 	surface *surface.Surface
 }
 
-func (i *importer) DMABUFFormats() ([]gpu.FormatModifier, error) { return formats, nil }
+func (i *importer) DMABUFFormats() ([]gpu.FormatModifier, error) {
+	return append(slices.Clip(formats), i.extra...), nil
+}
 
 const mainDevice = 0xe280
 
@@ -97,13 +100,13 @@ type env struct {
 	m   *Manager
 }
 
-func setup(t *testing.T, device error) *env {
+func setup(t *testing.T, device error, extra ...gpu.FormatModifier) *env {
 	t.Helper()
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{t: t, dir: testenv.SocketDir(t), l: l, imp: &importer{device: device}}
+	e := &env{t: t, dir: testenv.SocketDir(t), l: l, imp: &importer{device: device, extra: extra}}
 	if e.d, err = server.New(l, server.Options{RuntimeDir: e.dir, Report: func(err error) { t.Error(err) }}); err != nil {
 		t.Fatal(err)
 	}
@@ -466,5 +469,47 @@ func TestParamsErrors(t *testing.T) {
 				t.Fatal("the error has no message")
 			}
 		})
+	}
+}
+
+func TestTightlyPackedYUVIsInBoundsForEveryFormat(t *testing.T) {
+	const w, h = 64, 16
+	for _, tc := range []struct {
+		format  fourcc.Format
+		strides []uint32
+	}{
+		{fourcc.P012, []uint32{2 * w, 2 * w}},
+		{fourcc.P016, []uint32{2 * w, 2 * w}},
+		{fourcc.YUV422, []uint32{w, w / 2, w / 2}},
+		{fourcc.NV61, []uint32{w, w}},
+		{fourcc.YUYV, []uint32{2 * w}},
+		{fourcc.Q410, []uint32{2 * w, 2 * w, 2 * w}},
+	} {
+		e := setup(t, gpu.ErrUnsupported, gpu.FormatModifier{Format: tc.format, Modifier: fourcc.Linear})
+		c := e.connect(3)
+		var size uint32
+		offsets := make([]uint32, len(tc.strides))
+		for i, stride := range tc.strides {
+			offsets[i] = size
+			size += stride * uint32(tc.format.PlaneRows(i, h))
+		}
+		fd := memfd(t, int(size))
+		result := &created{}
+		p, err := c.linux.CreateParams(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, stride := range tc.strides {
+			if err := p.Add(fd, uint32(i), offsets[i], stride, 0, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := p.Create(w, h, uint32(tc.format), 0); err != nil {
+			t.Fatal(err)
+		}
+		c.roundtrip()
+		if result.buffer == nil || result.failed {
+			t.Errorf("a tightly packed %v buffer gave %+v", tc.format, result)
+		}
 	}
 }

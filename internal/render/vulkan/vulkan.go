@@ -33,15 +33,11 @@ var formats = []struct {
 	{render.XBGR2101010, fourcc.XBGR2101010},
 }
 
-var yuvFormats = []fourcc.Format{fourcc.NV12, fourcc.P010}
-
 type Renderer struct {
-	d           *lgpu.Device
-	node        uint64
-	pass        *pass
-	idle        pass
-	asyncProbed bool
-	asyncReads  bool
+	d    *lgpu.Device
+	node uint64
+	pass *pass
+	idle pass
 }
 
 func Open(node uint64) (*Renderer, error) {
@@ -154,7 +150,7 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 type Target struct {
 	r       *Renderer
 	t       *lgpu.Target
-	back    *readback
+	back    *lgpu.Readback
 	reading *pendingRead
 }
 
@@ -182,14 +178,14 @@ func (t *Target) Read(pix []byte, stride int) error {
 }
 
 func (t *Target) Destroy() error {
-	if t.reading != nil {
+	switch {
+	case t.reading != nil:
 		t.reading.t = nil
 		t.reading = nil
+	case t.back != nil:
+		t.back.Close()
 	}
-	if t.back != nil {
-		t.back.close()
-		t.back = nil
-	}
+	t.back = nil
 	t.t.Close()
 	return nil
 }
@@ -238,6 +234,47 @@ func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, mod
 		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, err)
 	}
 	return &Target{r: r, t: t}, gpu.FromDmabuf(t.Dmabuf()), nil
+}
+
+// LinearCopyTarget is a target whose frames reach a linear dmabuf by the
+// copy engine, for a device that renders into no linear layout. Copy
+// after each frame; Free releases all of it.
+type LinearCopyTarget struct {
+	Target render.ReadTarget
+	DMABUF gpu.DMABUF
+	Copy   func() error
+	Free   func() error
+}
+
+func (r *Renderer) NewLinearCopyTarget(size image.Point, format fourcc.Format) (LinearCopyTarget, error) {
+	shared, err := r.d.NewBuffer(size.X, size.Y, format, []fourcc.Modifier{fourcc.Linear})
+	if err != nil {
+		return LinearCopyTarget{}, fmt.Errorf("vulkan: a linear %v buffer to share: %w", size, err)
+	}
+	dst, err := r.d.ImportLinear(shared.Dmabuf())
+	if err != nil {
+		shared.Close()
+		return LinearCopyTarget{}, fmt.Errorf("vulkan: copy into the linear %v buffer: %w", size, err)
+	}
+	src, err := r.d.NewOffscreen(size.X, size.Y)
+	if err != nil {
+		dst.Close()
+		shared.Close()
+		return LinearCopyTarget{}, err
+	}
+	all := []image.Rectangle{{Max: size}}
+	target := &Target{r: r, t: src}
+	return LinearCopyTarget{
+		Target: target,
+		DMABUF: gpu.FromDmabuf(shared.Dmabuf()),
+		Copy:   func() error { return r.d.CopyToLinear(dst, src, all) },
+		Free: func() error {
+			err := target.Destroy()
+			dst.Close()
+			shared.Close()
+			return err
+		},
+	}, nil
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
@@ -293,13 +330,9 @@ func (r *Renderer) DMABUFFormats() ([]gpu.FormatModifier, error) {
 		return nil, fmt.Errorf("%w: %s shares no dmabufs", gpu.ErrUnsupported, r.d.Name())
 	}
 	var out []gpu.FormatModifier
-	all := append(r.d.TextureFormats(), yuvFormats...)
-	for _, f := range all {
+	for _, f := range r.d.ImportFormats() {
 		mods, err := r.d.TextureModifiers(f)
 		if err != nil {
-			if slices.Contains(yuvFormats, f) {
-				continue
-			}
 			return nil, err
 		}
 		for _, m := range mods {

@@ -295,20 +295,6 @@ func (p *params) Add(obj *sld.ZwpLinuxBufferParamsV1, fd int, idx, offset, strid
 	return nil
 }
 
-var verticalSubsampling = map[fourcc.Format][]int{
-	fourcc.ARGB8888: {1}, fourcc.XRGB8888: {1}, fourcc.ABGR8888: {1}, fourcc.XBGR8888: {1},
-	fourcc.NV12: {1, 2}, fourcc.NV21: {1, 2}, fourcc.NV16: {1, 1}, fourcc.P010: {1, 2},
-	fourcc.YUV420: {1, 2, 2}, fourcc.YVU420: {1, 2, 2},
-}
-
-func planeRows(format fourcc.Format, plane int, height int32) uint64 {
-	sub := 1
-	if subs, ok := verticalSubsampling[format]; ok {
-		sub = subs[plane]
-	}
-	return uint64((int(height) + sub - 1) / sub) //nolint:gosec // height was checked to be positive
-}
-
 func (p *params) build(width, height int32, format fourcc.Format, flags sld.ZwpLinuxBufferParamsV1Flags) (gpu.DMABUF, error) {
 	obj := p.res
 	if p.used {
@@ -331,8 +317,8 @@ func (p *params) build(width, height int32, format fourcc.Format, flags sld.ZwpL
 	if !slices.Contains(p.m.formats, gpu.FormatModifier{Format: format, Modifier: modifier}) {
 		return gpu.DMABUF{}, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorInvalidFormat, "format %v with modifier %v is not supported", format, modifier)
 	}
-	if subs, ok := verticalSubsampling[format]; ok && n != len(subs) {
-		return gpu.DMABUF{}, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorIncomplete, "format %v has %d planes, not %d", format, len(subs), n)
+	if planes := format.Planes(); n < planes {
+		return gpu.DMABUF{}, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorIncomplete, "format %v has %d planes, not %d", format, planes, n)
 	}
 	if width <= 0 || height <= 0 {
 		return gpu.DMABUF{}, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorInvalidDimensions, "invalid size %dx%d", width, height)
@@ -342,7 +328,7 @@ func (p *params) build(width, height int32, format fourcc.Format, flags sld.ZwpL
 	}
 	b := gpu.DMABUF{Size: image.Pt(int(width), int(height)), Format: format, Modifier: modifier}
 	for i, pl := range p.planes[:n] {
-		end := uint64(pl.offset) + uint64(pl.stride)*planeRows(format, i, height)
+		end := uint64(pl.offset) + uint64(pl.stride)*uint64(format.PlaneRows(i, int(height))) //nolint:gosec // height was checked to be positive
 		if end > math.MaxUint32 {
 			return gpu.DMABUF{}, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorOutOfBounds, "plane %d ends past 4 GiB", i)
 		}

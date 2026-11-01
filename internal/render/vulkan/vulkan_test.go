@@ -125,9 +125,7 @@ func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 	rendertest.AsyncReadSeesItsFrame(t, testenv.Vulkan(t))
 }
 
-const lysLibPassAllocs = 6
-
-func TestASteadyPassAllocatesOnlyInTheDevice(t *testing.T) {
+func TestASteadyPassDoesNotAllocate(t *testing.T) {
 	if raceEnabled {
 		t.Skip("the race detector allocates on its own")
 	}
@@ -155,8 +153,8 @@ func TestASteadyPassAllocatesOnlyInTheDevice(t *testing.T) {
 	if failed != nil {
 		t.Fatal(failed)
 	}
-	if n > lysLibPassAllocs {
-		t.Fatalf("a steady pass allocated %v times, and lys-lib's device accounts for %d", n, lysLibPassAllocs)
+	if n != 0 {
+		t.Fatalf("a steady pass allocated %v times", n)
 	}
 }
 
