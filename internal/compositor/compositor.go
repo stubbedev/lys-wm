@@ -142,7 +142,6 @@ type Compositor struct {
 	tearing         bool
 	inputMethods    *inputmethod.Manager
 	outputOverrides map[string]OutputRule
-	drm             *drm.Device
 	lidClosed       bool
 	windows         []*window
 	stack           []*window
@@ -460,19 +459,17 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 	if err != nil {
 		return err
 	}
-	if c.drm, err = drm.Open(node); err != nil {
+	dev, err := drm.Open(node)
+	if err != nil {
 		return err
 	}
-	timelines, err := c.drm.Cap(drm.CapSyncobjTimeline)
+	timelines, err := dev.Cap(drm.CapSyncobjTimeline)
 	if err != nil || timelines == 0 {
-		dev := c.drm
-		c.drm = nil
 		return errors.Join(err, dev.Close())
 	}
-	if _, err := syncobj.New(display, l, c.drm, r, c); err != nil {
-		return err
-	}
-	return nil
+	display.OnClose(dev.Close)
+	_, err = syncobj.New(display, l, dev, r, c)
+	return err
 }
 
 func (c *Compositor) Close() error {
@@ -490,10 +487,6 @@ func (c *Compositor) Close() error {
 	}
 	if c.dmabuf != nil {
 		errs = append(errs, c.dmabuf.Close())
-	}
-	if c.drm != nil {
-		errs = append(errs, c.drm.Close())
-		c.drm = nil
 	}
 	for s := range c.textures {
 		errs = append(errs, c.dropTexture(s))

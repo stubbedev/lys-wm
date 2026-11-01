@@ -31,6 +31,7 @@ type Options struct {
 
 type Display struct {
 	loop       *loop.Loop
+	onClose    []func() error
 	trace      io.Writer
 	traceBuf   []byte
 	start      time.Time
@@ -156,6 +157,10 @@ func (d *Display) NextSerial() uint32 {
 	return d.serial
 }
 
+func (d *Display) OnClose(f func() error) {
+	d.onClose = append(d.onClose, f)
+}
+
 func (d *Display) Close() error {
 	if d.closed {
 		return nil
@@ -167,6 +172,9 @@ func (d *Display) Close() error {
 	}
 	for len(d.sandboxes) > 0 {
 		errs = append(errs, d.sandboxes[0].close())
+	}
+	for _, f := range d.onClose {
+		errs = append(errs, f())
 	}
 	return errors.Join(append(errs, d.listener.Remove(), d.release())...)
 }

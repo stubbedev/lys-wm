@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -701,5 +702,55 @@ func TestEventsToARemovedObjectAreDropped(t *testing.T) {
 	h.on(func() { trace = h.trace.String() })
 	if strings.Contains(trace, ".done(7)") {
 		t.Fatalf("an event went out on a removed object:\n%s", trace)
+	}
+}
+
+func TestOnCloseRunsAfterClientsAreGone(t *testing.T) {
+	h := start(t)
+	var ran []string
+	h.on(func() {
+		h.disp.OnClose(func() error {
+			ran = append(ran, "close")
+			return nil
+		})
+		if _, err := h.disp.AddGlobal(sw.WlCompositorInterface, 6, func(c *Client, id wire.ObjectID, version uint32) error {
+			comp, err := sw.NewWlCompositor(c, id, version, releasable{})
+			if err != nil {
+				return err
+			}
+			OnDestroy(comp, func() error {
+				ran = append(ran, "object")
+				return nil
+			})
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+	})
+	d := h.connect()
+	reg, globals := h.registry(d)
+	comp, err := cw.NewWlCompositor(d, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var name uint32
+	for n, iface := range globals.globals {
+		if strings.HasPrefix(iface, "wl_compositor/") {
+			name = n
+		}
+	}
+	if err := reg.Bind(name, comp); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	h.on(func() {
+		if err := h.disp.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if !slices.Equal(ran, []string{"object", "close"}) {
+		t.Fatalf("teardown ran %v", ran)
 	}
 }
