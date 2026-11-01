@@ -24,8 +24,8 @@ has the whole list and the non-goals.
 
 ## Install
 
-Debian, Ubuntu and Fedora packages and a tarball, all x86_64, are on the
-[releases page](https://github.com/stubbedev/lys-wm/releases):
+Debian, Ubuntu and Fedora packages and a tarball, for x86_64 and aarch64, are on the
+[releases page](https://github.com/stubbedev/lys-wm/releases). On x86_64:
 
 ```sh
 sudo apt install ./lys-wm_<version>_amd64.deb

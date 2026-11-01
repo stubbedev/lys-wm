@@ -8,7 +8,7 @@ Summary:        Pure-Go tiling Wayland compositor for the lys desktop
 License:        MIT AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND LGPL-2.1-or-later AND (Unlicense OR BSD-3-Clause)
 URL:            https://github.com/stubbedev/lys-wm
 Source0:        https://github.com/stubbedev/lys-wm/releases/download/v%{version}/lys-wm-%{version}-%{_arch}-linux.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 
 BuildRequires:  systemd-rpm-macros
 Requires:       dejavu-sans-fonts

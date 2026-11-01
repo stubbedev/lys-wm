@@ -14,7 +14,13 @@ permissions:
 jobs:
   deb:
     name: Archive + deb
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: &arches
+        include:
+          - { runner: ubuntu-latest, arch: x86_64, deb: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, deb: arm64 }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,31 +34,34 @@ jobs:
       - name: Build the archive
         env:
           VERSION: ${{ inputs.version }}
-        run: ./packaging/build-archive.sh dist "${VERSION}" x86_64
+        run: ./packaging/build-archive.sh dist "${VERSION}" ${{ matrix.arch }}
       - name: Build the Debian package
         env:
           VERSION: ${{ inputs.version }}
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential debhelper dpkg-dev
-          ./packaging/build-packages.sh "lys-wm-${VERSION}-x86_64-linux.tar.gz" "${VERSION}" deb
+          ./packaging/build-packages.sh "lys-wm-${VERSION}-${{ matrix.arch }}-linux.tar.gz" "${VERSION}" deb
       - name: Install and run the Debian package
-        run: sudo ./packaging/smoke-test.sh debbuild/DEBS/amd64/*.deb
+        run: sudo ./packaging/smoke-test.sh debbuild/DEBS/${{ matrix.deb }}/*.deb
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: archive
-          path: lys-wm-${{ inputs.version }}-x86_64-linux.tar.gz
+          name: archive-${{ matrix.arch }}
+          path: lys-wm-${{ inputs.version }}-${{ matrix.arch }}-linux.tar.gz
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: deb
-          path: debbuild/DEBS/amd64/*.deb
+          name: deb-${{ matrix.arch }}
+          path: debbuild/DEBS/${{ matrix.deb }}/*.deb
           if-no-files-found: error
 
   rpm:
     name: rpm (Fedora)
     needs: deb
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: *arches
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     container:
       image: fedora:latest
@@ -62,17 +71,17 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: archive
+          name: archive-${{ matrix.arch }}
       - name: Build the RPM package
         env:
           VERSION: ${{ inputs.version }}
         run: |
           dnf -y --setopt=install_weak_deps=False install rpm-build systemd-rpm-macros
-          ./packaging/build-packages.sh "lys-wm-${VERSION}-x86_64-linux.tar.gz" "${VERSION}" rpm
+          ./packaging/build-packages.sh "lys-wm-${VERSION}-${{ matrix.arch }}-linux.tar.gz" "${VERSION}" rpm
       - name: Install and run the RPM package
-        run: ./packaging/smoke-test.sh rpmbuild/RPMS/x86_64/*.rpm
+        run: ./packaging/smoke-test.sh rpmbuild/RPMS/${{ matrix.arch }}/*.rpm
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: rpm
-          path: rpmbuild/RPMS/x86_64/*.rpm
+          name: rpm-${{ matrix.arch }}
+          path: rpmbuild/RPMS/${{ matrix.arch }}/*.rpm
           if-no-files-found: error

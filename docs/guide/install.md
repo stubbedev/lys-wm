@@ -2,8 +2,8 @@
 
 Release builds are on the
 [releases page](https://github.com/stubbedev/lys-wm/releases): a Debian package,
-an RPM and a tarball for x86_64, with a `SHA256SUMS` file. The Nix flake builds
-from source for x86_64 and aarch64, though CI only builds x86_64. There is no apt
+an RPM and a tarball for x86_64 and aarch64, with a `SHA256SUMS` file. The Nix
+flake builds from source for both, and CI builds and tests both. There is no apt
 or dnf repository, so packages do not update themselves.
 
 Every install gets the `lys-wm` and `lys-wmctl` binaries, the `lys-wm` session
@@ -62,6 +62,8 @@ If it cannot use your GPU driver from there, it says so; render in software with
 sudo apt install ./lys-wm_<version>_amd64.deb
 ```
 
+On aarch64 the file ends in `_arm64.deb`.
+
 The package depends on `libegl1`, `libgles2`, `libgbm1`, `libinput10`,
 `xkb-data`, `hwdata` and `fonts-dejavu-core`. It recommends `xwayland`,
 `xdg-desktop-portal`, `xdg-desktop-portal-wlr`, `xdg-desktop-portal-gtk`,
@@ -79,6 +81,8 @@ it on `ubuntu-latest`.
 sudo dnf install ./lys-wm-<version>-1.fc<release>.x86_64.rpm
 ```
 
+On aarch64 the file ends in `.aarch64.rpm`.
+
 The package requires `libglvnd-egl`, `libglvnd-gles`, `mesa-libgbm`, `libinput`,
 `xkeyboard-config`, `hwdata` and `dejavu-sans-fonts`. It recommends
 `xorg-x11-server-Xwayland`, `xdg-desktop-portal`, `xdg-desktop-portal-wlr`,
@@ -90,19 +94,20 @@ the file name carries that release. What the Debian section says about
 ## Other distributions
 
 There is no package for other distributions. The tarball holds the two binaries,
-the session file, the user unit, the portal config and the licences:
+the session file, the user unit, the portal config and the licences. `<arch>` is
+`x86_64` or `aarch64`:
 
 ```sh
-tar xzf lys-wm-<version>-x86_64-linux.tar.gz
-cd lys-wm-<version>-x86_64-linux
+tar xzf lys-wm-<version>-<arch>-linux.tar.gz
+cd lys-wm-<version>-<arch>-linux
 sudo install -m 0755 lys-wm lys-wmctl /usr/bin/
 sudo install -Dm 0644 lys-wm-session.target /usr/lib/systemd/user/lys-wm-session.target
 sudo install -Dm 0644 lys-wm-portals.conf /usr/share/xdg-desktop-portal/lys-wm-portals.conf
 sudo install -Dm 0644 lys-wm.desktop /usr/share/wayland-sessions/lys-wm.desktop
 ```
 
-The binaries need a glibc loader at `/lib64/ld-linux-x86-64.so.2`, and these from
-your distribution:
+The binaries need the platform's glibc loader (`/lib64/ld-linux-x86-64.so.2` or
+`/lib/ld-linux-aarch64.so.1`), and these from your distribution:
 
 | What | Where lys-wm looks | Override |
 | --- | --- | --- |
