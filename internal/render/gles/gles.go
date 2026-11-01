@@ -31,11 +31,7 @@ void main() {
 }`
 
 const (
-	maskUniforms = `#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
+	maskUniforms = `precision highp float;
 uniform vec4 keep;
 uniform vec4 cut;
 uniform vec4 radii;
@@ -58,6 +54,8 @@ var (
 	gooShader      = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 )
+
+const float32Mantissa = 23
 
 var requiredGL = []string{"GL_EXT_read_format_bgra", "GL_EXT_texture_format_BGRA8888", "GL_EXT_unpack_subimage", "GL_NV_pack_subimage", "GL_OES_EGL_image"}
 
@@ -122,6 +120,9 @@ func (r *Renderer) setup() error {
 		if !slices.Contains(exts, ext) {
 			return fmt.Errorf("gles: %s lacks %s", r.gl.Renderer(), ext)
 		}
+	}
+	if bits := r.gl.PrecisionBits(gpu.FragmentShader, gpu.HighFloat); bits < float32Mantissa {
+		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.gl.Renderer(), bits, float32Mantissa)
 	}
 	programs := []struct {
 		prog     *program

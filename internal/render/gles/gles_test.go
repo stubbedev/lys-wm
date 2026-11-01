@@ -221,6 +221,25 @@ func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	}
 }
 
+func TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput(t *testing.T) {
+	g := renderer(t)
+	size := image.Pt(3840, 48)
+	fb := framebuffer(t, g, size)
+	s, buf := soft.New(), soft.NewBuffer(size.X, size.Y)
+	ring := render.Mask{
+		Keep: render.RoundRect{Rect: image.Rect(3794, 3, 3821, 45), Radius: 9},
+		Cut:  render.RoundRect{Rect: image.Rect(3797, 6, 3818, 42), Radius: 6},
+	}
+	draw := func(p render.Pass) {
+		p.Clear(render.Color{A: 0xff})
+		p.FillRect(ring.Keep.Rect, render.Color{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, ring)
+	}
+	full := render.Region{image.Rectangle{Max: size}}
+	rendertest.Paint(t, g, fb, full, draw)
+	rendertest.Paint(t, s, buf, full, draw)
+	rendertest.Compare(t, buf, fb, 1)
+}
+
 func TestReadKeepsTheStridePadding(t *testing.T) {
 	g := renderer(t)
 	rendertest.ReadKeepsTheStridePadding(t, g, framebuffer(t, g, image.Pt(5, 3)))

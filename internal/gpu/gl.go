@@ -49,6 +49,7 @@ const (
 	ColorBufferBit                = 0x4000
 	VertexShader                  = 0x8B31
 	FragmentShader                = 0x8B30
+	HighFloat                     = 0x8DF2
 	CompileStatus                 = 0x8B81
 	LinkStatus                    = 0x8B82
 	InfoLogLength                 = 0x8B84
@@ -131,6 +132,7 @@ type GL struct {
 	CompileShader            func(shader uint32)
 	GetShaderiv              func(shader, pname uint32, params *int32)
 	getShaderInfoLog         func(shader uint32, size int32, length *int32, log *byte)
+	getShaderPrecisionFormat func(shaderType, precisionType uint32, rng *[2]int32, precision *int32)
 	DeleteShader             func(shader uint32)
 	CreateProgram            func() uint32
 	AttachShader             func(program, shader uint32)
@@ -199,6 +201,7 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.CompileShader, "glCompileShader"},
 		{&gl.GetShaderiv, "glGetShaderiv"},
 		{&gl.getShaderInfoLog, "glGetShaderInfoLog"},
+		{&gl.getShaderPrecisionFormat, "glGetShaderPrecisionFormat"},
 		{&gl.DeleteShader, "glDeleteShader"},
 		{&gl.CreateProgram, "glCreateProgram"},
 		{&gl.AttachShader, "glAttachShader"},
@@ -432,6 +435,13 @@ func (gl *GL) Compile(typ uint32, source string) (uint32, error) {
 		return 0, fmt.Errorf("gpu: compile shader: %s", log)
 	}
 	return shader, nil
+}
+
+func (gl *GL) PrecisionBits(shaderType, precisionType uint32) int32 {
+	var rng [2]int32
+	var bits int32
+	gl.getShaderPrecisionFormat(shaderType, precisionType, &rng, &bits)
+	return bits
 }
 
 func (gl *GL) Link(vertex, fragment string) (uint32, error) {
