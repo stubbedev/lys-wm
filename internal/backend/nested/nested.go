@@ -290,6 +290,7 @@ func (b *Backend) outputFor(s *cw.WlSurface) *Output {
 type buffer struct {
 	wl        *cw.WlBuffer
 	target    render.Target
+	prepare   func() error
 	busy      bool
 	presented uint64
 }
@@ -492,6 +493,11 @@ func (o *Output) Present(damage render.Region) error {
 		return backend.Broken("nested: present on %s without BeginFrame", o.name)
 	}
 	o.drawing = nil
+	if buf.prepare != nil {
+		if err := buf.prepare(); err != nil {
+			return err
+		}
+	}
 	if err := o.backend.chain.finish(); err != nil {
 		return err
 	}

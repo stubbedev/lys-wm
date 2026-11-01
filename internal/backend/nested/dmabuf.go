@@ -29,9 +29,10 @@ const (
 )
 
 type sharedBuffer struct {
-	target render.Target
-	dmabuf gpu.DMABUF
-	free   func() error
+	target  render.Target
+	dmabuf  gpu.DMABUF
+	prepare func() error
+	free    func() error
 }
 
 type gpuRenderer interface {
@@ -161,8 +162,37 @@ func (s *glesStack) close() error {
 	return errors.Join(s.stack.Close(), unix.Close(s.fd))
 }
 
+// hostLayout is how a buffer reaches a host that imports no modifier the
+// device renders in: the bytes are linear, which is what an import with
+// no modifier and no kernel metadata reads as, on every driver with an
+// implicit path.
+type hostLayout struct {
+	direct   bool
+	modifier fourcc.Modifier
+	copied   bool
+}
+
+// chooseHostLayout decides how to share buffers with a host: directly in
+// a modifier both take, or as linear bytes under what the host calls
+// them, rendered in place where the device renders linear and otherwise
+// copied into. Vulkan has no import or export of the implicit modifier,
+// so it is only ever how the host is told about linear bytes.
+func chooseHostLayout(host feedback.Feedback, rendered, shared []fourcc.Modifier) (hostLayout, bool) {
+	if len(shared) > 0 {
+		return hostLayout{direct: true}, true
+	}
+	switch {
+	case host.Imports(gpu.FormatModifier{Format: dmabufFormat, Modifier: fourcc.Linear}):
+		return hostLayout{modifier: fourcc.Linear, copied: true}, true
+	case host.Imports(gpu.FormatModifier{Format: dmabufFormat, Modifier: fourcc.Invalid}):
+		return hostLayout{modifier: fourcc.Invalid, copied: !slices.Contains(rendered, fourcc.Linear)}, true
+	}
+	return hostLayout{}, false
+}
+
 type vulkanStack struct {
-	r *vulkan.Renderer
+	r      *vulkan.Renderer
+	layout hostLayout
 }
 
 func openVulkan(main uint64) (dmabufStack, error) {
@@ -194,17 +224,36 @@ func (s *vulkanStack) modifiers(host feedback.Feedback) ([]fourcc.Modifier, erro
 		return nil, fmt.Errorf("nested: %s: %w", s.r.Device().Name(), err)
 	}
 	shared := hostImports(host, rendered)
-	if len(shared) == 0 {
-		return nil, fmt.Errorf("nested: the host imports %v in modifiers %v, %s renders it in %v, none of them shared", dmabufFormat, host.Modifiers(dmabufFormat), s.r.Device().Name(), rendered)
+	layout, ok := chooseHostLayout(host, rendered, shared)
+	if !ok {
+		return nil, fmt.Errorf("nested: the host imports %v in modifiers %v, %s renders it in %v, none of them shared, and the host takes neither linear nor implicit buffers", dmabufFormat, host.Modifiers(dmabufFormat), s.r.Device().Name(), rendered)
 	}
+	s.layout = layout
 	return shared, nil
 }
 
 func (s *vulkanStack) allocate(size image.Point, modifiers []fourcc.Modifier) (sharedBuffer, error) {
-	target, d, err := s.r.NewExportedTarget(size, dmabufFormat, modifiers)
+	switch {
+	case s.layout.direct:
+		target, d, err := s.r.NewExportedTarget(size, dmabufFormat, modifiers)
+		if err != nil {
+			return sharedBuffer{}, err
+		}
+		return sharedBuffer{target: target, dmabuf: d, free: target.Destroy}, nil
+	case s.layout.copied:
+		c, err := s.r.NewLinearCopyTarget(size, dmabufFormat)
+		if err != nil {
+			return sharedBuffer{}, err
+		}
+		d := c.DMABUF
+		d.Modifier = s.layout.modifier
+		return sharedBuffer{target: c.Target, dmabuf: d, prepare: c.Copy, free: c.Free}, nil
+	}
+	target, d, err := s.r.NewExportedTarget(size, dmabufFormat, []fourcc.Modifier{fourcc.Linear})
 	if err != nil {
 		return sharedBuffer{}, err
 	}
+	d.Modifier = s.layout.modifier
 	return sharedBuffer{target: target, dmabuf: d, free: target.Destroy}, nil
 }
 
@@ -236,7 +285,7 @@ func (c *dmabufChain) allocate(o *Output, size image.Point) ([]*buffer, func() e
 			return nil, nil, errors.Join(err, free())
 		}
 		shared = append(shared, s)
-		buf := &buffer{target: s.target}
+		buf := &buffer{target: s.target, prepare: s.prepare}
 		if buf.wl, err = c.hostBuffer(o, buf, s.dmabuf); err != nil {
 			return nil, nil, errors.Join(err, free())
 		}

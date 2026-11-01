@@ -9,20 +9,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
+	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/gles"
+	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wire"
+	"github.com/stubbedev/lys-wm/internal/wlclient/feedback"
 )
 
 var _ backend.Backend = (*Backend)(nil)
@@ -382,5 +389,180 @@ func TestFramesThatPresentNothingWaitForTheHost(t *testing.T) {
 	}
 	if h.frames == 0 || h.frames > h.limit {
 		t.Fatalf("%d frames that presented nothing in %v, want between 1 and %d", h.frames, span, h.limit)
+	}
+}
+
+func hostTaking(modifiers ...fourcc.Modifier) feedback.Feedback {
+	var fb feedback.Feedback
+	formats := make([]gpu.FormatModifier, len(modifiers))
+	for i, m := range modifiers {
+		formats[i] = gpu.FormatModifier{Format: dmabufFormat, Modifier: m}
+	}
+	fb.Tranches = []feedback.Tranche{{Formats: formats}}
+	return fb
+}
+
+func TestAHostLayoutIsChosenFromWhatBothSidesTake(t *testing.T) {
+	const tiled = fourcc.Modifier(1)
+	for _, tc := range []struct {
+		name     string
+		host     []fourcc.Modifier
+		rendered []fourcc.Modifier
+		want     hostLayout
+		ok       bool
+	}{
+		{"a shared modifier", []fourcc.Modifier{tiled}, []fourcc.Modifier{tiled}, hostLayout{direct: true}, true},
+		{"implicit only, the device renders linear", []fourcc.Modifier{fourcc.Invalid}, []fourcc.Modifier{tiled, fourcc.Linear}, hostLayout{modifier: fourcc.Invalid}, true},
+		{"implicit only, the device renders no linear", []fourcc.Modifier{fourcc.Invalid}, []fourcc.Modifier{tiled}, hostLayout{modifier: fourcc.Invalid, copied: true}, true},
+		{"linear only, the device renders no linear", []fourcc.Modifier{fourcc.Linear}, []fourcc.Modifier{tiled}, hostLayout{modifier: fourcc.Linear, copied: true}, true},
+		{"nothing in common", []fourcc.Modifier{tiled + 1}, []fourcc.Modifier{tiled}, hostLayout{}, false},
+	} {
+		host := hostTaking(tc.host...)
+		got, ok := chooseHostLayout(host, tc.rendered, hostImports(host, tc.rendered))
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: %+v, %v, want %+v, %v", tc.name, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestVulkanSharesLinearBytesWithAHostOfImplicitModifiers(t *testing.T) {
+	r := testenv.Vulkan(t)
+	if !r.Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+	}
+	rendered, err := r.ExportModifiers(dmabufFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(rendered, fourcc.Linear) {
+		t.Skipf("%s renders no linear; TestVulkanCopiesLinearBytes covers it", r.Device().Name())
+	}
+	s := &vulkanStack{r: r}
+	modifiers, err := s.modifiers(hostTaking(fourcc.Invalid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkLinearBytes(t, r, s, modifiers, r, fourcc.Linear)
+}
+
+func TestAnEGLHostImportsThoseBytesWithNoModifier(t *testing.T) {
+	r := testenv.Vulkan(t)
+	if !r.Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	display, err := testenv.GPU(t).Surfaceless()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := display.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	host, err := gles.New(display)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := host.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	s := &vulkanStack{r: r}
+	modifiers, err := s.modifiers(hostTaking(fourcc.Invalid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkLinearBytes(t, r, s, modifiers, host, fourcc.Invalid)
+}
+
+func TestVulkanCopiesLinearBytesForADeviceThatRendersNoLinear(t *testing.T) {
+	r := testenv.Vulkan(t)
+	if !r.Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+	}
+	checkLinearBytes(t, r, &vulkanStack{r: r, layout: hostLayout{modifier: fourcc.Invalid, copied: true}}, nil, r, fourcc.Linear)
+}
+
+type dmabufHost interface {
+	render.Renderer
+	ImportTexture(b gpu.DMABUF) (render.Texture, error)
+}
+
+func checkLinearBytes(t *testing.T, r *vulkan.Renderer, s *vulkanStack, modifiers []fourcc.Modifier, host dmabufHost, as fourcc.Modifier) {
+	t.Helper()
+	size := image.Pt(16, 8)
+	b, err := s.allocate(size, modifiers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := b.free(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if b.dmabuf.Modifier != fourcc.Invalid {
+		t.Errorf("the host is told about modifier %v, want the implicit one", b.dmabuf.Modifier)
+	}
+	p, err := r.Begin(b.target, render.Region{image.Rectangle{Max: size}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Clear(render.Color{R: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 4, 16, 8), render.Color{B: 0xff, A: 0xff}, render.Mask{})
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	if b.prepare != nil {
+		if err := b.prepare(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	imported := b.dmabuf
+	imported.Modifier = as
+	tex, err := host.ImportTexture(imported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := tex.Destroy(); err != nil {
+			t.Error(err)
+		}
+	}()
+	out, err := host.NewTarget(size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := out.Destroy(); err != nil {
+			t.Error(err)
+		}
+	}()
+	p, err = host.Begin(out, render.Region{image.Rectangle{Max: size}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Clear(render.Color{})
+	p.DrawTexture(tex, render.FRect{W: 16, H: 8}, image.Rectangle{Max: size}, render.Normal, 1, render.Mask{})
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	pix := make([]byte, size.X*4*size.Y)
+	if err := out.Read(pix, size.X*4); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		at   image.Point
+		want [3]byte
+	}{{image.Pt(8, 1), [3]byte{0, 0, 0xff}}, {image.Pt(8, 6), [3]byte{0xff, 0, 0}}} {
+		at := c.at.Y*size.X*4 + c.at.X*4
+		if got := [3]byte(pix[at : at+3]); got != c.want {
+			t.Errorf("%v reads BGR %v, want %v", c.at, got, c.want)
+		}
 	}
 }
