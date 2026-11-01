@@ -268,7 +268,11 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			clientDev, err := openRenderDevice(dev)
+			files, err := renderFiles(dev)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clientDev, err := files[0]()
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -24,7 +24,7 @@ func renderNodeOf(root string, major, minor uint32) (string, error) {
 	return filepath.Join("/dev/dri", filepath.Base(nodes[0])), nil
 }
 
-func openRenderDevice(dev *kdrm.Device) (*kdrm.Device, error) {
+func renderFiles(dev *kdrm.Device) ([]func() (*kdrm.Device, error), error) {
 	var st unix.Stat_t
 	if err := unix.Fstat(dev.FD(), &st); err != nil {
 		return nil, fmt.Errorf("drm: stat %s: %w", dev.Path(), err)
@@ -33,9 +33,14 @@ func openRenderDevice(dev *kdrm.Device) (*kdrm.Device, error) {
 	if err != nil {
 		return nil, fmt.Errorf("drm: %w", err)
 	}
-	if node != "" {
-		return kdrm.Open(node)
+	second := func() (*kdrm.Device, error) { return secondFileOn(dev) }
+	if node == "" {
+		return []func() (*kdrm.Device, error){second}, nil
 	}
+	return []func() (*kdrm.Device, error){func() (*kdrm.Device, error) { return kdrm.Open(node) }, second}, nil
+}
+
+func secondFileOn(dev *kdrm.Device) (*kdrm.Device, error) {
 	reopened, err := kdrm.Open(dev.Path())
 	if err != nil {
 		return nil, err

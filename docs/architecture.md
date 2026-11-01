@@ -194,7 +194,7 @@ state.
 
 ## GPU
 
-GBM and EGL (and Vulkan) get their own file on the device, the render node where there is one: GEM handles are per file and per buffer, so on one file Mesa and the compositor share a handle and either closing it pulls it from the other. KMS imports close their handles as soon as the framebuffer holds its reference.
+GBM and EGL (and Vulkan) get their own file on the device, the render node where there is one, or a second file on the card where the stack cannot allocate on it (Mesa's software GBM needs dumb buffers, which a render node refuses): GEM handles are per file and per buffer, so on one file Mesa and the compositor share a handle and either closing it pulls it from the other. KMS imports close their handles as soon as the framebuffer holds its reference.
 
 `internal/gpu` (#33) loads glvnd's `libEGL.so.1` and `libGLESv2.so.2` and
 Mesa's `libgbm.so.1` through purego. The Nix build bakes their store paths

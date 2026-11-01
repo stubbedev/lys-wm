@@ -43,62 +43,91 @@ type gbmAllocator struct {
 	closeGPU  func() error
 }
 
-func addFB2Modifiers(dev *kdrm.Device) (bool, error) {
+type gpuStack struct {
+	gbm      bufferMaker
+	gpu      gpuRenderer
+	closeGPU func() error
+}
+
+func openStackOnFile(files []func() (*kdrm.Device, error), open func(fd int) (gpuStack, error)) (gpuStack, error) {
+	var errs []error
+	for _, file := range files {
+		f, err := file()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		s, err := open(f.FD())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("on %s: %w", f.Path(), err), f.Close())
+			continue
+		}
+		probe, err := s.gbm.Allocate(image.Pt(16, 16), scanoutFormat, nil, gpu.UseRendering|gpu.UseScanout)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("on %s: %w", f.Path(), err), s.closeGPU(), f.Close())
+			continue
+		}
+		if err := probe.Close(); err != nil {
+			return gpuStack{}, errors.Join(err, s.closeGPU(), f.Close())
+		}
+		closeStack := s.closeGPU
+		s.closeGPU = func() error { return errors.Join(closeStack(), f.Close()) }
+		return s, nil
+	}
+	return gpuStack{}, errors.Join(errs...)
+}
+
+func newAllocator(dev *kdrm.Device, open func(fd int) (gpuStack, error)) (*gbmAllocator, error) {
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
-		return false, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
+		return nil, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
 	}
-	return modifiers == 1, nil
+	files, err := renderFiles(dev)
+	if err != nil {
+		return nil, err
+	}
+	s, err := openStackOnFile(files, open)
+	if err != nil {
+		return nil, fmt.Errorf("drm: rendering for %s: %w", dev.Path(), err)
+	}
+	return &gbmAllocator{dev: dev, path: dev.Path(), modifiers: modifiers == 1, gbm: s.gbm, gpu: s.gpu, closeGPU: s.closeGPU}, nil
 }
 
 func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) {
-	modifiers, err := addFB2Modifiers(dev)
-	if err != nil {
-		return nil, err
-	}
-	renderDev, err := openRenderDevice(dev)
-	if err != nil {
-		return nil, err
-	}
-	stack, err := gles.OnGBM(renderDev.FD(), paths)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: GLES on %s: %w", renderDev.Path(), err), renderDev.Close())
-	}
-	closeGPU := func() error { return errors.Join(stack.Close(), renderDev.Close()) }
-	return &gbmAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, gbm: stack.GBM, gpu: stack.Renderer, closeGPU: closeGPU}, nil
+	return newAllocator(dev, func(fd int) (gpuStack, error) {
+		stack, err := gles.OnGBM(fd, paths)
+		if err != nil {
+			return gpuStack{}, fmt.Errorf("render with GLES: %w", err)
+		}
+		return gpuStack{gbm: stack.GBM, gpu: stack.Renderer, closeGPU: stack.Close}, nil
+	})
 }
 
 func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) {
-	modifiers, err := addFB2Modifiers(dev)
-	if err != nil {
-		return nil, err
-	}
 	number, err := dev.Number()
 	if err != nil {
 		return nil, fmt.Errorf("drm: the device number of %s: %w", dev.Path(), err)
 	}
-	r, err := vulkan.Open(number)
-	if err != nil {
-		return nil, fmt.Errorf("drm: Vulkan on %s: %w", dev.Path(), err)
-	}
-	lib, err := gpu.LoadGBM(paths)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: GBM for %s: %w", dev.Path(), err), r.Close())
-	}
-	renderDev, err := openRenderDevice(dev)
-	if err != nil {
-		return nil, errors.Join(err, lib.Close(), r.Close())
-	}
-	bo, err := lib.Open(renderDev.FD())
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: GBM on %s: %w", renderDev.Path(), err), renderDev.Close(), lib.Close(), r.Close())
-	}
-	closeGPU := func() error {
-		err := r.Close()
-		bo.Close()
-		return errors.Join(err, lib.Close(), renderDev.Close())
-	}
-	return &gbmAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, gbm: bo, gpu: r, closeGPU: closeGPU}, nil
+	return newAllocator(dev, func(fd int) (gpuStack, error) {
+		r, err := vulkan.Open(number)
+		if err != nil {
+			return gpuStack{}, fmt.Errorf("render with Vulkan: %w", err)
+		}
+		lib, err := gpu.LoadGBM(paths)
+		if err != nil {
+			return gpuStack{}, errors.Join(fmt.Errorf("allocate with GBM: %w", err), r.Close())
+		}
+		bo, err := lib.Open(fd)
+		if err != nil {
+			return gpuStack{}, errors.Join(fmt.Errorf("allocate with GBM: %w", err), lib.Close(), r.Close())
+		}
+		closeGPU := func() error {
+			err := r.Close()
+			bo.Close()
+			return errors.Join(err, lib.Close())
+		}
+		return gpuStack{gbm: bo, gpu: r, closeGPU: closeGPU}, nil
+	})
 }
 
 func (a *gbmAllocator) renderer() render.Renderer {
