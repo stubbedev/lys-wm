@@ -189,3 +189,42 @@ func TestKeycodesFromTheFirstLayout(t *testing.T) {
 		t.Errorf("an unknown modifier: %v", err)
 	}
 }
+
+func TestLayoutsBeyondWhatTheRulesNameAreIgnoredAsInLibxkbcommon(t *testing.T) {
+	names := xkb.Names{Layout: "us,dk,es,fr,de,it", Options: "grp:toggle"}
+	km, err := testenv.XKBCompiler(t).Compile(names)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = km.Close() })
+	const rulesLayouts = 4
+	if got := len(km.Layouts()); got != rulesLayouts {
+		t.Fatalf("%d layouts: %v", got, km.Layouts())
+	}
+	st := km.NewState()
+	const keyToggle = 100
+	seen := map[uint32]bool{}
+	for range rulesLayouts {
+		seen[st.Modifiers().Group] = true
+		st.Key(keyToggle, true)
+		st.Key(keyToggle, false)
+	}
+	if len(seen) != rulesLayouts || st.Modifiers().Group != 0 {
+		t.Errorf("the toggle reached layouts %v and ended on %d", seen, st.Modifiers().Group)
+	}
+}
+
+func TestNamesIgnoreTheEnvironment(t *testing.T) {
+	env := map[string]string{"XKB_DEFAULT_LAYOUT": "dk", "XKB_DEFAULT_OPTIONS": "grp:toggle"}
+	for _, k := range []string{"XKB_CONFIG_ROOT", "HOME"} {
+		env[k] = os.Getenv(k)
+	}
+	km, err := xkb.NewCompiler(func(k string) string { return env[k] }).Compile(xkb.Names{Layout: "us"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = km.Close() })
+	if got := km.Layouts(); !slices.Equal(got, []string{"English (US)"}) {
+		t.Errorf("layouts %v: the environment filled in names", got)
+	}
+}

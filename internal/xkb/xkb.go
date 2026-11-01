@@ -27,7 +27,7 @@ type Compiler struct {
 
 // NewCompiler reads the environment for where keymaps include files from.
 func NewCompiler(getenv func(string) string) *Compiler {
-	return &Compiler{ctx: lxkb.NewContext(getenv)}
+	return &Compiler{ctx: lxkb.NewContextFlags(getenv, lxkb.ContextNoEnvironmentNames)}
 }
 
 // ledIndex is an LED's slot in a keymap, and whether the keymap has it.
