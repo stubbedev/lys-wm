@@ -141,6 +141,7 @@ type GL struct {
 	getProgramInfoLog        func(program uint32, size int32, length *int32, log *byte)
 	pUseProgram              uintptr
 	DeleteProgram            func(program uint32)
+	isProgram                func(program uint32) uint8
 	GetUniformLocation       func(program uint32, name string) int32
 	GetAttribLocation        func(program uint32, name string) int32
 	Uniform1i                func(location, v int32)
@@ -210,6 +211,7 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.getProgramInfoLog, "glGetProgramInfoLog"},
 		{&gl.pUseProgram, "glUseProgram"},
 		{&gl.DeleteProgram, "glDeleteProgram"},
+		{&gl.isProgram, "glIsProgram"},
 		{&gl.GetUniformLocation, "glGetUniformLocation"},
 		{&gl.GetAttribLocation, "glGetAttribLocation"},
 		{&gl.Uniform1i, "glUniform1i"},
@@ -478,4 +480,8 @@ func (gl *GL) infoLog(object uint32, get func(uint32, uint32, *int32), read func
 	buf := make([]byte, n)
 	read(object, n, &n, &buf[0])
 	return string(buf[:n])
+}
+
+func (gl *GL) IsProgram(program uint32) bool {
+	return gl.isProgram(program) != 0
 }

@@ -114,6 +114,24 @@ func New(d *gpu.Display) (*Renderer, error) {
 	return r, nil
 }
 
+type shader struct {
+	prog      *program
+	fragment  string
+	extension string
+}
+
+func (r *Renderer) programs() [7]shader {
+	return [7]shader{
+		{prog: &r.solid, fragment: solidShader},
+		{prog: &r.rgba, fragment: rgbaShader},
+		{prog: &r.rgbx, fragment: rgbxShader},
+		{prog: &r.gradient, fragment: gradientShader},
+		{prog: &r.kawase, fragment: kawaseShader},
+		{prog: &r.goo, fragment: gooShader},
+		{prog: &r.external, fragment: externalShader, extension: "GL_OES_EGL_image_external"},
+	}
+}
+
 func (r *Renderer) setup() error {
 	exts := strings.Fields(r.gl.Extensions())
 	for _, ext := range requiredGL {
@@ -124,17 +142,10 @@ func (r *Renderer) setup() error {
 	if bits := r.gl.PrecisionBits(gpu.FragmentShader, gpu.HighFloat); bits < float32Mantissa {
 		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.gl.Renderer(), bits, float32Mantissa)
 	}
-	programs := []struct {
-		prog     *program
-		fragment string
-	}{{&r.solid, solidShader}, {&r.rgba, rgbaShader}, {&r.rgbx, rgbxShader}, {&r.gradient, gradientShader}, {&r.kawase, kawaseShader}, {&r.goo, gooShader}}
-	if slices.Contains(exts, "GL_OES_EGL_image_external") {
-		programs = append(programs, struct {
-			prog     *program
-			fragment string
-		}{&r.external, externalShader})
-	}
-	for _, p := range programs {
+	for _, p := range r.programs() {
+		if p.extension != "" && !slices.Contains(exts, p.extension) {
+			continue
+		}
 		id, err := r.gl.Link(vertexShader, p.fragment)
 		if err != nil {
 			return err
@@ -174,9 +185,11 @@ func (r *Renderer) Close() error {
 	if err := r.enter(); err != nil {
 		return err
 	}
-	for _, p := range []program{r.solid, r.rgba, r.rgbx, r.external} {
-		if p.id != 0 {
-			r.gl.DeleteProgram(p.id)
+	r.gl.UseProgram(0)
+	for _, p := range r.programs() {
+		if p.prog.id != 0 {
+			r.gl.DeleteProgram(p.prog.id)
+			p.prog.id = 0
 		}
 	}
 	r.gl.DeleteBuffers(1, &r.vbo)
