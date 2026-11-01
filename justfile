@@ -204,40 +204,8 @@ vuln:
     govulncheck ./...
 
 # Set nix/package.nix's vendorHash to the hash of the modules go.sum pins.
-# The vendor derivation is fixed-output, so it is built once with a fake
-# hash and the hash Nix reports for it is written back.
 vendor-hash:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    file=nix/package.nix
-    fake=sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-    pattern='vendorHash = "sha256-[A-Za-z0-9+/=]*";'
-    count=$(grep -c "$pattern" "$file" || [[ $? == 1 ]])
-    if [[ "$count" != 1 ]]; then
-        echo "vendor-hash: expected one vendorHash in $file, found $count" >&2
-        exit 1
-    fi
-    original=$(mktemp)
-    log=$(mktemp)
-    written=
-    trap '[[ -n "$written" ]] || cp "$original" "$file"; rm -f "$original" "$log" "$file.tmp"' EXIT
-    cp "$file" "$original"
-    sed "s|$pattern|vendorHash = \"$fake\";|" "$original" > "$file.tmp"
-    mv "$file.tmp" "$file"
-    if nix build --no-link .#lys-wm.goModules > "$log" 2>&1; then
-        echo "vendor-hash: the vendor derivation built with the fake hash $fake" >&2
-        exit 1
-    fi
-    got=$(sed -n 's/^ *got: *\(sha256-[A-Za-z0-9+/=]*\)$/\1/p' "$log")
-    if [[ ! "$got" =~ ^sha256-[A-Za-z0-9+/]{43}=$ ]]; then
-        cat "$log" >&2
-        echo "vendor-hash: the vendor derivation failed without reporting its hash" >&2
-        exit 1
-    fi
-    sed "s|$pattern|vendorHash = \"$got\";|" "$original" > "$file.tmp"
-    mv "$file.tmp" "$file"
-    written=1
-    echo "vendorHash = $got"
+    nix run github:stubbedev/lys-ci#vendor-hash -- nix/package.nix .#lys-wm.goModules
 
 # Move an issue to In Progress on the lys-wm project board.
 start issue:
