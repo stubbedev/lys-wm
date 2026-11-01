@@ -16,14 +16,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
-func Now() time.Duration {
-	var ts unix.Timespec
-	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
-		panic(fmt.Sprintf("backend: clock_gettime(CLOCK_MONOTONIC) cannot fail with valid arguments: %v", err))
-	}
-	return time.Duration(ts.Nano())
-}
-
 func NextVblank(last, now, interval time.Duration) (at time.Duration, ticks uint64) {
 	if last == 0 || last > now {
 		last = now
