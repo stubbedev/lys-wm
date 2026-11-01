@@ -96,6 +96,7 @@ func (c *Conn) Fill() error {
 			}
 			c.in = append(c.in, make([]byte, len(c.in))...)
 		}
+		space := len(c.in) - c.w
 		n, oobn, flags, err := c.recvmsg(c.in[c.w:])
 		switch {
 		case errors.Is(err, unix.EINTR):
@@ -115,6 +116,9 @@ func (c *Conn) Fill() error {
 			return io.EOF
 		}
 		c.w += n
+		if n < space && oobn == 0 {
+			return nil
+		}
 	}
 }
 
