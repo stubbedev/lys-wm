@@ -125,6 +125,9 @@ func (t *Target) ReadAsync() (render.PendingRead, error) {
 }
 
 func (p *pendingRead) Wait() error {
+	if p.fence < 0 {
+		return nil
+	}
 	fds := []unix.PollFd{{Fd: int32(p.fence), Events: unix.POLLIN}} //nolint:gosec // file descriptors fit int32
 	for {
 		_, err := unix.Poll(fds, -1)

@@ -902,8 +902,11 @@ func FrameFencesReportTheGPUFinishing(t *testing.T, g GPU) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if fd < 0 {
+		return
+	}
 	defer check(t, func() error { return unix.Close(fd) })
-	if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 1000); err != nil { //nolint:gosec // file descriptors fit int32
+	if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 1000); err != nil {
 		t.Fatal(err)
 	}
 	done, ok, err := kdrm.SyncFileSignalTime(fd)

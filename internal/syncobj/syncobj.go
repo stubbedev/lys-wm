@@ -112,6 +112,9 @@ func (p *point) signalAfterGPU() error {
 	if err != nil {
 		return errors.Join(fmt.Errorf("syncobj: fence a release point: %w", err), p.drop())
 	}
+	if fd < 0 {
+		return p.signal()
+	}
 	return errors.Join(p.t.m.dev.ImportSyncFile(p.t.handle, p.value, fd), unix.Close(fd), p.drop())
 }
 

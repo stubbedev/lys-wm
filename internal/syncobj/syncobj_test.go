@@ -426,3 +426,26 @@ func TestProtocolErrors(t *testing.T) {
 		})
 	}
 }
+
+type finishedGPU struct{}
+
+func (finishedGPU) SyncFile() (int, error) { return -1, nil }
+
+func TestAReleasePointSignalsAtOnceWhenTheGPUHasFinished(t *testing.T) {
+	dev := device(t)
+	s, err := dev.CreateSyncobj(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = dev.DestroySyncobj(s) })
+	tl := &timeline{m: &Manager{dev: dev, fencer: finishedGPU{}}, handle: s, refs: 2}
+	if err := (&point{t: tl, value: 5}).signalAfterGPU(); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := dev.Query(s); err != nil || v != 5 {
+		t.Fatalf("the timeline is at %d, %v, want 5", v, err)
+	}
+	if tl.refs != 1 {
+		t.Fatalf("the point left %d references", tl.refs)
+	}
+}

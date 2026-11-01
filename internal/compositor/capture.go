@@ -77,7 +77,7 @@ func (t dmabufCapture) fill(c *Compositor, k *capture, finish func(error) error)
 		return finish(errors.Join(err, t.r.Finish()))
 	}
 	fd, err := t.r.SyncFile()
-	if err != nil {
+	if err != nil || fd < 0 {
 		return finish(err)
 	}
 	return c.loop.Once(fd, func() error { return finish(nil) })
