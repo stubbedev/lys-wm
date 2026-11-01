@@ -832,3 +832,49 @@ func TestADeferringConnReportsABrokenSendAtFlush(t *testing.T) {
 		}
 	}
 }
+
+func TestAnIdleConnectionHoldsSmallBuffers(t *testing.T) {
+	a, b := pair(t)
+	for _, c := range []*Conn{a, b} {
+		if len(c.in) > initialBuffer || cap(c.out) > initialBuffer {
+			t.Errorf("a new connection holds %d bytes in and %d out, want at most %d each", len(c.in), cap(c.out), initialBuffer)
+		}
+	}
+	send(t, a, 1, 0, func(e *Encoder) { e.Uint(7) })
+	if m := receive(t, b); m.Uint() != 7 {
+		t.Error("a small message did not arrive")
+	}
+	if cap(a.out) > initialBuffer || len(b.in) > initialBuffer {
+		t.Errorf("a small message grew the buffers to %d out and %d in", cap(a.out), len(b.in))
+	}
+}
+
+func TestTheLargestMessageGrowsBothBuffers(t *testing.T) {
+	a, b := pair(t)
+	payload := bytes.Repeat([]byte{0xab}, maxMessageSize-headerSize-4)
+	send(t, a, 1, 0, func(e *Encoder) { e.Array(payload) })
+	if got := receive(t, b).Array(); !bytes.Equal(got, payload) {
+		t.Errorf("received %d bytes, want the %d sent", len(got), len(payload))
+	}
+	if cap(a.out) > bufferSize || len(b.in) > bufferSize {
+		t.Errorf("buffers grew past their limit: %d out, %d in", cap(a.out), len(b.in))
+	}
+}
+
+func TestPendingOutputKeepsItsLimitAsTheBufferGrows(t *testing.T) {
+	a, _ := pair(t)
+	payload := make([]byte, initialBuffer)
+	for range bufferSize / initialBuffer {
+		e := a.Begin(1, 0)
+		e.Array(payload)
+		if err := e.End(); err != nil {
+			break
+		}
+		if cap(a.out) > bufferSize {
+			t.Fatalf("output buffer grew to %d, past its %d limit", cap(a.out), bufferSize)
+		}
+	}
+	if cap(a.out) <= initialBuffer {
+		t.Errorf("output buffer stayed at %d with %d pending", cap(a.out), len(a.out))
+	}
+}

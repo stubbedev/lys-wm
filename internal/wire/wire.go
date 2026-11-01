@@ -45,6 +45,7 @@ const (
 	headerSize     = 8
 	maxMessageSize = math.MaxUint16 &^ 3
 	bufferSize     = 1 << 16
+	initialBuffer  = 1 << 12
 	maxFDsOut      = 28
 	maxFDsIn       = 1024
 	maxFDsPerRecv  = 253

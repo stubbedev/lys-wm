@@ -63,6 +63,9 @@ func (e *Encoder) reserve(n int) bool {
 		e.fail(ErrMessageTooLarge)
 		return false
 	}
+	if len(c.out)+n > cap(c.out) && cap(c.out) < bufferSize {
+		c.out = append(make([]byte, 0, min(bufferSize, max(2*cap(c.out), len(c.out)+n))), c.out...)
+	}
 	if len(c.out)+n <= cap(c.out) {
 		return true
 	}

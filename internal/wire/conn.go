@@ -52,10 +52,10 @@ func (c *Conn) broken(err error) {
 func NewConn(fd int) *Conn {
 	return &Conn{
 		fd:     fd,
-		in:     make([]byte, bufferSize),
+		in:     make([]byte, initialBuffer),
 		fdsIn:  newFDQueue(maxFDsIn),
 		oobIn:  make([]byte, unix.CmsgSpace(maxFDsPerRecv*4)),
-		out:    make([]byte, 0, bufferSize),
+		out:    make([]byte, 0, initialBuffer),
 		fdsOut: make([]int, 0, maxFDsOut),
 		oobOut: make([]byte, unix.CmsgSpace(maxFDsOut*4)),
 	}
@@ -89,7 +89,13 @@ func (c *Conn) Fill() error {
 		c.w = copy(c.in, c.in[c.r:c.w])
 		c.r = 0
 	}
-	for c.w < len(c.in) {
+	for {
+		if c.w == len(c.in) {
+			if len(c.in) == bufferSize {
+				return nil
+			}
+			c.in = append(c.in, make([]byte, len(c.in))...)
+		}
 		n, oobn, flags, err := c.recvmsg(c.in[c.w:])
 		switch {
 		case errors.Is(err, unix.EINTR):
@@ -110,7 +116,6 @@ func (c *Conn) Fill() error {
 		}
 		c.w += n
 	}
-	return nil
 }
 
 func (c *Conn) recvmsg(p []byte) (n, oobn, flags int, err error) {
