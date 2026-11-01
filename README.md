@@ -1,102 +1,66 @@
-# lys-wm
+<p align="center">
+  <img src="docs/public/lys-wm.svg" width="160" alt="lys-wm">
+</p>
 
-A tiling Wayland compositor in pure Go (`CGO_ENABLED=0`), built to replace a
-Hyprland + hy3 setup with something smaller.
+<h1 align="center">lys-wm</h1>
 
-## Scope
+<p align="center">
+  A tiling Wayland compositor in pure Go (<code>CGO_ENABLED=0</code>), built to
+  replace a Hyprland + hy3 setup with something smaller.
+</p>
 
-- **Tiling like hy3**: a tree of horizontal and vertical splits and tab
-  groups, autotile by container width, directional focus and move,
-  workspaces 1–10 per output, floating windows, window rules, submaps.
-- **Drawing**: client surfaces, 1px borders and tab bars. Nothing else.
-- **Desktop protocols** for a full session: layer-shell, session lock, idle
-  notify and inhibit, data control, screen capture, foreign toplevels,
-  workspaces, output management, gamma and colour-matrix control, touchpad gestures, virtual
-  input, input methods, sandboxed clients, XWayland.
-- **Games**: Vulkan FIFO pacing (fifo, commit timing), opt-in tearing, pointer
-  warps and constraints.
-- **Hardware**: DRM/KMS through logind, libinput, NVIDIA (explicit sync) and
-  Mesa, fractional scaling, and multi-GPU.
+<p align="center">
+  <a href="https://github.com/stubbedev/lys-wm/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/stubbedev/lys-wm/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT license"></a>
+  <a href="https://stubbedev.github.io/lys-wm/"><img src="https://img.shields.io/badge/docs-stubbedev.github.io-informational?style=for-the-badge" alt="Documentation"></a>
+</p>
 
-## Non-goals
+hy3-style tiling with splits and tab groups, on DRM/KMS through logind and
+libinput, with NVIDIA and Mesa, several GPUs, the protocols a full desktop session
+needs, and Xwayland for X11 programs. [Scope](https://stubbedev.github.io/lys-wm/guide/scope)
+has the whole list and the non-goals.
 
-Animations, blur, shadows, rounded corners, plugins, a scripting language in
-the config, VR, HDR.
-
-## Pure Go
-
-No cgo. The few C libraries with no reasonable alternative (EGL, GLES2, GBM,
-libinput and libxkbcommon) are loaded at runtime with
-[purego](https://github.com/ebitengine/purego); everything else is Go. See
-[`docs/architecture.md`](docs/architecture.md).
+**Documentation: <https://stubbedev.github.io/lys-wm/>**
 
 ## Install
 
-On NixOS, add the flake as an input and enable the module:
-
-```nix
-{
-  inputs.lys-wm.url = "github:stubbedev/lys-wm";
-  outputs = {nixpkgs, lys-wm, ...}: {
-    nixosConfigurations.host = nixpkgs.lib.nixosSystem {
-      modules = [
-        lys-wm.nixosModules.default
-        {programs.lys-wm.enable = true;}
-      ];
-    };
-  };
-}
-```
-
-`programs.lys-wm.enable` installs lys-wm, offers it as a `lys-wm` session to
-display managers such as greetd (`lys-wm --systemd`), enables the portals that
-`lys-wm-portals.conf` routes to, polkit and the rest of a Wayland session. GPU
-drivers come from `/run/opengl-driver`, as for every NixOS compositor.
-
-With standalone home-manager on another distribution, import
-`lys-wm.homeManagerModules.default` and set `programs.lys-wm.enable = true`.
-It installs lys-wm and links `lys-wm-session.target` into
-`~/.config/systemd/user`, because the user manager there does not search the
-Nix profile for units. The display manager, portals and GPU drivers stay the
-host's.
-
-## Config
-
-One YAML file, `~/.config/lys-wm/config.yaml`; see
-[`docs/config.md`](docs/config.md) for every key and
-[`docs/actions.md`](docs/actions.md) for the actions binds can run.
-`lys-wmctl` queries and controls a running lys-wm; see [`docs/ipc.md`](docs/ipc.md).
-
-## Roadmap
-
-The plan lives in the issues, grouped by milestone. Each milestone has exit
-criteria in its description.
-
-| Milestone | Outcome |
-| --- | --- |
-| M0 Foundation | Wire codec, scanner, event loop, server core, headless and nested backends, test harness |
-| M1 Core protocols | Ordinary clients run nested on shm buffers |
-| M2 Tiling core | hy3-equivalent tiling, workspaces, floating, rules, binds |
-| M3 Config and IPC | One validated config file; `lys-wmctl` and an event stream |
-| M4 GPU rendering | GLES via purego, dmabuf, explicit sync, damage tracking |
-| M5 Native session | KMS, libinput, logind, hotplug, lid, suspend/resume |
-| M6 XWayland | Steam and JetBrains IDEs work |
-| M7 Desktop parity | lys-shell, rofi, cliphist, hypridle, screen sharing |
-| M8 Daily driver | Packaged for NixOS; Hyprland removed |
-| M9 Multi-GPU | Outputs on any GPU, proven in a VM rig |
-
-## Development
+Debian, Ubuntu and Fedora packages and a tarball, all x86_64, are on the
+[releases page](https://github.com/stubbedev/lys-wm/releases):
 
 ```sh
-nix develop    # Go, gopls, golangci-lint, govulncheck, just (or direnv: `use flake`)
-just gates     # every gate CI runs: format, lint, tests, headless harness, race detector
+sudo apt install ./lys-wm_<version>_amd64.deb
+sudo dnf install ./lys-wm-<version>-1.fc<release>.x86_64.rpm
 ```
 
-The flake's dev shell (`nix/shell.nix`) is the whole development environment:
-the package's Go toolchain, `CGO_ENABLED=0` and `GOTOOLCHAIN=local`. The flake
-also builds the package (`nix build`) and provides the NixOS module; `nix flake check`
-evaluates the module and runs the headless suite (`just headless`) in the
-build sandbox, with the same environment the dev shell sets
-(`nix/test-env.nix`). `checks.vm` boots the NixOS module in a VM with a
-virtio-gpu card, where greetd starts `lys-wm --systemd` on the native DRM
-backend; it needs KVM and runs as its own CI job.
+On NixOS, add the flake and set `programs.lys-wm.enable = true`.
+[Install](https://stubbedev.github.io/lys-wm/guide/install) has the module setup,
+home-manager, the tarball and what each needs.
+
+## Use
+
+Pick the `lys-wm` session in your display manager, or run `lys-wm` inside another
+Wayland session to get a nested window. `SUPER + Return` runs `foot`, and
+`SUPER + Q` closes a window.
+
+```sh
+lys-wmctl windows                # query a running lys-wm
+lys-wmctl dispatch workspace 3   # or control it
+```
+
+[Getting started](https://stubbedev.github.io/lys-wm/guide/getting-started) covers
+the default binds and your first config,
+[Config](https://stubbedev.github.io/lys-wm/config) every key of
+`~/.config/lys-wm/config.yaml`, and
+[Contributing](https://stubbedev.github.io/lys-wm/guide/contributing) the
+development setup.
+
+## The lys family
+
+lys-wm is the compositor of the lys desktop:
+[lys-shell](https://stubbedev.github.io/lys-shell/),
+[lys-ui](https://stubbedev.github.io/lys-ui/),
+[lys-lib](https://stubbedev.github.io/lys-lib/),
+[lys-login](https://stubbedev.github.io/lys-login/),
+[lys-splash](https://stubbedev.github.io/lys-splash/),
+[lys-polkit](https://stubbedev.github.io/lys-polkit/) and
+[lys-secrets](https://stubbedev.github.io/lys-secrets/).
