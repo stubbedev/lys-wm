@@ -34,7 +34,6 @@ const (
 	Float                         = 0x1406
 	UnpackAlignment               = 0x0CF5
 	PackRowLengthNV               = 0x0D02
-	UnpackRowLengthExt            = 0x0CF2
 	UnpackSkipPixelsExt           = 0x0CF4
 	UnpackSkipRowsExt             = 0x0CF3
 	Framebuffer                   = 0x8D40
@@ -59,7 +58,11 @@ const (
 	StreamDraw                    = 0x88E0
 	StreamRead                    = 0x88E1
 	PixelPackBuffer               = 0x88EB
+	PixelUnpackBuffer             = 0x88EC
 	MapReadBit                    = 0x0001
+	mapWriteBit                   = 0x0002
+	mapInvalidateBufferBit        = 0x0008
+	mapUnsynchronizedBit          = 0x0020
 	glVendor                      = 0x1F00
 	glRenderer                    = 0x1F01
 	glVersion                     = 0x1F02
@@ -105,6 +108,7 @@ type GL struct {
 	pTexParameteri           uintptr
 	texImage2D               func(target uint32, level, internalFormat, width, height, border int32, format, typ uint32, pixels *byte)
 	texSubImage2D            func(target uint32, level, x, y, width, height int32, format, typ uint32, pixels *byte)
+	texSubImage2DAt          func(target uint32, level, x, y, width, height int32, format, typ uint32, offset uintptr)
 	PixelStorei              func(pname uint32, param int32)
 	GenFramebuffers          func(n int32, fbs *uint32)
 	DeleteFramebuffers       func(n int32, fbs *uint32)
@@ -175,6 +179,7 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.pTexParameteri, "glTexParameteri"},
 		{&gl.texImage2D, "glTexImage2D"},
 		{&gl.texSubImage2D, "glTexSubImage2D"},
+		{&gl.texSubImage2DAt, "glTexSubImage2D"},
 		{&gl.PixelStorei, "glPixelStorei"},
 		{&gl.GenFramebuffers, "glGenFramebuffers"},
 		{&gl.DeleteFramebuffers, "glDeleteFramebuffers"},
@@ -266,6 +271,10 @@ func (gl *GL) TexSubImage2D(target uint32, x, y, width, height int32, format, ty
 	runtime.KeepAlive(pixels)
 }
 
+func (gl *GL) TexSubImage2DFromBuffer(target uint32, x, y, width, height int32, format, typ uint32, offset int) {
+	gl.texSubImage2DAt(target, 0, x, y, width, height, format, typ, uintptr(offset))
+}
+
 func (gl *GL) ReadPixels(x, y, width, height int32, format uint32, pixels []byte) {
 	gl.readPixels(x, y, width, height, format, UnsignedByte, first(pixels))
 	runtime.KeepAlive(pixels)
@@ -282,6 +291,18 @@ func (gl *GL) AllocateBuffer(target uint32, size int, usage uint32) {
 
 func (gl *GL) MapBufferForReading(target uint32, size int) []byte {
 	p := gl.mapBufferRange(target, 0, size, MapReadBit)
+	if p == nil {
+		return nil
+	}
+	return unsafe.Slice((*byte)(p), size) //nolint:gosec // glMapBufferRange mapped size bytes at p
+}
+
+func (gl *GL) MapBufferRangeForWriting(target uint32, offset, size int, invalidate bool) []byte {
+	access := uint32(mapWriteBit | mapUnsynchronizedBit)
+	if invalidate {
+		access = mapWriteBit | mapInvalidateBufferBit
+	}
+	p := gl.mapBufferRange(target, offset, size, access)
 	if p == nil {
 		return nil
 	}

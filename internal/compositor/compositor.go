@@ -123,9 +123,8 @@ type Compositor struct {
 	leds            xkb.Locks
 	shell           *shell.Shell
 	textures        map[*surface.Surface]texture
-	staged          []byte
 	cursorPixels    map[*surface.Surface]*cursorPixels
-	stagedRects     []image.Rectangle
+	uploadRects     []image.Rectangle
 	imported        map[*dmabuf.Buffer]importedTexture
 	colorrep        *colorrep.Manager
 	captureTargets  map[*dmabuf.Buffer]render.ReadTarget

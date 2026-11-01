@@ -387,3 +387,16 @@ func BenchmarkUpdate(b *testing.B) {
 		})
 	}
 }
+
+func TestUploadsAcrossBands(t *testing.T) {
+	size := rendertest.UploadTargetSize()
+	rendertest.UploadsAcrossBands(t, soft.New(), soft.NewBuffer(size.X, size.Y))
+}
+
+func TestSurvivesAFaultingUpload(t *testing.T) {
+	rendertest.SurvivesAFaultingUpload(t, soft.New(), soft.NewBuffer(1, 1))
+}
+
+func TestStreamedUpdatesStayInOrder(t *testing.T) {
+	rendertest.StreamedUpdatesStayInOrder(t, soft.New(), soft.NewBuffer(1, 1))
+}

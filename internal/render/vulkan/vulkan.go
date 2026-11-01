@@ -125,9 +125,16 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 		return nil, err
 	}
 	tex := &texture{r: r, t: t}
+	uploaded := false
+	defer func() {
+		if !uploaded {
+			_ = tex.Destroy()
+		}
+	}()
 	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
-		return nil, errors.Join(err, tex.Destroy())
+		return nil, err
 	}
+	uploaded = true
 	return tex, nil
 }
 

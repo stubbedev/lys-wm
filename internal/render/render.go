@@ -297,6 +297,10 @@ type AsyncReader interface {
 	NewAsyncTarget(size image.Point) (AsyncReadTarget, error)
 }
 
+// Texture is a renderer's image. Update and Renderer.NewTexture may be
+// handed a client's memory, which faults if the client shrank its file:
+// a renderer reads data only from Go on the calling goroutine and stays
+// usable when that read panics, and keeps no reference to data.
 type Texture interface {
 	Size() image.Point
 	Update(dst image.Rectangle, stride int, data []byte) error

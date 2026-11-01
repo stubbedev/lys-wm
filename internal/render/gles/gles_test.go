@@ -566,3 +566,30 @@ func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
 	g := renderer(t)
 	rendertest.EveryFormat(t, g, framebuffer(t, g, image.Pt(1, 1)))
 }
+
+func TestUploadsAcrossBands(t *testing.T) {
+	g := renderer(t)
+	rendertest.UploadsAcrossBands(t, g, framebuffer(t, g, rendertest.UploadTargetSize()))
+}
+
+func TestUploadsAcrossBandsWithoutAnUnpackBuffer(t *testing.T) {
+	g := renderer(t)
+	gles.DisableUnpackBuffer(g)
+	rendertest.UploadsAcrossBands(t, g, framebuffer(t, g, rendertest.UploadTargetSize()))
+}
+
+func TestSurvivesAFaultingUpload(t *testing.T) {
+	g := renderer(t)
+	rendertest.SurvivesAFaultingUpload(t, g, framebuffer(t, g, image.Pt(1, 1)))
+}
+
+func TestSurvivesAFaultingUploadWithoutAnUnpackBuffer(t *testing.T) {
+	g := renderer(t)
+	gles.DisableUnpackBuffer(g)
+	rendertest.SurvivesAFaultingUpload(t, g, framebuffer(t, g, image.Pt(1, 1)))
+}
+
+func TestStreamedUpdatesStayInOrder(t *testing.T) {
+	g := renderer(t)
+	rendertest.StreamedUpdatesStayInOrder(t, g, framebuffer(t, g, image.Pt(1, 1)))
+}

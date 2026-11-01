@@ -138,23 +138,28 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 	full := image.Rectangle{Max: b.Size()}
 	t, ok := c.textures[s].(uploaded)
 	update := ok && t.format == b.Format() && t.tex.Size() == b.Size()
-	c.stagedRects = append(c.stagedRects[:0], full)
+	c.uploadRects = append(c.uploadRects[:0], full)
 	if update {
-		c.stagedRects = c.stagedRects[:0]
+		c.uploadRects = c.uploadRects[:0]
 		for _, r := range s.BufferDamage() {
 			if r = r.Intersect(full); !r.Empty() {
-				c.stagedRects = append(c.stagedRects, r)
+				c.uploadRects = append(c.uploadRects, r)
 			}
 		}
 	}
-	if err := c.stage(b); err != nil {
-		return err
-	}
-	if seat.IsCursorSurface(s) {
-		c.keepCursorPixels(s, b.Format(), b.Size())
-	}
-	if !update {
-		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), full.Dx()*4, c.staged)
+	return b.Read(func(data []byte, stride int) error {
+		if seat.IsCursorSurface(s) {
+			c.keepCursorPixels(s, b.Format(), b.Size(), data, stride)
+		}
+		if update {
+			for _, r := range c.uploadRects {
+				if err := t.tex.Update(r, stride, data[r.Min.Y*stride+r.Min.X*4:]); err != nil {
+					return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
+				}
+			}
+			return nil
+		}
+		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), stride, data)
 		if err != nil {
 			return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
 		}
@@ -163,56 +168,22 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 		}
 		c.textures[s] = uploaded{tex, b.Format()}
 		return nil
-	}
-	off := 0
-	for _, r := range c.stagedRects {
-		if err := t.tex.Update(r, r.Dx()*4, c.staged[off:]); err != nil {
-			return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
-		}
-		off += r.Dx() * r.Dy() * 4
-	}
-	return nil
+	})
 }
 
-func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, size image.Point) {
+func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, size image.Point, data []byte, stride int) {
 	cp := c.cursorPixels[s]
 	if cp == nil || cp.size != size {
 		cp = &cursorPixels{pix: make([]byte, size.X*size.Y*4), size: size}
 		c.cursorPixels[s] = cp
 	}
-	off := 0
-	for _, r := range c.stagedRects {
-		row := r.Dx() * 4
+	for _, r := range c.uploadRects {
 		for y := r.Min.Y; y < r.Max.Y; y++ {
 			dst := cp.pix[(y*size.X+r.Min.X)*4 : (y*size.X+r.Max.X)*4]
-			copy(dst, c.staged[off:off+row])
+			copy(dst, data[y*stride+r.Min.X*4:])
 			format.DecodeRow(dst)
-			off += row
 		}
 	}
-}
-
-func (c *Compositor) stage(b *shm.Buffer) error {
-	n := 0
-	for _, r := range c.stagedRects {
-		n += r.Dx() * r.Dy() * 4
-	}
-	if cap(c.staged) < n {
-		c.staged = make([]byte, n)
-	}
-	c.staged = c.staged[:n]
-	return b.Read(func(data []byte, stride int) error {
-		off := 0
-		for _, r := range c.stagedRects {
-			row := r.Dx() * 4
-			for y := r.Min.Y; y < r.Max.Y; y++ {
-				at := y*stride + r.Min.X*4
-				copy(c.staged[off:off+row], data[at:at+row])
-				off += row
-			}
-		}
-		return nil
-	})
 }
 
 func (c *Compositor) dropTexture(s *surface.Surface) error {

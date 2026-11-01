@@ -57,7 +57,7 @@ var (
 
 const float32Mantissa = 23
 
-var requiredGL = []string{"GL_EXT_read_format_bgra", "GL_EXT_texture_format_BGRA8888", "GL_EXT_unpack_subimage", "GL_NV_pack_subimage", "GL_OES_EGL_image"}
+var requiredGL = []string{"GL_EXT_read_format_bgra", "GL_EXT_texture_format_BGRA8888", "GL_NV_pack_subimage", "GL_OES_EGL_image"}
 
 type program struct {
 	id                 uint32
@@ -92,6 +92,10 @@ type Renderer struct {
 	closed    bool
 	es3       bool
 	async     bool
+	unpack    uint32
+	ringCap   int
+	ringAt    int
+	band      []byte
 }
 
 func (r *Renderer) enter() error {
@@ -173,6 +177,9 @@ func (r *Renderer) setup() error {
 	}
 	r.gl.GenBuffers(1, &r.vbo)
 	r.es3 = esMajor(r.gl.Version()) >= 3
+	if r.es3 {
+		r.gl.GenBuffers(1, &r.unpack)
+	}
 	r.async = r.es3 && r.d.Has("EGL_KHR_fence_sync")
 	return nil
 }
@@ -192,6 +199,7 @@ func (r *Renderer) Close() error {
 			p.prog.id = 0
 		}
 	}
+	r.gl.DeleteBuffers(1, &r.unpack)
 	r.gl.DeleteBuffers(1, &r.vbo)
 	err := errors.Join(r.gl.Check("gles: close"), r.d.Release())
 	runtime.UnlockOSThread()
@@ -266,12 +274,20 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 		r.gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleB, gpu.Red)
 	}
 	u := t.upload
-	r.gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                       //nolint:gosec // bounded by CheckPixels
-	r.gl.TexImage2D(gpu.Texture2D, u.internal, int32(size.X), int32(size.Y), u.format, u.typ, data) //nolint:gosec // texture sizes fit GLsizei
-	r.gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
+	r.gl.TexImage2D(gpu.Texture2D, u.internal, int32(size.X), int32(size.Y), u.format, u.typ, nil) //nolint:gosec // texture sizes fit GLsizei
 	if err := r.leave("gles: new texture"); err != nil {
 		return nil, errors.Join(err, t.Destroy())
 	}
+	uploaded := false
+	defer func() {
+		if !uploaded {
+			_ = t.Destroy()
+		}
+	}()
+	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
+		return nil, err
+	}
+	uploaded = true
 	return t, nil
 }
 
@@ -422,7 +438,7 @@ func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
 	return t, nil
 }
 
-func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
+func (t *texture) Update(dst image.Rectangle, stride int, data []byte) (err error) {
 	if t.id == 0 {
 		return errors.New("gles: update of a destroyed texture")
 	}
@@ -435,15 +451,12 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
 	}
-	gl := t.r.gl
 	if err := t.r.enter(); err != nil {
 		return err
 	}
-	gl.BindTexture(gpu.Texture2D, t.id)
-	gl.PixelStorei(gpu.UnpackRowLengthExt, int32(stride/4))                                                                                    //nolint:gosec // bounded by CheckUpdate
-	gl.TexSubImage2D(gpu.Texture2D, int32(dst.Min.X), int32(dst.Min.Y), int32(dst.Dx()), int32(dst.Dy()), t.upload.format, t.upload.typ, data) //nolint:gosec // inside the texture
-	gl.PixelStorei(gpu.UnpackRowLengthExt, 0)
-	return t.r.leave("gles: update texture")
+	defer func() { err = errors.Join(err, t.r.leave("gles: update texture")) }()
+	t.r.gl.BindTexture(gpu.Texture2D, t.id)
+	return t.r.upload(t.upload, dst, stride, data)
 }
 
 func (t *texture) Destroy() error {

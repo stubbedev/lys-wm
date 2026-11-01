@@ -7,8 +7,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"image"
+	"runtime/debug"
 	"slices"
 	"testing"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
@@ -403,4 +406,155 @@ func drawn(t *testing.T, r render.Renderer, target render.ReadTarget, tex render
 		t.Fatal(err)
 	}
 	return [4]byte(pix)
+}
+
+var uploadSize = image.Pt(640, 512)
+
+func uploadPixel(x, y int, seed byte) render.Color {
+	return render.Color{R: seed ^ byte(y>>8), G: byte(y), B: byte(x), A: 0xff} //nolint:gosec // the pattern keeps the low bits
+}
+
+func paddedPixels(size image.Point, stride int, seed byte) []byte {
+	data := bytes.Repeat([]byte{0xee}, stride*size.Y)
+	for y := range size.Y {
+		for x := range size.X {
+			c := uploadPixel(x, y, seed)
+			copy(data[y*stride+x*4:], []byte{c.B, c.G, c.R, c.A})
+		}
+	}
+	return data
+}
+
+// UploadsAcrossBands holds a texture larger than one GPU upload step to
+// its client's pixels, whole and in part, from memory with a padded
+// stride. The target is UploadTargetSize.
+func UploadsAcrossBands(t *testing.T, r render.Renderer, target render.ReadTarget) {
+	t.Helper()
+	stride := uploadSize.X*4 + 8
+	tex, err := r.NewTexture(render.ARGB8888, uploadSize, stride, paddedPixels(uploadSize, stride, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tex.Destroy() }()
+	checkUpload(t, r, target, tex, func(image.Point) byte { return 1 })
+
+	part := image.Rect(50, 20, 610, 500)
+	if err := tex.Update(part, stride, paddedPixels(uploadSize, stride, 2)[part.Min.Y*stride+part.Min.X*4:]); err != nil {
+		t.Fatal(err)
+	}
+	checkUpload(t, r, target, tex, func(p image.Point) byte {
+		if p.In(part) {
+			return 2
+		}
+		return 1
+	})
+}
+
+// UploadTargetSize is the target UploadsAcrossBands draws on.
+func UploadTargetSize() image.Point { return uploadSize }
+
+func checkUpload(t *testing.T, r render.Renderer, target render.ReadTarget, tex render.Texture, seed func(image.Point) byte) {
+	t.Helper()
+	all := image.Rectangle{Max: uploadSize}
+	Paint(t, r, target, render.Region{all}, func(p render.Pass) {
+		p.DrawTexture(tex, render.FRect{W: float64(uploadSize.X), H: float64(uploadSize.Y)}, all, render.Normal, 1, render.Mask{})
+	})
+	got := make([]byte, uploadSize.X*uploadSize.Y*4)
+	if err := target.Read(got, uploadSize.X*4); err != nil {
+		t.Fatal(err)
+	}
+	for y := range uploadSize.Y {
+		for x := range uploadSize.X {
+			c := uploadPixel(x, y, seed(image.Pt(x, y)))
+			at := (y*uploadSize.X + x) * 4
+			if want := [4]byte{c.B, c.G, c.R, c.A}; [4]byte(got[at:at+4]) != want {
+				t.Fatalf("pixel (%d,%d) = %v, want %v", x, y, got[at:at+4], want)
+			}
+		}
+	}
+}
+
+// faultingMemory is a mapping past the end of its file, as a client
+// leaves its pool by shrinking it: every read raises SIGBUS.
+func faultingMemory(t *testing.T, n int) []byte {
+	t.Helper()
+	fd, err := unix.MemfdCreate("rendertest", unix.MFD_CLOEXEC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	if err := unix.Ftruncate(fd, int64(n)); err != nil {
+		t.Fatal(err)
+	}
+	data, err := unix.Mmap(fd, 0, n, unix.PROT_READ, unix.MAP_SHARED)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = unix.Munmap(data) })
+	if err := unix.Ftruncate(fd, 0); err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func wantFault(t *testing.T, what string, f func()) {
+	t.Helper()
+	defer debug.SetPanicOnFault(debug.SetPanicOnFault(true))
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Errorf("%s read faulting memory without a Go fault", what)
+			return
+		}
+		if _, ok := r.(interface{ Addr() uintptr }); !ok {
+			panic(r)
+		}
+	}()
+	f()
+}
+
+// SurvivesAFaultingUpload holds a renderer to the Texture contract: a
+// client's shrunk file faults in Go, and the renderer draws on. The
+// target is 1x1.
+func SurvivesAFaultingUpload(t *testing.T, r render.Renderer, target render.ReadTarget) {
+	t.Helper()
+	size := image.Pt(16, 16)
+	data := faultingMemory(t, size.X*size.Y*4)
+	c := render.Color{R: 0xff, G: 0xaa, B: 0x55, A: 0xff}
+	good := bytes.Repeat(Encode(render.ARGB8888, c), size.X*size.Y)
+	tex, err := r.NewTexture(render.ARGB8888, size, size.X*4, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tex.Destroy() }()
+	wantFault(t, "Update", func() { _ = tex.Update(image.Rectangle{Max: size}, size.X*4, data) })
+	wantFault(t, "NewTexture", func() { _, _ = r.NewTexture(render.ARGB8888, size, size.X*4, data) })
+	if err := tex.Update(image.Rectangle{Max: size}, size.X*4, good); err != nil {
+		t.Fatalf("update after a fault: %v", err)
+	}
+	if got, want := drawn(t, r, target, tex), [4]byte{c.B, c.G, c.R, c.A}; got != want {
+		t.Errorf("drew %v after a fault, want %v", got, want)
+	}
+}
+
+// StreamedUpdatesStayInOrder draws after every one of many updates of
+// one texture, past any upload buffer's wrap: each draw sees exactly
+// the last update, not one a later write overwrote. The target is 1x1.
+func StreamedUpdatesStayInOrder(t *testing.T, r render.Renderer, target render.ReadTarget) {
+	t.Helper()
+	size := image.Pt(256, 256)
+	tex, err := r.NewTexture(render.ARGB8888, size, size.X*4, make([]byte, size.X*size.Y*4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tex.Destroy() }()
+	for i := range 64 {
+		c := render.Color{R: byte(i * 3), G: byte(255 - i), B: byte(i), A: 0xff}
+		if err := tex.Update(image.Rectangle{Max: size}, size.X*4, bytes.Repeat(Encode(render.ARGB8888, c), size.X*size.Y)); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := drawn(t, r, target, tex), [4]byte{c.B, c.G, c.R, c.A}; got != want {
+			t.Fatalf("update %d drew %v, want %v", i, got, want)
+		}
+	}
 }

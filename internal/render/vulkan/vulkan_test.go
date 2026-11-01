@@ -166,3 +166,18 @@ func TestScanoutTargetsRoundTripAsDMABUFsOnHardware(t *testing.T) {
 		}
 	}
 }
+
+func TestUploadsAcrossBands(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.UploadsAcrossBands(t, r, target(t, r, rendertest.UploadTargetSize()))
+}
+
+func TestSurvivesAFaultingUpload(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.SurvivesAFaultingUpload(t, r, target(t, r, image.Pt(1, 1)))
+}
+
+func TestStreamedUpdatesStayInOrder(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.StreamedUpdatesStayInOrder(t, r, target(t, r, image.Pt(1, 1)))
+}
