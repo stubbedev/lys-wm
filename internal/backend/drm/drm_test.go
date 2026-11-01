@@ -1076,7 +1076,7 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 	sent = len(r.dev.commits)
 	r.dev.flip(t, 10, 4)
 	r.until("the frame after the hidden cursor's flip", func() bool { return len(r.dev.commits) > sent && o.flipping })
-	if fb, _, ok := cursorAt(r.dev.commits[len(r.dev.commits)-1]); !ok || fb != 0 {
+	if fb, _, ok := cursorAt(r.dev.commits[len(r.dev.commits)-1]); ok && fb != 0 {
 		t.Fatal("a frame brought a hidden cursor back")
 	}
 }
@@ -1666,7 +1666,7 @@ func TestTearingScanoutsFlipAsync(t *testing.T) {
 	}
 
 	r.dev.refuseAsync = true
-	if refused := scanout(9, true); refused.flags&kdrm.AtomicPageFlipAsync != 0 || refused.values[[2]uint32{40, propSrcW}] == 0 {
+	if refused := scanout(9, true); refused.flags&kdrm.AtomicPageFlipAsync != 0 || refused.values[[2]uint32{40, propFB}] == 0 {
 		t.Fatalf("an async flip the driver refuses did not fall back to a full vblank flip: %+v", refused)
 	}
 }
@@ -2067,5 +2067,31 @@ func TestClosingOverAnInheritedFrameLeavesItAlone(t *testing.T) {
 	}
 	if got := r.dev.commits[before:]; len(got) != 0 || len(r.dev.closedFBs) != 0 {
 		t.Fatalf("closing over the inherited frame committed %+v and closed %v", got, r.dev.closedFBs)
+	}
+}
+
+func TestASteadyFrameTouchesOnlyThePrimaryPlanesBuffer(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	for seq := uint32(2); seq < 6; seq++ {
+		n := len(r.dev.commits)
+		if err := o.ScheduleFrame(); err != nil {
+			t.Fatal(err)
+		}
+		r.committedSince("the frame", o, n)
+		r.dev.flip(t, 10, seq)
+		r.until("the frame's flip", func() bool { return !o.flipping })
+	}
+	last := r.dev.commits[len(r.dev.commits)-1]
+	if last.flags&kdrm.AtomicTestOnly != 0 {
+		t.Fatal("the last commit is a test")
+	}
+	for key := range last.values {
+		if object, prop := key[0], key[1]; object != o.primary.id || prop != propFB && prop != propInFence {
+			t.Errorf("a steady frame set property %d of object %d", prop, object)
+		}
+	}
+	if last.values[[2]uint32{o.primary.id, propFB}] == 0 {
+		t.Fatal("a steady frame set no buffer")
 	}
 }

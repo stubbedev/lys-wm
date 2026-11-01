@@ -144,7 +144,7 @@ func (c *cursor) test() error {
 	o.b.req.Reset()
 	c.add()
 	if err := o.b.dev.Commit(&o.b.req, kdrm.AtomicTestOnly, 0); err != nil {
-		c.refused, c.visible = fmt.Errorf("drm: the cursor plane of %s refuses a %v image: %w", o.Name(), o.b.cursor, err), false
+		c.refused, c.visible, c.dirty = fmt.Errorf("drm: the cursor plane of %s refuses a %v image: %w", o.Name(), o.b.cursor, err), false, true
 		return c.refused
 	}
 	return nil

@@ -1174,7 +1174,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	o.frame(s, fence)
 	err := o.verify(s.fb, flags)
 	if c := o.cursor; err != nil && c != nil && c.visible {
-		c.visible = false
+		c.visible, c.dirty = false, true
 		o.frame(s, fence)
 		if o.test(flags) != nil {
 			c.visible = true
@@ -1198,14 +1198,22 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 func (o *Output) frame(s *scanout, fence int) {
 	r := &o.b.req
 	r.Reset()
-	if o.kms == kmsModeset {
-		o.connector.set(&o.b.req, "CRTC_ID", uint64(o.crtc.id))
-		o.crtc.set(&o.b.req, "MODE_ID", uint64(o.modeBlob))
-		o.crtc.set(&o.b.req, "ACTIVE", 1)
+	switch o.kms {
+	case kmsFlip:
+		o.primary.set(r, "FB_ID", uint64(s.fb))
+		if fence >= 0 {
+			o.primary.set(r, "IN_FENCE_FD", uint64(fence))
+		}
+	case kmsModeset:
+		o.connector.set(r, "CRTC_ID", uint64(o.crtc.id))
+		o.crtc.set(r, "MODE_ID", uint64(o.modeBlob))
+		o.crtc.set(r, "ACTIVE", 1)
+		fallthrough
+	default:
+		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
 	}
-	o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
-	if o.cursor != nil {
-		o.cursor.add()
+	if c := o.cursor; c != nil && (c.dirty || o.kms != kmsFlip) {
+		c.add()
 	}
 	o.addColor()
 }
