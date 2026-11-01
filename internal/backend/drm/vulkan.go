@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 )
@@ -17,9 +18,11 @@ type vulkanAllocator struct {
 	dev       *kdrm.Device
 	modifiers bool
 	r         *vulkan.Renderer
+	gbmLib    *gpu.GBMLibrary
+	gbm       *gpu.GBM
 }
 
-func newVulkanAllocator(dev *kdrm.Device) (*vulkanAllocator, error) {
+func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*vulkanAllocator, error) {
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
@@ -32,7 +35,15 @@ func newVulkanAllocator(dev *kdrm.Device) (*vulkanAllocator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("drm: Vulkan on %s: %w", dev.Path(), err)
 	}
-	return &vulkanAllocator{dev: dev, modifiers: modifiers == 1, r: r}, nil
+	lib, err := gpu.LoadGBM(paths)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: GBM for %s: %w", dev.Path(), err), r.Close())
+	}
+	bo, err := lib.Open(dev.FD())
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: GBM on %s: %w", dev.Path(), err), lib.Close(), r.Close())
+	}
+	return &vulkanAllocator{dev: dev, modifiers: modifiers == 1, r: r, gbmLib: lib, gbm: bo}, nil
 }
 
 func (a *vulkanAllocator) renderer() render.Renderer {
@@ -44,16 +55,20 @@ func (a *vulkanAllocator) renderable(format fourcc.Format) ([]fourcc.Modifier, e
 }
 
 func (a *vulkanAllocator) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
-	t, err := a.r.NewScanoutTarget(size, format, modifiers)
+	bo, err := a.gbm.Allocate(size, format, modifiers, gpu.UseRendering|gpu.UseScanout)
 	if err != nil {
 		return nil, err
 	}
-	id, closeHandles, err := importFB(a.dev, t.Dmabuf(), a.modifiers)
+	t, err := a.r.ImportTarget(bo.DMABUF)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), t.Destroy())
+		return nil, errors.Join(fmt.Errorf("drm: import a %v buffer into Vulkan on %s: %w", bo.Modifier, a.dev.Path(), err), bo.Close())
+	}
+	id, closeHandles, err := importFB(a.dev, bo.DMABUF, a.modifiers)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), t.Destroy(), bo.Close())
 	}
 	return &scanout{target: t, fb: id, release: func() error {
-		return errors.Join(closeHandles(), t.Destroy())
+		return errors.Join(closeHandles(), t.Destroy(), bo.Close())
 	}}, nil
 }
 
@@ -65,5 +80,7 @@ func (a *vulkanAllocator) fence() (int, error) {
 }
 
 func (a *vulkanAllocator) close() error {
-	return a.r.Close()
+	err := a.r.Close()
+	a.gbm.Close()
+	return errors.Join(err, a.gbmLib.Close())
 }

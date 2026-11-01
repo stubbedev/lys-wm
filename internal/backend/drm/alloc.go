@@ -138,7 +138,7 @@ type Options struct {
 
 func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {
 	if opts.Vulkan {
-		return newVulkanAllocator(dev)
+		return newVulkanAllocator(dev, opts.Paths)
 	}
 	return newGBMAllocator(dev, opts.Paths)
 }

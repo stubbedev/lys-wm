@@ -171,15 +171,6 @@ func (t *Target) Destroy() error {
 	return nil
 }
 
-func (t *Target) Dmabuf() gpu.DMABUF {
-	b := t.t.Dmabuf()
-	planes := make([]gpu.Plane, len(b.Planes))
-	for i, p := range b.Planes {
-		planes[i] = gpu.Plane{FD: p.FD, Offset: p.Offset, Stride: p.Stride}
-	}
-	return gpu.DMABUF{Size: image.Pt(b.Width, b.Height), Format: b.Format, Modifier: b.Modifier, Planes: planes}
-}
-
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	t, err := r.d.NewOffscreen(size.X, size.Y)
 	if err != nil {
@@ -208,14 +199,6 @@ func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, err
 		return nil, err
 	}
 	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex}}, nil
-}
-
-func (r *Renderer) NewScanoutTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*Target, error) {
-	t, err := r.d.NewTarget(size.X, size.Y, format, modifiers)
-	if err != nil {
-		return nil, err
-	}
-	return &Target{r: r, t: t}, nil
 }
 
 func (r *Renderer) RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier, error) {

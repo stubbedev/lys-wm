@@ -2,14 +2,9 @@ package vulkan_test
 
 import (
 	"image"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
-	"github.com/stubbedev/lys-lib/fourcc"
-
-	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/rendertest"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
@@ -88,81 +83,6 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 		draw(p)
 		if err := p.End(); err == nil {
 			t.Errorf("%s: End succeeded", name)
-		}
-	}
-}
-
-func TestScanoutTargetsRoundTripAsDMABUFsOnHardware(t *testing.T) {
-	nodes, err := filepath.Glob("/dev/dri/renderD*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nodes) == 0 {
-		t.Skip("no render node")
-	}
-	r, err := vulkan.OpenRenderNode(nodes[0])
-	if err != nil {
-		t.Skipf("no Vulkan device for %s: %v", nodes[0], err)
-	}
-	t.Cleanup(func() {
-		if err := r.Close(); err != nil {
-			t.Error(err)
-		}
-	})
-	if node, err := r.RenderNode(); err != nil || node != nodes[0] {
-		t.Fatalf("RenderNode() = %q, %v; want %q", node, err, nodes[0])
-	}
-	formats, err := r.DMABUFFormats()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.ContainsFunc(formats, func(f gpu.FormatModifier) bool { return f.Format == fourcc.XRGB8888 }) {
-		t.Fatalf("%s imports no XRGB8888 dmabufs: %v", r.Device().Name(), formats)
-	}
-	mods, err := r.RenderableModifiers(fourcc.XRGB8888)
-	if err != nil {
-		t.Fatal(err)
-	}
-	size := image.Pt(37, 21)
-	scanout, err := r.NewScanoutTarget(size, fourcc.XRGB8888, mods)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := scanout.Destroy(); err != nil {
-			t.Error(err)
-		}
-	})
-	rendertest.Paint(t, r, scanout, render.Region{{Max: size}}, func(p render.Pass) {
-		p.FillRect(image.Rectangle{Max: size}, render.Color{G: 0x80, B: 0xff, A: 0xff}, render.Mask{})
-		p.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 0xff, A: 0xff}, render.Mask{})
-	})
-	if err := r.Finish(); err != nil {
-		t.Fatal(err)
-	}
-	tex, err := r.ImportTexture(scanout.Dmabuf())
-	if err != nil {
-		t.Fatalf("import the scanout target's %v dmabuf: %v", scanout.Dmabuf().Modifier, err)
-	}
-	t.Cleanup(func() {
-		if err := tex.Destroy(); err != nil {
-			t.Error(err)
-		}
-	})
-	copied := target(t, r, size)
-	rendertest.Paint(t, r, copied, render.Region{{Max: size}}, func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Max: size}, render.Normal, 1, render.Mask{})
-	})
-	pix := make([]byte, size.X*size.Y*4)
-	if err := copied.Read(pix, size.X*4); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		at   image.Point
-		want [4]byte
-	}{{image.Pt(1, 1), [4]byte{0, 0, 0xff, 0xff}}, {image.Pt(30, 15), [4]byte{0xff, 0x80, 0, 0xff}}} {
-		if got := [4]byte(pix[c.at.Y*size.X*4+c.at.X*4:]); got != c.want {
-			t.Errorf("%v: %v, want %v", c.at, got, c.want)
 		}
 	}
 }

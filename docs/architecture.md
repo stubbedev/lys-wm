@@ -195,8 +195,10 @@ or textures.
 
 `render/vulkan` (#155) is a second GPU renderer on lys-lib's `gpu` package,
 the Vulkan stack lys-ui and lys-shell draw with; `-renderer vulkan` selects
-it on the DRM and headless backends, where it allocates scanout targets in a
-modifier the plane and the device share and fences them with sync files.
+it on the DRM and headless backends, where GBM allocates scanout targets in a
+modifier the plane and the device share, Vulkan imports them, and sync files
+fence them. The kernel refuses framebuffers over memory Vulkan exports on `xe`
+(Lunar Lake), in every modifier, and takes the same modifiers from GBM.
 GLES stays the default. lys-lib loads `libvulkan.so.1`, whose store path the
 Nix build bakes in and `LYS_LIBVULKAN` overrides; the dev shell points
 `VK_DRIVER_FILES` at lavapipe, as it points EGL at llvmpipe, and both renderers
