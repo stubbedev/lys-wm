@@ -169,6 +169,7 @@ func start(t *testing.T, s setup, modes ...backend.Mode) *Harness {
 		t.Fatalf("harness: %v", err)
 	}
 	h.compositor.OnDispatch(h.ipc.Dispatched)
+	h.auditIPC()
 	if s.xwayland != nil {
 		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout}
 		if h.xwayland, err = xwayland.Listen(h.loop, h.display, opts); err != nil {
@@ -437,4 +438,21 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func (h *Harness) auditIPC() {
+	said := false
+	h.compositor.OnStateChange(func() {
+		said = true
+		h.ipc.Changed()
+	})
+	last := h.compositor.Snapshot()
+	h.loop.BeforeWait(func() error {
+		next := h.compositor.Snapshot()
+		if events := ipc.Diff(last, next); len(events) > 0 && !said {
+			h.t.Errorf("harness: the compositor changed what IPC watchers see without saying so: %#v", events)
+		}
+		last, said = next, false
+		return nil
+	})
 }

@@ -169,6 +169,7 @@ func (c *Compositor) XWindowUnmapped(w *xwayland.Window) error {
 }
 
 func (c *Compositor) XWindowChanged(w *xwayland.Window) error {
+	c.stateChanged()
 	var err error
 	if win := c.windowOf(xToplevel{w, c}); win != nil && w.Urgent() {
 		err = c.markUrgent(win)
@@ -179,6 +180,7 @@ func (c *Compositor) XWindowChanged(w *xwayland.Window) error {
 func (c *Compositor) XWindowResponsive(w *xwayland.Window, responsive bool) error {
 	if win := c.windowOf(xToplevel{w, c}); win != nil {
 		win.hung = !responsive
+		c.stateChanged()
 	}
 	return nil
 }

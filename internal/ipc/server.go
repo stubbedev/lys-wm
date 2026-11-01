@@ -63,6 +63,7 @@ type Server struct {
 	watchers []*watcher
 	last     Snapshot
 	pending  []Event
+	changed  bool
 }
 
 func Listen(l *loop.Loop, path string, h Handler, report func(error)) (*Server, error) {
@@ -269,7 +270,7 @@ func (s *Server) watch(conn *net.UnixConn) {
 	w := &watcher{lines: make(chan []byte, watchBacklog)}
 	if _, err := onLoop(s, func() (struct{}, error) {
 		if len(s.watchers) == 0 {
-			s.last, s.pending = s.handler.Snapshot(), nil
+			s.last, s.pending, s.changed = s.handler.Snapshot(), nil, false
 		}
 		s.watchers = append(s.watchers, w)
 		return struct{}{}, nil
@@ -304,10 +305,15 @@ func (s *Server) Dispatched(a wm.Action) {
 	}
 }
 
+func (s *Server) Changed() {
+	s.changed = true
+}
+
 func (s *Server) publish() error {
-	if len(s.watchers) == 0 || s.shut() {
+	if len(s.watchers) == 0 || !s.changed && len(s.pending) == 0 || s.shut() {
 		return nil
 	}
+	s.changed = false
 	next := s.handler.Snapshot()
 	events := append(s.pending, Diff(s.last, next)...)
 	s.last, s.pending = next, nil

@@ -26,6 +26,7 @@ type fake struct {
 	dispatched []wm.Action
 	icons      map[wm.WindowID]*image.RGBA
 	server     *Server
+	snapshots  int
 }
 
 func (f *fake) Icon(id wm.WindowID, _ int) (*image.RGBA, int, error) {
@@ -37,6 +38,7 @@ func (f *fake) Icon(id wm.WindowID, _ int) (*image.RGBA, int, error) {
 }
 
 func (f *fake) Snapshot() Snapshot {
+	f.snapshots++
 	snap := f.snap
 	snap.Windows = append([]Window(nil), f.snap.Windows...)
 	return snap
@@ -103,6 +105,7 @@ func (r *rig) do(f func(*fake)) {
 	ran := make(chan struct{})
 	if err := r.loop.Post(func() error {
 		f(r.fake)
+		r.server.Changed()
 		close(ran)
 		return nil
 	}); err != nil {
@@ -377,5 +380,33 @@ func TestADispatchThatStopsLysWMIsAnswered(t *testing.T) {
 		if err := <-answered; err != nil {
 			t.Fatalf("the exit that stopped lys-wm was answered with %v", err)
 		}
+	}
+}
+
+func TestAWakeupWithoutAChangeBuildsNoSnapshot(t *testing.T) {
+	r := start(t)
+	_, stop := watch(t, r.path)
+	defer stop()
+	count := func() int {
+		n := make(chan int, 1)
+		if err := r.loop.Post(func() error {
+			n <- r.fake.snapshots
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return <-n
+	}
+	before := count()
+	for range 10 {
+		count()
+	}
+	if got := count() - before; got != 0 {
+		t.Fatalf("%d snapshots across wakeups that changed nothing", got)
+	}
+	r.do(func(*fake) {})
+	count()
+	if got := count() - before; got != 1 {
+		t.Fatalf("%d snapshots after one change, want 1", got)
 	}
 }

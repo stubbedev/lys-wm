@@ -216,6 +216,7 @@ func (c *Compositor) outputLive(o *output.Output) bool {
 }
 
 func (c *Compositor) OutputAdded(b backend.Output) error {
+	c.stateChanged()
 	rule := c.outputRule(b)
 	if _, err := c.commitOutput(b, rule); err != nil {
 		c.report(err)
@@ -254,6 +255,7 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 }
 
 func (c *Compositor) OutputRemoved(b backend.Output) error {
+	c.stateChanged()
 	if i := slices.Index(c.disabled, b); i >= 0 {
 		c.disabled = slices.Delete(c.disabled, i, i+1)
 		err := c.outputConfig.Changed()
@@ -306,6 +308,7 @@ func (c *Compositor) disable(o *output.Output) error {
 		return errors.Join(append(errs, err)...)
 	}
 	c.wm = s
+	c.stateChanged()
 	errs = append(errs, c.relayout(), c.syncAreas(), c.fifo.Latched(nil))
 	return errors.Join(errs...)
 }
@@ -377,6 +380,7 @@ func (c *Compositor) OutputDamaged(b backend.Output) error {
 }
 
 func (c *Compositor) OutputChanged(b backend.Output) error {
+	c.stateChanged()
 	if slices.Contains(c.disabled, b) {
 		return nil
 	}

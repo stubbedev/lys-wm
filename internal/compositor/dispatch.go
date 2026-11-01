@@ -52,6 +52,7 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.pressShortcut(e, trigger)
 	case wm.SubmapAction:
 		c.submap = e.Name
+		c.stateChanged()
 		return nil
 	case wm.DragAction:
 		return c.beginDrag(e.Mode, trigger)

@@ -172,6 +172,7 @@ type Compositor struct {
 	disabled        []backend.Output
 	hooks           Hooks
 	dispatched      func(wm.Action)
+	changed         func()
 	loop            *loop.Loop
 	display         *server.Display
 	nextWindow      wm.WindowID
@@ -430,6 +431,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.adopt(cfg, m)
 	c.outputOverrides = nil
 	c.submap = ""
+	c.stateChanged()
 	err = errors.Join(c.dropDecor(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll())
 	c.syncLEDs()
 	if err != nil {

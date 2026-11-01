@@ -359,3 +359,4 @@ func (quietListener) CursorChanged() error { return nil }
 func (quietListener) KeyboardFocusChanged(*surface.Surface) error { return nil }
 
 func (quietListener) PointerFocusChanged(*surface.Surface) error { return nil }
+func (quietListener) KeyboardStateChanged()                      {}

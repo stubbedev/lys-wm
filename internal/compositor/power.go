@@ -35,6 +35,7 @@ func (c *Compositor) SetPower(o *output.Output, on bool) error {
 	if err := b.Commit(st); err != nil {
 		return fmt.Errorf("compositor: power %s on=%v: %w", b.Name(), on, err)
 	}
+	c.stateChanged()
 	var err error
 	if on {
 		c.sceneOf(o).invalidate()

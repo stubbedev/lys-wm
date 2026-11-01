@@ -446,6 +446,7 @@ func run(args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, srv.Close()) }()
 	s.comp.OnDispatch(srv.Dispatched)
+	s.comp.OnStateChange(srv.Changed)
 	if b.onPower != nil {
 		b.onPower(s.comp.PowerChanged)
 	}

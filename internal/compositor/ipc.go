@@ -106,3 +106,17 @@ func (c *Compositor) keyboardLayout() ipc.Layout {
 	}
 	return l
 }
+
+func (c *Compositor) OnStateChange(f func()) {
+	c.changed = f
+}
+
+func (c *Compositor) stateChanged() {
+	if c.changed != nil {
+		c.changed()
+	}
+}
+
+func (c *Compositor) KeyboardStateChanged() {
+	c.stateChanged()
+}

@@ -147,6 +147,7 @@ func (c *Compositor) update(s wm.State, err error) error {
 		return err
 	}
 	c.wm = s
+	c.stateChanged()
 	return c.reconcile()
 }
 
@@ -216,6 +217,9 @@ func (c *Compositor) reconcile() error {
 	if target != c.active {
 		c.active = target
 		if target != nil {
+			if target.urgent {
+				c.stateChanged()
+			}
 			c.layerFocus, target.urgent = nil, false
 			errs = append(errs, target.top.ping())
 		}
@@ -448,6 +452,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 }
 
 func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {
+	c.stateChanged()
 	switch change {
 	case shell.ChangedSizeLimits:
 		return errors.Join(c.refreshLimits(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
@@ -466,6 +471,7 @@ func (c *Compositor) markUrgent(w *window) error {
 		return nil
 	}
 	w.urgent = true
+	c.stateChanged()
 	return errors.Join(c.scheduleAll(), c.syncWorkspaces())
 }
 
@@ -499,6 +505,7 @@ func (c *Compositor) ClientResponsive(cl *server.Client, responsive bool) error 
 	for _, w := range c.windows {
 		if s := w.top.Surface(); s != nil && s.Client() == cl {
 			w.hung = !responsive
+			c.stateChanged()
 		}
 	}
 	return nil

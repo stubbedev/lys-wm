@@ -51,6 +51,7 @@ type Listener interface {
 	CursorChanged() error
 	KeyboardFocusChanged(focus *surface.Surface) error
 	PointerFocusChanged(focus *surface.Surface) error
+	KeyboardStateChanged()
 }
 
 type Seat struct {

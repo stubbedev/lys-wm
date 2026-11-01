@@ -130,6 +130,9 @@ func (s *Seat) Key(code uint32, pressed bool, at time.Duration) error {
 		k.pressed = slices.Delete(k.pressed, i, i+1)
 	}
 	modsChanged := s.state.Key(code, pressed)
+	if modsChanged {
+		s.listener.KeyboardStateChanged()
+	}
 	if grabbed, err := s.grabKey(code, pressed, modsChanged, at); grabbed {
 		return err
 	}
@@ -189,6 +192,7 @@ func (s *Seat) Reconfigure(p Pending) error {
 	}
 	s.state.Close()
 	s.state, s.cfg = p.state, p.cfg
+	s.listener.KeyboardStateChanged()
 	clear(s.keymaps)
 	var errs []error
 	if g := s.keyboard.grab; g != nil {
