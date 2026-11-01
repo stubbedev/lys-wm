@@ -24,6 +24,8 @@ Depends:
 Recommends:
  xwayland,
  xdg-desktop-portal,
+ xdg-desktop-portal-wlr,
+ xdg-desktop-portal-gtk,
  lys-shell,
  libvulkan1,
  mesa-vulkan-drivers

@@ -20,6 +20,8 @@ Requires:       libxkbcommon
 Requires:       mesa-libgbm
 Recommends:     xorg-x11-server-Xwayland
 Recommends:     xdg-desktop-portal
+Recommends:     xdg-desktop-portal-wlr
+Recommends:     xdg-desktop-portal-gtk
 Recommends:     lys-shell
 Recommends:     vulkan-loader
 Recommends:     mesa-vulkan-drivers

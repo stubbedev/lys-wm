@@ -61,13 +61,14 @@ sudo apt install ./lys-wm_<version>_amd64.deb
 
 The package depends on `libegl1`, `libgles2`, `libgbm1`, `libinput10`,
 `libxkbcommon0`, `hwdata` and `fonts-dejavu-core`. It recommends `xwayland`,
-`xdg-desktop-portal`, `lys-shell`, `libvulkan1` and `mesa-vulkan-drivers`. CI
-installs and runs it on `ubuntu-latest`.
+`xdg-desktop-portal`, `xdg-desktop-portal-wlr`, `xdg-desktop-portal-gtk`,
+`lys-shell`, `libvulkan1` and `mesa-vulkan-drivers`. CI installs and runs it on
+`ubuntu-latest`.
 
 `lys-shell` is not in the distribution's archive: take its package from
 [its releases](https://github.com/stubbedev/lys-shell/releases). Without it,
-install `xdg-desktop-portal-wlr` for screen sharing and screenshots and
-`xdg-desktop-portal-gtk` for the other portals.
+`xdg-desktop-portal-wlr` serves screen sharing and screenshots and
+`xdg-desktop-portal-gtk` the other portals.
 
 ## Fedora
 
@@ -77,8 +78,9 @@ sudo dnf install ./lys-wm-<version>-1.fc<release>.x86_64.rpm
 
 The package requires `libglvnd-egl`, `libglvnd-gles`, `mesa-libgbm`, `libinput`,
 `libxkbcommon`, `hwdata` and `dejavu-sans-fonts`. It recommends
-`xorg-x11-server-Xwayland`, `xdg-desktop-portal`, `lys-shell`, `vulkan-loader`
-and `mesa-vulkan-drivers`. It is built, installed and run on `fedora:latest`, and
+`xorg-x11-server-Xwayland`, `xdg-desktop-portal`, `xdg-desktop-portal-wlr`,
+`xdg-desktop-portal-gtk`, `lys-shell`, `vulkan-loader` and
+`mesa-vulkan-drivers`. It is built, installed and run on `fedora:latest`, and
 the file name carries that release. What the Debian section says about
 `lys-shell` and the portal backends holds here too.
 

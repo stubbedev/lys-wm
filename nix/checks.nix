@@ -85,6 +85,8 @@
         sessions = machine.config.services.displayManager.sessionData.desktops;
       in
         assert builtins.elem self'.packages.lys-wm machine.config.xdg.portal.configPackages;
+        assert machine.config.xdg.portal.wlr.enable;
+        assert builtins.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals;
         assert builtins.elem "lys-wm" machine.config.services.displayManager.sessionData.sessionNames;
           pkgs.runCommand "lys-wm-module" {} ''
             grep -q "^Exec=${self'.packages.lys-wm}/bin/lys-wm --systemd$" ${sessions}/share/wayland-sessions/lys-wm.desktop
