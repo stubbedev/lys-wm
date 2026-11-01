@@ -11,6 +11,7 @@ type FrameClock struct {
 	idle      func(func() error)
 	ready     func() bool
 	frame     func() error
+	onIdle    func() error
 	latch     *Latch
 	requested bool
 	queued    bool
@@ -18,7 +19,9 @@ type FrameClock struct {
 }
 
 func NewFrameClock(idle func(func() error), ready func() bool, frame func() error, latch *Latch) *FrameClock {
-	return &FrameClock{idle: idle, ready: ready, frame: frame, latch: latch}
+	f := &FrameClock{idle: idle, ready: ready, frame: frame, latch: latch}
+	f.onIdle = f.fire
+	return f
 }
 
 func (f *FrameClock) Request() error {
@@ -45,7 +48,7 @@ func (f *FrameClock) Kick() error {
 		}
 	}
 	f.queued = true
-	f.idle(f.fire)
+	f.idle(f.onIdle)
 	return nil
 }
 

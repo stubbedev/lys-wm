@@ -80,6 +80,18 @@ func TestACancelledFrameRequestNeverFires(t *testing.T) {
 	}
 }
 
+func TestAFrameClockCycleDoesNotAllocate(t *testing.T) {
+	var queued func() error
+	clock := NewFrameClock(func(f func() error) { queued = f }, func() bool { return true }, func() error { return nil }, nil)
+	cycle := func() {
+		must(t, clock.Request())
+		must(t, queued())
+	}
+	if n := testing.AllocsPerRun(100, cycle); n != 0 {
+		t.Fatalf("a frame clock cycle allocated %v times", n)
+	}
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
