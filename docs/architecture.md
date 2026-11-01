@@ -13,6 +13,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | Need | Source |
 | --- | --- |
 | EGL, GLES2, GBM | `libEGL`, `libGLESv2`, `libgbm` through purego (#33) |
+| Vulkan | `libvulkan` through lys-lib's `third_party/vk` and `gpu` (#155) |
 | Input devices | `libinput` through purego (#42) |
 | Keymaps and keyboard state | `libxkbcommon` through purego (#13) |
 | Wayland wire protocol | in-repo codec and scanner (#3, #4) |
@@ -21,23 +22,25 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | logind, systemd | lys-lib's `third_party/godbus`, godbus v5.2.4 with the fd and ordered-dispatch fixes every lys process shares |
 | udev | netlink, read directly (#39) |
 | X11 window manager | [`github.com/jezek/xgb`](https://github.com/jezek/xgb) (#45) |
-| Text | [`github.com/go-text/typesetting`](https://github.com/go-text/typesetting), through lys-lib's `render` |
+| Text | lys-lib's `render`, on its `third_party/typesetting` copy of [go-text/typesetting](https://github.com/go-text/typesetting) |
+| Icon themes | lys-ui's `icontheme` |
 | Config file | [`go.yaml.in/yaml/v3`](https://github.com/yaml/go-yaml), strict, as lys-shell uses (#30) |
 
 Adding a purego library, or a dependency to this table, is a decision issue.
 
 libxkbcommon replaced xkb-go (#13): xkb-go's RMLVO compiler drops the
 compatibility section, so no key sets a modifier, and serializes keys
-with several groups in a form libxkbcommon refuses to parse. Clients read
-keymaps with libxkbcommon anyway, so the compositor compiles and serves
-them with it too. The purego libraries' paths are baked in at build time
-by the Nix package; `LYS_WM_LIBXKBCOMMON` overrides libxkbcommon's.
+with several groups in a form libxkbcommon refuses to parse. Third-party
+clients read keymaps with libxkbcommon, so the compositor compiles and
+serves them with it too; lys-ui and lys-shell read them with xkb-go. The
+purego libraries' paths are baked in at build time by the Nix package, and
+the release builds load them by soname; `LYS_WM_LIBXKBCOMMON` overrides
+libxkbcommon's.
 
 Tab titles are drawn with lys-lib's `render` package, which lys-ui moved
-there with everything else that is not UI (stubbedev/lys-ui#357). Font
-discovery is internal to lys-ui, so the tab font is baked in the same way:
-the Nix package sets DejaVu Sans as the default and `LYS_WM_FONT` overrides
-it, until the config (#30) names one.
+there with everything else that is not UI (stubbedev/lys-ui#357). lys-wm does
+not discover fonts, so the tab font is a file: `tabs.font` in the config, else
+`LYS_WM_FONT`, else the DejaVu Sans the build bakes in.
 
 ## Threading
 
@@ -434,6 +437,7 @@ Everything lives under `internal/` except the commands.
 | `server` | Display socket, clients, object maps, globals; sandbox sockets whose clients carry a security context and do not see restricted globals (#6, #118) |
 | `securitycontext` | `wp_security_context_manager_v1`: Flatpak and other sandbox engines register a socket for their apps; the compositor restricts screen capture, data control, foreign toplevels, output management, virtual input, session lock, layer shell, workspaces and global shortcuts, gamma and colour-matrix control and input methods to unsandboxed clients (#118, #123, #124, #176) |
 | `wlclient` | The client side of a connection: object map, zombies and dispatch, for the nested backend and tests (#6, #9) |
+| `wlclient/feedback` | Reads `zwp_linux_dmabuf_feedback_v1` as a client: the device a compositor renders with and each tranche's format and modifier pairs |
 | `backend` | The backend interface: outputs, frames, input devices (#8) |
 | `backend/headless` | Virtual outputs and injected input, for tests (#8) |
 | `backend/nested` | Outputs as windows on a parent Wayland compositor (#9) |
@@ -452,6 +456,11 @@ Everything lives under `internal/` except the commands.
 | `gammacontrol` | `zwlr_gamma_control_manager_v1`: one client per output sets its gamma ramps, which the drm backend tests and writes to the CRTC's `GAMMA_LUT`; the identity returns when the client lets go (#123) |
 | `colorrep` | `wp_color_representation_manager_v1`: a client states a YCbCr surface's coefficients (BT.601, BT.709, BT.2020), range and chroma siting; the compositor imports its dmabufs with the matching EGL hints instead of guessing BT.709 from 720 lines up and BT.601 below. Only premultiplied alpha is advertised, and coefficients or siting on an RGB buffer are a pixel_format error at commit (#189) |
 | `ctmcontrol` | `hyprland_ctm_control_manager_v1`: the first manager bound sets outputs' 3×3 colour transform matrices on commit, as hyprsunset does, written as S31.32 to the CRTC's `CTM`, which sits before `GAMMA_LUT` so both apply; later managers get `blocked`, and every output it changed returns to the identity when it goes. An output whose CRTC has no `CTM` keeps its colours and the request is reported (#176) |
+| `alphamodifier` | `wp_alpha_modifier_v1`: clients fade a surface by an opacity factor the compositor applies when it draws it |
+| `dmabuf` | `zwp_linux_dmabuf_v1`: GPU buffers shared as dmabuf planes, checked against what the renderer imports, and the feedback that names the formats, modifiers and device |
+| `syncobj` | `wp_linux_drm_syncobj_manager_v1`: explicit synchronization through DRM timeline syncobjs |
+| `idle` | `ext_idle_notifier_v1` and `zwp_idle_inhibit_manager_v1`: idle timers that input resets, and inhibitors that hold them off while their surface is on screen |
+| `outputpower` | `zwlr_output_power_manager_v1`: clients such as idle daemons turn outputs off and on |
 | `singlepixel` | `wp_single_pixel_buffer_manager_v1`: one-pixel buffers of a solid color (#20) |
 | `region` | Pixel regions as disjoint rectangles, for damage and input and opaque regions |
 | `output` | `wl_output` and `zxdg_output_v1`: each output's mode, logical position and scale in 120ths, with rounding that keeps logical edges adjacent in device pixels (#19) |
@@ -466,9 +475,10 @@ Everything lives under `internal/` except the commands.
 | `wm` | The pure core and the dispatcher (#21, #66) |
 | `anim` | Easing curves, springs, tweens and the per-event animation table (#223) |
 | `binds` | Typed chords (modifiers with a keycode from the first layout, a button or a scroll direction), submaps and bind flags, matched to `wm` actions (#29) |
-| `xwm` | The X11 window manager for XWayland (#45) |
+| `xwayland` | Runs Xwayland for X11 clients: the display sockets, the start on the first connection, the X11 window manager and the selection bridge (#44, #45, #46) |
 | `config` | The typed config, its validation and reload (#30) |
 | `ipc` | The IPC socket and event stream (#31) |
+| `systemd` | Hands the session's environment to D-Bus activation and the systemd user manager, and runs `lys-wm-session.target` while lys-wm runs |
 | `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42); the `handle-lid-switch` inhibitor, logind's Suspend, and the power supplies' AC state for the lid policy (#179) |
 | `harness` | The compositor-in-the-loop harness (#10) |
 | `testclient` | A scripted Wayland client that maps toplevels and animates shm frames, for integration tests |
@@ -502,9 +512,8 @@ implement `wire.Peer`: the object map, id allocation and removal.
 ## Devices
 
 Nothing assumes a single GPU. Each DRM device owns its own `backend/drm`
-instance and its own renderer. The primary render device is an explicit
-choice passed to whatever needs it, never an implicit global. Multi-GPU
-itself lands in M9 (#62), which records the selection rule here.
+instance. The primary render device is an explicit choice passed to whatever
+needs it, never an implicit global. [GPU](#gpu) has the selection rule (#62).
 
 ## Testing
 
@@ -516,16 +525,7 @@ itself lands in M9 (#62), which records the selection rule here.
   `just headless` runs it with `LYS_WM_HEADLESS=1`, which turns a missing
   client into a failure; it is part of `just gates`, so CI runs it too.
 
-## Reference implementations
-
-Hyprland no longer uses wlroots.
-[aquamarine](https://github.com/hyprwm/aquamarine) is its backend library
-(DRM/KMS, session, libinput, GBM, headless and nested backends) and
-[hyprwayland-scanner](https://github.com/hyprwm/hyprwayland-scanner)
-generates its protocol bindings; the wire format still comes from
-libwayland-server. Hyprland's `hyprtester` is its compositor-in-the-loop
-suite and the reference for #10. Issues link the relevant files at pinned
-commits under a **Reference** heading.
+## The lid
 
 lys-wm owns the lid (#179). logind acts only on the lid switch's edge
 (systemd#7690), so undocking or unplugging the charger with the lid already
@@ -547,6 +547,17 @@ After a wake the policy runs again once logind's default lid holdoff (30 s)
 has passed, so a laptop woken with the lid still closed, undocked and on
 battery sleeps again, while a lid opened to wake it, or a dock that comes up,
 is seen first; a suspend that fails at once cannot spin (#212).
+
+## Reference implementations
+
+Hyprland no longer uses wlroots.
+[aquamarine](https://github.com/hyprwm/aquamarine) is its backend library
+(DRM/KMS, session, libinput, GBM, headless and nested backends) and
+[hyprwayland-scanner](https://github.com/hyprwm/hyprwayland-scanner)
+generates its protocol bindings; the wire format still comes from
+libwayland-server. Hyprland's `hyprtester` is its compositor-in-the-loop
+suite and the reference for #10. Issues link the relevant files at pinned
+commits under a **Reference** heading.
 
 Licences decide how they may be used:
 

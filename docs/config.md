@@ -17,7 +17,10 @@ config.yaml:12: binds[3].action: bad action: unknown action "teleport"
 parse, or whose chords, layout or font do not load, is rejected whole and the
 running config stays. Nothing reloads when the file changes.
 
-Every section is optional. An empty file gives the defaults.
+Every section is optional, and a file replaces the built-in config rather than
+adding to it: each key the file leaves out takes the default this page gives,
+and a file without `binds` has no binds and without `env` none of the built-in
+config's variables.
 
 ## outputs
 
@@ -452,13 +455,13 @@ one. Read at startup only.
 ## Locking
 
 lys-wm speaks `ext-session-lock-v1`, so lockers such as swaylock, hyprlock or
-lys-shell's lock screen work. While the session is locked, nothing but the lock
+lys-login's lock screen work. While the session is locked, nothing but the lock
 surfaces renders or receives input, and only binds flagged `locked` run.
 lys-wm tells the locker it is locked only after every output has drawn a
 blank frame. If the locker dies, the session stays locked on a dark red
 screen until a new locker takes over; outputs added while locked show the
 lock colour until the locker covers them. lys-wm does not set logind's
-`LockedHint`: the locker does, as lys-shell does today.
+`LockedHint`: the locker does, as lys-login does.
 
 ## Session
 
