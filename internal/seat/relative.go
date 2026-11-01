@@ -40,10 +40,10 @@ func (s *Seat) RelativeMotion(at time.Duration, dx, dy, unaccelDX, unaccelDY flo
 		return nil
 	}
 	hi, lo := wire.Halves(uint64(max(at, 0) / time.Microsecond))
-	errs := make([]error, 0, len(r.relatives))
+	var errs error
 	for _, rel := range r.relatives {
-		errs = append(errs, rel.SendRelativeMotion(hi, lo,
+		errs = errors.Join(errs, rel.SendRelativeMotion(hi, lo,
 			wire.FixedFromFloat(dx), wire.FixedFromFloat(dy), wire.FixedFromFloat(unaccelDX), wire.FixedFromFloat(unaccelDY)))
 	}
-	return errors.Join(errs...)
+	return errs
 }

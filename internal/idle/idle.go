@@ -64,11 +64,11 @@ func New(d *server.Display, l *loop.Loop, now func() time.Duration, inhibitorsCh
 
 func (m *Manager) Activity() error {
 	m.last = m.now()
-	var errs []error
+	var errs error
 	for _, n := range m.notifications {
-		errs = append(errs, n.reset(m.last))
+		errs = errors.Join(errs, n.reset(m.last))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (m *Manager) Inhibitors() iter.Seq[*Inhibitor] {

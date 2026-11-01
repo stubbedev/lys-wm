@@ -360,3 +360,31 @@ func (quietListener) KeyboardFocusChanged(*surface.Surface) error { return nil }
 
 func (quietListener) PointerFocusChanged(*surface.Surface) error { return nil }
 func (quietListener) KeyboardStateChanged()                      {}
+
+func TestPointerMotionAllocatesNothing(t *testing.T) {
+	e := setup(t)
+	e.on(func() {
+		if err := e.seat.AddDevice(sw.WlSeatCapabilityPointer); err != nil {
+			t.Error(err)
+		}
+	})
+	c := e.connect()
+	if _, err := c.seat.GetPointer(struct{ cw.WlPointerHandler }{}); err != nil {
+		t.Fatal(err)
+	}
+	c.surface()
+	var allocs float64
+	e.on(func() {
+		if err := e.seat.SetPointerFocus(e.surf.list[0], 1, 1); err != nil {
+			t.Error(err)
+		}
+		allocs = testing.AllocsPerRun(100, func() {
+			if err := errors.Join(e.seat.PointerMotion(0, 1, 1), e.seat.RelativeMotion(0, 1, 1, 1, 1), e.seat.PointerFrame()); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	if allocs != 0 {
+		t.Fatalf("a pointer motion allocated %v times", allocs)
+	}
+}

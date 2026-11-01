@@ -446,12 +446,12 @@ func (in *Libinput) read(loop.Events) error {
 }
 
 func (in *Libinput) drain() error {
-	var errs []error
+	var errs error
 	for ev := in.fn.getEvent(in.li); ev != 0; ev = in.fn.getEvent(in.li) {
-		errs = append(errs, in.event(ev))
+		errs = errors.Join(errs, in.event(ev))
 		in.fn.destroyEvent(ev)
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func usec(v uint64) time.Duration {

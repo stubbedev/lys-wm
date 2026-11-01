@@ -113,11 +113,11 @@ func (s *Seat) SetPointerFocus(target *surface.Surface, x, y float64) error {
 
 func (s *Seat) PointerMotion(at time.Duration, x, y float64) error {
 	_, pointers := s.focusPointers()
-	var errs []error
+	var errs error
 	for _, ptr := range pointers {
-		errs = append(errs, ptr.SendMotion(wire.Millis(at), wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, ptr.SendMotion(wire.Millis(at), wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) PointerButton(at time.Duration, button uint32, pressed bool) error {
@@ -192,7 +192,7 @@ func (s *Seat) PointerFrame() error {
 	if p.focus != nil && !slices.Contains(p.framed, p.focus.Client()) {
 		p.framed = append(p.framed, p.focus.Client())
 	}
-	var errs []error
+	var errs error
 	for _, c := range p.framed {
 		r := s.lookup(c)
 		if r == nil {
@@ -200,13 +200,13 @@ func (s *Seat) PointerFrame() error {
 		}
 		for _, ptr := range r.pointers {
 			if ptr.Base().Version() >= 5 {
-				errs = append(errs, ptr.SendFrame())
+				errs = errors.Join(errs, ptr.SendFrame())
 			}
 		}
 	}
 	clear(p.framed)
 	p.framed = p.framed[:0]
-	return errors.Join(errs...)
+	return errs
 }
 
 func (r seatRequests) GetPointer(obj *sw.WlSeat, ptr *sw.WlPointer) (sw.WlPointerHandler, error) {

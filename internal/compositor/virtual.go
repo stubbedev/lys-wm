@@ -204,16 +204,16 @@ func (v *virtualPointer) AxisStop(obj *svp.ZwlrVirtualPointerV1, ms uint32, axis
 }
 
 func (v *virtualPointer) Frame(*svp.ZwlrVirtualPointerV1) error {
-	var errs []error
+	var errs error
 	for _, a := range v.axes {
 		a.Source = v.source
-		errs = append(errs, v.input(a))
+		errs = errors.Join(errs, v.input(a))
 	}
 	for _, a := range v.stops {
-		errs = append(errs, v.input(a))
+		errs = errors.Join(errs, v.input(a))
 	}
 	v.axes, v.stops, v.source = v.axes[:0], v.stops[:0], backend.Wheel
-	return errors.Join(append(errs, v.input(backend.PointerFrame{}))...)
+	return errors.Join(errs, v.input(backend.PointerFrame{}))
 }
 
 func (*virtualPointer) Destroy(*svp.ZwlrVirtualPointerV1) error {
