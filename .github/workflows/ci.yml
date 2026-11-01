@@ -2,7 +2,15 @@ name: ci
 
 on:
   push:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "docs/actions.md"
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "docs/actions.md"
 
 permissions:
   contents: read
