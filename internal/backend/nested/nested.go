@@ -65,6 +65,7 @@ type Renderer uint8
 const (
 	Soft Renderer = iota + 1
 	GLES
+	Vulkan
 )
 
 type Options struct {
@@ -72,12 +73,12 @@ type Options struct {
 	GPU      gpu.Paths
 }
 
-func New(l *loop.Loop, socket string, opts Options) (b *Backend, err error) {
+func New(l *loop.Loop, socket string, opts Options) (_ *Backend, err error) {
 	host, err := wlclient.Connect(socket)
 	if err != nil {
 		return nil, fmt.Errorf("nested: %w", err)
 	}
-	b = &Backend{loop: l, host: host}
+	b := &Backend{loop: l, host: host}
 	defer func() {
 		if err != nil {
 			if b.chain != nil {
@@ -137,10 +138,16 @@ func New(l *loop.Loop, socket string, opts Options) (b *Backend, err error) {
 	switch opts.Renderer {
 	case Soft:
 		b.chain = &shmChain{shm: b.shm, soft: soft.New()}
-	case GLES:
-		if b.chain, err = newDMABUFChain(host, globals, reg, opts.GPU); err != nil {
+	case GLES, Vulkan:
+		open := openStack(openVulkan)
+		if opts.Renderer == GLES {
+			open = openGLES(opts.GPU)
+		}
+		c, err := newDMABUFChain(host, globals, reg, open)
+		if err != nil {
 			return nil, err
 		}
+		b.chain = c
 	default:
 		return nil, fmt.Errorf("nested: unknown renderer %d", opts.Renderer)
 	}

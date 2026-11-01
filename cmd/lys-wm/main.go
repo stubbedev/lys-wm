@@ -113,15 +113,12 @@ func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
 		return glesRenderer, nil
 	case "soft":
 		if kind == drmBackend {
-			return 0, errors.New("the drm backend renders with GLES")
+			return 0, errors.New("the drm backend renders with GLES or Vulkan")
 		}
 		return softRenderer, nil
 	case "gles":
 		return glesRenderer, nil
 	case "vulkan":
-		if kind == nestedBackend {
-			return 0, errors.New("the nested backend renders with GLES or in software")
-		}
 		return vulkanRenderer, nil
 	}
 	return 0, fmt.Errorf("unknown renderer %q (available: gles, soft, vulkan)", requested)
@@ -174,8 +171,11 @@ func openOther(kind backendKind, renderer rendererKind, l *loop.Loop) (backend.B
 			return nil, err
 		}
 		opts := nested.Options{Renderer: nested.Soft, GPU: paths}
-		if renderer == glesRenderer {
+		switch renderer {
+		case glesRenderer:
 			opts.Renderer = nested.GLES
+		case vulkanRenderer:
+			opts.Renderer = nested.Vulkan
 		}
 		b, err := nested.New(l, host, opts)
 		return b, hint(err)
@@ -350,7 +350,7 @@ func run(args []string) (err error) {
 	flags := flag.NewFlagSet("lys-wm", flag.ContinueOnError)
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
-	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; vulkan on drm and headless)")
+	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; drm takes gles or vulkan)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	if err := flags.Parse(args); err != nil {
 		return err
