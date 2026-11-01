@@ -3,6 +3,8 @@
 package wayland
 
 import (
+	"sync"
+
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
@@ -249,6 +251,8 @@ type WlCallback struct {
 	object wire.Object
 }
 
+var wlCallbackFree = sync.Pool{New: func() any { return new(WlCallback) }}
+
 func (obj *WlCallback) Base() *wire.Object {
 	return &obj.object
 }
@@ -258,7 +262,8 @@ func CreateWlCallback(p wire.Peer, id wire.ObjectID, version uint32) (*WlCallbac
 	if err != nil {
 		return nil, err
 	}
-	obj := &WlCallback{object: object}
+	obj := wlCallbackFree.Get().(*WlCallback)
+	obj.object = object
 	if err := p.Add(obj); err != nil {
 		return nil, err
 	}
@@ -290,6 +295,8 @@ func (obj *WlCallback) SendDone(callbackData uint32) error {
 	if err := obj.object.Peer().Remove(obj.object.ID()); err != nil {
 		return err
 	}
+	obj.object = wire.Object{}
+	wlCallbackFree.Put(obj)
 	return nil
 }
 

@@ -3,6 +3,8 @@
 package presentationtime
 
 import (
+	"sync"
+
 	"github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
@@ -154,6 +156,8 @@ type WpPresentationFeedback struct {
 	object wire.Object
 }
 
+var wpPresentationFeedbackFree = sync.Pool{New: func() any { return new(WpPresentationFeedback) }}
+
 func (obj *WpPresentationFeedback) Base() *wire.Object {
 	return &obj.object
 }
@@ -163,7 +167,8 @@ func CreateWpPresentationFeedback(p wire.Peer, id wire.ObjectID, version uint32)
 	if err != nil {
 		return nil, err
 	}
-	obj := &WpPresentationFeedback{object: object}
+	obj := wpPresentationFeedbackFree.Get().(*WpPresentationFeedback)
+	obj.object = object
 	if err := p.Add(obj); err != nil {
 		return nil, err
 	}
@@ -216,6 +221,8 @@ func (obj *WpPresentationFeedback) SendPresented(tvSecHi uint32, tvSecLo uint32,
 	if err := obj.object.Peer().Remove(obj.object.ID()); err != nil {
 		return err
 	}
+	obj.object = wire.Object{}
+	wpPresentationFeedbackFree.Put(obj)
 	return nil
 }
 
@@ -230,5 +237,7 @@ func (obj *WpPresentationFeedback) SendDiscarded() error {
 	if err := obj.object.Peer().Remove(obj.object.ID()); err != nil {
 		return err
 	}
+	obj.object = wire.Object{}
+	wpPresentationFeedbackFree.Put(obj)
 	return nil
 }
