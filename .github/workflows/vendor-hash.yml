@@ -1,0 +1,60 @@
+name: vendor-hash
+
+on:
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vendor-hash-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  vendor-hash:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # 31.11.3
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Recompute vendorHash
+        run: nix develop -c just vendor-hash
+      - name: Push the new vendorHash to the pull request
+        env:
+          DEPLOY_KEY: ${{ secrets.VENDOR_HASH_DEPLOY_KEY }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- nix/package.nix; then
+            echo "vendorHash is current"
+            exit 0
+          fi
+          if [[ -z "$DEPLOY_KEY" ]]; then
+            echo "vendorHash is stale and the VENDOR_HASH_DEPLOY_KEY Dependabot secret is missing" >&2
+            exit 1
+          fi
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          chmod 600 "$ssh_dir/key"
+          printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n' > "$ssh_dir/known_hosts"
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -F - -- nix/package.nix <<EOF
+          nix: vendorHash for the bumped modules (#$PR_NUMBER)
+
+          Dependabot rewrites go.mod and go.sum but not the Nix vendorHash,
+          so the fixed-output vendor derivation would fail every Nix build.
+          EOF
+          GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts" \
+            git push "git@github.com:$REPOSITORY.git" "HEAD:refs/heads/$HEAD_REF"

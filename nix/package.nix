@@ -24,8 +24,8 @@
           );
         };
 
-        # Pins the module dependencies in go.sum. When they change, set this to
-        # lib.fakeHash, run `nix build` and put the reported got: hash here.
+        # Pins the module dependencies in go.sum; `just vendor-hash` recomputes
+        # it, and CI does so on Dependabot's pull requests.
         vendorHash = "sha256-BMHAskXq3eKwp2/FG9QLIovWLcxaekKOOXkKVDS9U8E=";
 
         subPackages = ["cmd/lys-wm" "cmd/lys-wmctl"];
