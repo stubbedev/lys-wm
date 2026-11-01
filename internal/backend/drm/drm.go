@@ -56,16 +56,31 @@ type device interface {
 	PrimeFDToHandle(fd int) (uint32, error)
 	CloseHandle(handle uint32) error
 	RemoveFB(id uint32) error
+	CloseFB(id uint32) error
 	Commit(r *kdrm.Request, flags uint32, userData uint64) error
 }
 
 type scanout struct {
 	target    render.Target
-	client    bool
+	client    *clientFB
 	fb        uint32
 	prepare   func() error
-	free      func() error
+	release   func() error
 	presented uint64
+}
+
+func (s *scanout) free(dev device) error {
+	if s.client != nil {
+		return errors.Join(s.client.leave(), s.release())
+	}
+	return errors.Join(dev.RemoveFB(s.fb), s.release())
+}
+
+func (s *scanout) keepOnScreen(dev device) error {
+	if s.client != nil {
+		return errors.Join(s.client.keepOnScreen(), s.release())
+	}
+	return errors.Join(dev.CloseFB(s.fb), s.release())
 }
 
 type allocator interface {
@@ -148,10 +163,12 @@ type Backend struct {
 }
 
 type clientFB struct {
-	fb        uint32
-	remove    func() error
-	shown     int
-	forgotten bool
+	dev          device
+	fb           uint32
+	closeHandles func() error
+	shown        int
+	forgotten    bool
+	kept         bool
 }
 
 func (cf *clientFB) leave() error {
@@ -162,15 +179,30 @@ func (cf *clientFB) leave() error {
 	return nil
 }
 
+func (cf *clientFB) remove() error {
+	if cf.kept {
+		return nil
+	}
+	return errors.Join(cf.dev.RemoveFB(cf.fb), cf.closeHandles())
+}
+
+func (cf *clientFB) keepOnScreen() error {
+	if cf.kept {
+		return nil
+	}
+	cf.kept = true
+	return errors.Join(cf.dev.CloseFB(cf.fb), cf.closeHandles())
+}
+
 func (b *Backend) clientFB(key backend.ScanoutKey, d gpu.DMABUF) (*clientFB, error) {
 	if cf, ok := b.clientFBs[key]; ok {
 		return cf, nil
 	}
-	fb, remove, err := importFB(b.dev, d, b.modifiers)
+	fb, closeHandles, err := importFB(b.dev, d, b.modifiers)
 	if err != nil {
 		return nil, err
 	}
-	cf := &clientFB{fb: fb, remove: remove}
+	cf := &clientFB{dev: b.dev, fb: fb, closeHandles: closeHandles}
 	b.clientFBs[key] = cf
 	return cf, nil
 }
@@ -686,7 +718,9 @@ func (b *Backend) Close() error {
 	b.closed = true
 	var errs []error
 	for len(b.outputs) > 0 {
-		errs = append(errs, b.remove(b.outputs[0]))
+		o := b.outputs[0]
+		b.outputs = b.outputs[1:]
+		errs = append(errs, b.handler.OutputRemoved(o), o.leaveOnScreen(), o.release())
 	}
 	for key := range b.clientFBs {
 		errs = append(errs, b.forget(key))
@@ -1030,7 +1064,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if err != nil {
 		return false, nil
 	}
-	s := &scanout{client: true, fb: cf.fb, free: func() error { return errors.Join(cf.leave(), release()) }}
+	s := &scanout{client: cf, fb: cf.fb, release: release}
 	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
 	torn := tear && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync)
 	if torn {
@@ -1275,8 +1309,8 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 		return errors.Join(timing, o.clock.Kick(), o.flushPlanes())
 	}
 	var errs []error
-	if old := o.front; old != nil && old.client {
-		errs = append(errs, old.free())
+	if old := o.front; old != nil && old.client != nil {
+		errs = append(errs, old.free(o.b.dev))
 	}
 	o.front, o.queued = o.queued, nil
 	o.presented++
@@ -1286,10 +1320,10 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 }
 
 func (o *Output) dropScanout(s *scanout) error {
-	if s == nil || !s.client {
+	if s == nil || s.client == nil {
 		return nil
 	}
-	return s.free()
+	return s.free(o.b.dev)
 }
 
 func (o *Output) dropScanouts() error {
@@ -1301,9 +1335,35 @@ func (o *Output) dropScanouts() error {
 func (o *Output) freeBuffers() error {
 	errs := []error{o.dropScanouts()}
 	for _, s := range o.buffers {
-		errs = append(errs, s.free())
+		errs = append(errs, s.free(o.b.dev))
 	}
 	o.buffers, o.drawing, o.queued, o.front = nil, nil, nil, nil
+	return errors.Join(errs...)
+}
+
+func (o *Output) leaveOnScreen() error {
+	if o.kms == kmsInherited && o.enabled && !o.off && !o.b.paused {
+		o.enabled, o.lit = false, false
+		return o.freeBuffers()
+	}
+	if !o.enabled || !o.lit || o.off || o.b.paused || o.front == nil {
+		return o.disable()
+	}
+	shown := []*scanout{o.front, o.queued}
+	var errs []error
+	for _, s := range shown {
+		if s != nil {
+			errs = append(errs, s.keepOnScreen(o.b.dev))
+		}
+	}
+	for _, s := range o.buffers {
+		if !slices.Contains(shown, s) {
+			errs = append(errs, s.free(o.b.dev))
+		}
+	}
+	o.buffers, o.drawing, o.queued, o.front = nil, nil, nil, nil
+	o.enabled, o.lit, o.flipping = false, false, false
+	o.clock.Cancel()
 	return errors.Join(errs...)
 }
 

@@ -196,13 +196,13 @@ func (a *blitAllocator) allocate(size image.Point, format fourcc.Format, modifie
 	}
 	s, err := a.share(size, format)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: a %v frame shared with %s: %w", size, a.local.dev.Path(), err), out.free())
+		return nil, errors.Join(fmt.Errorf("drm: a %v frame shared with %s: %w", size, a.local.dev.Path(), err), out.free(a.local.dev))
 	}
 	return &scanout{
 		target:  s.target,
 		fb:      out.fb,
 		prepare: func() error { return a.blit(s, out.target, size) },
-		free:    func() error { return errors.Join(s.release(), out.free()) },
+		release: func() error { return errors.Join(s.release(), out.release()) },
 	}, nil
 }
 

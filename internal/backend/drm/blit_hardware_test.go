@@ -73,7 +73,7 @@ func blitPair(t *testing.T, a *blitAllocator, size image.Point) (*scanout, *shar
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := out.free(); err != nil {
+		if err := out.free(a.local.dev); err != nil {
 			t.Error(err)
 		}
 	})

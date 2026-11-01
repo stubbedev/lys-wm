@@ -44,7 +44,7 @@ func (a *copyAllocator) allocate(size image.Point, format fourcc.Format, _ []fou
 		target:  target,
 		fb:      fb,
 		prepare: func() error { return target.Read(dumb.Pix, int(dumb.Pitch)) },
-		free:    func() error { return errors.Join(a.dev.RemoveFB(fb), a.dev.DestroyDumb(dumb), target.Destroy()) },
+		release: func() error { return errors.Join(a.dev.DestroyDumb(dumb), target.Destroy()) },
 	}, nil
 }
 

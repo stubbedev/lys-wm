@@ -111,7 +111,7 @@ func deepFrames(t *testing.T, o *Output) {
 	if err != nil {
 		t.Fatalf("%s offers %v with %v for 10-bit frames, but they do not allocate: %v", o.Name(), l.format, l.modifiers, err)
 	}
-	if err := s.free(); err != nil {
+	if err := s.free(o.b.dev); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("%s draws 10-bit frames as %v", o.Name(), l.format)

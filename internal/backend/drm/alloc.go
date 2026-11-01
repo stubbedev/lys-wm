@@ -52,12 +52,12 @@ func (a *gbmAllocator) allocate(size image.Point, format fourcc.Format, modifier
 	if err != nil {
 		return nil, errors.Join(err, bo.Close())
 	}
-	id, remove, err := importFB(a.dev, bo.DMABUF, a.modifiers)
+	id, closeHandles, err := importFB(a.dev, bo.DMABUF, a.modifiers)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), target.Destroy(), bo.Close())
 	}
-	return &scanout{target: target, fb: id, free: func() error {
-		return errors.Join(remove(), target.Destroy(), bo.Close())
+	return &scanout{target: target, fb: id, release: func() error {
+		return errors.Join(closeHandles(), target.Destroy(), bo.Close())
 	}}, nil
 }
 
@@ -88,7 +88,7 @@ func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, func() erro
 	if err != nil {
 		return 0, nil, errors.Join(err, closeHandles())
 	}
-	return id, func() error { return errors.Join(dev.RemoveFB(id), closeHandles()) }, nil
+	return id, closeHandles, nil
 }
 
 func framebuffer(size image.Point, format fourcc.Format, modifier fourcc.Modifier, withModifiers bool) (kdrm.FB, error) {

@@ -48,12 +48,12 @@ func (a *vulkanAllocator) allocate(size image.Point, format fourcc.Format, modif
 	if err != nil {
 		return nil, err
 	}
-	id, remove, err := importFB(a.dev, t.Dmabuf(), a.modifiers)
+	id, closeHandles, err := importFB(a.dev, t.Dmabuf(), a.modifiers)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), t.Destroy())
 	}
-	return &scanout{target: t, fb: id, free: func() error {
-		return errors.Join(remove(), t.Destroy())
+	return &scanout{target: t, fb: id, release: func() error {
+		return errors.Join(closeHandles(), t.Destroy())
 	}}, nil
 }
 

@@ -87,7 +87,8 @@ type fakeDevice struct {
 	live           map[uint32]bool
 	pix            map[uint32][]byte
 	scanouts       map[uint32]uint32
-	removedFBs     int
+	removedFBs     []uint32
+	closedFBs      []uint32
 	unmapped       map[uint32]bool
 	now            func() time.Duration
 }
@@ -302,9 +303,16 @@ func (f *fakeDevice) AddFB2(fb kdrm.FB) (uint32, error) {
 	return 700 + f.fbs, nil
 }
 
-func (f *fakeDevice) RemoveFB(uint32) error {
+func (f *fakeDevice) RemoveFB(id uint32) error {
 	if !f.gone {
-		f.removedFBs++
+		f.removedFBs = append(f.removedFBs, id)
+	}
+	return nil
+}
+
+func (f *fakeDevice) CloseFB(id uint32) error {
+	if !f.gone {
+		f.closedFBs = append(f.closedFBs, id)
 	}
 	return nil
 }
@@ -359,7 +367,7 @@ func (a *fakeAlloc) allocate(size image.Point, format fourcc.Format, modifiers [
 	}
 	a.formats = append(a.formats, format)
 	a.next++
-	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, free: func() error { a.freed++; return nil }}, nil
+	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, release: func() error { a.freed++; return nil }}, nil
 }
 
 func (a *fakeAlloc) fence() (int, error) {
@@ -1137,7 +1145,7 @@ func TestSecondaryDevicesShowFramesThePrimaryRendered(t *testing.T) {
 func TestUnpluggedDevicesDropTheirOutputsWithoutTouchingTheDevice(t *testing.T) {
 	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: soft.New()} })
 	r.settle()
-	commits, dumbs, fbs := len(r.dev.commits), len(r.dev.live), r.dev.removedFBs
+	commits, dumbs, fbs := len(r.dev.commits), len(r.dev.live), len(r.dev.removedFBs)
 	r.dev.gone = true
 	if err := r.b.Unplug(); err != nil {
 		t.Fatal(err)
@@ -1145,8 +1153,8 @@ func TestUnpluggedDevicesDropTheirOutputsWithoutTouchingTheDevice(t *testing.T) 
 	if r.rec.log[len(r.rec.log)-1] != "removed "+r.rec.outputs[0].Name() {
 		t.Fatalf("log %v: unplugging did not remove the output", r.rec.log)
 	}
-	if len(r.dev.commits) != commits || len(r.dev.live) != dumbs || r.dev.removedFBs != fbs {
-		t.Fatalf("unplugging touched the gone device: %d commits, %d dumb buffers, %d framebuffers removed", len(r.dev.commits)-commits, dumbs-len(r.dev.live), r.dev.removedFBs-fbs)
+	if len(r.dev.commits) != commits || len(r.dev.live) != dumbs || len(r.dev.removedFBs) != fbs {
+		t.Fatalf("unplugging touched the gone device: %d commits, %d dumb buffers, %d framebuffers removed", len(r.dev.commits)-commits, dumbs-len(r.dev.live), len(r.dev.removedFBs)-fbs)
 	}
 	for handle := range r.dev.live {
 		if !r.dev.unmapped[handle] {
@@ -1227,11 +1235,11 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 	if fbs[0] == 0 || fbs[1] != fbs[0] || fbs[2] != fbs[0] {
 		t.Fatalf("three scanouts of one buffer used framebuffers %v, want one framebuffer reused", fbs)
 	}
-	removed := r.dev.removedFBs
+	removed := len(r.dev.removedFBs)
 	if err := o.ForgetScanout(key); err != nil {
 		t.Fatal(err)
 	}
-	if r.dev.removedFBs != removed {
+	if len(r.dev.removedFBs) != removed {
 		t.Fatal("a framebuffer still on screen was removed when its buffer was forgotten")
 	}
 	n := len(r.dev.commits)
@@ -1241,8 +1249,8 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 	r.committedSince("the frame replacing the forgotten buffer", o, n)
 	r.dev.flip(t, 10, 5)
 	r.until("the frame's flip", func() bool { return !o.flipping })
-	if r.dev.removedFBs != removed+1 {
-		t.Fatalf("%d framebuffers removed once the forgotten buffer left the screen, want 1", r.dev.removedFBs-removed)
+	if len(r.dev.removedFBs) != removed+1 {
+		t.Fatalf("%d framebuffers removed once the forgotten buffer left the screen, want 1", len(r.dev.removedFBs)-removed)
 	}
 }
 
@@ -1268,15 +1276,24 @@ func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 			if ok, err := o.Scanout(key, client, func() error { released++; return nil }, false); err != nil || !ok {
 				t.Fatalf("Scanout = %t, %v", ok, err)
 			}
-			fbs := r.dev.removedFBs
+			fb := r.b.clientFBs[key].fb
+			removals := func() int {
+				n := 0
+				for _, id := range r.dev.removedFBs {
+					if id == fb {
+						n++
+					}
+				}
+				return n
+			}
 			if err := stop(r, o); err != nil {
 				t.Fatal(err)
 			}
-			if released != 1 || r.dev.removedFBs != fbs {
-				t.Fatalf("released %d times and %d framebuffers removed; want the client buffer let go once and its framebuffer kept for the next scanout", released, r.dev.removedFBs-fbs)
+			if released != 1 || removals() != 0 {
+				t.Fatalf("released %d times and framebuffer %d removed %d times; want the client buffer let go once and its framebuffer kept for the next scanout", released, fb, removals())
 			}
-			if err := o.ForgetScanout(key); err != nil || r.dev.removedFBs != fbs+1 {
-				t.Fatalf("forgetting the buffer removed %d framebuffers, %v", r.dev.removedFBs-fbs, err)
+			if err := o.ForgetScanout(key); err != nil || removals() != 1 {
+				t.Fatalf("forgetting the buffer removed its framebuffer %d times, %v", removals(), err)
 			}
 		})
 	}
@@ -1865,5 +1882,41 @@ func TestAPausedBackendClosesWithoutCommitting(t *testing.T) {
 	}
 	if got := r.dev.commits[before:]; len(got) != 0 {
 		t.Fatalf("closing without DRM master committed %+v", got)
+	}
+}
+
+func TestClosingLeavesTheFrameOnScreenForTheNextMaster(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	front := o.front.fb
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the second frame", o, 0)
+	queued := o.queued.fb
+	others := len(o.buffers) - 2
+	before, removed := len(r.dev.commits), len(r.dev.removedFBs)
+	if err := r.b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.dev.commits[before:]; len(got) != 0 {
+		t.Fatalf("closing committed %+v over the frame on screen", got)
+	}
+	if !slices.Equal(r.dev.closedFBs, []uint32{front, queued}) {
+		t.Fatalf("closed framebuffers %v, want the one on screen %d and the queued %d", r.dev.closedFBs, front, queued)
+	}
+	if got := r.dev.removedFBs[removed:]; len(got) != others || slices.Contains(got, front) || slices.Contains(got, queued) {
+		t.Fatalf("removed framebuffers %v, want the %d not on screen", got, others)
+	}
+}
+
+func TestClosingOverAnInheritedFrameLeavesItAlone(t *testing.T) {
+	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: modes[0]}, false)
+	before := len(r.dev.commits)
+	if err := r.b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.dev.commits[before:]; len(got) != 0 || len(r.dev.closedFBs) != 0 {
+		t.Fatalf("closing over the inherited frame committed %+v and closed %v", got, r.dev.closedFBs)
 	}
 }
