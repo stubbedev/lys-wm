@@ -203,8 +203,8 @@ func TestPointerMotionDoesNotAllocate(t *testing.T) {
 	w := c.Window("steady", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
-		motions := [2]backend.Event{backend.PointerMotion{DX: 2, DY: 1}, backend.PointerMotion{DX: -2, DY: -1}}
-		var frame backend.Event = backend.PointerFrame{}
+		motions := [2]backend.Event{&backend.PointerMotion{DX: 2, DY: 1}, &backend.PointerMotion{DX: -2, DY: -1}}
+		var frame backend.Event = &backend.PointerFrame{}
 		next := 0
 		move := func() {
 			if err := errors.Join(comp.Input(b.Pointer(), motions[next]), comp.Input(b.Pointer(), frame)); err != nil {

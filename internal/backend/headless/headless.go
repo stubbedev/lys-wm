@@ -646,7 +646,7 @@ func (b *Backend) Pointer() *Pointer {
 }
 
 func (p *Pointer) Move(dx, dy float64) error {
-	return p.backend.emit(p, backend.PointerMotion{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
+	return p.backend.emit(p, &backend.PointerMotion{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
 }
 
 func (p *Pointer) MoveTo(o backend.Output, x, y float64) error {
@@ -662,7 +662,7 @@ func (p *Pointer) Axis(orientation backend.Orientation, source backend.AxisSourc
 }
 
 func (p *Pointer) Frame() error {
-	return p.backend.emit(p, backend.PointerFrame{Time: now()})
+	return p.backend.emit(p, &backend.PointerFrame{Time: now()})
 }
 
 func (p *Pointer) GestureBegin(g backend.Gesture, fingers uint32) error {

@@ -325,11 +325,11 @@ type Switch struct {
 func (e Switch) Timestamp() time.Duration { return e.Time }
 
 func (e Key) Timestamp() time.Duration                   { return e.Time }
-func (e PointerMotion) Timestamp() time.Duration         { return e.Time }
+func (e *PointerMotion) Timestamp() time.Duration        { return e.Time }
 func (e PointerMotionAbsolute) Timestamp() time.Duration { return e.Time }
 func (e PointerButton) Timestamp() time.Duration         { return e.Time }
 func (e PointerAxis) Timestamp() time.Duration           { return e.Time }
-func (e PointerFrame) Timestamp() time.Duration          { return e.Time }
+func (e *PointerFrame) Timestamp() time.Duration         { return e.Time }
 func (e TouchDown) Timestamp() time.Duration             { return e.Time }
 func (e TouchMotion) Timestamp() time.Duration           { return e.Time }
 func (e TouchUp) Timestamp() time.Duration               { return e.Time }

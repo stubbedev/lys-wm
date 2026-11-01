@@ -224,7 +224,7 @@ func (p pointerEvents) Axis(_ *cw.WlPointer, _ uint32, axis cw.WlPointerAxis, va
 
 func (p pointerEvents) Frame(*cw.WlPointer) error {
 	p.source = backend.Wheel
-	return p.backend.emit(p.Pointer, backend.PointerFrame{Time: backend.Now()})
+	return p.backend.emit(p.Pointer, &backend.PointerFrame{Time: backend.Now()})
 }
 
 func (p pointerEvents) AxisSource(_ *cw.WlPointer, source cw.WlPointerAxisSource) error {

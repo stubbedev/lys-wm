@@ -64,6 +64,7 @@ const (
 var switchKinds = map[int32]backend.SwitchKind{switchLid: backend.SwitchLid, switchTabletMode: backend.SwitchTabletMode}
 
 type libinputFuncs struct {
+	args           [1]uintptr
 	createContext  func(iface unsafe.Pointer, userData uintptr) uintptr
 	unref          func(li uintptr) uintptr
 	addDevice      func(li uintptr, path string) uintptr
@@ -191,6 +192,8 @@ type Libinput struct {
 	fds     map[int32]Device
 	openErr error
 	out     []backend.Event
+	motion  backend.PointerMotion
+	frame   backend.PointerFrame
 	// suspended: the devices were let go for an inactive session, and a
 	// resume takes them again. A resume without one would take each
 	// device a second time, which logind refuses.
@@ -285,6 +288,14 @@ func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, 
 	return in, nil
 }
 
+func hotCall[R uintptr | int32 | uint64](f *libinputFuncs, sym uintptr) func(uintptr) R {
+	return func(arg uintptr) R {
+		f.args[0] = arg
+		r, _, _ := purego.SyscallN(sym, f.args[:]...)
+		return R(r)
+	}
+}
+
 func (in *Libinput) bind(path string) error {
 	f := &in.fn
 	for _, s := range []struct {
@@ -372,6 +383,32 @@ func (in *Libinput) bind(path string) error {
 			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
 		}
 		purego.RegisterLibFunc(s.fn, in.lib, s.name)
+	}
+	return in.bindHot(path)
+}
+
+func (in *Libinput) bindHot(path string) error {
+	f := &in.fn
+	for _, s := range []struct {
+		name string
+		set  func(sym uintptr)
+	}{
+		{"libinput_dispatch", func(sym uintptr) { f.dispatch = hotCall[int32](f, sym) }},
+		{"libinput_get_event", func(sym uintptr) { f.getEvent = hotCall[uintptr](f, sym) }},
+		{"libinput_event_get_type", func(sym uintptr) { f.eventType = hotCall[int32](f, sym) }},
+		{"libinput_event_get_device", func(sym uintptr) { f.eventDevice = hotCall[uintptr](f, sym) }},
+		{"libinput_event_destroy", func(sym uintptr) {
+			destroy := hotCall[uintptr](f, sym)
+			f.destroyEvent = func(ev uintptr) { destroy(ev) }
+		}},
+		{"libinput_event_get_pointer_event", func(sym uintptr) { f.pointerEvent = hotCall[uintptr](f, sym) }},
+		{"libinput_event_pointer_get_time_usec", func(sym uintptr) { f.pointerTime = hotCall[uint64](f, sym) }},
+	} {
+		sym, err := purego.Dlsym(in.lib, s.name)
+		if err != nil {
+			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
+		}
+		s.set(sym)
 	}
 	return nil
 }
@@ -464,7 +501,8 @@ func (in *Libinput) event(ev uintptr) error {
 	}
 	f := &in.fn
 	h := f.eventDevice(ev)
-	switch typ := f.eventType(ev); typ {
+	typ := f.eventType(ev)
+	switch typ {
 	case evDeviceAdded:
 		d := &InputDevice{name: f.deviceName(h), h: f.deviceRef(h), touchpad: f.tapFingers(h) > 0, scrollFactor: 1, ledUpdate: f.ledUpdate}
 		for c, flag := range map[int32]backend.Capability{capKeyboard: backend.Keyboard, capPointer: backend.Pointer, capTouch: backend.Touch} {
@@ -490,7 +528,7 @@ func (in *Libinput) event(ev uintptr) error {
 	if !ok {
 		return nil
 	}
-	in.out = in.translate(in.out[:0], d, ev)
+	in.out = in.translate(in.out[:0], d, ev, typ)
 	for _, e := range in.out {
 		if err := in.handler.Input(d, e); err != nil {
 			return err
@@ -505,28 +543,30 @@ var gestures = map[int32]backend.Gesture{
 	evHoldBegin: backend.Hold, evHoldEnd: backend.Hold,
 }
 
-func pointerFrame(out []backend.Event, at time.Duration) []backend.Event {
-	return append(out, backend.PointerFrame{Time: at})
+func (in *Libinput) pointerFrame(out []backend.Event, at time.Duration) []backend.Event {
+	in.frame.Time = at
+	return append(out, &in.frame)
 }
 
-func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr) []backend.Event {
+func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, typ int32) []backend.Event {
 	f := &in.fn
-	switch typ := f.eventType(ev); typ {
+	switch typ {
 	case evKeyboardKey:
 		k := f.keyboardEvent(ev)
 		return append(out, backend.Key{Time: usec(f.keyTime(k)), Code: f.key(k), Pressed: f.keyState(k) == 1})
 	case evPointerMotion:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		return pointerFrame(append(out, backend.PointerMotion{Time: at, DX: f.dx(p), DY: f.dy(p), UnaccelDX: f.dxRaw(p), UnaccelDY: f.dyRaw(p)}), at)
+		in.motion = backend.PointerMotion{Time: at, DX: f.dx(p), DY: f.dy(p), UnaccelDX: f.dxRaw(p), UnaccelDY: f.dyRaw(p)}
+		return in.pointerFrame(append(out, &in.motion), at)
 	case evPointerAbsolute:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		return pointerFrame(append(out, backend.PointerMotionAbsolute{Time: at, X: f.absX(p, 1), Y: f.absY(p, 1)}), at)
+		return in.pointerFrame(append(out, backend.PointerMotionAbsolute{Time: at, X: f.absX(p, 1), Y: f.absY(p, 1)}), at)
 	case evPointerButton:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		return pointerFrame(append(out, backend.PointerButton{Time: at, Button: f.button(p), Pressed: f.buttonState(p) == 1}), at)
+		return in.pointerFrame(append(out, backend.PointerButton{Time: at, Button: f.button(p), Pressed: f.buttonState(p) == 1}), at)
 	case evScrollWheel, evScrollFinger, evScrollContinuous:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
@@ -544,7 +584,7 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr) [
 			}
 			out = append(out, ax)
 		}
-		return pointerFrame(out, at)
+		return in.pointerFrame(out, at)
 	case evTouchDown, evTouchMotion:
 		t := f.touchEvent(ev)
 		at, id, x, y := usec(f.touchTime(t)), f.touchSlot(t), f.touchX(t, 1), f.touchY(t, 1)

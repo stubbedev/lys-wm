@@ -43,7 +43,7 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	}}
 	var got []backend.Event
 	for i := range events {
-		got = in.translate(got, &InputDevice{}, uintptr(i+1))
+		got = in.translate(got, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
 	}
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	want := []backend.Event{
@@ -72,7 +72,7 @@ func TestOnlyKnownSwitchesBecomeBackendEvents(t *testing.T) {
 	}}
 	var got []backend.Event
 	for i := range kinds {
-		got = in.translate(got, &InputDevice{}, uintptr(i+1))
+		got = in.translate(got, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
 	}
 	want := []backend.Event{
 		backend.Switch{Time: time.Millisecond, Kind: backend.SwitchLid, On: true},

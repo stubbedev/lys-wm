@@ -160,7 +160,7 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		err := c.seat.Key(e.Code, e.Pressed, e.Time)
 		c.syncLEDs()
 		return err
-	case backend.PointerMotion:
+	case *backend.PointerMotion:
 		if err := c.seat.RelativeMotion(e.Time, e.DX, e.DY, e.UnaccelDX, e.UnaccelDY); err != nil {
 			return err
 		}
@@ -217,7 +217,7 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 			a.Orientation = sw.WlPointerAxisHorizontalScroll
 		}
 		return c.seat.PointerAxis(e.Time, a)
-	case backend.PointerFrame:
+	case *backend.PointerFrame:
 		return c.seat.PointerFrame()
 	case backend.GestureBegin:
 		return c.seat.GestureBegin(e.Time, e.Gesture, e.Fingers)

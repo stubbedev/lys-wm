@@ -23,7 +23,7 @@ func (o *refusingOpener) TakeDevice(path string) (int, Device, error) {
 
 func (o *refusingOpener) ReleaseDevice(Device) error { return nil }
 
-func libinput(t *testing.T, opener Opener) *Libinput {
+func libinput(t testing.TB, opener Opener) *Libinput {
 	t.Helper()
 	l, err := loop.New()
 	if err != nil {

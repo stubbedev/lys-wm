@@ -386,7 +386,7 @@ func TestInputInjection(t *testing.T) {
 	}
 	checks := []bool{
 		got[0].(backend.Key).Code == 30 && got[0].(backend.Key).Pressed,
-		got[1].(backend.PointerMotion).DX == 1.5 && got[1].(backend.PointerMotion).UnaccelDY == -2,
+		got[1].(*backend.PointerMotion).DX == 1.5 && got[1].(*backend.PointerMotion).UnaccelDY == -2,
 		got[2].(backend.PointerMotionAbsolute).Output == o && got[2].(backend.PointerMotionAbsolute).Y == 0.75,
 		got[3].(backend.PointerButton).Button == 272,
 		got[4].(backend.PointerAxis).Value120 == 120,

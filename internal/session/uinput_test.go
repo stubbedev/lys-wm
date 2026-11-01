@@ -67,7 +67,7 @@ const virtualKeyboard = "lys-wm virtual keyboard"
 
 type uinputBit struct{ req, v uintptr }
 
-func newVirtualMouse(t *testing.T) *virtualDevice {
+func newVirtualMouse(t testing.TB) *virtualDevice {
 	t.Helper()
 	return newVirtualDevice(t, virtualMouse, []uinputBit{
 		{uiSetEvBit, evKey},
@@ -91,7 +91,7 @@ func newVirtualKeyboard(t *testing.T) *virtualDevice {
 	})
 }
 
-func newVirtualDevice(t *testing.T, devName string, bits []uinputBit) *virtualDevice {
+func newVirtualDevice(t testing.TB, devName string, bits []uinputBit) *virtualDevice {
 	t.Helper()
 	f, err := os.OpenFile("/dev/uinput", os.O_RDWR|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -159,7 +159,7 @@ func (v *virtualDevice) awaitLED(t *testing.T, code uint16, value int32) {
 	t.Fatalf("LED %d never became %d", code, value)
 }
 
-func (v *virtualDevice) emit(t *testing.T, events ...[3]int32) {
+func (v *virtualDevice) emit(t testing.TB, events ...[3]int32) {
 	t.Helper()
 	buf := make([]byte, 0, 24*(len(events)+1))
 	for _, e := range append(events, [3]int32{evSyn, 0, 0}) {
@@ -262,4 +262,103 @@ func TestLibinputSetsKeyboardLEDs(t *testing.T) {
 	kbd.awaitLED(t, ledCapsL, 1)
 	leds.SetLEDs(xkb.Locks{})
 	kbd.awaitLED(t, ledCapsL, 0)
+}
+
+type motionRecorder struct {
+	backend.Handler
+	motions []backend.PointerMotion
+	frames  int
+	count   int
+}
+
+func (*motionRecorder) DeviceAdded(backend.Device) error   { return nil }
+func (*motionRecorder) DeviceRemoved(backend.Device) error { return nil }
+
+func TestLibinputPointerMotionBecomesEvents(t *testing.T) {
+	mouse := newVirtualMouse(t)
+	in := libinput(t, PlainOpener{})
+	rec := &motionRecorder{}
+	in.Start(rec)
+	if err := in.Add(mouse.node); err != nil {
+		t.Fatal(err)
+	}
+	mouse.emit(t, [3]int32{evRel, relX, 7}, [3]int32{evRel, relY, -3})
+	deadline := time.Now().Add(5 * time.Second)
+	for len(rec.motions) == 0 || rec.frames == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("no motion arrived")
+		}
+		if err := in.read(0); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	m := rec.motions[0]
+	if m.Time <= 0 || m.DX <= 0 || m.DY >= 0 || m.UnaccelDX != 7 || m.UnaccelDY != -3 {
+		t.Fatalf("the motion arrived as %+v", m)
+	}
+	if rec.frames != len(rec.motions) {
+		t.Fatalf("%d frames for %d motions", rec.frames, len(rec.motions))
+	}
+}
+
+func BenchmarkLibinputMotion(b *testing.B) {
+	mouse := newVirtualMouse(b)
+	in := libinput(b, PlainOpener{})
+	rec := &motionRecorder{}
+	in.Start(rec)
+	if err := in.Add(mouse.node); err != nil {
+		b.Fatal(err)
+	}
+	if err := in.read(0); err != nil {
+		b.Fatal(err)
+	}
+	events := binaryMotions(50)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for rec.count < b.N {
+		b.StopTimer()
+		if _, err := mouse.f.Write(events); err != nil {
+			b.Fatal(err)
+		}
+		before := rec.count
+		deadline := time.Now().Add(5 * time.Second)
+		b.StartTimer()
+		for rec.count < before+50 {
+			if time.Now().After(deadline) {
+				b.Fatalf("only %d of 50 motions arrived", rec.count-before)
+			}
+			if err := in.read(0); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func binaryMotions(n int) []byte {
+	var buf []byte
+	event := func(typ, code uint16, value int32) {
+		buf = append(buf, make([]byte, 16)...)
+		buf = binary.NativeEndian.AppendUint16(buf, typ)
+		buf = binary.NativeEndian.AppendUint16(buf, code)
+		buf = binary.NativeEndian.AppendUint32(buf, uint32(value))
+	}
+	for i := range n {
+		event(evRel, relX, int32(1-2*(i%2)))
+		event(evSyn, 0, 0)
+	}
+	return buf
+}
+
+func (r *motionRecorder) Input(_ backend.Device, e backend.Event) error {
+	switch e := e.(type) {
+	case *backend.PointerMotion:
+		r.count++
+		if len(r.motions) < 8 {
+			r.motions = append(r.motions, *e)
+		}
+	case *backend.PointerFrame:
+		r.frames++
+	}
+	return nil
 }

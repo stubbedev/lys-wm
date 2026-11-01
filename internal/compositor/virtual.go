@@ -117,7 +117,7 @@ func (v *virtualPointer) input(e backend.Event) error {
 
 func (v *virtualPointer) Motion(_ *svp.ZwlrVirtualPointerV1, ms uint32, dx, dy wire.Fixed) error {
 	x, y := dx.Float(), dy.Float()
-	return v.input(backend.PointerMotion{Time: millis(ms), DX: x, DY: y, UnaccelDX: x, UnaccelDY: y})
+	return v.input(&backend.PointerMotion{Time: millis(ms), DX: x, DY: y, UnaccelDX: x, UnaccelDY: y})
 }
 
 func (v *virtualPointer) MotionAbsolute(_ *svp.ZwlrVirtualPointerV1, ms, x, y, xExtent, yExtent uint32) error {
@@ -213,7 +213,7 @@ func (v *virtualPointer) Frame(*svp.ZwlrVirtualPointerV1) error {
 		errs = errors.Join(errs, v.input(a))
 	}
 	v.axes, v.stops, v.source = v.axes[:0], v.stops[:0], backend.Wheel
-	return errors.Join(errs, v.input(backend.PointerFrame{}))
+	return errors.Join(errs, v.input(&backend.PointerFrame{}))
 }
 
 func (*virtualPointer) Destroy(*svp.ZwlrVirtualPointerV1) error {
