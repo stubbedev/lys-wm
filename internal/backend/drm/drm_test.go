@@ -63,35 +63,39 @@ type splash struct {
 }
 
 type fakeDevice struct {
-	events, write  int
-	splash         *splash
-	sharedPrimary  bool
-	connected      bool
-	unplugged      bool
-	gone           bool
-	badEDID        bool
-	refuseCursor   bool
-	refuseGamma    bool
-	noCTM          bool
-	deep           []fourcc.Format
-	refuseFrames   func(fb uint64) bool
-	refuseAsync    bool
-	refusePowerOff bool
-	refuseModesets bool
-	asyncFlips     bool
-	failCommits    error
-	commits        []commit
-	blobs          uint32
-	blobData       map[uint32][]byte
-	destroyed      []uint32
-	dumbs, fbs     uint32
-	live           map[uint32]bool
-	pix            map[uint32][]byte
-	scanouts       map[uint32]uint32
-	removedFBs     []uint32
-	closedFBs      []uint32
-	unmapped       map[uint32]bool
-	now            func() time.Duration
+	events, write     int
+	splash            *splash
+	sharedPrimary     bool
+	connected         bool
+	unplugged         bool
+	gone              bool
+	badEDID           bool
+	refuseCursor      bool
+	refuseGamma       bool
+	noCTM             bool
+	deep              []fourcc.Format
+	refuseFrames      func(fb uint64) bool
+	refuseAsync       bool
+	refusePowerOff    bool
+	refuseModesets    bool
+	asyncFlips        bool
+	failCommits       error
+	commits           []commit
+	blobs             uint32
+	blobData          map[uint32][]byte
+	destroyed         []uint32
+	dumbs, fbs        uint32
+	live              map[uint32]bool
+	pix               map[uint32][]byte
+	scanouts          map[uint32]uint32
+	removedFBs        []uint32
+	openHandles       map[uint32]bool
+	refuseCloseHandle bool
+	refuseAddFB       bool
+	refuseRemoveFB    bool
+	closedFBs         []uint32
+	unmapped          map[uint32]bool
+	now               func() time.Duration
 }
 
 var modes = []kdrm.Mode{
@@ -119,10 +123,24 @@ func (f *fakeDevice) Cap(c uint64) (uint64, error) {
 }
 
 func (f *fakeDevice) PrimeFDToHandle(fd int) (uint32, error) {
-	return uint32(primeHandles + fd), nil
+	h := uint32(primeHandles + fd)
+	if f.openHandles == nil {
+		f.openHandles = map[uint32]bool{}
+	}
+	f.openHandles[h] = true
+	return h, nil
 }
 
-func (f *fakeDevice) CloseHandle(uint32) error { return nil }
+func (f *fakeDevice) CloseHandle(h uint32) error {
+	if !f.openHandles[h] {
+		return fmt.Errorf("handle %d is not open: %w", h, unix.EINVAL)
+	}
+	if f.refuseCloseHandle {
+		return fmt.Errorf("close handle %d: %w", h, unix.EIO)
+	}
+	delete(f.openHandles, h)
+	return nil
+}
 
 const primeHandles = 1000
 
@@ -295,6 +313,9 @@ func (f *fakeDevice) unmap(b kdrm.Dumb) error {
 }
 
 func (f *fakeDevice) AddFB2(fb kdrm.FB) (uint32, error) {
+	if f.refuseAddFB {
+		return 0, fmt.Errorf("add a framebuffer: %w", unix.EINVAL)
+	}
 	prime := fb.Handles[0] >= primeHandles && fb.Format == scanoutFormat
 	if !prime && ((fb.Format != cursorFormat && fb.Format != scanoutFormat) || fb.WithModifier || !f.live[fb.Handles[0]]) {
 		return 0, fmt.Errorf("unexpected framebuffer %+v", fb)
@@ -308,6 +329,9 @@ func (f *fakeDevice) AddFB2(fb kdrm.FB) (uint32, error) {
 }
 
 func (f *fakeDevice) RemoveFB(id uint32) error {
+	if f.refuseRemoveFB {
+		return fmt.Errorf("remove framebuffer %d: %w", id, unix.EBUSY)
+	}
 	if !f.gone {
 		f.removedFBs = append(f.removedFBs, id)
 	}

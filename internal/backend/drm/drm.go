@@ -71,7 +71,8 @@ type scanout struct {
 
 func (s *scanout) free(dev device) error {
 	if s.client != nil {
-		return errors.Join(s.client.leave(), s.release())
+		s.client.leave()
+		return s.release()
 	}
 	return errors.Join(dev.RemoveFB(s.fb), s.release())
 }
@@ -162,27 +163,28 @@ type Backend struct {
 }
 
 type clientFB struct {
-	dev          device
-	fb           uint32
-	closeHandles func() error
-	shown        int
-	forgotten    bool
-	kept         bool
+	dev       device
+	report    func(error)
+	fb        uint32
+	shown     int
+	forgotten bool
+	kept      bool
 }
 
-func (cf *clientFB) leave() error {
+func (cf *clientFB) leave() {
 	cf.shown--
 	if cf.forgotten && cf.shown == 0 {
-		return cf.remove()
+		cf.remove()
 	}
-	return nil
 }
 
-func (cf *clientFB) remove() error {
+func (cf *clientFB) remove() {
 	if cf.kept {
-		return nil
+		return
 	}
-	return errors.Join(cf.dev.RemoveFB(cf.fb), cf.closeHandles())
+	if err := cf.dev.RemoveFB(cf.fb); err != nil {
+		cf.report(fmt.Errorf("drm: a client buffer's framebuffer %d stays allocated: %w", cf.fb, err))
+	}
 }
 
 func (cf *clientFB) keepOnScreen() error {
@@ -190,33 +192,32 @@ func (cf *clientFB) keepOnScreen() error {
 		return nil
 	}
 	cf.kept = true
-	return errors.Join(cf.dev.CloseFB(cf.fb), cf.closeHandles())
+	return cf.dev.CloseFB(cf.fb)
 }
 
 func (b *Backend) clientFB(key backend.ScanoutKey, d gpu.DMABUF) (*clientFB, error) {
 	if cf, ok := b.clientFBs[key]; ok {
 		return cf, nil
 	}
-	fb, closeHandles, err := importFB(b.dev, d, b.modifiers)
+	fb, err := importFB(b.dev, d, b.modifiers)
 	if err != nil {
 		return nil, err
 	}
-	cf := &clientFB{dev: b.dev, fb: fb, closeHandles: closeHandles}
+	cf := &clientFB{dev: b.dev, report: b.report, fb: fb}
 	b.clientFBs[key] = cf
 	return cf, nil
 }
 
-func (b *Backend) forget(key backend.ScanoutKey) error {
+func (b *Backend) forget(key backend.ScanoutKey) {
 	cf, ok := b.clientFBs[key]
 	if !ok {
-		return nil
+		return
 	}
 	delete(b.clientFBs, key)
 	cf.forgotten = true
 	if cf.shown == 0 {
-		return cf.remove()
+		cf.remove()
 	}
-	return nil
 }
 
 func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backend, error) {
@@ -724,7 +725,7 @@ func (b *Backend) Close() error {
 		errs = append(errs, b.handler.OutputRemoved(o), o.leaveOnScreen(), o.release())
 	}
 	for key := range b.clientFBs {
-		errs = append(errs, b.forget(key))
+		b.forget(key)
 	}
 	if b.src != nil {
 		errs = append(errs, b.src.Remove())
@@ -1089,7 +1090,8 @@ func (o *Output) ScanoutFormats() gpu.ScanoutTarget {
 }
 
 func (o *Output) ForgetScanout(key backend.ScanoutKey) error {
-	return o.b.forget(key)
+	o.b.forget(key)
+	return nil
 }
 
 func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {

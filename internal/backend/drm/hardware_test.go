@@ -238,3 +238,78 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 		t.Fatal(err)
 	}
 }
+
+func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
+	cards, err := filepath.Glob("/dev/dri/card*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) == 0 {
+		t.Skip("no DRM card")
+	}
+	for _, card := range cards {
+		t.Run(filepath.Base(card), func(t *testing.T) {
+			dev, err := kdrm.Open(card)
+			if err != nil {
+				t.Skipf("cannot open %s: %v", card, err)
+			}
+			defer dev.Close()
+			a, err := newGBMAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+			if err != nil {
+				t.Skipf("no GLES on %s: %v", card, err)
+			}
+			defer func() {
+				if err := a.close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			size := image.Pt(64, 64)
+			mods, err := a.renderable(scanoutFormat)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clientDev, err := openRenderDevice(dev)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer clientDev.Close()
+			clientLib, err := gpu.LoadGBM(gpu.PathsFromEnv(os.Getenv))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer clientLib.Close()
+			client, err := clientLib.Open(clientDev.FD())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			bo, err := client.Allocate(size, scanoutFormat, mods, gpu.UseRendering|gpu.UseScanout)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := bo.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			tex, err := a.stack.Renderer.ImportTexture(bo.DMABUF)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, err := importFB(dev, bo.DMABUF, a.modifiers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tex.Destroy(); err != nil {
+				t.Fatal(err)
+			}
+			again, err := importFB(dev, bo.DMABUF, a.modifiers)
+			if err != nil {
+				t.Fatalf("importing the buffer again after Mesa let go of it: %v", err)
+			}
+			if err := errors.Join(dev.RemoveFB(id), dev.RemoveFB(again)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

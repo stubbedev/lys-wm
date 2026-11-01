@@ -16,6 +16,7 @@ import (
 
 type vulkanAllocator struct {
 	dev       *kdrm.Device
+	renderDev *kdrm.Device
 	modifiers bool
 	r         *vulkan.Renderer
 	gbmLib    *gpu.GBMLibrary
@@ -39,11 +40,15 @@ func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*vulkanAllocator, er
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: GBM for %s: %w", dev.Path(), err), r.Close())
 	}
-	bo, err := lib.Open(dev.FD())
+	renderDev, err := openRenderDevice(dev)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: GBM on %s: %w", dev.Path(), err), lib.Close(), r.Close())
+		return nil, errors.Join(err, lib.Close(), r.Close())
 	}
-	return &vulkanAllocator{dev: dev, modifiers: modifiers == 1, r: r, gbmLib: lib, gbm: bo}, nil
+	bo, err := lib.Open(renderDev.FD())
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: GBM on %s: %w", renderDev.Path(), err), renderDev.Close(), lib.Close(), r.Close())
+	}
+	return &vulkanAllocator{dev: dev, renderDev: renderDev, modifiers: modifiers == 1, r: r, gbmLib: lib, gbm: bo}, nil
 }
 
 func (a *vulkanAllocator) renderer() render.Renderer {
@@ -63,12 +68,12 @@ func (a *vulkanAllocator) allocate(size image.Point, format fourcc.Format, modif
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: import a %v buffer into Vulkan on %s: %w", bo.Modifier, a.dev.Path(), err), bo.Close())
 	}
-	id, closeHandles, err := importFB(a.dev, bo.DMABUF, a.modifiers)
+	id, err := importFB(a.dev, bo.DMABUF, a.modifiers)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), t.Destroy(), bo.Close())
 	}
 	return &scanout{target: t, fb: id, release: func() error {
-		return errors.Join(closeHandles(), t.Destroy(), bo.Close())
+		return errors.Join(t.Destroy(), bo.Close())
 	}}, nil
 }
 
@@ -82,5 +87,5 @@ func (a *vulkanAllocator) fence() (int, error) {
 func (a *vulkanAllocator) close() error {
 	err := a.r.Close()
 	a.gbm.Close()
-	return errors.Join(err, a.gbmLib.Close())
+	return errors.Join(err, a.gbmLib.Close(), a.renderDev.Close())
 }

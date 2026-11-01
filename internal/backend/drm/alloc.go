@@ -19,6 +19,7 @@ import (
 
 type gbmAllocator struct {
 	dev       *kdrm.Device
+	render    *kdrm.Device
 	modifiers bool
 	stack     *gles.Stack
 }
@@ -28,11 +29,15 @@ func newGBMAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
 	}
-	stack, err := gles.OnGBM(dev.FD(), paths)
+	render, err := openRenderDevice(dev)
 	if err != nil {
-		return nil, fmt.Errorf("drm: GLES on %s: %w", dev.Path(), err)
+		return nil, err
 	}
-	return &gbmAllocator{dev: dev, modifiers: modifiers == 1, stack: stack}, nil
+	stack, err := gles.OnGBM(render.FD(), paths)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: GLES on %s: %w", render.Path(), err), render.Close())
+	}
+	return &gbmAllocator{dev: dev, render: render, modifiers: modifiers == 1, stack: stack}, nil
 }
 
 func (a *gbmAllocator) renderer() render.Renderer {
@@ -52,21 +57,21 @@ func (a *gbmAllocator) allocate(size image.Point, format fourcc.Format, modifier
 	if err != nil {
 		return nil, errors.Join(err, bo.Close())
 	}
-	id, closeHandles, err := importFB(a.dev, bo.DMABUF, a.modifiers)
+	id, err := importFB(a.dev, bo.DMABUF, a.modifiers)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.dev.Path(), err), target.Destroy(), bo.Close())
 	}
 	return &scanout{target: target, fb: id, release: func() error {
-		return errors.Join(closeHandles(), target.Destroy(), bo.Close())
+		return errors.Join(target.Destroy(), bo.Close())
 	}}, nil
 }
 
-func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, func() error, error) {
+func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, error) {
 	fb, err := framebuffer(d.Size, d.Format, d.Modifier, withModifiers)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-	var handles []uint32
+	handles := make([]uint32, 0, len(d.Planes))
 	closeHandles := func() error {
 		errs := make([]error, 0, len(handles))
 		for _, h := range handles {
@@ -77,7 +82,7 @@ func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, func() erro
 	for i, p := range d.Planes {
 		h, err := dev.PrimeFDToHandle(p.FD)
 		if err != nil {
-			return 0, nil, errors.Join(err, closeHandles())
+			return 0, errors.Join(err, closeHandles())
 		}
 		if !slices.Contains(handles, h) {
 			handles = append(handles, h)
@@ -86,9 +91,12 @@ func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, func() erro
 	}
 	id, err := dev.AddFB2(fb)
 	if err != nil {
-		return 0, nil, errors.Join(err, closeHandles())
+		return 0, errors.Join(err, closeHandles())
 	}
-	return id, closeHandles, nil
+	if err := closeHandles(); err != nil {
+		return 0, errors.Join(err, dev.RemoveFB(id))
+	}
+	return id, nil
 }
 
 func framebuffer(size image.Point, format fourcc.Format, modifier fourcc.Modifier, withModifiers bool) (kdrm.FB, error) {
@@ -114,7 +122,7 @@ func (a *gbmAllocator) fence() (int, error) {
 }
 
 func (a *gbmAllocator) close() error {
-	return a.stack.Close()
+	return errors.Join(a.stack.Close(), a.render.Close())
 }
 
 func atomic(dev *kdrm.Device) error {
