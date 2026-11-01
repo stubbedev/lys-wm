@@ -78,6 +78,7 @@ type program struct {
 type Renderer struct {
 	d         *gpu.Display
 	gl        *gpu.GL
+	name      string
 	solid     program
 	gradient  program
 	kawase    program
@@ -137,14 +138,15 @@ func (r *Renderer) programs() [7]shader {
 }
 
 func (r *Renderer) setup() error {
+	r.name = r.gl.Renderer()
 	exts := strings.Fields(r.gl.Extensions())
 	for _, ext := range requiredGL {
 		if !slices.Contains(exts, ext) {
-			return fmt.Errorf("gles: %s lacks %s", r.gl.Renderer(), ext)
+			return fmt.Errorf("gles: %s lacks %s", r.name, ext)
 		}
 	}
 	if bits := r.gl.PrecisionBits(gpu.FragmentShader, gpu.HighFloat); bits < float32Mantissa {
-		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.gl.Renderer(), bits, float32Mantissa)
+		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.name, bits, float32Mantissa)
 	}
 	for _, p := range r.programs() {
 		if p.extension != "" && !slices.Contains(exts, p.extension) {
@@ -352,7 +354,7 @@ func (r *Renderer) RenderNode() (string, error) {
 	}
 	node := dev.RenderNode()
 	if node == "" {
-		return "", fmt.Errorf("%w: %s has no render node", gpu.ErrUnsupported, r.gl.Renderer())
+		return "", fmt.Errorf("%w: %s has no render node", gpu.ErrUnsupported, r.name)
 	}
 	return node, nil
 }
@@ -414,7 +416,7 @@ func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
 		return nil, err
 	}
 	if external && r.external.id == 0 {
-		return nil, fmt.Errorf("%w: %s samples format %v with modifier %v only through GL_OES_EGL_image_external", gpu.ErrUnsupported, r.gl.Renderer(), b.Format, b.Modifier)
+		return nil, fmt.Errorf("%w: %s samples format %v with modifier %v only through GL_OES_EGL_image_external", gpu.ErrUnsupported, r.name, b.Format, b.Modifier)
 	}
 	img, err := r.d.ImportDMABUF(b)
 	if err != nil {
@@ -961,4 +963,9 @@ func flip(f float64, reversed bool) float64 {
 		return 1 - f
 	}
 	return f
+}
+
+// Name is GL_RENDERER.
+func (r *Renderer) Name() string {
+	return r.name
 }

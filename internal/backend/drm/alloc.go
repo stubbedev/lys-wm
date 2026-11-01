@@ -47,11 +47,13 @@ type gpuStack struct {
 	gbm      bufferMaker
 	gpu      gpuRenderer
 	closeGPU func() error
+	// softwareOnly marks a stack that allocates only on a card node.
+	softwareOnly bool
 }
 
 func openStackOnFile(files []func() (*kdrm.Device, error), open func(fd int) (gpuStack, error)) (gpuStack, error) {
 	var errs []error
-	for _, file := range files {
+	for i, file := range files {
 		f, err := file()
 		if err != nil {
 			errs = append(errs, err)
@@ -60,6 +62,10 @@ func openStackOnFile(files []func() (*kdrm.Device, error), open func(fd int) (gp
 		s, err := open(f.FD())
 		if err != nil {
 			errs = append(errs, fmt.Errorf("on %s: %w", f.Path(), err), f.Close())
+			continue
+		}
+		if s.softwareOnly && i < len(files)-1 {
+			errs = append(errs, s.closeGPU(), f.Close())
 			continue
 		}
 		probe, err := s.gbm.Allocate(image.Pt(16, 16), scanoutFormat, nil, gpu.UseRendering|gpu.UseScanout)
@@ -99,7 +105,7 @@ func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) 
 		if err != nil {
 			return gpuStack{}, fmt.Errorf("render with GLES: %w", err)
 		}
-		return gpuStack{gbm: stack.GBM, gpu: stack.Renderer, closeGPU: stack.Close}, nil
+		return gpuStack{gbm: stack.GBM, gpu: stack.Renderer, closeGPU: stack.Close, softwareOnly: stack.SoftwareOnly()}, nil
 	})
 }
 

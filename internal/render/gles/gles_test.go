@@ -334,3 +334,9 @@ func TestStreamedUpdatesStayInOrder(t *testing.T) {
 	g := renderer(t)
 	rendertest.StreamedUpdatesStayInOrder(t, g, framebuffer(t, g, image.Pt(1, 1)))
 }
+
+func TestTheRendererKnowsItsNameOutsideItsContext(t *testing.T) {
+	if name := renderer(t).Name(); name == "" {
+		t.Fatal("no GL_RENDERER: glGetString was asked without a current context")
+	}
+}

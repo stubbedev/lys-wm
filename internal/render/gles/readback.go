@@ -30,7 +30,7 @@ func (r *Renderer) AsyncReads() bool {
 
 func (r *Renderer) NewAsyncTarget(size image.Point) (render.AsyncReadTarget, error) {
 	if !r.async {
-		return nil, fmt.Errorf("%w: %s reads framebuffers back only synchronously", gpu.ErrUnsupported, r.gl.Renderer())
+		return nil, fmt.Errorf("%w: %s reads framebuffers back only synchronously", gpu.ErrUnsupported, r.name)
 	}
 	return r.NewFramebuffer(size)
 }
@@ -45,7 +45,7 @@ func (f *Framebuffer) ReadAsync() (render.PendingRead, error) {
 	r := f.r
 	switch {
 	case !r.async:
-		return nil, fmt.Errorf("%w: %s reads framebuffers back only synchronously", gpu.ErrUnsupported, r.gl.Renderer())
+		return nil, fmt.Errorf("%w: %s reads framebuffers back only synchronously", gpu.ErrUnsupported, r.name)
 	case f.reading:
 		return nil, fmt.Errorf("gles: a read of the %v framebuffer is still pending", f.size)
 	}

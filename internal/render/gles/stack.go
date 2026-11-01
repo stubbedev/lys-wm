@@ -2,6 +2,7 @@ package gles
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 )
@@ -55,4 +56,11 @@ func (s *Stack) Close() error {
 		errs = append(errs, s.gbmLib.Close())
 	}
 	return errors.Join(errs...)
+}
+
+// SoftwareOnly reports Mesa's software rasterizer behind this stack's
+// GBM device: its kms_swrast allocates dumb buffers, which only a card
+// node grants, and logs the refusal on a render node.
+func (s *Stack) SoftwareOnly() bool {
+	return strings.HasPrefix(s.Renderer.name, "llvmpipe") || strings.HasPrefix(s.Renderer.name, "softpipe")
 }

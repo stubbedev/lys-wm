@@ -258,3 +258,41 @@ func TestAStackThatCannotAllocateOnTheRenderNodeMovesToTheCard(t *testing.T) {
 		t.Fatalf("no file that allocates: %v", err)
 	}
 }
+
+func TestASoftwareStackMovesToTheCardWithoutAllocating(t *testing.T) {
+	file := func(name string) func() (*kdrm.Device, error) {
+		return func() (*kdrm.Device, error) {
+			fd, err := unix.MemfdCreate(name, unix.MFD_CLOEXEC)
+			if err != nil {
+				return nil, err
+			}
+			return kdrm.FromFD(fd, name), nil
+		}
+	}
+	world := &blitWorld{memory: map[int]*soft.Buffer{}}
+	var opened, closed int
+	s, err := openStackOnFile([]func() (*kdrm.Device, error){file("renderD128"), file("card0")}, func(int) (gpuStack, error) {
+		opened++
+		stack := gpuStack{gbm: fakeGBM{world}, gpu: &fakeRenderer{Renderer: soft.New(), world: world}, closeGPU: func() error { closed++; return nil }, softwareOnly: true}
+		if opened == 1 {
+			stack.gbm = failingOnAllocate{t}
+		}
+		return stack, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened != 2 || closed != 1 {
+		t.Fatalf("opened %d stacks and closed %d, want the first closed and the second kept", opened, closed)
+	}
+	if err := s.closeGPU(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type failingOnAllocate struct{ t *testing.T }
+
+func (f failingOnAllocate) Allocate(image.Point, fourcc.Format, []fourcc.Modifier, gpu.Usage) (*gpu.Buffer, error) {
+	f.t.Error("a software stack tried to allocate on the render node, which makes Mesa log the refusal")
+	return nil, errors.New("gbm refuses")
+}
