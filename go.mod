@@ -7,7 +7,7 @@ require (
 	github.com/jezek/xgb v1.3.1
 	github.com/stubbedev/lys-lib v0.1.1-0.20261031133720-997212b06be3
 	github.com/stubbedev/lys-ui v0.0.0-20261031091025-a4c27c901177
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
 )
