@@ -47,15 +47,21 @@ not discover fonts, so the tab font is a file: `tabs.font` in the config, else
 One goroutine owns all compositor state and runs the event loop (#5). Other
 goroutines exist only at the edges, for blocking work such as D-Bus. They
 post closures to the loop's mailbox and never read or write state
-themselves. Nothing in the compositor takes a lock to protect its state.
+themselves. The compositor's state takes no lock, with one exception below.
+Packages under it keep their own: the loop's mailbox, the IPC server's
+connection set, and the process-wide tables in `gpu` and `session`.
 
 Screen capture into shared memory is one such edge (#131). The loop draws
 the capture, starts an asynchronous read into a pixel buffer and maps the
 client's buffer privately; a goroutine waits on the GPU fence, the loop maps
 the pixel buffer, and a second goroutine copies the rows into the private
 mapping. Each step hands back to the loop through the mailbox, so the loop
-never waits on the GPU or copies a frame. On close, the compositor waits for
-these goroutines and releases what their posted closures would have.
+never waits on the GPU or copies a frame. The exception is the read's
+`cancelled` flag, which `asyncRead.mu` guards for the length of the copy: a client
+that abandons a capture has the loop take that lock, so the loop waits for a copy
+in flight, and the abandoned mapping is never written afterwards. On close, the
+compositor waits for these goroutines and releases what their posted closures
+would have.
 
 The loop goroutine is locked to its OS thread for as long as it runs
 (`gpu.PinThread`, #149), so a GL context it makes current stays current
