@@ -39,6 +39,7 @@ type Renderer struct {
 	d    *lgpu.Device
 	node uint64
 	pass *pass
+	idle pass
 }
 
 func Open(node uint64) (*Renderer, error) {
@@ -349,7 +350,8 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	if err != nil {
 		return nil, err
 	}
-	r.pass = &pass{r: r, p: p}
+	r.idle = pass{r: r, p: p}
+	r.pass = &r.idle
 	return r.pass, nil
 }
 
