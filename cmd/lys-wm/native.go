@@ -35,6 +35,7 @@ type gpuCard struct {
 	name    string
 	bootVGA bool
 	render  bool
+	driver  string
 }
 
 type native struct {
@@ -86,6 +87,14 @@ func choosePrimary(cards []gpuCard, configured string) (int, string, error) {
 	return -1, "", errors.New("no DRM card on this seat")
 }
 
+func driversOf(cards []gpuCard) []string {
+	drivers := make([]string, len(cards))
+	for i, c := range cards {
+		drivers[i] = c.driver
+	}
+	return drivers
+}
+
 func (n *native) gpuCards() ([]gpuCard, error) {
 	devices, err := session.Enumerate(session.SystemRoots, n.logind.Seat(), session.DRM)
 	if err != nil {
@@ -105,7 +114,11 @@ func (n *native) gpuCards() ([]gpuCard, error) {
 		if err != nil {
 			return nil, err
 		}
-		cards = append(cards, gpuCard{udev: d, name: name, bootVGA: boot, render: render})
+		driver, err := d.Driver()
+		if err != nil {
+			return nil, err
+		}
+		cards = append(cards, gpuCard{udev: d, name: name, bootVGA: boot, render: render, driver: driver})
 	}
 	slices.SortFunc(cards, func(a, b gpuCard) int { return cmp.Compare(a.udev.Device.Minor, b.udev.Device.Minor) })
 	return cards, nil
@@ -133,7 +146,7 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 		return nil, err
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: rendering on %s, %s\n", cards[primary].name, why)
-	if err := n.add(cards[primary]); err != nil {
+	if err := gpu.WithOwnVendorOnly(driversOf(cards), func() error { return n.add(cards[primary]) }); err != nil {
 		return nil, err
 	}
 	for i, c := range cards {

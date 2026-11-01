@@ -27,3 +27,16 @@ func (d UdevDevice) HasRenderNode() (bool, error) {
 	}
 	return len(nodes) > 0, nil
 }
+
+// Driver names the kernel driver bound to the card, "" for a card without
+// one.
+func (d UdevDevice) Driver() (string, error) {
+	target, err := os.Readlink(filepath.Join(filepath.Dir(filepath.Dir(d.Syspath)), "driver"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("session: driver of %s: %w", d.Devnode, err)
+	}
+	return filepath.Base(target), nil
+}
