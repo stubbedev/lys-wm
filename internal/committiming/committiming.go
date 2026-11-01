@@ -26,9 +26,10 @@ type Clock struct {
 }
 
 type Manager struct {
-	loop   *loop.Loop
-	clock  Clock
-	timers []*timer
+	loop    *loop.Loop
+	clock   Clock
+	timers  []*timer
+	waiting []*timer
 }
 
 func New(d *server.Display, l *loop.Loop, clock Clock) (*Manager, error) {
@@ -40,13 +41,18 @@ func New(d *server.Display, l *loop.Loop, clock Clock) (*Manager, error) {
 }
 
 func (m *Manager) Presented() error {
-	var errs []error
-	for _, t := range slices.Clone(m.timers) {
+	m.waiting = m.waiting[:0]
+	for _, t := range m.timers {
 		if len(t.targets) > 0 {
-			errs = append(errs, t.s.Retry())
+			m.waiting = append(m.waiting, t)
 		}
 	}
-	return errors.Join(errs...)
+	var errs error
+	for _, t := range m.waiting {
+		errs = errors.Join(errs, t.s.Retry())
+	}
+	clear(m.waiting)
+	return errs
 }
 
 func (m *Manager) bind(c *server.Client, id wire.ObjectID, v uint32) error {
@@ -91,14 +97,50 @@ func (r requests) GetTimer(obj *sct.WpCommitTimingManagerV1, res *sct.WpCommitTi
 }
 
 type timer struct {
-	m       *Manager
-	s       *surface.Surface
-	hooks   *surface.Hooks
-	clock   *loop.Timer
-	live    bool
-	gone    bool
-	pending *time.Duration
-	targets []time.Duration
+	m         *Manager
+	s         *surface.Surface
+	hooks     *surface.Hooks
+	clock     *loop.Timer
+	live      bool
+	gone      bool
+	pending   bool
+	pendingAt time.Duration
+	targets   []*commitTarget
+	spare     []*commitTarget
+	armedFor  time.Duration
+}
+
+type commitTarget struct {
+	t       *timer
+	at      time.Duration
+	due     func() bool
+	applied func() error
+}
+
+func (c *commitTarget) reached() bool {
+	return c.t.due(c.at)
+}
+
+func (c *commitTarget) apply() error {
+	t := c.t
+	n := copy(t.targets, t.targets[1:])
+	t.targets[n] = nil
+	t.targets = t.targets[:n]
+	t.spare = append(t.spare, c)
+	return t.arm()
+}
+
+func (t *timer) newTarget(at time.Duration) *commitTarget {
+	if n := len(t.spare); n > 0 {
+		c := t.spare[n-1]
+		t.spare[n-1] = nil
+		t.spare = t.spare[:n-1]
+		c.at = at
+		return c
+	}
+	c := &commitTarget{t: t, at: at}
+	c.due, c.applied = c.reached, c.apply
+	return c
 }
 
 func (*timer) Destroy(*sct.WpCommitTimerV1) error { return nil }
@@ -117,11 +159,10 @@ func (t *timer) SetTimestamp(obj *sct.WpCommitTimerV1, secHi, secLo, nsec uint32
 		return obj.ProtocolError(sct.WpCommitTimerV1ErrorSurfaceDestroyed, "set_timestamp after the wl_surface was destroyed")
 	case nsec >= uint32(time.Second):
 		return obj.ProtocolError(sct.WpCommitTimerV1ErrorInvalidTimestamp, "tv_nsec %d is not below one second", nsec)
-	case t.pending != nil:
+	case t.pending:
 		return obj.ProtocolError(sct.WpCommitTimerV1ErrorTimestampExists, "the next commit already has a timestamp")
 	}
-	at := target(secHi, secLo, nsec)
-	t.pending = &at
+	t.pending, t.pendingAt = true, target(secHi, secLo, nsec)
 	return nil
 }
 
@@ -134,28 +175,29 @@ func (t *timer) due(at time.Duration) bool {
 }
 
 func (t *timer) commit(u *surface.Update) error {
-	if t.pending == nil {
+	if !t.pending {
 		return nil
 	}
-	at := *t.pending
-	t.pending = nil
-	t.targets = append(t.targets, at)
-	u.Gate(func() bool { return t.due(at) })
-	u.OnApply(func() error {
-		t.targets = t.targets[1:]
-		return t.arm()
-	})
+	t.pending = false
+	c := t.newTarget(t.pendingAt)
+	t.targets = append(t.targets, c)
+	u.Gate(c.due)
+	u.OnApply(c.applied)
 	return t.arm()
 }
 
 func (t *timer) arm() error {
 	now := t.m.clock.Now()
 	var next time.Duration
-	for _, at := range t.targets {
-		if at > now && (next == 0 || at < next) {
-			next = at
+	for _, c := range t.targets {
+		if c.at > now && (next == 0 || c.at < next) {
+			next = c.at
 		}
 	}
+	if next == t.armedFor {
+		return nil
+	}
+	t.armedFor = next
 	if next == 0 {
 		return t.clock.Disarm()
 	}
@@ -163,6 +205,7 @@ func (t *timer) arm() error {
 }
 
 func (t *timer) fire() error {
+	t.armedFor = 0
 	return errors.Join(t.s.Retry(), t.arm())
 }
 
