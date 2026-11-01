@@ -9,7 +9,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 )
 
-const DefaultInheritTimeout = 10 * time.Second
+const DefaultInheritTimeout = 30 * time.Second
 
 func showsInherited(o *output.Output) bool {
 	in, ok := o.Backend().(backend.Inheriting)

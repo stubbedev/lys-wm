@@ -269,7 +269,7 @@ carries no `ALLOW_MODESET`. Any other lit state, a different mode included, is m
 before. The compositor draws that first frame only once a client surface has
 content on the output (#219), so the splash gives way to the greeter's first
 frame rather than to lys-wm's empty background. If no client draws within
-`Config.InheritTimeout` (10 s), lys-wm logs it and draws over the inherited
+`Config.InheritTimeout` (30 s), lys-wm logs it and draws over the inherited
 frame anyway, so a greeter that never starts cannot freeze the display. The splash leaves its framebuffer on screen by closing it with
 `DRM_IOCTL_MODE_CLOSEFB` (Linux 6.8) rather than removing it.
 
