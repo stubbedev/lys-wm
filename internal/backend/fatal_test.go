@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -20,6 +21,7 @@ func TestOnlyALostDeviceOrABrokenInvariantIsFatal(t *testing.T) {
 		{fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x300E}), true},
 		{fmt.Errorf("gles: render pass: %w", &gpu.GLError{Op: "draw", Code: 0x0507}), true},
 		{fmt.Errorf("%w: nested: host gone", backend.ErrDeviceLost), true},
+		{fmt.Errorf("vulkan: render pass: %w", lgpu.ErrDeviceLost), true},
 		{backend.Broken("present without BeginFrame"), true},
 		{fmt.Errorf("drm: commit the frame: %w", unix.EBUSY), false},
 		{fmt.Errorf("drm: test the frame: %w", unix.EINVAL), false},

@@ -80,10 +80,9 @@ with it. So only two classes of error may reach the loop (#144):
 
 - **Device lost**: the device is gone and nothing on it can recover.
   `ENODEV` from any ioctl, `EGL_CONTEXT_LOST` or `GL_CONTEXT_LOST`
-  (`gpu.ErrContextLost`), and `backend.ErrDeviceLost`, which the nested
-  backend wraps around a failed send to its host. lys-lib does not yet name
-  a lost Vulkan device (stubbedev/lys-lib#59), so on the Vulkan renderer it
-  surfaces as a failed frame instead.
+  (`gpu.ErrContextLost`), `VK_ERROR_DEVICE_LOST` (lys-lib's
+  `gpu.ErrDeviceLost`), and `backend.ErrDeviceLost`, which the nested
+  backend wraps around a failed send to its host.
 - **Broken invariant**: a bug, which should crash loudly rather than limp
   on. `backend.Broken` marks these: a frame on an output the compositor
   does not know, `BeginFrame` with a frame already in progress, `Present`

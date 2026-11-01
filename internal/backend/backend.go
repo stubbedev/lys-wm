@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/edid"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -114,7 +115,7 @@ var (
 )
 
 func Fatal(err error) bool {
-	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken) || errors.Is(err, unix.ENODEV) || errors.Is(err, gpu.ErrContextLost)
+	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken) || errors.Is(err, unix.ENODEV) || errors.Is(err, gpu.ErrContextLost) || errors.Is(err, lgpu.ErrDeviceLost)
 }
 
 func Broken(format string, args ...any) error {
