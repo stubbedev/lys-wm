@@ -121,6 +121,12 @@ func StartGLESWithCursorPlanes(t *testing.T, size image.Point, configure func(*c
 	return start(t, setup{open: withCursorPlanes(glesBackend, size), configure: configure, traced: true}, modes...)
 }
 
+func StartVulkanWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
+	t.Helper()
+	testenv.Vulkan(t)
+	return start(t, setup{open: withCursorPlanes(vulkanBackend, size), configure: configure, traced: true}, modes...)
+}
+
 const XTransferTimeout = 2 * time.Second
 
 func StartXwayland(t *testing.T, report func(error), modes ...backend.Mode) *Harness {

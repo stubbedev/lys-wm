@@ -64,6 +64,11 @@
       vm-splash-handover = import ./splash-handover.nix {inherit pkgs module;};
       vm-xwayland = import ./xwayland.nix {inherit pkgs module;};
       vm-xwayland-apps = xwaylandApp "idea";
+      vm-gpu-tests = import ./gpu-tests.nix {
+        inherit pkgs;
+        inherit (self'.packages) lys-wm;
+        inherit (inputs'.lys-ui.packages) lys-ui;
+      };
       headless = pkgs.callPackage ./headless.nix {
         inherit (self'.packages) lys-wm;
         inherit (inputs'.lys-ui.packages) lys-ui;

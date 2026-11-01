@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/golden"
 	ccs "github.com/stubbedev/lys-wm/internal/protocol/client/cursorshape"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
@@ -270,7 +272,27 @@ func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
 }
 
 func TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback(t *testing.T) {
-	r := inputOn(t, StartGLESWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
+	for _, stack := range []struct {
+		name  string
+		start func(*testing.T, image.Point, func(*compositor.Config), ...backend.Mode) *Harness
+	}{{"gles", StartGLESWithCursorPlanes}, {"vulkan", StartVulkanWithCursorPlanes}} {
+		t.Run(stack.name, func(t *testing.T) {
+			scaledCursorOnThePlane(t, stack.start(t, plane, func(*compositor.Config) {}, small))
+		})
+	}
+}
+
+func scaledCursorOnThePlane(t *testing.T, h *Harness) {
+	async := false
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		a, ok := b.Renderer().(render.AsyncReader)
+		async = ok && a.AsyncReads()
+		return nil
+	})
+	if !async {
+		t.Skip("this renderer reads back only synchronously here")
+	}
+	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	cursor := r.c.Surface()
 	if err := cursor.SetBufferScale(2); err != nil {

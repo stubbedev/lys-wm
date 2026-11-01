@@ -18,8 +18,12 @@ type ignoreRelease struct{}
 
 func (ignoreRelease) Release(*cw.WlBuffer) error { return nil }
 
-func TestAShrunkPoolDisconnectsOnlyItsClientUnderGLES(t *testing.T) {
-	h := StartGLES(t, func(*compositor.Config) {}, small)
+func TestAShrunkPoolDisconnectsOnlyItsClientOnTheGPURenderers(t *testing.T) {
+	onEachGPURenderer(t, testAShrunkPoolDisconnectsOnlyItsClientOnTheGPURenderers)
+}
+
+func testAShrunkPoolDisconnectsOnlyItsClientOnTheGPURenderers(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("shrinking", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
@@ -80,6 +84,7 @@ func TestTenBitShmBuffersShowTheirColour(t *testing.T) {
 	}{
 		{"soft", func(t *testing.T) *Harness { return Start(t, small) }},
 		{"gles", func(t *testing.T) *Harness { return StartGLES(t, func(*compositor.Config) {}, small) }},
+		{"vulkan", func(t *testing.T) *Harness { return StartVulkan(t, func(*compositor.Config) {}, small) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := tc.start(t)

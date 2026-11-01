@@ -16,6 +16,7 @@ import (
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
 var small = backend.Mode{Size: image.Pt(160, 100), RefreshMHz: 60000, Preferred: true}
@@ -218,6 +219,23 @@ func TestIntegerScaleIsScaledOnce(t *testing.T) {
 }
 
 type starter func(t *testing.T, modes ...backend.Mode) *Harness
+
+type gpuStarter func(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness
+
+func onEachGPURenderer(t *testing.T, test func(t *testing.T, start gpuStarter)) {
+	t.Run("gles", func(t *testing.T) { test(t, StartGLES) })
+	t.Run("vulkan", func(t *testing.T) { test(t, StartVulkan) })
+}
+
+func onEachDMABUFRenderer(t *testing.T, test func(t *testing.T, start gpuStarter)) {
+	t.Run("gles", func(t *testing.T) { test(t, StartGLES) })
+	t.Run("vulkan", func(t *testing.T) {
+		if !testenv.Vulkan(t).Device().Exports() {
+			t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+		}
+		test(t, StartVulkan)
+	})
+}
 
 func onEachRenderer(t *testing.T, test func(t *testing.T, start starter)) {
 	for _, r := range []struct {

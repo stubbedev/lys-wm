@@ -36,7 +36,7 @@ WAYLAND_DISPLAY=wayland-2 foot
 | `--config <file>` | Read this file instead of the [default path](../config); the file must exist |
 | `--systemd` | Hand the environment to the user manager and run `lys-wm-session.target`; leave it off when nested |
 | `--backend <name>` | `drm`, `nested` or `headless`. Default: `nested` when `WAYLAND_DISPLAY` is set, else `drm` |
-| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default: `gles`, and `soft` on the headless backend. `vulkan` works on `drm` and `headless`, `soft` on `nested` and `headless` |
+| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default: `gles`, and `soft` on the headless backend. `gles` and `vulkan` work on every backend, `soft` on `nested` and `headless` |
 
 lys-wm logs to stderr. `LYS_WM_DEBUG=wire` adds a trace of the Wayland messages.
 

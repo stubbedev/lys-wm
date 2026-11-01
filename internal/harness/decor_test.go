@@ -90,7 +90,11 @@ func TestRoundedWindowsAndBorders(t *testing.T) {
 }
 
 func TestARoundedWindowThatFillsTheOutputIsComposited(t *testing.T) {
-	h := StartGLES(t, func(cfg *compositor.Config) {
+	onEachDMABUFRenderer(t, testARoundedWindowThatFillsTheOutputIsComposited)
+}
+
+func testARoundedWindowThatFillsTheOutputIsComposited(t *testing.T, start gpuStarter) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor = compositor.DefaultDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 0, 6
 	}, small)

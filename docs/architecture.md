@@ -81,7 +81,9 @@ with it. So only two classes of error may reach the loop (#144):
 - **Device lost**: the device is gone and nothing on it can recover.
   `ENODEV` from any ioctl, `EGL_CONTEXT_LOST` or `GL_CONTEXT_LOST`
   (`gpu.ErrContextLost`), and `backend.ErrDeviceLost`, which the nested
-  backend wraps around a failed send to its host.
+  backend wraps around a failed send to its host. lys-lib does not yet name
+  a lost Vulkan device (stubbedev/lys-lib#59), so on the Vulkan renderer it
+  surfaces as a failed frame instead.
 - **Broken invariant**: a bug, which should crash loudly rather than limp
   on. `backend.Broken` marks these: a frame on an output the compositor
   does not know, `BeginFrame` with a frame already in progress, `Present`
@@ -205,14 +207,29 @@ or textures.
 
 `render/vulkan` (#155) is a second GPU renderer on lys-lib's `gpu` package,
 the Vulkan stack lys-ui and lys-shell draw with; `-renderer vulkan` selects
-it on the DRM and headless backends, where GBM allocates scanout targets in a
-modifier the plane and the device share, Vulkan imports them, and sync files
-fence them. The kernel refuses framebuffers over memory Vulkan exports on `xe`
-(Lunar Lake), in every modifier, and takes the same modifiers from GBM.
-GLES stays the default. lys-lib loads `libvulkan.so.1`, whose store path the
-Nix build bakes in and `LYS_LIBVULKAN` overrides; the dev shell points
-`VK_DRIVER_FILES` at lavapipe, as it points EGL at llvmpipe, and both renderers
-are pixel-compared against the software renderer by `render/rendertest`.
+it on every backend, and it is a peer of GLES in every path. On the DRM backend
+GBM allocates scanout targets in a modifier the plane and the device share,
+Vulkan imports them, and sync files fence them: the kernel refuses framebuffers
+over memory Vulkan exports on `xe` (Lunar Lake), in every modifier, and takes
+the same modifiers from GBM. Beyond how they open, the two renderers ask the same
+of a card, so one `gbmAllocator` holds either. On the nested backend
+nothing scans out directly, so Vulkan renders into memory it exports itself, on
+the device the host names in its dmabuf feedback, and needs no GBM. A host below
+`zwp_linux_dmabuf_v1` version 4 names no device, as lavapipe's does: Vulkan then
+opens the default device and offers what the host listed, while GLES, which
+allocates through GBM on that device, reports what it lacks. Headless Vulkan
+tries the render nodes in order before any other device, so that it has a main
+device to name as headless GLES does, which dmabuf feedback, dmabuf captures and
+explicit sync all need.
+
+GLES stays the default, since not every GPU has a good Vulkan driver. lys-lib
+loads `libvulkan.so.1`, whose store path the Nix build bakes in and
+`LYS_LIBVULKAN` overrides; the dev shell points `VK_DRIVER_FILES` at lavapipe,
+as it points EGL at llvmpipe, and both renderers are pixel-compared against the
+software renderer by `render/rendertest`, which also holds the checks both must
+pass on real GPUs. Lavapipe shares dmabufs only through `/dev/udmabuf`, so the
+paths that share them run on it in the `vm-gpu-tests` NixOS check; `just docker
+hardware` runs them on a real GPU, on both renderers.
 
 Without cgo, `os.Setenv` does not reach libc's `getenv`, so variables that
 drivers read must be in the process environment from the start. The dev
@@ -244,10 +261,15 @@ linear dumb buffers before each flip, the same copy the cursor plane uses,
 so display-only devices such as vkms and DisplayLink work too. A secondary
 with a render node gets a GPU blit instead: the primary renders into a
 linear buffer the secondary samples and draws into its own scanout buffer.
-NVIDIA's GLES renders into no linear buffer, so an NVIDIA primary renders
+The blit does not care what renders on either side. A Vulkan session runs its
+secondaries on Vulkan too, and a card without a Vulkan driver takes GLES behind
+a Vulkan primary, since all they exchange is a dmabuf and a sync file. NVIDIA
+renders into no linear buffer on either API, so an NVIDIA primary renders
 its usual tiled frame and its Vulkan device (lys-lib's `gpu`) copies it with
 the copy engine into a linear buffer its GBM allocates, which the secondary
-samples (#147); sync files order the three steps. Outputs keep
+samples (#147); sync files order the three steps. A Vulkan primary makes that
+copy on its own device and queue, so the frame needs no fence to reach the copy.
+The startup log names the renderer each secondary blits with. Outputs keep
 the kernel's connector names, which are unique across cards because the
 kernel numbers the connectors of each type globally. Cards come and go with udev: a
 new card is driven as a secondary, a removed secondary drops its outputs
@@ -463,7 +485,7 @@ Everything lives under `internal/` except the commands.
 | `render` | The renderer interface (#7) |
 | `render/soft` | The CPU renderer, for headless and golden tests (#7) |
 | `render/gles` | The GLES2 renderer (#34) |
-| `render/vulkan` | The Vulkan renderer, on lys-lib's `gpu` package (#155) |
+| `render/vulkan` | The Vulkan renderer, on lys-lib's `gpu` package, with the same capabilities as GLES (#155) |
 | `render/rendertest` | The scene and checks every renderer is held to the software renderer's pixels with |
 | `gpu` | purego bindings for EGL, GLES2 and GBM (#33) |
 | `surface` | `wl_compositor`, `wl_surface`, `wl_region`, `wl_subcompositor`, `wp_viewporter`, `wp_fractional_scale_v1`, `wp_presentation`: double-buffered state, a queue of content updates that apply in order once their gates open, subsurface trees, roles (#11, #19, #117) |

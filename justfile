@@ -22,12 +22,12 @@ headless:
 
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
-hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGLESRenderer|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGLESRenderer|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding"
+hardware_tests := "OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGPURenderers|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGPURenderers|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding|TestAnAsyncReadSeesTheFrameItWasStartedAfter|TestNestedLysWMRendersWithVulkan"
 
 # Run the GPU tests on the container's /run/opengl-driver instead of the dev
-# shell's llvmpipe, failing when any of them skips, then check frame pacing:
-# headless GLES lys-wm in a private runtime dir, with Xwayland off, runs
-# es2gears_wayland and fails below min_fps.
+# shell's llvmpipe, failing when any of them skips, then check frame pacing on
+# each GPU renderer: headless lys-wm in a private runtime dir, with Xwayland
+# off, runs es2gears_wayland and fails below min_fps.
 hardware min_fps="57":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -40,31 +40,39 @@ hardware min_fps="57":
         cat "$dir/not-run.log" >&2
         exit 1
     fi
-    mkdir -m 0700 "$dir/run"
     go build -o "$dir/lys-wm" ./cmd/lys-wm
     printf 'xwayland:\n  enabled: false\n' > "$dir/config.yaml"
-    XDG_RUNTIME_DIR="$dir/run" WAYLAND_DISPLAY='' "$dir/lys-wm" -backend headless -renderer gles -config "$dir/config.yaml" 2> "$dir/lys-wm.log" &
-    compositor=$!
-    trap 'kill "$compositor" 2>/dev/null || true; wait "$compositor" 2>/dev/null || true; rm -rf "$dir"' EXIT
-    for _ in $(seq 50); do
-        socket=$(find "$dir/run" -maxdepth 1 -name 'wayland-*' ! -name '*.lock' -printf '%f\n' | head -1)
-        [[ -n "$socket" ]] && break
-        sleep 0.1
-    done
-    if [[ -z "$socket" ]]; then
-        echo "hardware: lys-wm did not start" >&2
-        cat "$dir/lys-wm.log" >&2
-        exit 1
-    fi
-    XDG_RUNTIME_DIR="$dir/run" WAYLAND_DISPLAY="$socket" timeout 12 stdbuf -oL es2gears_wayland > "$dir/gears.log" 2>&1 || true
-    cat "$dir/gears.log"
-    fps=$(grep -oE '= [0-9.]+ FPS' "$dir/gears.log" | tail -1 | grep -oE '[0-9.]+' || true)
-    if [[ -z "$fps" ]]; then
-        echo "hardware: es2gears_wayland reported no frame rate" >&2
-        exit 1
-    fi
-    echo "pacing: $fps fps on headless GLES lys-wm at 60 Hz"
-    awk -v fps="$fps" -v min="{{min_fps}}" 'BEGIN { exit !(fps >= min) }' || { echo "hardware: $fps fps is below {{min_fps}}" >&2; exit 1; }
+    pace() {
+        local renderer=$1 run="$dir/run-$1" compositor socket fps
+        mkdir -m 0700 "$run"
+        XDG_RUNTIME_DIR="$run" WAYLAND_DISPLAY='' "$dir/lys-wm" -backend headless -renderer "$renderer" -config "$dir/config.yaml" 2> "$dir/lys-wm-$renderer.log" &
+        compositor=$!
+        trap 'kill "$compositor" 2>/dev/null || true; wait "$compositor" 2>/dev/null || true; rm -rf "$dir"' EXIT
+        socket=
+        for _ in $(seq 50); do
+            socket=$(find "$run" -maxdepth 1 -name 'wayland-*' ! -name '*.lock' -printf '%f\n' | head -1)
+            [[ -n "$socket" ]] && break
+            sleep 0.1
+        done
+        if [[ -z "$socket" ]]; then
+            echo "hardware: lys-wm on $renderer did not start" >&2
+            cat "$dir/lys-wm-$renderer.log" >&2
+            exit 1
+        fi
+        XDG_RUNTIME_DIR="$run" WAYLAND_DISPLAY="$socket" timeout 12 stdbuf -oL es2gears_wayland > "$dir/gears.log" 2>&1 || true
+        cat "$dir/gears.log"
+        kill "$compositor" 2>/dev/null || true
+        wait "$compositor" 2>/dev/null || true
+        fps=$(grep -oE '= [0-9.]+ FPS' "$dir/gears.log" | tail -1 | grep -oE '[0-9.]+' || true)
+        if [[ -z "$fps" ]]; then
+            echo "hardware: es2gears_wayland reported no frame rate on $renderer" >&2
+            exit 1
+        fi
+        echo "pacing: $fps fps on headless $renderer lys-wm at 60 Hz"
+        awk -v fps="$fps" -v min="{{min_fps}}" 'BEGIN { exit !(fps >= min) }' || { echo "hardware: $fps fps on $renderer is below {{min_fps}}" >&2; exit 1; }
+    }
+    pace gles
+    pace vulkan
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and

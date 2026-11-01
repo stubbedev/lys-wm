@@ -123,7 +123,7 @@ func TestAFullscreenGameTearsLikeARuleWouldMakeIt(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := fullscreenScanout(t, func(cfg *compositor.Config) {
+			s := fullscreenScanout(t, StartGLES, func(cfg *compositor.Config) {
 				cfg.Tearing, cfg.Rules = tc.tearing, tc.rules
 			})
 			if tc.content != cct.WpContentTypeV1TypeNone {

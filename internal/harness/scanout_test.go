@@ -39,9 +39,9 @@ type scanoutScene struct {
 	w *testclient.Window
 }
 
-func fullscreenScanout(t *testing.T, configure func(*compositor.Config)) *scanoutScene {
+func fullscreenScanout(t *testing.T, start gpuStarter, configure func(*compositor.Config)) *scanoutScene {
 	t.Helper()
-	h := StartGLES(t, configure, small)
+	h := start(t, configure, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		b.Outputs()[0].AllowScanout(primaryPlane)
 		return nil
@@ -73,7 +73,11 @@ func (s *scanoutScene) show(t *testing.T, name string, b *testclient.DMABUF) {
 }
 
 func TestFullscreenDMABUFsScanOutDirectly(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testFullscreenDMABUFsScanOutDirectly)
+}
+
+func testFullscreenDMABUFsScanOutDirectly(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	h, c := s.h, s.c
 	show := func(name string, b *testclient.DMABUF) { t.Helper(); s.show(t, name, b) }
 	first := c.DMABUF(image.Pt(160, 100), testclient.Fill(0xff, 0, 0))
@@ -99,7 +103,11 @@ func TestFullscreenDMABUFsScanOutDirectly(t *testing.T) {
 }
 
 func TestAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testAFullscreenDMABUFScansOutOverAWallpaperAndABar)
+}
+
+func testAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	shell := testclient.Connect(t, s.h.Socket())
 	wallpaper := shell.Layer(testclient.LayerSpec{
 		Layer:  cwlr.ZwlrLayerShellV1LayerBackground,
@@ -111,7 +119,11 @@ func TestAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T) {
 }
 
 func TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt)
+}
+
+func testAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	before := scanouts(s.h)
 	b := s.c.DMABUFIn(fourcc.ARGB8888, image.Pt(160, 100), testclient.Fill(0, 0xff, 0))
 	if err := errors.Join(s.w.Surface.Attach(b.WL, 0, 0), s.w.Surface.DamageBuffer(0, 0, 160, 100), s.w.Surface.Commit(), s.c.Display.Roundtrip()); err != nil {
@@ -132,12 +144,20 @@ func TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt(t *testing.T) {
 }
 
 func TestATenBitDMABUFScansOutUnconverted(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testATenBitDMABUFScansOutUnconverted)
+}
+
+func testATenBitDMABUFScansOutUnconverted(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	s.show(t, "an XR30 dmabuf", s.c.DMABUFIn(fourcc.XRGB2101010, image.Pt(160, 100), testclient.Fill(0xff, 0, 0)))
 }
 
 func TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testDestroyingAReplacedBufferStillOnScreenSendsNoRelease)
+}
+
+func testDestroyingAReplacedBufferStillOnScreenSendsNoRelease(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	gone := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff))
 	s.show(t, "the dmabuf", gone)
 	next := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0xff, 0xff, 0))
@@ -154,7 +174,11 @@ func TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease(t *testing.T) {
 }
 
 func TestAFullscreenSurfaceIsOfferedThePlaneFormats(t *testing.T) {
-	s := fullscreenScanout(t, func(*compositor.Config) {})
+	onEachDMABUFRenderer(t, testAFullscreenSurfaceIsOfferedThePlaneFormats)
+}
+
+func testAFullscreenSurfaceIsOfferedThePlaneFormats(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
 	var game *surface.Surface
 	var got gpu.ScanoutTarget
 	s.h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {

@@ -55,7 +55,11 @@ func TestInactiveWindowsAndRuledWindowsAreTranslucent(t *testing.T) {
 }
 
 func TestATranslucentFullscreenWindowIsComposited(t *testing.T) {
-	s := fullscreenScanout(t, func(cfg *compositor.Config) { cfg.Decor.Opacity.Fullscreen = 0.5 })
+	onEachDMABUFRenderer(t, testATranslucentFullscreenWindowIsComposited)
+}
+
+func testATranslucentFullscreenWindowIsComposited(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(cfg *compositor.Config) { cfg.Decor.Opacity.Fullscreen = 0.5 })
 	before := scanouts(s.h)
 	b := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0xff, 0))
 	if err := errors.Join(s.w.Surface.Attach(b.WL, 0, 0), s.w.Surface.DamageBuffer(0, 0, 160, 100), s.w.Surface.Commit(), s.c.Display.Roundtrip()); err != nil {

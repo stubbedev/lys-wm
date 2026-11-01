@@ -300,9 +300,9 @@ func TestImageCopyCaptureFollowsAPlaneCursor(t *testing.T) {
 	}
 }
 
-func dmabufCapture(t *testing.T) (*testclient.Client, *ceic.ExtImageCopyCaptureSessionV1, *captureView) {
+func dmabufCapture(t *testing.T, start gpuStarter) (*testclient.Client, *ceic.ExtImageCopyCaptureSessionV1, *captureView) {
 	t.Helper()
-	h := StartGLES(t, func(*compositor.Config) {}, small)
+	h := start(t, func(*compositor.Config) {}, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("captured", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
@@ -312,7 +312,11 @@ func dmabufCapture(t *testing.T) (*testclient.Client, *ceic.ExtImageCopyCaptureS
 }
 
 func TestImageCopyCaptureIntoDMABUFs(t *testing.T) {
-	c, session, view := dmabufCapture(t)
+	onEachDMABUFRenderer(t, testImageCopyCaptureIntoDMABUFs)
+}
+
+func testImageCopyCaptureIntoDMABUFs(t *testing.T, start gpuStarter) {
+	c, session, view := dmabufCapture(t, start)
 	target := c.RenderTarget(view.size, view.modifiers)
 	f, _ := captureInto(t, c, session, target.WL, view.size)
 	c.DispatchUntil("the dmabuf frame", func() bool { return f.ready || f.failed })
@@ -326,7 +330,11 @@ func TestImageCopyCaptureIntoDMABUFs(t *testing.T) {
 }
 
 func TestACaptureIntoADMABUFTheRendererCannotDrawIntoBreaksTheConstraints(t *testing.T) {
-	c, session, view := dmabufCapture(t)
+	onEachDMABUFRenderer(t, testACaptureIntoADMABUFTheRendererCannotDrawIntoBreaksTheConstraints)
+}
+
+func testACaptureIntoADMABUFTheRendererCannotDrawIntoBreaksTheConstraints(t *testing.T, start gpuStarter) {
+	c, session, view := dmabufCapture(t, start)
 	f, _ := captureInto(t, c, session, c.DMABUFOutside(view.size, view.modifiers).WL, view.size)
 	c.DispatchUntil("the frame", func() bool { return f.ready || f.failed })
 	if !f.failed || f.reason != ceic.ExtImageCopyCaptureFrameV1FailureReasonBufferConstraints {
@@ -469,7 +477,11 @@ func TestAnOutputCaptureNeverDrawsATextureReplacedSinceTheLastFrame(t *testing.T
 }
 
 func TestAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T) {
-	h := StartGLES(t, func(*compositor.Config) {}, small)
+	onEachGPURenderer(t, testAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext)
+}
+
+func testAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
 	async := false
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		r, ok := b.Renderer().(render.AsyncReader)
@@ -567,8 +579,12 @@ func TestACaptureOfAClosedToplevelStops(t *testing.T) {
 }
 
 func TestShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T) {
+	onEachGPURenderer(t, testShmCapturesLeaveTheLoopFreeOnHardware)
+}
+
+func testShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T, start gpuStarter) {
 	large := backend.Mode{Size: image.Pt(2560, 1440), RefreshMHz: 60000, Preferred: true}
-	h := StartGLES(t, func(*compositor.Config) {}, large)
+	h := start(t, func(*compositor.Config) {}, large)
 	hardware := false
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		r, ok := b.Renderer().(interface {

@@ -200,8 +200,12 @@ func TestAScreencopyFrameCopiesOnce(t *testing.T) {
 	c.ExpectProtocolError(uint32(cwsc.ZwlrScreencopyFrameV1ErrorAlreadyUsed))
 }
 
-func TestScreencopyIntoDMABUFsOnTheGLESRenderer(t *testing.T) {
-	c, _, view := dmabufCapture(t)
+func TestScreencopyIntoDMABUFsOnTheGPURenderers(t *testing.T) {
+	onEachDMABUFRenderer(t, testScreencopyIntoDMABUFsOnTheGPURenderers)
+}
+
+func testScreencopyIntoDMABUFsOnTheGPURenderers(t *testing.T, start gpuStarter) {
+	c, _, view := dmabufCapture(t, start)
 	if !c.HasDMABUFFeedback() {
 		t.Skip("the renderer names no main device, so it offers no dmabuf captures")
 	}

@@ -49,7 +49,7 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VMs with one GPU, two GPUs, a configured primary, a display-only card, the cursor plane and zero-scaled X windows
-        run: nix build -L .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland
+        run: nix build -L .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests
 
   clients:
     runs-on: ubuntu-latest

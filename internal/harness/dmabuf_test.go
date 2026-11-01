@@ -9,8 +9,12 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
-func TestDMABUFClientsOnTheGLESRenderer(t *testing.T) {
-	h := StartGLES(t, func(*compositor.Config) {}, small)
+func TestDMABUFClientsOnTheGPURenderers(t *testing.T) {
+	onEachDMABUFRenderer(t, testDMABUFClientsOnTheGPURenderers)
+}
+
+func testDMABUFClientsOnTheGPURenderers(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("dmabuf", testclient.Fill(0, 0, 0xff))
 	c.DispatchUntil("the window to map", w.Mapped)
@@ -48,7 +52,11 @@ func TestDMABUFClientsOnTheGLESRenderer(t *testing.T) {
 }
 
 func TestADMABUFDestroyedInASynchronizedCacheKeepsItsClient(t *testing.T) {
-	h := StartGLES(t, func(*compositor.Config) {}, small)
+	onEachDMABUFRenderer(t, testADMABUFDestroyedInASynchronizedCacheKeepsItsClient)
+}
+
+func testADMABUFDestroyedInASynchronizedCacheKeepsItsClient(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("dmabuf cache", testclient.Fill(0, 0, 0xff))
 	c.DispatchUntil("the window to map", w.Mapped)
