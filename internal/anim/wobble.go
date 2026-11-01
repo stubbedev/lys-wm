@@ -38,10 +38,10 @@ func (w *Wobble) Shift(dx, dy, grabU, grabV float64) {
 	for j := range w.rows + 1 {
 		for i := range w.cols + 1 {
 			du, dv := float64(i)/float64(w.cols)-grabU, float64(j)/float64(w.rows)-grabV
-			lag := 1 - math.Exp(-(du*du+dv*dv)/(wobbleReach*wobbleReach))
+			lag := 1 - math.Exp(-(float64(du*du)+float64(dv*dv))/(wobbleReach*wobbleReach))
 			k := w.node(i, j)
-			w.off[k][0] -= dx * lag
-			w.off[k][1] -= dy * lag
+			w.off[k][0] -= float64(dx * lag)
+			w.off[k][1] -= float64(dy * lag)
 		}
 	}
 }
@@ -65,14 +65,14 @@ func (w *Wobble) step(dt float64) {
 			}
 			for a := range 2 {
 				pull := sum[a]/float64(n) - w.off[k][a]
-				acc[k][a] = -w.omega2*w.off[k][a] + wobbleCouple*w.omega2*pull - w.damping*w.vel[k][a]
+				acc[k][a] = float64(-w.omega2*w.off[k][a]) + float64(wobbleCouple*w.omega2*pull) - float64(w.damping*w.vel[k][a])
 			}
 		}
 	}
 	for k := range w.off {
 		for a := range 2 {
-			w.vel[k][a] += acc[k][a] * dt
-			w.off[k][a] += w.vel[k][a] * dt
+			w.vel[k][a] += float64(acc[k][a] * dt)
+			w.off[k][a] += float64(w.vel[k][a] * dt)
 		}
 	}
 }

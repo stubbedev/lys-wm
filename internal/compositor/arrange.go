@@ -14,7 +14,7 @@ type arranged struct {
 }
 
 func centred(lo, span, size int) int {
-	return lo + int(math.Round(float64(span)/2-float64(size)/2))
+	return lo + int(math.Round(float64(float64(span)/2)-float64(float64(size)/2)))
 }
 
 func placeAxis(lo, span, size, marginLo, marginHi int, anchorLo, anchorHi bool) (int, int) {

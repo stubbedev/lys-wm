@@ -65,7 +65,7 @@ func (c *Compositor) shownOpacity(w *window) float32 {
 }
 
 func (c *Compositor) shownDim(w *window) render.Color {
-	return render.Color{A: uint8(min(max(w.look.dim.At(c.frameTime), 0), 1)*0xff + 0.5)}
+	return render.Color{A: uint8(float64(min(max(w.look.dim.At(c.frameTime), 0), 1)*0xff) + 0.5)}
 }
 
 func (c *Compositor) shownShadow(w *window) render.Color {

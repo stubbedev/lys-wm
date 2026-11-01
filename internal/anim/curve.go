@@ -45,12 +45,12 @@ func NewBezier(x1, y1, x2, y2 float64) (Bezier, error) {
 
 func cubic(a, b, t float64) float64 {
 	u := 1 - t
-	return 3*u*u*t*a + 3*u*t*t*b + t*t*t
+	return float64(3*u*u*t*a) + float64(3*u*t*t*b) + float64(t*t*t)
 }
 
 func cubicSlope(a, b, t float64) float64 {
 	u := 1 - t
-	return 3*u*u*a + 6*u*t*(b-a) + 3*t*t*(1-b)
+	return float64(3*u*u*a) + float64(6*u*t*(b-a)) + float64(3*t*t*(1-b))
 }
 
 const solveEpsilon = 1e-9
@@ -156,27 +156,27 @@ func (s Spring) offset(t float64) float64 {
 	w, z := s.omega, s.zeta
 	switch {
 	case z < 1:
-		wd := w * math.Sqrt(1-z*z)
-		return -math.Exp(-z*w*t) * (math.Cos(wd*t) + z*w/wd*math.Sin(wd*t))
+		wd := w * math.Sqrt(1-float64(z*z))
+		return -math.Exp(-z*w*t) * (math.Cos(wd*t) + float64(z*w/wd*math.Sin(wd*t)))
 	case z == 1:
-		return -(1 + w*t) * math.Exp(-w*t)
+		return -(1 + float64(w*t)) * math.Exp(-w*t)
 	}
-	r := w * math.Sqrt(z*z-1)
-	r1, r2 := -z*w+r, -z*w-r
-	return (r2*math.Exp(r1*t) - r1*math.Exp(r2*t)) / (r1 - r2)
+	r := float64(w * math.Sqrt(float64(z*z)-1))
+	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
+	return (float64(r2*math.Exp(r1*t)) - float64(r1*math.Exp(r2*t))) / (r1 - r2)
 }
 
 func (s Spring) envelope(t float64) float64 {
 	w, z := s.omega, s.zeta
 	switch {
 	case z < 1:
-		wd := w * math.Sqrt(1-z*z)
+		wd := w * math.Sqrt(1-float64(z*z))
 		return math.Exp(-z*w*t) * math.Hypot(1, z*w/wd)
 	case z == 1:
-		return (1 + w*t) * math.Exp(-w*t)
+		return (1 + float64(w*t)) * math.Exp(-w*t)
 	}
-	r := w * math.Sqrt(z*z-1)
-	r1, r2 := -z*w+r, -z*w-r
+	r := float64(w * math.Sqrt(float64(z*z)-1))
+	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
 	return (math.Abs(r2) + math.Abs(r1)) / (r1 - r2) * math.Exp(r1*t)
 }
 

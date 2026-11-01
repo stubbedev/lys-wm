@@ -108,6 +108,6 @@ func (g geometry) toBuffer(r image.Rectangle) image.Rectangle {
 		return image.Rectangle{}
 	}
 	sx, sy := src.W/float64(dst.X), src.H/float64(dst.Y)
-	scaled := outward((src.X+float64(r.Min.X)*sx)*k, (src.Y+float64(r.Min.Y)*sy)*k, (src.X+float64(r.Max.X)*sx)*k, (src.Y+float64(r.Max.Y)*sy)*k)
+	scaled := outward((src.X+float64(float64(r.Min.X)*sx))*k, (src.Y+float64(float64(r.Min.Y)*sy))*k, (src.X+float64(float64(r.Max.X)*sx))*k, (src.Y+float64(float64(r.Max.Y)*sy))*k)
 	return g.transform.Rect(scaled, g.transform.Invert().Size(size)).Intersect(image.Rectangle{Max: size})
 }

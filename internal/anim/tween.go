@@ -49,7 +49,7 @@ func (t *Tween[V]) Jump(to V) {
 }
 
 func Lerp(from, to, p float64) float64 {
-	return from + (to-from)*p
+	return from + float64((to-from)*p)
 }
 
 func lerpInt(from, to int, p float64) int {

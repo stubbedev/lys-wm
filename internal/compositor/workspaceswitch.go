@@ -56,7 +56,7 @@ func (sw *workspaceSwitch) view(area image.Rectangle, incoming bool, now time.Du
 		return view{offset: image.Pt(0, shift(area.Dy())), scale: 1, alpha: 1}
 	case anim.Popin:
 		if incoming {
-			return view{scale: sw.style.Percent/100 + (1-sw.style.Percent/100)*p, alpha: p}
+			return view{scale: sw.style.Percent/100 + float64((1-sw.style.Percent/100)*p), alpha: p}
 		}
 		return view{scale: 1, alpha: 1 - p}
 	}

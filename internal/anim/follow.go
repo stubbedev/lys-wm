@@ -24,44 +24,44 @@ func newFollower(s Spring, at, velocity, target float64, now time.Duration) foll
 
 func (f follower) roots() (r1, r2 float64) {
 	w, z := f.s.omega, f.s.zeta
-	r := w * math.Sqrt(z*z-1)
-	return -z*w + r, -z*w - r
+	r := float64(w * math.Sqrt(float64(z*z)-1))
+	return float64(-z*w) + r, float64(-z*w) - r
 }
 
 func (f follower) offset(t float64) (u, v float64) {
 	w, z := f.s.omega, f.s.zeta
 	switch {
 	case z < 1:
-		wd := w * math.Sqrt(1-z*z)
-		a, b := f.u0, (f.v0+z*w*f.u0)/wd
+		wd := w * math.Sqrt(1-float64(z*z))
+		a, b := f.u0, (f.v0+float64(z*w*f.u0))/wd
 		e := math.Exp(-z * w * t)
 		c, s := math.Cos(wd*t), math.Sin(wd*t)
-		u = e * (a*c + b*s)
-		v = e * ((b*wd-z*w*a)*c - (a*wd+z*w*b)*s)
+		u = e * (float64(a*c) + float64(b*s))
+		v = e * (float64((float64(b*wd)-float64(z*w*a))*c) - float64((float64(a*wd)+float64(z*w*b))*s))
 		return u, v
 	case z == 1:
-		a, b := f.u0, f.v0+w*f.u0
+		a, b := f.u0, f.v0+float64(w*f.u0)
 		e := math.Exp(-w * t)
-		return (a + b*t) * e, (b - w*(a+b*t)) * e
+		return (a + float64(b*t)) * e, (b - float64(w*(a+float64(b*t)))) * e
 	}
 	r1, r2 := f.roots()
-	c1 := (f.v0 - r2*f.u0) / (r1 - r2)
+	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
 	c2 := f.u0 - c1
 	e1, e2 := math.Exp(r1*t), math.Exp(r2*t)
-	return c1*e1 + c2*e2, r1*c1*e1 + r2*c2*e2
+	return float64(c1*e1) + float64(c2*e2), float64(r1*c1*e1) + float64(r2*c2*e2)
 }
 
 func (f follower) envelope(t float64) float64 {
 	w, z := f.s.omega, f.s.zeta
 	switch {
 	case z < 1:
-		wd := w * math.Sqrt(1-z*z)
-		return math.Exp(-z*w*t) * (math.Abs(f.u0) + math.Abs((f.v0+z*w*f.u0)/wd))
+		wd := w * math.Sqrt(1-float64(z*z))
+		return math.Exp(-z*w*t) * (math.Abs(f.u0) + math.Abs((f.v0+float64(z*w*f.u0))/wd))
 	case z == 1:
-		return (math.Abs(f.u0) + math.Abs(f.v0+w*f.u0)*t) * math.Exp(-w*t)
+		return (math.Abs(f.u0) + float64(math.Abs(f.v0+float64(w*f.u0))*t)) * math.Exp(-w*t)
 	}
 	r1, r2 := f.roots()
-	c1 := (f.v0 - r2*f.u0) / (r1 - r2)
+	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
 	return (math.Abs(c1) + math.Abs(f.u0-c1)) * math.Exp(r1*t)
 }
 

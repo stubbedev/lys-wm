@@ -79,7 +79,7 @@ func budRect(neighbour, goal image.Rectangle) image.Rectangle {
 
 func travelled(from, at, to image.Rectangle) float64 {
 	centre := func(r image.Rectangle) (float64, float64) {
-		return float64(r.Min.X+r.Max.X) / 2, float64(r.Min.Y+r.Max.Y) / 2
+		return float64(float64(r.Min.X+r.Max.X) / 2), float64(float64(r.Min.Y+r.Max.Y) / 2)
 	}
 	fx, fy := centre(from)
 	ax, ay := centre(at)

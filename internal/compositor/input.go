@@ -49,7 +49,7 @@ func (r origin) at() point {
 
 func (r origin) local(p point) point {
 	f := r.k.Float()
-	return point{(p.X-float64(r.base.X))*f - float64(r.px.X), (p.Y-float64(r.base.Y))*f - float64(r.px.Y)}
+	return point{float64((p.X-float64(r.base.X))*f) - float64(r.px.X), float64((p.Y-float64(r.base.Y))*f) - float64(r.px.Y)}
 }
 
 func (r origin) global(l point) point {
@@ -113,7 +113,7 @@ func (c *Compositor) layoutBounds() image.Rectangle {
 }
 
 func denormalize(r image.Rectangle, x, y float64) point {
-	return point{float64(r.Min.X) + x*float64(r.Dx()), float64(r.Min.Y) + y*float64(r.Dy())}
+	return point{float64(r.Min.X) + float64(x*float64(r.Dx())), float64(r.Min.Y) + float64(y*float64(r.Dy()))}
 }
 
 func (c *Compositor) clampToOutputs(p point) point {

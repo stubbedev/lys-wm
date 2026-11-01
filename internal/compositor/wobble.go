@@ -72,7 +72,7 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 	scale := o.Scale().Float()
 	node := func(i, j int) (float64, float64) {
 		dx, dy := w.wobble.Offset(i, j)
-		return float64(tile.Min.X) + float64(tile.Dx()*i)/float64(cols) + dx*scale, float64(tile.Min.Y) + float64(tile.Dy()*j)/float64(rows) + dy*scale
+		return float64(tile.Min.X) + float64(tile.Dx()*i)/float64(cols) + float64(dx*scale), float64(tile.Min.Y) + float64(tile.Dy()*j)/float64(rows) + float64(dy*scale)
 	}
 	round := func(v float64) int { return int(math.Round(v)) }
 	c.jellyGen++

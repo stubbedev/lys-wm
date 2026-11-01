@@ -38,7 +38,7 @@ func FixedFromFloat(f float64) Fixed {
 }
 
 func (f Fixed) Float() float64 {
-	return float64(f) / 256
+	return float64(float64(f) / 256)
 }
 
 const (

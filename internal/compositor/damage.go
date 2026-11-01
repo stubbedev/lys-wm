@@ -114,7 +114,7 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	}
 	sx, sy := float32(dst.Dx())/float32(src.Dx()), float32(dst.Dy())/float32(src.Dy())
 	point := func(v [2]float32) [2]float32 {
-		return [2]float32{float32(dst.Min.X) + (v[0]-float32(src.Min.X))*sx, float32(dst.Min.Y) + (v[1]-float32(src.Min.Y))*sy}
+		return [2]float32{float32(dst.Min.X) + float32((v[0]-float32(src.Min.X))*sx), float32(dst.Min.Y) + float32((v[1]-float32(src.Min.Y))*sy)}
 	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]

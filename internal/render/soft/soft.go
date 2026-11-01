@@ -446,7 +446,7 @@ func sampleMap(out []int, n int, a render.Axis, src render.FRect, size image.Poi
 		if a.Reversed {
 			f = 1 - f
 		}
-		s := int(math.Floor(origin + f*extent))
+		s := int(math.Floor(origin + float64(f*extent)))
 		out = append(out, min(max(s, 0), limit-1))
 	}
 	return out

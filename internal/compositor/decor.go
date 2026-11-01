@@ -82,9 +82,9 @@ type stopsKey struct {
 
 func (b Border) line(r image.Rectangle) (from, to [2]float32) {
 	s, c := math.Sincos(b.angle * math.Pi / 180)
-	cx, cy := float64(r.Min.X+r.Max.X)/2, float64(r.Min.Y+r.Max.Y)/2
+	cx, cy := float64(float64(r.Min.X+r.Max.X)/2), float64(float64(r.Min.Y+r.Max.Y)/2)
 	h := math.Abs(float64(r.Dx())/2*c) + math.Abs(float64(r.Dy())/2*s)
-	return [2]float32{float32(cx - h*c), float32(cy - h*s)}, [2]float32{float32(cx + h*c), float32(cy + h*s)}
+	return [2]float32{float32(cx - float64(h*c)), float32(cy - float64(h*s))}, [2]float32{float32(cx + float64(h*c)), float32(cy + float64(h*s))}
 }
 
 type Decor struct {

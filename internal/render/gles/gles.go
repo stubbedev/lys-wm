@@ -950,8 +950,8 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		var s [2]float64
 		s[h.Source] = flip(corner[0], h.Reversed)
 		s[v.Source] = flip(corner[1], v.Reversed)
-		verts[i*4+2] = float32((src.X + s[0]*src.W) / float64(tex.size.X))
-		verts[i*4+3] = float32((src.Y + s[1]*src.H) / float64(tex.size.Y))
+		verts[i*4+2] = float32((src.X + float64(s[0]*src.W)) / float64(tex.size.X))
+		verts[i*4+3] = float32((src.Y + float64(s[1]*src.H)) / float64(tex.size.Y))
 	}
 	p.draw(dst)
 }

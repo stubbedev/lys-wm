@@ -355,7 +355,7 @@ func (t Tree) Resize(id WindowID, area image.Rectangle, d Direction, delta int) 
 			return t, false, nil
 		}
 		perPixel := float64(len(g.Children)) / float64(span)
-		floor := minTile * perPixel
+		floor := float64(minTile * perPixel)
 		dr := float64(delta) * perPixel
 		dr = min(dr, max(0, g.Children[j].Ratio-floor))
 		dr = max(dr, -max(0, g.Children[i].Ratio-floor))
