@@ -30,7 +30,9 @@ Add the flake as an input and enable the module:
 
 `programs.lys-wm.enable` installs lys-wm, offers it as a session to display
 managers such as greetd (`lys-wm --systemd`), enables the portals that
-`lys-wm-portals.conf` falls back to, polkit and the rest of a Wayland session.
+`lys-wm-portals.conf` falls back to, polkit, `foot` for the built-in
+`SUPER + Return` bind and the rest of a Wayland session; set
+`programs.foot.enable = false` to leave it out.
 lys-shell, which the portal config prefers, is yours to add. GPU drivers come
 from `/run/opengl-driver`, as for every NixOS compositor.
 `programs.lys-wm.package` picks another build.
@@ -38,7 +40,8 @@ from `/run/opengl-driver`, as for every NixOS compositor.
 ## Nix on another distribution
 
 With standalone home-manager, import `lys-wm.homeManagerModules.default` and set
-`programs.lys-wm.enable = true`. It installs lys-wm and links
+`programs.lys-wm.enable = true`. It installs lys-wm and `foot` (set
+`programs.foot.enable = false` to leave it out), and links
 `lys-wm-session.target` into `~/.config/systemd/user`, because the user manager
 there does not search the Nix profile for units. The display manager, portals
 and GPU drivers stay the host's, so point the host's display manager at
@@ -62,8 +65,8 @@ sudo apt install ./lys-wm_<version>_amd64.deb
 The package depends on `libegl1`, `libgles2`, `libgbm1`, `libinput10`,
 `libxkbcommon0`, `hwdata` and `fonts-dejavu-core`. It recommends `xwayland`,
 `xdg-desktop-portal`, `xdg-desktop-portal-wlr`, `xdg-desktop-portal-gtk`,
-`lys-shell`, `libvulkan1` and `mesa-vulkan-drivers`. CI installs and runs it on
-`ubuntu-latest`.
+`lys-shell`, `foot`, `libvulkan1` and `mesa-vulkan-drivers`. CI installs and runs
+it on `ubuntu-latest`.
 
 `lys-shell` is not in the distribution's archive: take its package from
 [its releases](https://github.com/stubbedev/lys-shell/releases). Without it,
@@ -79,7 +82,7 @@ sudo dnf install ./lys-wm-<version>-1.fc<release>.x86_64.rpm
 The package requires `libglvnd-egl`, `libglvnd-gles`, `mesa-libgbm`, `libinput`,
 `libxkbcommon`, `hwdata` and `dejavu-sans-fonts`. It recommends
 `xorg-x11-server-Xwayland`, `xdg-desktop-portal`, `xdg-desktop-portal-wlr`,
-`xdg-desktop-portal-gtk`, `lys-shell`, `vulkan-loader` and
+`xdg-desktop-portal-gtk`, `lys-shell`, `foot`, `vulkan-loader` and
 `mesa-vulkan-drivers`. It is built, installed and run on `fedora:latest`, and
 the file name carries that release. What the Debian section says about
 `lys-shell` and the portal backends holds here too.

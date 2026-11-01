@@ -32,6 +32,7 @@ in {
     config = lib.mkIf cfg.enable (lib.mkMerge [
       {
         environment.systemPackages = [cfg.package];
+        programs.foot.enable = lib.mkDefault true;
         systemd.packages = [cfg.package];
         services.displayManager.sessionPackages = [cfg.package];
         xdg.portal = {
@@ -61,6 +62,7 @@ in {
 
     config = lib.mkIf cfg.enable {
       home.packages = [cfg.package];
+      programs.foot.enable = lib.mkDefault true;
       xdg.configFile."systemd/user/${sessionTarget}".source = "${cfg.package}/share/systemd/user/${sessionTarget}";
     };
   };

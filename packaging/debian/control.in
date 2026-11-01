@@ -27,6 +27,7 @@ Recommends:
  xdg-desktop-portal-wlr,
  xdg-desktop-portal-gtk,
  lys-shell,
+ foot,
  libvulkan1,
  mesa-vulkan-drivers
 Description: pure-Go tiling Wayland compositor for the lys desktop

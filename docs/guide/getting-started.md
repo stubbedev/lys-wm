@@ -1,8 +1,9 @@
 # Getting started
 
 [Install](./install) lys-wm first. The built-in config binds `SUPER + Return`
-to `foot`, so install that terminal too, or [change the bind](#configure) before
-you start a session.
+to `foot`. The Debian and Fedora packages recommend it and the Nix modules enable
+it; on any other install, or without recommended packages, install it too or
+[change the bind](#configure) before you start a session.
 
 ## Start it
 

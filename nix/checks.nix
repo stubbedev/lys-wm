@@ -85,6 +85,7 @@
         sessions = machine.config.services.displayManager.sessionData.desktops;
       in
         assert builtins.elem self'.packages.lys-wm machine.config.xdg.portal.configPackages;
+        assert machine.config.programs.foot.enable;
         assert machine.config.xdg.portal.wlr.enable;
         assert builtins.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals;
         assert builtins.elem "lys-wm" machine.config.services.displayManager.sessionData.sessionNames;

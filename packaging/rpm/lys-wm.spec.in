@@ -23,6 +23,7 @@ Recommends:     xdg-desktop-portal
 Recommends:     xdg-desktop-portal-wlr
 Recommends:     xdg-desktop-portal-gtk
 Recommends:     lys-shell
+Recommends:     foot
 Recommends:     vulkan-loader
 Recommends:     mesa-vulkan-drivers
 

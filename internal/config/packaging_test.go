@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 const packagingDir = "../../packaging"
@@ -89,5 +91,25 @@ func TestPackagesRecommendEveryPortalBackendTheConfigNames(t *testing.T) {
 			pkg = backend
 		}
 		assertRecommended(t, pkg)
+	}
+}
+
+func TestPackagesRecommendWhatTheBuiltInBindsRun(t *testing.T) {
+	file, err := Parse("default.yaml", Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, b := range file.Binds {
+		run, ok := b.Action.(wm.ExecAction)
+		if !ok {
+			continue
+		}
+		program, _, _ := strings.Cut(run.Command, " ")
+		assertRecommended(t, program)
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("the built-in config runs nothing")
 	}
 }
