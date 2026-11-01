@@ -1,28 +1,32 @@
-{self, ...}: {
+{
   perSystem = {
     lib,
     pkgs,
     self',
     ...
-  }: {
+  }: let
+    src = lib.fileset.toSource {
+      root = ../.;
+      fileset = lib.fileset.difference (lib.fileset.gitTracked ../.) (
+        lib.fileset.unions [
+          ../flake.nix
+          ../flake.lock
+          ../nix
+          (lib.fileset.difference ../docs ../docs/actions.md)
+        ]
+      );
+    };
+  in {
     packages = {
       default = self'.packages.lys-wm;
       lys-wm = pkgs.buildGo127Module {
         pname = "lys-wm";
         # Nix has no version to read from the source tree, so builds from a
-        # checkout are stamped with the commit date.
-        version = "0-unstable-${self.lastModifiedDate or "0"}";
+        # checkout are stamped with their source's hash: only a commit that
+        # changes the source changes the package.
+        version = "0-unstable-${lib.substring 0 8 (builtins.unsafeDiscardStringContext (baseNameOf src))}";
 
-        src = lib.fileset.toSource {
-          root = ../.;
-          fileset = lib.fileset.difference (lib.fileset.gitTracked ../.) (
-            lib.fileset.unions [
-              ../flake.nix
-              ../flake.lock
-              ../nix
-            ]
-          );
-        };
+        inherit src;
 
         # Pins the module dependencies in go.sum; `just vendor-hash` recomputes
         # it, and CI does so on Dependabot's pull requests.
