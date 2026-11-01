@@ -1,5 +1,5 @@
-// Package render defines the renderer interface that the software and GLES
-// renderers implement.
+// Package render defines the renderer interface that the software, GLES and
+// Vulkan renderers implement.
 package render
 
 import (
@@ -283,7 +283,7 @@ type TextureTarget interface {
 
 type PendingRead interface {
 	Wait() error
-	Map() ([]byte, error)
+	Map() ([]byte, int, error)
 	Release() error
 }
 

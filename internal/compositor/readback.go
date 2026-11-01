@@ -112,7 +112,7 @@ func (r *asyncRead) waited(err error) error {
 	if err != nil || r.cancelled {
 		return r.end(err)
 	}
-	pix, err := r.pending.Map()
+	pix, stride, err := r.pending.Map()
 	if err != nil {
 		return r.end(err)
 	}
@@ -124,10 +124,10 @@ func (r *asyncRead) waited(err error) error {
 		if r.cancelled {
 			return dst.Close()
 		}
-		err := dst.Write(func(data []byte, stride int) error {
+		err := dst.Write(func(data []byte, dstStride int) error {
 			row := size.X * 4
 			for y := range size.Y {
-				copy(data[y*stride:y*stride+row], pix[y*row:])
+				copy(data[y*dstStride:y*dstStride+row], pix[y*stride:])
 			}
 			return nil
 		})

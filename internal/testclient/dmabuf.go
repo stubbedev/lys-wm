@@ -23,10 +23,6 @@ import (
 const (
 	udmabufCreate   = 0x40187542
 	udmabufCloexec  = 0x01
-	dmabufSync      = 0x40086200
-	syncRead        = 1 << 0
-	syncWrite       = 1 << 1
-	syncEnd         = 1 << 2
 	feedbackVersion = 4
 	dmabufFormat    = fourcc.XRGB8888
 )
@@ -74,14 +70,6 @@ func (b *DMABUF) Pixels() []byte {
 	return pix
 }
 
-func cpuAccess(fd int, flags uint64) error {
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), dmabufSync, uintptr(unsafe.Pointer(&flags))) //nolint:gosec // DMA_BUF_IOCTL_SYNC reads the flags during the call
-	if errno != 0 {
-		return fmt.Errorf("testclient: DMA_BUF_IOCTL_SYNC %#x on fd %d: %w", flags, fd, errno)
-	}
-	return nil
-}
-
 type mapping struct {
 	fd     int
 	stride int
@@ -98,15 +86,15 @@ func mapDMABUF(fd, stride int, size image.Point) (*mapping, error) {
 }
 
 func (m *mapping) paint(p Painter) error {
-	if err := cpuAccess(m.fd, syncWrite); err != nil {
+	if err := gpu.CPUAccess(m.fd, gpu.SyncWrite); err != nil {
 		return err
 	}
 	p(m.bytes, m.stride, m.size, 0)
-	return cpuAccess(m.fd, syncWrite|syncEnd)
+	return gpu.CPUAccess(m.fd, gpu.SyncWrite|gpu.SyncEnd)
 }
 
 func (m *mapping) pixels() ([]byte, error) {
-	if err := cpuAccess(m.fd, syncRead); err != nil {
+	if err := gpu.CPUAccess(m.fd, gpu.SyncRead); err != nil {
 		return nil, err
 	}
 	row := m.size.X * 4
@@ -114,7 +102,7 @@ func (m *mapping) pixels() ([]byte, error) {
 	for y := range m.size.Y {
 		pix = append(pix, m.bytes[y*m.stride:y*m.stride+row]...)
 	}
-	return pix, cpuAccess(m.fd, syncRead|syncEnd)
+	return pix, gpu.CPUAccess(m.fd, gpu.SyncRead|gpu.SyncEnd)
 }
 
 func (m *mapping) unmap() error {

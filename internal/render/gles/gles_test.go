@@ -1,18 +1,11 @@
 package gles_test
 
 import (
-	"bytes"
 	"errors"
 	"image"
-	"os"
 	"strings"
 	"testing"
 
-	kdrm "github.com/stubbedev/lys-lib/drm"
-	"github.com/stubbedev/lys-lib/fourcc"
-	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/gles"
@@ -65,29 +58,7 @@ func framebuffer(t *testing.T, r *gles.Renderer, size image.Point) *gles.Framebu
 
 func TestOverlappingDamageBlendsOnce(t *testing.T) {
 	r := renderer(t)
-	fb, err := r.NewFramebuffer(image.Pt(4, 1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := fb.Destroy(); err != nil {
-			t.Error(err)
-		}
-	})
-	all := image.Rect(0, 0, 4, 1)
-	rendertest.Paint(t, r, fb, render.Region{all}, func(p render.Pass) { p.FillRect(all, render.Color{A: 0xff}, render.Mask{}) })
-	rendertest.Paint(t, r, fb, render.Region{image.Rect(0, 0, 3, 1), image.Rect(1, 0, 4, 1), image.Rect(1, 0, 2, 1)}, func(p render.Pass) {
-		p.FillRect(all, render.Color{R: 0x80, A: 0x80}, render.Mask{})
-	})
-	pix := make([]byte, 16)
-	if err := fb.Read(pix, 16); err != nil {
-		t.Fatal(err)
-	}
-	for x := range 4 {
-		if got := pix[4*x : 4*x+4]; got[2] < 0x7f || got[2] > 0x81 || got[3] != 0xff {
-			t.Fatalf("pixel %d is %v, want one blend of half-transparent red over black", x, got)
-		}
-	}
+	rendertest.OverlappingDamageBlendsOnce(t, r, framebuffer(t, r, rendertest.DamageSize))
 }
 
 func TestParityWithTheSoftwareRenderer(t *testing.T) {
@@ -123,121 +94,17 @@ func TestParityOnHardware(t *testing.T) {
 
 func TestDMABUFTexturesOnHardware(t *testing.T) {
 	g, node := hardware(t)
-	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unix.Close(fd)
-	lib, err := gpu.LoadGBM(gpu.PathsFromEnv(os.Getenv))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dev, err := lib.Open(fd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dev.Close()
-	bo, err := dev.Allocate(image.Pt(8, 8), fourcc.ARGB8888, nil, gpu.UseRendering)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bo.Close()
-	client, err := g.ImportFramebuffer(bo.DMABUF)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Destroy()
-	rendertest.Paint(t, g, client, render.Region{image.Rect(0, 0, 8, 8)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 8, 8), render.Color{B: 0x80, A: 0x80}, render.Mask{})
-		p.FillRect(image.Rect(0, 0, 4, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
-	})
-	if err := g.Finish(); err != nil {
-		t.Fatal(err)
-	}
-	tex, err := g.ImportTexture(bo.DMABUF)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tex.Destroy()
-	if err := tex.Update(image.Rect(0, 0, 8, 8), 32, make([]byte, 256)); err == nil {
-		t.Fatal("a dmabuf texture accepted an upload")
-	}
-	fb := framebuffer(t, g, image.Pt(16, 8))
-	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 8)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 16, 8), render.Color{G: 0xff, A: 0xff}, render.Mask{})
-		p.DrawTexture(tex, render.FRect{W: 8, H: 8}, image.Rect(8, 0, 16, 8), render.Flipped, 1, render.Mask{})
-	})
-	got := make([]byte, 16*8*4)
-	if err := fb.Read(got, 64); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		x    int
-		want [4]byte
-	}{{2, [4]byte{0, 0xff, 0, 0xff}}, {10, [4]byte{0x80, 0x7f, 0, 0xff}}, {14, [4]byte{0, 0, 0xff, 0xff}}} {
-		px := [4]byte(got[4*64+c.x*4:])
-		if !near(px, c.want) {
-			t.Errorf("x=%d: %v, want %v", c.x, px, c.want)
-		}
-	}
-}
-
-func near(a, b [4]byte) bool {
-	for i := range a {
-		if d := int(a[i]) - int(b[i]); d < -1 || d > 1 {
-			return false
-		}
-	}
-	return true
+	rendertest.DMABUFTextures(t, g, node)
 }
 
 func TestScaledDrawsKeepFlatColor(t *testing.T) {
 	g := renderer(t)
-	pix := make([]byte, 4*4*4)
-	for i := range pix {
-		pix[i] = []byte{0x20, 0x40, 0x60, 0xff}[i%4]
-	}
-	tx, err := g.NewTexture(render.ARGB8888, image.Pt(4, 4), 16, pix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Destroy()
-	fb := framebuffer(t, g, image.Pt(20, 20))
-	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 20, 20)}, func(p render.Pass) {
-		p.FillRect(image.Rect(0, 0, 20, 20), render.Color{A: 0xff}, render.Mask{})
-		p.DrawTexture(tx, render.FRect{X: 0.5, Y: 0.5, W: 3, H: 3}, image.Rect(2, 2, 12, 17), render.Rotate270, 1, render.Mask{})
-	})
-	got := make([]byte, 20*20*4)
-	if err := fb.Read(got, 80); err != nil {
-		t.Fatal(err)
-	}
-	for _, at := range []image.Point{{3, 3}, {7, 9}, {11, 16}} {
-		if px := got[at.Y*80+at.X*4:][:4]; px[0] != 0x20 || px[1] != 0x40 || px[2] != 0x60 || px[3] != 0xff {
-			t.Errorf("%v: %v", at, px)
-		}
-	}
-	if px := got[18*80+18*4:][:4]; px[0] != 0 || px[3] != 0xff {
-		t.Errorf("outside the draw: %v", px)
-	}
+	rendertest.ScaledDrawsKeepFlatColor(t, g, framebuffer(t, g, rendertest.ScaledSize))
 }
 
 func TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput(t *testing.T) {
 	g := renderer(t)
-	size := image.Pt(3840, 48)
-	fb := framebuffer(t, g, size)
-	s, buf := soft.New(), soft.NewBuffer(size.X, size.Y)
-	ring := render.Mask{
-		Keep: render.RoundRect{Rect: image.Rect(3794, 3, 3821, 45), Radius: 9},
-		Cut:  render.RoundRect{Rect: image.Rect(3797, 6, 3818, 42), Radius: 6},
-	}
-	draw := func(p render.Pass) {
-		p.Clear(render.Color{A: 0xff})
-		p.FillRect(ring.Keep.Rect, render.Color{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, ring)
-	}
-	full := render.Region{image.Rectangle{Max: size}}
-	rendertest.Paint(t, g, fb, full, draw)
-	rendertest.Paint(t, s, buf, full, draw)
-	rendertest.Compare(t, buf, fb, 1)
+	rendertest.MaskEdgesAcrossA4KOutput(t, g, framebuffer(t, g, rendertest.FourKStrip))
 }
 
 func TestReadKeepsTheStridePadding(t *testing.T) {
@@ -246,64 +113,7 @@ func TestReadKeepsTheStridePadding(t *testing.T) {
 }
 
 func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
-	g := renderer(t)
-	if !g.AsyncReads() {
-		t.Skip("this renderer reads back only synchronously")
-	}
-	target, err := g.NewAsyncTarget(image.Pt(5, 3))
-	if err != nil {
-		t.Fatal(err)
-	}
-	fb, ok := target.(*gles.Framebuffer)
-	if !ok {
-		t.Fatalf("an async target of %T", target)
-	}
-	t.Cleanup(func() {
-		if err := fb.Destroy(); err != nil {
-			t.Error(err)
-		}
-	})
-	for round := range 2 {
-		rendertest.PaintMarked(t, g, fb)
-		pending, err := fb.ReadAsync()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := fb.ReadAsync(); err == nil {
-			t.Fatal("a second read was started while one was pending")
-		}
-		rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 5, 3)}, func(p render.Pass) {
-			p.FillRect(image.Rect(0, 0, 5, 3), render.Color{R: 0xff, G: 0xff, A: 0xff}, render.Mask{})
-		})
-		if err := pending.Wait(); err != nil {
-			t.Fatal(err)
-		}
-		m, err := pending.Map()
-		if err != nil {
-			t.Fatalf("round %d: %v", round, err)
-		}
-		if _, err := pending.Map(); err == nil {
-			t.Fatal("a mapped read was mapped again")
-		}
-		got := bytes.Repeat([]byte{0xaa}, rendertest.MarkedStride*3)
-		for y := range 3 {
-			copy(got[y*rendertest.MarkedStride:], m[y*20:(y+1)*20])
-		}
-		if err := pending.Release(); err != nil {
-			t.Fatal(err)
-		}
-		rendertest.CheckMarked(t, got)
-	}
-	pending, err := fb.ReadAsync()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := errors.Join(pending.Wait(), pending.Release()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fb.ReadAsync(); err != nil {
-		t.Fatalf("a read after one released unmapped: %v", err)
-	}
+	rendertest.AsyncReadSeesItsFrame(t, renderer(t))
 }
 
 func TestMisuseFailsPrecisely(t *testing.T) {
@@ -339,95 +149,14 @@ func TestMisuseFailsPrecisely(t *testing.T) {
 	}
 }
 
-func sampleNV12(t *testing.T, g *gles.Renderer, node string, y, cb, cr byte, yuv gpu.YUVEncoding) [4]byte {
-	t.Helper()
-	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unix.Close(fd)
-	lib, err := gpu.LoadGBM(gpu.PathsFromEnv(os.Getenv))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dev, err := lib.Open(fd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dev.Close()
-	carrier, err := dev.Allocate(image.Pt(4, 24), fourcc.XRGB8888, nil, gpu.UseLinear)
-	if err != nil {
-		t.Fatalf("%s cannot allocate the linear buffer that carries the NV12 planes: %v", dev.Backend(), err)
-	}
-	defer carrier.Close()
-	plane := carrier.Planes[0]
-	stride := int(plane.Stride)
-	m, err := unix.Mmap(plane.FD, int64(plane.Offset), 24*stride, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
-	if err != nil {
-		t.Fatalf("map the NV12 carrier: %v", err)
-	}
-	for row := range 24 {
-		for col := range 16 {
-			switch {
-			case row < 16:
-				m[row*stride+col] = y
-			case col%2 == 0:
-				m[row*stride+col] = cb
-			default:
-				m[row*stride+col] = cr
-			}
-		}
-	}
-	if err := unix.Munmap(m); err != nil {
-		t.Fatal(err)
-	}
-	d := gpu.DMABUF{
-		Size:     image.Pt(16, 16),
-		Format:   fourcc.NV12,
-		Modifier: fourcc.Linear,
-		Planes:   []gpu.Plane{plane, {FD: plane.FD, Offset: plane.Offset + 16*plane.Stride, Stride: plane.Stride}},
-		YUV:      yuv,
-	}
-	tex, err := g.ImportTexture(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tex.Destroy()
-	fb := framebuffer(t, g, image.Pt(16, 16))
-	rendertest.Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 16)}, func(p render.Pass) {
-		p.DrawTexture(tex, render.FRect{W: 16, H: 16}, image.Rect(0, 0, 16, 16), render.Normal, 1, render.Mask{})
-	})
-	got := make([]byte, 16*16*4)
-	if err := fb.Read(got, 64); err != nil {
-		t.Fatal(err)
-	}
-	return [4]byte(got[8*64+8*4:])
-}
-
 func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	g, node := hardware(t)
-	px := sampleNV12(t, g, node, 126, 128, 128, gpu.YUVEncoding{})
-	for c := range 3 {
-		if d := int(px[c]) - 128; d < -4 || d > 4 {
-			t.Fatalf("mid-gray NV12 sampled as %v", px)
-		}
-	}
+	rendertest.ExternalYUV(t, g, node)
 }
 
 func TestYUVHintsSelectTheConversionOnHardware(t *testing.T) {
 	g, node := hardware(t)
-	for _, c := range []struct {
-		yuv   gpu.YUVEncoding
-		green int
-	}{
-		{gpu.YUVEncoding{Coefficients: gpu.BT601, Range: gpu.LimitedRange}, 0},
-		{gpu.YUVEncoding{Coefficients: gpu.BT709, Range: gpu.LimitedRange}, 24},
-	} {
-		px := sampleNV12(t, g, node, 81, 90, 240, c.yuv)
-		if d := int(px[1]) - c.green; d < -6 || d > 6 || px[2] < 0xf0 {
-			t.Errorf("Y=81 Cb=90 Cr=240 tagged %+v sampled as %v, want green near %d and full red", c.yuv, px, c.green)
-		}
-	}
+	rendertest.YUVHintsSelectTheConversion(t, g, node)
 }
 
 func TestAPinnedThreadKeepsTheContextCurrentBetweenFrames(t *testing.T) {
@@ -566,30 +295,7 @@ func TestASteadyTextureUpdateDoesNotAllocate(t *testing.T) {
 
 func TestFrameFencesReportWhenTheGPUFinishedOnHardware(t *testing.T) {
 	g, _ := hardware(t)
-	if !g.NativeFences() {
-		t.Skip("no native fences on this driver")
-	}
-	fb := framebuffer(t, g, rendertest.Size)
-	start := backend.Now()
-	rendertest.Paint(t, g, fb, render.Region{{Max: rendertest.Size}}, func(p render.Pass) {
-		p.FillRect(image.Rectangle{Max: rendertest.Size}, render.Color{G: 0xff, A: 0xff}, render.Mask{})
-	})
-	fd, err := g.SyncFile()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unix.Close(fd)
-	if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 1000); err != nil {
-		t.Fatal(err)
-	}
-	done, ok, err := kdrm.SyncFileSignalTime(fd)
-	if err != nil || !ok {
-		t.Fatalf("a signalled frame fence: %v, %v", ok, err)
-	}
-	if done < start || done > backend.Now() {
-		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, backend.Now())
-	}
-	t.Logf("the GPU finished the frame %v after it started", done-start)
+	rendertest.FrameFencesReportTheGPUFinishing(t, g)
 }
 
 func parity(t *testing.T, g *gles.Renderer) {

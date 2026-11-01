@@ -79,13 +79,13 @@ func (p *pendingRead) Wait() error {
 	return p.fence.ClientWait()
 }
 
-func (p *pendingRead) Map() ([]byte, error) {
+func (p *pendingRead) Map() ([]byte, int, error) {
 	f := p.f
 	if p.mapped {
-		return nil, fmt.Errorf("gles: the %v framebuffer's pixel buffer is already mapped", f.size)
+		return nil, 0, fmt.Errorf("gles: the %v framebuffer's pixel buffer is already mapped", f.size)
 	}
 	if err := f.r.enter(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	gl := f.r.gl
 	gl.BindBuffer(gpu.PixelPackBuffer, f.pbo)
@@ -96,10 +96,10 @@ func (p *pendingRead) Map() ([]byte, error) {
 		err = errors.Join(fmt.Errorf("gles: map the %v framebuffer's pixel buffer", f.size), err)
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	p.mapped = true
-	return m, nil
+	return m, f.size.X * 4, nil
 }
 
 func (p *pendingRead) Release() error {

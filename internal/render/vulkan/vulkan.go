@@ -36,10 +36,12 @@ var formats = []struct {
 var yuvFormats = []fourcc.Format{fourcc.NV12, fourcc.P010}
 
 type Renderer struct {
-	d    *lgpu.Device
-	node uint64
-	pass *pass
-	idle pass
+	d           *lgpu.Device
+	node        uint64
+	pass        *pass
+	idle        pass
+	asyncProbed bool
+	asyncReads  bool
 }
 
 func Open(node uint64) (*Renderer, error) {
@@ -51,6 +53,16 @@ func Open(node uint64) (*Renderer, error) {
 }
 
 func OpenDefault() (*Renderer, error) {
+	nodes, err := filepath.Glob("/dev/dri/renderD*")
+	if err != nil {
+		return nil, fmt.Errorf("vulkan: list render nodes: %w", err)
+	}
+	slices.Sort(nodes)
+	for _, n := range nodes {
+		if r, err := OpenRenderNode(n); err == nil {
+			return r, nil
+		}
+	}
 	d, err := lgpu.Open()
 	if err != nil {
 		return nil, fmt.Errorf("vulkan: %w", err)
@@ -140,8 +152,10 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 }
 
 type Target struct {
-	r *Renderer
-	t *lgpu.Target
+	r       *Renderer
+	t       *lgpu.Target
+	back    *readback
+	reading *pendingRead
 }
 
 func (t *Target) Size() image.Point {
@@ -168,6 +182,14 @@ func (t *Target) Read(pix []byte, stride int) error {
 }
 
 func (t *Target) Destroy() error {
+	if t.reading != nil {
+		t.reading.t = nil
+		t.reading = nil
+	}
+	if t.back != nil {
+		t.back.close()
+		t.back = nil
+	}
 	t.t.Close()
 	return nil
 }
@@ -206,6 +228,18 @@ func (r *Renderer) RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier,
 	return r.d.TargetModifiers(format)
 }
 
+func (r *Renderer) ExportModifiers(format fourcc.Format) ([]fourcc.Modifier, error) {
+	return r.d.Modifiers(format)
+}
+
+func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (render.ReadTarget, gpu.DMABUF, error) {
+	t, err := r.d.NewTarget(size.X, size.Y, format, modifiers)
+	if err != nil {
+		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, err)
+	}
+	return &Target{r: r, t: t}, gpu.FromDmabuf(t.Dmabuf()), nil
+}
+
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
 	t, err := r.d.ImportTarget(b.Dmabuf())
 	if err != nil {
@@ -214,8 +248,18 @@ func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
 	return &Target{r: r, t: t}, nil
 }
 
+func sitingOf(s gpu.Siting) lgpu.Siting {
+	switch s {
+	case gpu.SitedAt0:
+		return lgpu.SitedAt0
+	case gpu.SitedAtHalf:
+		return lgpu.SitedAtHalf
+	}
+	return lgpu.SitingDefault
+}
+
 func ycbcrOf(e gpu.YUVEncoding) lgpu.YCbCr {
-	var c lgpu.YCbCr
+	c := lgpu.YCbCr{Chroma: lgpu.ChromaSiting{X: sitingOf(e.Chroma.Horizontal), Y: sitingOf(e.Chroma.Vertical)}}
 	switch e.Coefficients {
 	case gpu.BT709:
 		c.Matrix = lgpu.BT709

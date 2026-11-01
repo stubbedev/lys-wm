@@ -274,10 +274,9 @@ func (r *cursorRead) waited(err error) error {
 		hw.reading = nil
 	}
 	if current && err == nil {
-		var pix []byte
-		if pix, err = r.pending.Map(); err == nil {
-			size := r.target.Size()
-			err = hw.plane.LoadCursor(pix, size.X*4, size, r.hotspot)
+		pix, stride, mapErr := r.pending.Map()
+		if err = mapErr; err == nil {
+			err = hw.plane.LoadCursor(pix, stride, r.target.Size(), r.hotspot)
 		}
 	}
 	keep := current && hw.target == nil
