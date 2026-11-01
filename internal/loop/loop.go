@@ -23,6 +23,8 @@ const (
 	Error    Events = unix.EPOLLERR
 )
 
+const edgeTriggered Events = unix.EPOLLET
+
 var ErrClosed = errors.New("loop: closed")
 
 type token uint64
@@ -52,6 +54,7 @@ type Loop struct {
 	stopped bool
 	closed  bool
 	wakeups int
+	batch   uint64
 	busy    time.Duration
 
 	mailboxFD int
@@ -164,6 +167,8 @@ type Timer struct {
 	loop  *Loop
 	token token
 	fd    int
+	armed bool
+	set   uint64
 }
 
 func (l *Loop) AddTimer(handler func() error) (*Timer, error) {
@@ -171,41 +176,54 @@ func (l *Loop) AddTimer(handler func() error) (*Timer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loop: timerfd_create: %w", err)
 	}
-	var buf [8]byte
-	t, err := l.add(fd, true, Readable, func(Events) error {
-		if _, err := unix.Read(fd, buf[:]); err != nil {
-			if errors.Is(err, unix.EAGAIN) {
-				return nil
-			}
-			return fmt.Errorf("loop: read timerfd %d: %w", fd, err)
+	timer := &Timer{loop: l, fd: fd}
+	timer.token, err = l.add(fd, true, Readable|edgeTriggered, func(Events) error {
+		if timer.set == l.batch {
+			return nil
 		}
+		timer.armed = false
 		return handler()
 	})
 	if err != nil {
 		_ = unix.Close(fd)
 		return nil, err
 	}
-	return &Timer{loop: l, token: t, fd: fd}, nil
+	return timer, nil
 }
 
 func (t *Timer) Arm(d time.Duration) error {
 	if d <= 0 {
 		d = 1
 	}
-	return t.set(unix.NsecToTimespec(d.Nanoseconds()))
+	if err := t.settime(unix.NsecToTimespec(d.Nanoseconds())); err != nil {
+		return err
+	}
+	t.armed = true
+	return nil
 }
 
 func (t *Timer) Disarm() error {
-	return t.set(unix.Timespec{})
+	if !t.armed {
+		if _, ok := t.loop.sources[t.token]; !ok {
+			return ErrClosed
+		}
+		return nil
+	}
+	if err := t.settime(unix.Timespec{}); err != nil {
+		return err
+	}
+	t.armed = false
+	return nil
 }
 
-func (t *Timer) set(ts unix.Timespec) error {
+func (t *Timer) settime(ts unix.Timespec) error {
 	if _, ok := t.loop.sources[t.token]; !ok {
 		return ErrClosed
 	}
 	if err := unix.TimerfdSettime(t.fd, 0, &unix.ItimerSpec{Value: ts}, nil); err != nil {
 		return fmt.Errorf("loop: timerfd_settime on fd %d: %w", t.fd, err)
 	}
+	t.set = t.loop.batch
 	return nil
 }
 
@@ -350,6 +368,7 @@ func (l *Loop) Run() error {
 			return fmt.Errorf("loop: epoll_wait: %w", err)
 		}
 		l.wakeups++
+		l.batch++
 		for i := range l.events[:n] {
 			if l.stopped {
 				break

@@ -452,3 +452,111 @@ func TestBusyCountsWorkButNotWaiting(t *testing.T) {
 		t.Fatalf("busy %v after %v of work and %v of waiting", busy, work, wait)
 	}
 }
+
+func expiredTimers(t *testing.T, l *Loop, n int, fired func(int)) []*Timer {
+	t.Helper()
+	timers := make([]*Timer, n)
+	for i := range timers {
+		timer, err := l.AddTimer(func() error {
+			fired(i)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := timer.Arm(1); err != nil {
+			t.Fatal(err)
+		}
+		timers[i] = timer
+	}
+	time.Sleep(5 * time.Millisecond)
+	return timers
+}
+
+func stopAfter(t *testing.T, l *Loop, d time.Duration) {
+	t.Helper()
+	stop, err := l.AddTimer(func() error {
+		l.Stop()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stop.Arm(d); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestATimerDisarmedEarlierInTheSameWakeupDoesNotFire(t *testing.T) {
+	l := newLoop(t)
+	fires := 0
+	var timers []*Timer
+	timers = expiredTimers(t, l, 2, func(i int) {
+		fires++
+		if err := timers[1-i].Disarm(); err != nil {
+			t.Error(err)
+		}
+	})
+	stopAfter(t, l, 30*time.Millisecond)
+	run(t, l)
+	if fires != 1 {
+		t.Fatalf("%d timers fired, want the other disarmed", fires)
+	}
+}
+
+func TestATimerReArmedEarlierInTheSameWakeupWaitsForItsNewDeadline(t *testing.T) {
+	l := newLoop(t)
+	fires := 0
+	var timers []*Timer
+	timers = expiredTimers(t, l, 2, func(i int) {
+		fires++
+		if err := timers[1-i].Arm(time.Hour); err != nil {
+			t.Error(err)
+		}
+	})
+	stopAfter(t, l, 30*time.Millisecond)
+	run(t, l)
+	if fires != 1 {
+		t.Fatalf("%d timers fired, want the other waiting an hour", fires)
+	}
+}
+
+func TestATimerThatFiredFiresAgainWhenArmedLater(t *testing.T) {
+	l := newLoop(t)
+	fires := 0
+	again, err := l.AddTimer(func() error {
+		fires++
+		if fires == 2 {
+			l.Stop()
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := l.AddTimer(func() error { return again.Arm(time.Millisecond) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(again.Arm(time.Millisecond), later.Arm(20*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	run(t, l)
+	if fires != 2 {
+		t.Fatalf("timer fired %d times", fires)
+	}
+}
+
+func TestDisarmAfterRemoveIsAnError(t *testing.T) {
+	l := newLoop(t)
+	timer, err := l.AddTimer(func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := timer.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if err := timer.Disarm(); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Disarm after Remove = %v, want ErrClosed", err)
+	}
+}
