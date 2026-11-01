@@ -256,12 +256,18 @@ allocates buffers that plane can show.
 Composited frames are 8-bit XRGB8888 unless an output rule asks for
 `bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
 because XR30 primaries break screen sharing and some fullscreen games on
-some drivers, NVIDIA's among them. A 10-bit output allocates its buffers in
-the first opaque 10-bit format its primary plane scans out and the renderer
-draws, XR30 and then XB30 (NVIDIA's planes offer only XB30, and its GBM
-cannot allocate XR30 at all; #215), with the plane's modifiers for that
-format, and test-commits the modeset first; a plane, allocator or kernel
-that refuses it leaves the output at 8 bits with the refusal logged.
+some drivers, NVIDIA's among them. A 10-bit output tries each opaque 10-bit
+format its primary plane scans out and the renderer draws, XR30 and then XB30
+(NVIDIA's planes offer only XB30, and its GBM cannot allocate XR30 at all;
+#215), with the plane's modifiers for that format: it allocates the buffers
+and test-commits the modeset, and a refusal moves on to the next format with
+the refusal logged, because a plane's format list does not say what the
+allocator or the kernel takes. Only when every format is refused does the
+output stay at 8 bits on the frames it already shows, with each refusal
+logged. Scanout memory stays GBM's on
+both renderers: the formats a plane offers on NVIDIA allocate there, so a
+fallback to Vulkan-exported memory, which `xe` refuses, would have nothing to
+serve.
 
 A boot splash hands its last frame over without a black one in between
 (#204). An output keeps the CRTC its connector is routed to, and the primary

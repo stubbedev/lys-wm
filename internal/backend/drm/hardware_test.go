@@ -102,19 +102,25 @@ func gammaRamps(t *testing.T, o *Output) {
 
 func deepFrames(t *testing.T, o *Output) {
 	t.Helper()
-	l, ok := o.primary.depth(backend.Depth10)
-	if !ok {
+	layouts := o.primary.layouts(backend.Depth10)
+	if len(layouts) == 0 {
 		t.Logf("%s scans out no 10-bit format the renderer draws", o.Name())
 		return
 	}
-	s, err := o.b.alloc.allocate(image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay)), l.format, l.modifiers)
-	if err != nil {
-		t.Fatalf("%s offers %v with %v for 10-bit frames, but they do not allocate: %v", o.Name(), l.format, l.modifiers, err)
+	size := image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))
+	for _, l := range layouts {
+		s, err := o.b.alloc.allocate(size, l.format, l.modifiers)
+		if err != nil {
+			t.Logf("%s offers %v with %v for 10-bit frames, but they do not allocate: %v", o.Name(), l.format, l.modifiers, err)
+			continue
+		}
+		if err := s.free(o.b.dev); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%s draws 10-bit frames as %v", o.Name(), l.format)
+		return
 	}
-	if err := s.free(o.b.dev); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("%s draws 10-bit frames as %v", o.Name(), l.format)
+	t.Fatalf("%s allocates none of the 10-bit layouts it offers: %+v", o.Name(), layouts)
 }
 
 func colorTransform(t *testing.T, o *Output) {

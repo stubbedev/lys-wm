@@ -73,7 +73,8 @@ type fakeDevice struct {
 	refuseCursor   bool
 	refuseGamma    bool
 	noCTM          bool
-	deep           fourcc.Format
+	deep           []fourcc.Format
+	refuseFrames   func(fb uint64) bool
 	refuseAsync    bool
 	refusePowerOff bool
 	refuseModesets bool
@@ -152,11 +153,11 @@ func (f *fakeDevice) Planes() ([]uint32, error) { return []uint32{40, 41, 42, 43
 
 func (f *fakeDevice) Plane(id uint32) (kdrm.Plane, error) {
 	formats := []fourcc.Format{scanoutFormat}
-	switch {
-	case id == 43:
+	switch id {
+	case 43:
 		formats = []fourcc.Format{cursorFormat}
-	case f.deep != 0:
-		formats = append(formats, f.deep)
+	default:
+		formats = append(formats, f.deep...)
 	}
 	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01}[id], Formats: formats}, nil
 }
@@ -220,17 +221,20 @@ func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 	if id != inFormatsBlob {
 		return nil, fmt.Errorf("no blob %d", id)
 	}
-	formats, mask := []uint32{uint32(scanoutFormat), 0}, uint64(1)
-	if f.deep != 0 {
-		formats, mask = []uint32{uint32(scanoutFormat), uint32(f.deep)}, 3
+	formats := []uint32{uint32(scanoutFormat)}
+	for _, format := range f.deep {
+		formats = append(formats, uint32(format))
 	}
+	mask := uint64(1)<<len(formats) - 1
+	modifiersAt := uint32(24 + (len(formats)*4+7)/8*8)
 	b := binary.NativeEndian.AppendUint32(nil, 1)
-	for _, v := range []uint32{0, uint32(1 + mask/2), 24, 2, 32} {
+	for _, v := range []uint32{0, uint32(len(formats)), 24, 2, modifiersAt} {
 		b = binary.NativeEndian.AppendUint32(b, v)
 	}
 	for _, v := range formats {
 		b = binary.NativeEndian.AppendUint32(b, v)
 	}
+	b = append(b, make([]byte, int(modifiersAt)-len(b))...)
 	for _, m := range []uint64{0, 7} {
 		b = binary.NativeEndian.AppendUint64(b, mask)
 		b = binary.NativeEndian.AppendUint64(b, 0)
@@ -322,7 +326,7 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
 	active, setsActive := c.values[[2]uint32{10, propActive}]
-	if f.refuseCursor && c.values[[2]uint32{43, propFB}] != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 {
+	if f.refuseCursor && c.values[[2]uint32{43, propFB}] != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 || f.refuseFrames != nil && f.refuseFrames(c.values[[2]uint32{40, propFB}]) {
 		return unix.EINVAL
 	}
 	if flags&kdrm.AtomicTestOnly == 0 && f.failCommits != nil {
@@ -348,11 +352,13 @@ func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
 }
 
 type fakeAlloc struct {
-	formats []fourcc.Format
-	next    uint32
-	freed   int
-	soft    *soft.Renderer
-	fences  []int
+	formats    []fourcc.Format
+	next       uint32
+	freed      int
+	soft       *soft.Renderer
+	fences     []int
+	buffersFor map[fourcc.Format]int
+	fbFormats  map[uint64]fourcc.Format
 }
 
 func (a *fakeAlloc) renderer() render.Renderer { return a.soft }
@@ -365,8 +371,16 @@ func (a *fakeAlloc) allocate(size image.Point, format fourcc.Format, modifiers [
 	if !slices.Equal(modifiers, []fourcc.Modifier{0, 7}) {
 		return nil, fmt.Errorf("allocated with modifiers %v", modifiers)
 	}
+	if limit, limited := a.buffersFor[format]; limited && limit == 0 {
+		return nil, fmt.Errorf("the allocator refuses %v", format)
+	} else if limited {
+		a.buffersFor[format] = limit - 1
+	}
 	a.formats = append(a.formats, format)
 	a.next++
+	if a.fbFormats != nil {
+		a.fbFormats[uint64(900+a.next)] = format
+	}
 	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, release: func() error { a.freed++; return nil }}, nil
 }
 
@@ -672,7 +686,7 @@ func TestTenBitFramesNeedAPlaneThatScansThemOut(t *testing.T) {
 
 	for _, format := range []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010} {
 		r = boot(t, func(d *fakeDevice) allocator {
-			d.deep = format
+			d.deep = []fourcc.Format{format}
 			return &fakeAlloc{soft: soft.New()}
 		})
 		o = r.b.Outputs()[0]
@@ -690,6 +704,117 @@ func TestTenBitFramesNeedAPlaneThatScansThemOut(t *testing.T) {
 	r.dev.refuseModesets = true
 	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[1]), Depth: backend.Depth10}); !errors.Is(err, backend.ErrDepthUnsupported) {
 		t.Fatalf("a 10-bit modeset the kernel refuses: %v", err)
+	}
+}
+
+func bootDeep(t *testing.T, alloc *fakeAlloc) (*rig, *Output, backend.OutputState) {
+	t.Helper()
+	alloc.soft = soft.New()
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.deep = deepFormats
+		return alloc
+	})
+	o := r.b.Outputs()[0]
+	r.alloc.formats = nil
+	return r, o, backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[0]), Depth: backend.Depth10}
+}
+
+func TestTenBitFramesMoveToTheNextFormatWhenTheAllocatorRefuses(t *testing.T) {
+	r, o, deep := bootDeep(t, &fakeAlloc{buffersFor: map[fourcc.Format]int{fourcc.XRGB2101010: 1}})
+	freed := r.alloc.freed
+	if err := o.Commit(deep); err != nil {
+		t.Fatalf("a plane with a second 10-bit format: %v", err)
+	}
+	want := []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010, fourcc.XBGR2101010}
+	if !slices.Equal(r.alloc.formats, want) || o.State() != deep {
+		t.Fatalf("allocated %v and left state %+v, want %v", r.alloc.formats, o.State(), want)
+	}
+	if len(o.buffers) != buffersPerOut || r.alloc.freed != freed+buffersPerOut+1 {
+		t.Fatalf("%d buffers held and %d freed after the refused format", len(o.buffers), r.alloc.freed-freed)
+	}
+	if len(r.reports) != 1 || !strings.Contains(r.reports[0].Error(), "the allocator refuses "+fourcc.XRGB2101010.String()) {
+		t.Fatalf("reports %v, want the refused format named once", r.reports)
+	}
+}
+
+func TestTenBitFramesMoveToTheNextFormatWhenTheKernelRefuses(t *testing.T) {
+	alloc := &fakeAlloc{fbFormats: map[uint64]fourcc.Format{}}
+	r, o, deep := bootDeep(t, alloc)
+	r.dev.refuseFrames = func(fb uint64) bool { return alloc.fbFormats[fb] == fourcc.XRGB2101010 }
+	before := len(r.dev.commits)
+	if err := o.Commit(deep); err != nil {
+		t.Fatalf("a plane with a second 10-bit format: %v", err)
+	}
+	want := []fourcc.Format{fourcc.XRGB2101010, fourcc.XRGB2101010, fourcc.XBGR2101010, fourcc.XBGR2101010}
+	if !slices.Equal(r.alloc.formats, want) || o.State() != deep {
+		t.Fatalf("allocated %v and left state %+v, want %v", r.alloc.formats, o.State(), want)
+	}
+	tests := 0
+	for _, c := range r.dev.commits[before:] {
+		if c.flags&kdrm.AtomicTestOnly != 0 && c.flags&kdrm.AtomicAllowModeset != 0 {
+			tests++
+		}
+	}
+	if tests != 2 {
+		t.Fatalf("%d modesets tested, want one per format", tests)
+	}
+	if len(r.reports) != 1 {
+		t.Fatalf("reports %v, want the refused format named once", r.reports)
+	}
+}
+
+func TestTenBitFramesRefusedEverywhereKeepTheFramesOnScreen(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		alloc    *fakeAlloc
+		refusal  string
+		byKernel bool
+	}{
+		{name: "by the allocator", alloc: &fakeAlloc{buffersFor: map[fourcc.Format]int{fourcc.XRGB2101010: 0, fourcc.XBGR2101010: 0}}, refusal: "the allocator refuses "},
+		{name: "by the kernel", alloc: &fakeAlloc{fbFormats: map[uint64]fourcc.Format{}}, refusal: "", byKernel: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, o, deep := bootDeep(t, tc.alloc)
+			if tc.byKernel {
+				r.dev.refuseFrames = func(fb uint64) bool { return slices.Contains(deepFormats, tc.alloc.fbFormats[fb]) }
+			}
+			depth8, buffers, modeBlob := o.State(), slices.Clone(o.buffers), o.modeBlob
+			blobs, destroyed := r.dev.blobs, len(r.dev.destroyed)
+			err := o.Commit(deep)
+			if !errors.Is(err, backend.ErrDepthUnsupported) {
+				t.Fatalf("no 10-bit format works: %v", err)
+			}
+			for _, format := range deepFormats {
+				if !strings.Contains(err.Error(), tc.refusal+format.String()) {
+					t.Fatalf("the error does not name %v: %v", format, err)
+				}
+			}
+			if r.dev.blobs != blobs+1 || len(r.dev.destroyed) != destroyed+1 || o.modeBlob != modeBlob {
+				t.Fatalf("the refused mode's blob: %d created, %d destroyed, current %d was %d", r.dev.blobs-blobs, len(r.dev.destroyed)-destroyed, o.modeBlob, modeBlob)
+			}
+			if o.State() != depth8 || !slices.Equal(o.buffers, buffers) {
+				t.Fatalf("state %+v and buffers %v after the refusal, want the 8-bit frames untouched", o.State(), o.buffers)
+			}
+			allocated := len(r.alloc.formats)
+			if err := o.Commit(depth8); err != nil {
+				t.Fatalf("staying at 8 bits: %v", err)
+			}
+			if len(r.alloc.formats) != allocated {
+				t.Fatalf("staying at 8 bits allocated %v", r.alloc.formats[allocated:])
+			}
+		})
+	}
+}
+
+func TestEightBitFramesTryOnlyTheirOneFormat(t *testing.T) {
+	r, o, _ := bootDeep(t, &fakeAlloc{buffersFor: map[fourcc.Format]int{scanoutFormat: 2}})
+	state := o.State()
+	err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[1])})
+	if err == nil || errors.Is(err, backend.ErrDepthUnsupported) {
+		t.Fatalf("no 8-bit buffers: %v", err)
+	}
+	if len(r.alloc.formats) != 0 || o.State() != state || len(o.buffers) != buffersPerOut {
+		t.Fatalf("allocated %v and left state %+v with %d buffers after the 8-bit refusal", r.alloc.formats, o.State(), len(o.buffers))
 	}
 }
 

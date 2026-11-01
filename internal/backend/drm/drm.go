@@ -120,17 +120,16 @@ type plane struct {
 	kind      planeKind
 	possible  uint32
 	modifiers []fourcc.Modifier
-	deep      layout
-	deepOK    bool
+	deep      []layout
 	clients   []gpu.FormatModifier
 	taken     bool
 }
 
-func (p *plane) depth(d backend.BitDepth) (layout, bool) {
+func (p *plane) layouts(d backend.BitDepth) []layout {
 	if d == backend.Depth10 {
-		return p.deep, p.deepOK
+		return p.deep
 	}
-	return layout{format: scanoutFormat, modifiers: p.modifiers}, true
+	return []layout{{format: scanoutFormat, modifiers: p.modifiers}}
 }
 
 var (
@@ -287,17 +286,19 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	return b, nil
 }
 
-func deepLayout(formats []fourcc.Format, blob []byte, renderable []layout) (layout, bool, error) {
+func deepLayouts(formats []fourcc.Format, blob []byte, renderable []layout) ([]layout, error) {
+	var layouts []layout
 	for _, r := range renderable {
 		if !slices.Contains(formats, r.format) {
 			continue
 		}
 		if blob == nil {
-			return layout{format: r.format}, true, nil
+			layouts = append(layouts, layout{format: r.format})
+			continue
 		}
 		scanable, err := kdrm.Modifiers(blob, r.format)
 		if err != nil {
-			return layout{}, false, err
+			return nil, err
 		}
 		both := layout{format: r.format}
 		for _, m := range scanable {
@@ -306,10 +307,10 @@ func deepLayout(formats []fourcc.Format, blob []byte, renderable []layout) (layo
 			}
 		}
 		if len(both.modifiers) > 0 {
-			return both, true, nil
+			layouts = append(layouts, both)
 		}
 	}
-	return layout{}, false, nil
+	return layouts, nil
 }
 
 func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable []layout) (*plane, error) {
@@ -354,7 +355,7 @@ func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable 
 		}
 	}
 	if p.kind == primaryPlane {
-		if p.deep, p.deepOK, err = deepLayout(info.Formats, blob, deepRenderable); err != nil {
+		if p.deep, err = deepLayouts(info.Formats, blob, deepRenderable); err != nil {
 			return nil, fmt.Errorf("drm: 10-bit formats of primary plane %d: %w", id, err)
 		}
 	}
@@ -823,41 +824,76 @@ func (o *Output) State() backend.OutputState {
 }
 
 func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
-	l, ok := o.primary.depth(d)
-	if !ok {
+	layouts := o.primary.layouts(d)
+	if len(layouts) == 0 {
 		return fmt.Errorf("drm: the primary plane of %s scans out none of %v that the renderer can draw: %w", o.Name(), deepFormats, backend.ErrDepthUnsupported)
 	}
-	clear(o.tested)
 	blob, err := o.b.dev.CreateBlob(m.Bytes())
 	if err != nil {
 		return err
 	}
-	if err := o.freeBuffers(); err != nil {
-		return errors.Join(err, o.b.dev.DestroyBlob(blob))
-	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
+	refused := make([]error, 0, len(layouts))
+	for _, l := range layouts {
+		buffers, err := o.allocateBuffers(size, l)
+		if err != nil {
+			refused = append(refused, fmt.Errorf("%v buffers: %w", l.format, err))
+			continue
+		}
+		if d != backend.Depth8 && !o.b.paused {
+			if err := o.testMode(m, blob, buffers[0]); err != nil {
+				refused = append(refused, fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
+				continue
+			}
+		}
+		if len(refused) > 0 {
+			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refused...)))
+		}
+		return o.adoptMode(m, d, blob, buffers)
+	}
+	refused = append(refused, o.b.dev.DestroyBlob(blob))
+	if d == backend.Depth8 {
+		return fmt.Errorf("drm: %s keeps its current frames: %w", o.Name(), errors.Join(refused...))
+	}
+	return fmt.Errorf("drm: %s takes none of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrDepthUnsupported, errors.Join(refused...))
+}
+
+func (o *Output) allocateBuffers(size image.Point, l layout) ([]*scanout, error) {
+	buffers := make([]*scanout, 0, buffersPerOut)
 	for range buffersPerOut {
 		s, err := o.b.alloc.allocate(size, l.format, l.modifiers)
 		if err != nil {
-			if d != backend.Depth8 {
-				err = fmt.Errorf("drm: %v buffers for %s: %w: %w", l.format, o.Name(), backend.ErrDepthUnsupported, err)
-			}
-			return errors.Join(err, o.b.dev.DestroyBlob(blob), o.freeBuffers())
+			return nil, errors.Join(err, o.free(buffers))
 		}
-		o.buffers = append(o.buffers, s)
+		buffers = append(buffers, s)
 	}
+	return buffers, nil
+}
+
+func (o *Output) free(buffers []*scanout) error {
+	errs := make([]error, 0, len(buffers))
+	for _, s := range buffers {
+		errs = append(errs, s.free(o.b.dev))
+	}
+	return errors.Join(errs...)
+}
+
+func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout) error {
+	mode, modeBlob, kms := o.mode, o.modeBlob, o.kms
+	defer func() { o.mode, o.modeBlob, o.kms = mode, modeBlob, kms }()
+	o.mode, o.modeBlob, o.kms = m, blob, kmsModeset
+	o.frame(s, -1)
+	return o.test(kdrm.AtomicAllowModeset)
+}
+
+func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout) error {
+	clear(o.tested)
+	err := o.freeBuffers()
 	if o.modeBlob != 0 {
-		err = o.b.dev.DestroyBlob(o.modeBlob)
+		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 	}
-	o.mode, o.depth, o.modeBlob, o.enabled, o.kms = m, d, blob, true, kmsModeset
-	if err != nil || d == backend.Depth8 || o.b.paused {
-		return err
-	}
-	o.frame(o.buffers[0], -1)
-	if err := o.test(kdrm.AtomicAllowModeset); err != nil {
-		return fmt.Errorf("drm: %s refuses %v frames: %w: %w", o.Name(), l.format, backend.ErrDepthUnsupported, err)
-	}
-	return nil
+	o.buffers, o.mode, o.depth, o.modeBlob, o.enabled, o.kms = buffers, m, d, blob, true, kmsModeset
+	return err
 }
 
 func (o *Output) Commit(s backend.OutputState) error {
@@ -1333,12 +1369,9 @@ func (o *Output) dropScanouts() error {
 }
 
 func (o *Output) freeBuffers() error {
-	errs := []error{o.dropScanouts()}
-	for _, s := range o.buffers {
-		errs = append(errs, s.free(o.b.dev))
-	}
+	err := errors.Join(o.dropScanouts(), o.free(o.buffers))
 	o.buffers, o.drawing, o.queued, o.front = nil, nil, nil, nil
-	return errors.Join(errs...)
+	return err
 }
 
 func (o *Output) leaveOnScreen() error {
