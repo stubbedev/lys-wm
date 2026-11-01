@@ -4,7 +4,6 @@ multi-ecosystem-groups:
   actions-and-docs:
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 5
     labels:
       - "area:dependencies"
     commit-message:
