@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -71,6 +72,7 @@ type fakeDevice struct {
 	gone              bool
 	badEDID           bool
 	refuseCursor      bool
+	cursorPlaneFB     uint64
 	refuseGamma       bool
 	noCTM             bool
 	deep              []fourcc.Format
@@ -350,11 +352,19 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
 	active, setsActive := c.values[[2]uint32{10, propActive}]
-	if f.refuseCursor && c.values[[2]uint32{43, propFB}] != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 || f.refuseFrames != nil && f.refuseFrames(c.values[[2]uint32{40, propFB}]) {
+	cursorFB, setsCursor := c.values[[2]uint32{43, propFB}]
+	if !setsCursor {
+		cursorFB = f.cursorPlaneFB
+	}
+	touchesCursor := slices.ContainsFunc(slices.Collect(maps.Keys(c.values)), func(k [2]uint32) bool { return k[0] == 43 })
+	if f.refuseCursor && touchesCursor && cursorFB != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 || f.refuseFrames != nil && f.refuseFrames(c.values[[2]uint32{40, propFB}]) {
 		return unix.EINVAL
 	}
 	if flags&kdrm.AtomicTestOnly == 0 && f.failCommits != nil {
 		return f.failCommits
+	}
+	if flags&kdrm.AtomicTestOnly == 0 {
+		f.cursorPlaneFB = cursorFB
 	}
 	return nil
 }
@@ -1764,7 +1774,7 @@ func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := r.dev.commits[len(r.dev.commits)-1]
-	if fb, _, touched := cursorAt(last); !touched || fb == 0 || last.flags&kdrm.AtomicTestOnly != 0 {
+	if _, at, _ := cursorAt(last); at != image.Pt(29, 14) || last.flags&kdrm.AtomicTestOnly != 0 {
 		t.Fatalf("the cursor did not go out once the kernel took commits again: %+v", last)
 	}
 }
@@ -2093,5 +2103,156 @@ func TestASteadyFrameTouchesOnlyThePrimaryPlanesBuffer(t *testing.T) {
 	}
 	if last.values[[2]uint32{o.primary.id, propFB}] == 0 {
 		t.Fatal("a steady frame set no buffer")
+	}
+}
+
+func (r *rig) cursorCommit(what string, o *Output, act func() error) commit {
+	r.t.Helper()
+	n := len(r.dev.commits)
+	if err := act(); err != nil {
+		r.t.Fatal(err)
+	}
+	r.until(what, func() bool { return o.flipping && len(r.dev.commits) > n })
+	last := r.dev.commits[len(r.dev.commits)-1]
+	if last.flags&kdrm.AtomicTestOnly != 0 {
+		r.t.Fatalf("%s ended in a test commit", what)
+	}
+	r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
+	r.until(what+"'s flip", func() bool { return !o.flipping })
+	return last
+}
+
+func cursorProps(c commit) []uint32 {
+	var props []uint32
+	for key := range c.values {
+		if key[0] == 43 {
+			props = append(props, key[1])
+		}
+	}
+	slices.Sort(props)
+	return props
+}
+
+func sortedProps(props ...uint32) []uint32 {
+	slices.Sort(props)
+	return props
+}
+
+func TestACursorCommitCarriesOnlyWhatChanged(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	first := r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
+	if len(cursorProps(first)) != 12 {
+		t.Fatalf("the first image set %v, want every plane property", cursorProps(first))
+	}
+	cp, _ := o.CursorPlane()
+	position := sortedProps(propCRTCX, propCRTCY)
+
+	moved := r.cursorCommit("the move", o, func() error { return cp.MoveCursor(image.Pt(20, 30)) })
+	if got := cursorProps(moved); !slices.Equal(got, position) {
+		t.Fatalf("a move set %v, want only the position %v", got, position)
+	}
+	if _, at, _ := cursorAt(moved); at != image.Pt(16, 24) {
+		t.Fatalf("the move put the plane at %v", at)
+	}
+
+	again := r.cursorCommit("a new image on the same hotspot", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
+	if got, want := cursorProps(again), []uint32{propFB}; !slices.Equal(got, want) {
+		t.Fatalf("a new image set %v, want only the buffer", got)
+	}
+
+	hotspot := r.cursorCommit("a new hotspot", o, func() error { return r.setCursor(o, image.Pt(1, 2)) })
+	if got, want := cursorProps(hotspot), sortedProps(propFB, propCRTCX, propCRTCY, propHotspotX, propHotspotY); !slices.Equal(got, want) {
+		t.Fatalf("a new hotspot set %v, want %v", got, want)
+	}
+	if _, at, _ := cursorAt(hotspot); at != image.Pt(19, 28) || hotspot.values[[2]uint32{43, propHotspotX}] != 1 || hotspot.values[[2]uint32{43, propHotspotY}] != 2 {
+		t.Fatalf("the new hotspot put the plane at %v with %+v", at, hotspot.values)
+	}
+
+	hidden := r.cursorCommit("hiding", o, cp.HideCursor)
+	if got, want := cursorProps(hidden), sortedProps(propFB, propPlaneCRTC); !slices.Equal(got, want) || hidden.values[[2]uint32{43, propFB}] != 0 {
+		t.Fatalf("hiding set %v: %+v", got, hidden.values)
+	}
+
+	if err := cp.MoveCursor(image.Pt(40, 40)); err != nil {
+		t.Fatal(err)
+	}
+	if o.flipping {
+		t.Fatal("moving a hidden cursor committed")
+	}
+
+	back := r.cursorCommit("showing again", o, func() error { return r.setCursor(o, image.Pt(1, 2)) })
+	if len(cursorProps(back)) != 12 {
+		t.Fatalf("a cursor coming back set %v, want every plane property", cursorProps(back))
+	}
+	if _, at, _ := cursorAt(back); at != image.Pt(39, 38) || back.values[[2]uint32{43, propHotspotX}] != 1 {
+		t.Fatalf("the cursor came back at %v with %+v", at, back.values)
+	}
+}
+
+func TestACursorThatMovesBackBeforeItsCommitSendsNothing(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.cursorCommit("the cursor", o, func() error { return r.setCursor(o, image.Point{}) })
+	cp, _ := o.CursorPlane()
+	n := len(r.dev.commits)
+	if err := cp.MoveCursor(image.Pt(5, 5)); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the move's commit", func() bool { return o.flipping })
+	if err := errors.Join(cp.MoveCursor(image.Pt(6, 6)), cp.MoveCursor(image.Pt(5, 5))); err != nil {
+		t.Fatal(err)
+	}
+	sent := len(r.dev.commits)
+	if sent <= n {
+		t.Fatal("the first move committed nothing")
+	}
+	r.dev.flip(t, 10, 99)
+	r.until("the flip", func() bool { return !o.flipping })
+	if len(r.dev.commits) != sent || o.cursor.dirty {
+		t.Fatalf("a cursor back where the plane holds it committed %+v, dirty %v", r.dev.commits[sent:], o.cursor.dirty)
+	}
+}
+
+func TestAFailedCursorCommitKeepsItsChangesForTheNext(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.cursorCommit("the cursor", o, func() error { return r.setCursor(o, image.Point{}) })
+	cp, _ := o.CursorPlane()
+	r.dev.failCommits = unix.EBUSY
+	if err := cp.MoveCursor(image.Pt(7, 7)); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the refused move", func() bool {
+		last := r.dev.commits[len(r.dev.commits)-1]
+		_, at, _ := cursorAt(last)
+		return at == image.Pt(7, 7) && last.flags&kdrm.AtomicTestOnly == 0
+	})
+	if o.cursor.onPlane.at == image.Pt(7, 7) {
+		t.Fatal("a refused commit counted as on the plane")
+	}
+	r.dev.failCommits = nil
+	last := r.cursorCommit("the retry", o, o.flushPlanes)
+	if _, at, _ := cursorAt(last); at != image.Pt(7, 7) {
+		t.Fatalf("the retry left out the position: %+v", last.values)
+	}
+}
+
+func TestAResumedOutputSetsTheWholeCursorPlaneAgain(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.cursorCommit("the cursor", o, func() error { return r.setCursor(o, image.Pt(3, 3)) })
+	r.b.Pause()
+	if err := r.b.Resume(); err != nil {
+		t.Fatal(err)
+	}
+	n := len(r.dev.commits)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the frame after resuming", o, n)
+	last := r.dev.commits[len(r.dev.commits)-1]
+	if len(cursorProps(last)) != 12 || last.values[[2]uint32{43, propHotspotX}] != 3 {
+		t.Fatalf("the frame after resuming set %v of the cursor plane", cursorProps(last))
 	}
 }

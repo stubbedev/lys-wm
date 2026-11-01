@@ -1218,6 +1218,11 @@ func (o *Output) frame(s *scanout, fence int) {
 	o.addColor()
 }
 
+func (p *plane) setPosition(r *kdrm.Request, at image.Point) {
+	p.set(r, "CRTC_X", uint64(int64(at.X))) //nolint:gosec // signed plane positions travel as two's complement
+	p.set(r, "CRTC_Y", uint64(int64(at.Y))) //nolint:gosec // signed plane positions travel as two's complement
+}
+
 func (o *Output) place(p *plane, fb uint32, at image.Rectangle, fence int) {
 	w, h := uint64(at.Dx()), uint64(at.Dy()) //nolint:gosec // plane sizes are positive
 	p.set(&o.b.req, "FB_ID", uint64(fb))
@@ -1226,8 +1231,7 @@ func (o *Output) place(p *plane, fb uint32, at image.Rectangle, fence int) {
 	p.set(&o.b.req, "SRC_Y", 0)
 	p.set(&o.b.req, "SRC_W", w<<16)
 	p.set(&o.b.req, "SRC_H", h<<16)
-	p.set(&o.b.req, "CRTC_X", uint64(int64(at.Min.X))) //nolint:gosec // signed plane positions travel as two's complement
-	p.set(&o.b.req, "CRTC_Y", uint64(int64(at.Min.Y))) //nolint:gosec // signed plane positions travel as two's complement
+	p.setPosition(&o.b.req, at.Min)
 	p.set(&o.b.req, "CRTC_W", w)
 	p.set(&o.b.req, "CRTC_H", h)
 	if fence >= 0 {
@@ -1290,6 +1294,9 @@ func (o *Output) planesDue() error {
 func (o *Output) flushPlanes() error {
 	c := o.cursor
 	cursor := c != nil && c.dirty
+	if cursor && c.settled() {
+		c.dirty, cursor = false, false
+	}
 	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
 		return nil
 	}

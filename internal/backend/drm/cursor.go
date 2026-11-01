@@ -26,6 +26,13 @@ type cursor struct {
 	hotspot, at             image.Point
 	drawing, visible, dirty bool
 	refused                 error
+	onPlane                 cursorPlaneState
+}
+
+type cursorPlaneState struct {
+	shown       bool
+	fb          uint32
+	at, hotspot image.Point
 }
 
 func (o *Output) CursorPlane() (backend.CursorPlane, error) {
@@ -173,21 +180,52 @@ func (c *cursor) HideCursor() error {
 	return c.flush()
 }
 
-func (c *cursor) add() {
-	o, p := c.o, c.plane
+func (c *cursor) wanted() cursorPlaneState {
 	if !c.visible {
-		p.set(&o.b.req, "FB_ID", 0)
-		p.set(&o.b.req, "CRTC_ID", 0)
+		return cursorPlaneState{}
+	}
+	return cursorPlaneState{shown: true, fb: c.pending.fb, at: c.at.Sub(c.hotspot), hotspot: c.hotspot}
+}
+
+func (c *cursor) settled() bool {
+	return c.o.kms == kmsFlip && c.wanted() == c.onPlane
+}
+
+func (c *cursor) add() {
+	o, p, want, was := c.o, c.plane, c.wanted(), c.onPlane
+	r := &o.b.req
+	whole := o.kms != kmsFlip
+	if !want.shown {
+		if whole || was.shown {
+			p.set(r, "FB_ID", 0)
+			p.set(r, "CRTC_ID", 0)
+		}
 		return
 	}
-	at := c.at.Sub(c.hotspot)
-	o.place(p, c.pending.fb, image.Rectangle{Min: at, Max: at.Add(o.b.cursor)}, -1)
-	p.set(&o.b.req, "HOTSPOT_X", uint64(int64(c.hotspot.X))) //nolint:gosec // signed plane properties travel as two's complement
-	p.set(&o.b.req, "HOTSPOT_Y", uint64(int64(c.hotspot.Y))) //nolint:gosec // signed plane properties travel as two's complement
+	if whole || !was.shown {
+		o.place(p, want.fb, image.Rectangle{Min: want.at, Max: want.at.Add(o.b.cursor)}, -1)
+		c.addHotspot()
+		return
+	}
+	if want.fb != was.fb {
+		p.set(r, "FB_ID", uint64(want.fb))
+	}
+	if want.at != was.at {
+		p.setPosition(r, want.at)
+	}
+	if want.hotspot != was.hotspot {
+		c.addHotspot()
+	}
+}
+
+func (c *cursor) addHotspot() {
+	r := &c.o.b.req
+	c.plane.set(r, "HOTSPOT_X", uint64(int64(c.hotspot.X))) //nolint:gosec // signed plane properties travel as two's complement
+	c.plane.set(r, "HOTSPOT_Y", uint64(int64(c.hotspot.Y))) //nolint:gosec // signed plane properties travel as two's complement
 }
 
 func (c *cursor) sent() {
-	c.queued, c.dirty = nil, false
+	c.queued, c.dirty, c.onPlane = nil, false, c.wanted()
 	if c.visible {
 		c.queued = c.pending
 	}
