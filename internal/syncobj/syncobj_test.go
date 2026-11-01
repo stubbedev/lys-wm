@@ -161,7 +161,7 @@ func setup(t *testing.T) *env {
 	if _, err := surface.New(d, e.rec); err != nil {
 		t.Fatal(err)
 	}
-	m, err := dmabuf.New(d, importer{}, importer{})
+	m, err := dmabuf.New(d, l, importer{}, importer{})
 	if err != nil {
 		t.Fatal(err)
 	}

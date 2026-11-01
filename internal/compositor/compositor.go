@@ -365,7 +365,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if imp, ok := c.renderer.(dmabufRenderer); ok {
-		switch c.dmabuf, err = dmabuf.New(display, imp, c); {
+		switch c.dmabuf, err = dmabuf.New(display, l, imp, c); {
 		case errors.Is(err, gpu.ErrUnsupported):
 			c.dmabuf = nil
 		case err != nil:

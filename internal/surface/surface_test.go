@@ -207,6 +207,16 @@ type testBuffer struct {
 	*Backing
 	size     image.Point
 	released bool
+	// writers are how many holds AwaitWriter takes.
+	writers  int
+	releases []func() error
+}
+
+func (b *testBuffer) AwaitWriter(c Awaiter) error {
+	for range b.writers {
+		b.releases = append(b.releases, c.Await())
+	}
+	return nil
 }
 
 func (b *testBuffer) Size() image.Point          { return b.size }
@@ -1098,5 +1108,36 @@ func TestReplacingAnAttachedBufferUnlocksIt(t *testing.T) {
 	e.roundtrip()
 	if size := e.last(s).size; size != image.Pt(2, 2) {
 		t.Fatalf("the commit applied size %v, want the second buffer's 2x2", size)
+	}
+}
+
+func TestACommitWaitsForItsBuffersWriter(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	proxy, res := e.bufferPair(4, 4)
+	b := e.testBuffer(res)
+	must(t, s.Commit())
+	e.roundtrip()
+	before := len(e.commits())
+	e.on(func() { b.writers = 2 })
+	must(t, s.Attach(proxy, 0, 0), s.Commit())
+	e.roundtrip()
+	e.on(func() {
+		if err := b.releases[0](); err != nil {
+			t.Error(err)
+		}
+	})
+	e.roundtrip()
+	if got := len(e.commits()); got != before {
+		t.Fatalf("%d commits took effect with one of its buffer's two writers at work", got-before)
+	}
+	e.on(func() {
+		if err := b.releases[1](); err != nil {
+			t.Error(err)
+		}
+	})
+	e.roundtrip()
+	if size := e.last(s).size; size != image.Pt(4, 4) {
+		t.Fatalf("after its writers finished the commit applied size %v, want 4x4", size)
 	}
 }

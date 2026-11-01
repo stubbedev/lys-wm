@@ -261,6 +261,10 @@ func (u *Update) Hold() *Hold {
 	return h
 }
 
+func (u *Update) Await() func() error {
+	return u.Hold().Release
+}
+
 func (u *Update) OnApply(f func() error) {
 	u.applied = append(u.applied, f)
 }
@@ -551,6 +555,11 @@ func (s *Surface) commit() error {
 			if err := h.Commit(u); err != nil {
 				return err
 			}
+		}
+	}
+	if b, ok := s.pending.buffer.(Awaited); ok && s.pending.set&fieldBuffer != 0 {
+		if err := b.AwaitWriter(u); err != nil {
+			return err
 		}
 	}
 	u.state, s.pending = s.pending, u.state

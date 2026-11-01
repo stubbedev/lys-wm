@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	sld "github.com/stubbedev/lys-wm/internal/protocol/server/linuxdmabuf"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -42,6 +43,7 @@ type Listener interface {
 }
 
 type Manager struct {
+	loop     *loop.Loop
 	importer Importer
 	listener Listener
 	formats  []gpu.FormatModifier
@@ -58,7 +60,7 @@ type surfaceFeedback struct {
 	res *sld.ZwpLinuxDmabufFeedbackV1
 }
 
-func New(d *server.Display, imp Importer, l Listener) (*Manager, error) {
+func New(d *server.Display, lp *loop.Loop, imp Importer, l Listener) (*Manager, error) {
 	formats, err := imp.DMABUFFormats()
 	if err != nil {
 		return nil, fmt.Errorf("dmabuf: %w", err)
@@ -66,7 +68,7 @@ func New(d *server.Display, imp Importer, l Listener) (*Manager, error) {
 	if len(formats) == 0 || len(formats) > math.MaxUint16 {
 		return nil, fmt.Errorf("dmabuf: the renderer imports %d format and modifier pairs", len(formats))
 	}
-	m := &Manager{importer: imp, listener: l, formats: formats, table: -1, version: legacyVersion, surfaces: map[*surface.Surface][]surfaceFeedback{}}
+	m := &Manager{loop: lp, importer: imp, listener: l, formats: formats, table: -1, version: legacyVersion, surfaces: map[*surface.Surface][]surfaceFeedback{}}
 	m.index = make(map[gpu.FormatModifier]uint16, len(formats))
 	for i, f := range formats {
 		m.index[f] = uint16(i)
@@ -410,6 +412,30 @@ type Buffer struct {
 
 func (b *Buffer) Size() image.Point {
 	return b.dmabuf.Size
+}
+
+// AwaitWriter holds a commit until the fences on the buffer's planes signal:
+// linux-dmabuf's implicit synchronization, which a Vulkan renderer's sampling
+// does not wait on by itself. A dmabuf polls readable once its writers finish.
+func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
+	for _, p := range b.dmabuf.Planes {
+		pfd := [1]unix.PollFd{{Fd: int32(p.FD), Events: unix.POLLIN}} //nolint:gosec // a file descriptor fits an int32
+		n, err := unix.Poll(pfd[:], 0)
+		if err != nil && !errors.Is(err, unix.EINTR) {
+			return fmt.Errorf("dmabuf: poll plane fd %d for its writer: %w", p.FD, err)
+		}
+		if n > 0 {
+			continue
+		}
+		fd, err := unix.FcntlInt(uintptr(p.FD), unix.F_DUPFD_CLOEXEC, 0)
+		if err != nil {
+			return fmt.Errorf("dmabuf: duplicate plane fd %d to wait on: %w", p.FD, err)
+		}
+		if err := b.m.loop.Once(fd, c.Await()); err != nil {
+			return fmt.Errorf("dmabuf: wait on plane fd %d: %w", p.FD, err)
+		}
+	}
+	return nil
 }
 
 func (b *Buffer) DMABUF() gpu.DMABUF {

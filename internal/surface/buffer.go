@@ -14,6 +14,19 @@ type Buffer interface {
 	Unlock() error
 }
 
+// Awaited is a buffer whose writer may still be at work when it is committed,
+// as implicit synchronization allows. AwaitWriter takes a hold on the commit for
+// each thing the writer has yet to finish, and releases it once it has.
+type Awaited interface {
+	AwaitWriter(c Awaiter) error
+}
+
+// Awaiter is a commit an Awaited buffer can keep from taking effect: Await holds
+// it until the returned func is called.
+type Awaiter interface {
+	Await() (release func() error)
+}
+
 type Backing struct {
 	resource *sw.WlBuffer
 	release  func() error

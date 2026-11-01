@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
@@ -113,7 +114,7 @@ func setup(t *testing.T, device error, extra ...gpu.FormatModifier) *env {
 	if _, err := surface.New(e.d, e.imp); err != nil {
 		t.Fatal(err)
 	}
-	if e.m, err = New(e.d, e.imp, e.imp); err != nil {
+	if e.m, err = New(e.d, l, e.imp, e.imp); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -511,5 +512,64 @@ func TestTightlyPackedYUVIsInBoundsForEveryFormat(t *testing.T) {
 		if result.buffer == nil || result.failed {
 			t.Errorf("a tightly packed %v buffer gave %+v", tc.format, result)
 		}
+	}
+}
+
+type awaiter func() func() error
+
+func (a awaiter) Await() func() error { return a() }
+
+// A commit of a buffer whose writer is still at work waits for it, as
+// linux-dmabuf's implicit synchronization promises the client, and one whose
+// writer has finished does not. A pipe's read end stands in for the dmabuf: both
+// poll readable when the wait is over.
+func TestAwaitWriterHoldsUntilThePlaneIsReadable(t *testing.T) {
+	e := setup(t, nil)
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(p[0])
+	defer unix.Close(p[1])
+	b := &Buffer{m: e.m, dmabuf: gpu.DMABUF{Planes: []gpu.Plane{{FD: p[0]}}}}
+	released := make(chan struct{})
+	holds := make(chan int, 1)
+	if err := e.l.Post(func() error {
+		n := 0
+		err := b.AwaitWriter(awaiter(func() func() error {
+			n++
+			return func() error {
+				close(released)
+				return nil
+			}
+		}))
+		holds <- n
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := <-holds; n != 1 {
+		t.Fatalf("%d holds for a plane with its writer at work", n)
+	}
+	select {
+	case <-released:
+		t.Fatal("released with the writer at work")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if _, err := unix.Write(p[1], []byte{0}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not released after the writer finished")
+	}
+	if err := e.l.Post(func() error {
+		return b.AwaitWriter(awaiter(func() func() error {
+			t.Error("a hold for a plane whose writer has finished")
+			return func() error { return nil }
+		}))
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
