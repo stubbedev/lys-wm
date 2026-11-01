@@ -11,6 +11,7 @@ binds:
   - {chord: SUPER + Return, action: exec foot}
   - {chord: SUPER + Q, action: kill}
   - {chord: SUPER + SHIFT + R, action: reload}
+  - {chord: SUPER + SHIFT + E, action: exit}
   - {chord: SUPER + F, action: fullscreen}
   - {chord: SUPER + V, action: togglefloating}
   - {chord: SUPER + T, action: makegroup tab ephemeral}

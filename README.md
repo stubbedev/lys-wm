@@ -39,8 +39,8 @@ home-manager, the tarball and what each needs.
 ## Use
 
 Pick the `lys-wm` session in your display manager, or run `lys-wm` inside another
-Wayland session to get a nested window. `SUPER + Return` runs `foot`, and
-`SUPER + Q` closes a window.
+Wayland session to get a nested window. `SUPER + Return` runs `foot`,
+`SUPER + Q` closes a window and `SUPER + SHIFT + E` leaves the session.
 
 ```sh
 lys-wmctl windows                # query a running lys-wm

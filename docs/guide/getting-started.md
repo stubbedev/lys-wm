@@ -60,12 +60,9 @@ which is the full list.
 | `SUPER` + left or right drag | Move or resize the window under the pointer |
 | `SUPER` + scroll | Step through the open workspaces |
 | `SUPER + SHIFT + R` | Read the config file again |
+| `SUPER + SHIFT + E` | Leave the session, with no confirmation |
 
-The built-in config has no bind to leave the session. End it with:
-
-```sh
-lys-wmctl dispatch exit
-```
+Scripts can do the same with `lys-wmctl dispatch exit`.
 
 The keymap's `XF86Switch_VT_*` keys, usually `CTRL + ALT + F1` and up, switch
 virtual terminals.

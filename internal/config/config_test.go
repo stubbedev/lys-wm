@@ -303,3 +303,20 @@ func TestTheBuiltInConfigBuildsACompositorConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTheBuiltInConfigCanLeaveTheSession(t *testing.T) {
+	file, err := Parse("default.yaml", Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(cfg.Binds, func(b binds.Bind) bool {
+		_, exits := b.Action.(wm.ExitAction)
+		return exits && b.Submap == ""
+	}) {
+		t.Fatalf("no top-level bind exits among %d", len(cfg.Binds))
+	}
+}
