@@ -331,3 +331,7 @@ func (sh *Shell) DismissGrab() error {
 func (sh *Shell) Grab() []*Popup {
 	return slices.Clone(sh.grab)
 }
+
+func (p *Popup) placedAt() image.Point {
+	return p.box.Min
+}

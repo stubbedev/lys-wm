@@ -198,3 +198,19 @@ func testAFullscreenSurfaceIsOfferedThePlaneFormats(t *testing.T, start gpuStart
 		return len(c.SurfaceScanout(game).Formats) == 0
 	})
 }
+
+func TestAWindowWhoseBufferWasDestroyedIsDrawnAgainFromItsNextBuffer(t *testing.T) {
+	onEachDMABUFRenderer(t, testAWindowWhoseBufferWasDestroyedIsDrawnAgainFromItsNextBuffer)
+}
+
+func testAWindowWhoseBufferWasDestroyedIsDrawnAgainFromItsNextBuffer(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
+	gone := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff))
+	s.show(t, "the dmabuf", gone)
+	if err := errors.Join(gone.WL.Destroy(), s.c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	s.c.Sync()
+	settle(t, s.h)
+	s.show(t, "the next dmabuf", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0xff, 0)))
+}

@@ -216,6 +216,10 @@ func (*LockSurface) RoleName() string {
 	return lockRole
 }
 
+func (*LockSurface) Placement() image.Rectangle {
+	return image.Rectangle{}
+}
+
 func (s *LockSurface) Surface() *surface.Surface {
 	return s.surface
 }

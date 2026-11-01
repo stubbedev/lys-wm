@@ -54,7 +54,9 @@ func (c *Compositor) layerOutput(l *shell.LayerSurface) *output.Output {
 	return c.firstOutput()
 }
 
-func (c *Compositor) arrange(o *output.Output) (bool, error) {
+type layerChanges struct{ usable, moved bool }
+
+func (c *Compositor) arrange(o *output.Output) (layerChanges, error) {
 	var entries []*layer
 	var states []shell.LayerState
 	for _, e := range c.layers {
@@ -70,8 +72,10 @@ func (c *Compositor) arrange(o *output.Output) (bool, error) {
 	}
 	result, usable := arrangeLayers(image.Rectangle{Max: o.LogicalSize()}, states)
 	var errs []error
+	var got layerChanges
 	for i, e := range entries {
 		moved := e.box != result[i].box
+		got.moved = got.moved || moved || e.placed != result[i].ok
 		e.box, e.placed = result[i].box, result[i].ok
 		if !e.placed {
 			continue
@@ -89,23 +93,23 @@ func (c *Compositor) arrange(o *output.Output) (bool, error) {
 			}
 		}
 	}
-	changed := usable != c.usable[o]
+	got.usable = usable != c.usable[o]
 	c.usable[o] = usable
-	return changed, errors.Join(errs...)
+	return got, errors.Join(errs...)
 }
 
-func (c *Compositor) rearrange(o *output.Output) error {
-	changed, err := c.arrange(o)
-	if changed {
+func (c *Compositor) rearrange(o *output.Output) (bool, error) {
+	got, err := c.arrange(o)
+	if got.usable {
 		err = errors.Join(err, c.syncAreas())
 	}
-	return err
+	return got.moved, err
 }
 
 func (c *Compositor) layersChanged(o *output.Output) error {
 	var err error
 	if o != nil {
-		err = c.rearrange(o)
+		_, err = c.rearrange(o)
 	}
 	return errors.Join(err, c.refocus(), c.refreshPointer(), c.scheduleAll())
 }
@@ -117,10 +121,14 @@ func (c *Compositor) LayerCommitted(l *shell.LayerSurface) error {
 		if o == nil {
 			return l.Close()
 		}
-		e = &layer{surface: l, output: o}
-		c.layers = append(c.layers, e)
+		c.layers = append(c.layers, &layer{surface: l, output: o})
+		return c.layersChanged(o)
 	}
-	return c.layersChanged(e.output)
+	moved, err := c.rearrange(e.output)
+	if moved {
+		err = errors.Join(err, c.scheduleAll())
+	}
+	return errors.Join(err, c.refocus(), c.refreshPointer())
 }
 
 func (c *Compositor) LayerUnmapped(l *shell.LayerSurface) error {

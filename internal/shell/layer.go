@@ -97,6 +97,10 @@ func (l *LayerSurface) RoleName() string {
 	return layerRole
 }
 
+func (*LayerSurface) Placement() image.Rectangle {
+	return image.Rectangle{}
+}
+
 func (l *LayerSurface) Surface() *surface.Surface {
 	return l.surface
 }

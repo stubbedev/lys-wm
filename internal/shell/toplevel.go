@@ -330,3 +330,7 @@ func (t *Toplevel) UnsetFullscreen(*sxdg.XdgToplevel) error {
 func (t *Toplevel) SetMinimized(*sxdg.XdgToplevel) error {
 	return t.request(SetMinimized{})
 }
+
+func (t *Toplevel) placedAt() image.Point {
+	return image.Point{}
+}

@@ -297,6 +297,7 @@ type roleObject interface {
 	mapped() error
 	unmapped() error
 	inert() bool
+	placedAt() image.Point
 }
 
 type XdgSurface struct {
@@ -381,18 +382,15 @@ func (xs *XdgSurface) AckConfigure(obj *sxdg.XdgSurface, serial uint32) error {
 	return nil
 }
 
-func treeBounds(s *surface.Surface, at image.Point) image.Rectangle {
-	b := image.Rectangle{Min: at, Max: at.Add(s.Size())}
-	for child := range s.Stack() {
-		if child != s && child.Subsurface() != nil {
-			b = b.Union(treeBounds(child, at.Add(child.Subsurface().Position())))
-		}
-	}
-	return b
-}
-
 func (xs *XdgSurface) Geometry() image.Rectangle {
 	return xs.geometry
+}
+
+func (xs *XdgSurface) Placement() image.Rectangle {
+	if xs.role == nil {
+		return xs.geometry
+	}
+	return xs.geometry.Sub(xs.role.placedAt())
 }
 
 func (xs *XdgSurface) Committed(s *surface.Surface) error {
@@ -414,7 +412,7 @@ func (xs *XdgSurface) Committed(s *surface.Surface) error {
 		return xs.resource.ProtocolError(sxdg.XdgSurfaceErrorUnconfiguredBuffer, "a buffer was attached before the first configure was acked")
 	}
 	if !xs.geometrySet {
-		xs.geometry = treeBounds(s, image.Point{})
+		xs.geometry = s.TreeBounds()
 	}
 	switch step {
 	case stepInitial:

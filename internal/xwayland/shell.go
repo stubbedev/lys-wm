@@ -2,6 +2,7 @@ package xwayland
 
 import (
 	"fmt"
+	"image"
 
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxs "github.com/stubbedev/lys-wm/internal/protocol/server/xwaylandshell"
@@ -75,6 +76,10 @@ type xsurface struct {
 
 func (*xsurface) RoleName() string {
 	return surfaceRole
+}
+
+func (*xsurface) Placement() image.Rectangle {
+	return image.Rectangle{}
 }
 
 func (x *xsurface) Committed(*surface.Surface) error {

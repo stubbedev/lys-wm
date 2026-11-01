@@ -183,6 +183,7 @@ type Compositor struct {
 	usable          map[*output.Output]image.Rectangle
 	layerFocus      *shell.LayerSurface
 	shown           map[*output.Output][]*surface.Surface
+	footprints      map[*surface.Surface]footprint
 	entered         []*entered
 	cursor          point
 	touches         map[int32]touchAt
@@ -286,6 +287,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		captureTargets: map[*dmabuf.Buffer]render.ReadTarget{},
 		cursorPixels:   map[*surface.Surface]*cursorPixels{},
 		shown:          map[*output.Output][]*surface.Surface{},
+		footprints:     map[*surface.Surface]footprint{},
 		touches:        map[int32]touchAt{},
 		labels:         map[*output.Output]map[labelKey]*label{},
 		stops:          map[stopsKey]render.Texture{},

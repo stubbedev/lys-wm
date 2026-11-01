@@ -59,17 +59,61 @@ type syncRenderer interface {
 
 func (c *Compositor) Committed(s *surface.Surface) error {
 	c.cursorCommitted(s)
-	if d := s.Damage(); len(d) > 0 {
-		for _, sc := range c.scenes {
-			sc.damaged(s, d)
-		}
-	}
+	_, drawable := c.textures[s]
 	if s.Attached() {
 		if err := c.attach(s); err != nil {
 			return err
 		}
 	}
-	return errors.Join(c.noteCommit(s), c.updateCursorSessions(), c.scheduleAll())
+	_, stillDrawable := c.textures[s]
+	root := s.Root()
+	reach := c.footprintMoved(s, root) || drawable != stillDrawable
+	err := errors.Join(c.noteCommit(s), c.updateCursorSessions())
+	d := s.Damage()
+	for _, o := range c.outputs {
+		shows := showsTree(c.shown[o], root)
+		if shows && len(d) > 0 {
+			c.sceneOf(o).damaged(s, d)
+		}
+		if !shows && !reach {
+			continue
+		}
+		if e := c.schedule(o); e != nil {
+			err = errors.Join(err, e)
+		}
+	}
+	return err
+}
+
+type placedRole interface {
+	Placement() image.Rectangle
+}
+
+type footprint struct {
+	bounds, placement image.Rectangle
+}
+
+func (c *Compositor) footprintMoved(s, root *surface.Surface) bool {
+	role, placed := root.Role().(placedRole)
+	if !placed {
+		return true
+	}
+	now := footprint{root.TreeBounds(), role.Placement()}
+	was, seen := c.footprints[root]
+	if seen && was == now {
+		return s.Offset() != (image.Point{})
+	}
+	c.footprints[root] = now
+	return true
+}
+
+func showsTree(shown []*surface.Surface, root *surface.Surface) bool {
+	for _, s := range shown {
+		if s.Root() == root {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Compositor) attach(s *surface.Surface) error {
@@ -243,6 +287,7 @@ func (c *Compositor) Destroyed(s *surface.Surface) error {
 	if err := c.dropTexture(s); err != nil {
 		return err
 	}
+	delete(c.footprints, s)
 	delete(c.cursorPixels, s)
 	for _, sc := range c.scenes {
 		sc.forget(s)

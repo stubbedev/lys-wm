@@ -31,6 +31,27 @@ func (sub *Subsurface) Parent() *Surface {
 	return sub.parent
 }
 
+func (s *Surface) Root() *Surface {
+	for s.sub != nil && s.sub.parent != nil {
+		s = s.sub.parent
+	}
+	return s
+}
+
+func (s *Surface) TreeBounds() image.Rectangle {
+	return s.boundsAt(image.Point{})
+}
+
+func (s *Surface) boundsAt(at image.Point) image.Rectangle {
+	b := image.Rectangle{Min: at, Max: at.Add(s.Size())}
+	for _, child := range s.order {
+		if child != s {
+			b = b.Union(child.boundsAt(at.Add(child.sub.position)))
+		}
+	}
+	return b
+}
+
 func (sub *Subsurface) Position() image.Point {
 	return sub.position
 }
