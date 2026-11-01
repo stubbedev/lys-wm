@@ -18,8 +18,9 @@ import (
 const version = 1
 
 type Manager struct {
-	shown func(*surface.Surface) bool
-	fifos []*fifo
+	shown  func(*surface.Surface) bool
+	fifos  []*fifo
+	waking []*fifo
 }
 
 func New(d *server.Display, shown func(*surface.Surface) bool) (*Manager, error) {
@@ -31,14 +32,19 @@ func New(d *server.Display, shown func(*surface.Surface) bool) (*Manager, error)
 }
 
 func (m *Manager) Latched(latched []*surface.Surface) error {
-	var errs []error
-	for _, f := range slices.Clone(m.fifos) {
+	m.waking = m.waking[:0]
+	for _, f := range m.fifos {
 		if f.barrier && (slices.Contains(latched, f.s) || !m.shown(f.s)) {
 			f.barrier = false
-			errs = append(errs, f.s.Retry())
+			m.waking = append(m.waking, f)
 		}
 	}
-	return errors.Join(errs...)
+	var errs error
+	for _, f := range m.waking {
+		errs = errors.Join(errs, f.s.Retry())
+	}
+	clear(m.waking)
+	return errs
 }
 
 func (m *Manager) bind(c *server.Client, id wire.ObjectID, v uint32) error {
@@ -67,6 +73,7 @@ func (r requests) GetFifo(obj *sff.WpFifoManagerV1, res *sff.WpFifoV1, wl *sw.Wl
 		f = r.m.fifos[i]
 	} else {
 		f = &fifo{m: r.m, s: s}
+		f.passed, f.raise = f.barrierPassed, f.raiseBarrier
 		f.hooks = &surface.Hooks{Commit: f.commit, Destroyed: f.surfaceGone}
 		s.AddHooks(f.hooks)
 		r.m.fifos = append(r.m.fifos, f)
@@ -88,6 +95,8 @@ type fifo struct {
 	set     bool
 	wait    bool
 	barrier bool
+	passed  func() bool
+	raise   func() error
 }
 
 func (*fifo) Destroy(*sff.WpFifoV1) error { return nil }
@@ -112,14 +121,20 @@ func (f *fifo) commit(u *surface.Update) error {
 	set, wait := f.set, f.wait
 	f.set, f.wait = false, false
 	if sub := f.s.Subsurface(); wait && (sub == nil || !sub.Synchronized()) {
-		u.Gate(func() bool { return !f.barrier })
+		u.Gate(f.passed)
 	}
 	if set {
-		u.OnApply(func() error {
-			f.barrier = f.m.shown(f.s)
-			return nil
-		})
+		u.OnApply(f.raise)
 	}
+	return nil
+}
+
+func (f *fifo) barrierPassed() bool {
+	return !f.barrier
+}
+
+func (f *fifo) raiseBarrier() error {
+	f.barrier = f.m.shown(f.s)
 	return nil
 }
 
