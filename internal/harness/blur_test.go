@@ -15,8 +15,12 @@ import (
 )
 
 func TestATranslucentWindowBlursWhatIsBehindIt(t *testing.T) {
+	onEachConfiguredRenderer(t, testATranslucentWindowBlursWhatIsBehindIt)
+}
+
+func testATranslucentWindowBlursWhatIsBehindIt(t *testing.T, start gpuStarter) {
 	half := float32(0.5)
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 4, Passes: 2}
 		cfg.Rules = []wm.Rule{
 			{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Opacity: &half},
@@ -53,8 +57,12 @@ func TestATranslucentWindowBlursWhatIsBehindIt(t *testing.T) {
 }
 
 func TestXRayBlurShowsTheWallpaperNotTheWindowsBelow(t *testing.T) {
+	onEachConfiguredRenderer(t, testXRayBlurShowsTheWallpaperNotTheWindowsBelow)
+}
+
+func testXRayBlurShowsTheWallpaperNotTheWindowsBelow(t *testing.T, start gpuStarter) {
 	half := float32(0.5)
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1, XRay: true}
 		cfg.Rules = []wm.Rule{
 			{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Opacity: &half},

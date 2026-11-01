@@ -31,8 +31,12 @@ func near(got, want [3]byte) bool {
 }
 
 func TestInactiveWindowsAndRuledWindowsAreTranslucent(t *testing.T) {
+	onEachConfiguredRenderer(t, testInactiveWindowsAndRuledWindowsAreTranslucent)
+}
+
+func testInactiveWindowsAndRuledWindowsAreTranslucent(t *testing.T, start gpuStarter) {
 	half := float32(0.25)
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Opacity = compositor.Opacity{Active: 1, Inactive: 0.5, Fullscreen: 1}
 		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^ruled$`), Opacity: &half}}
 	}, tall)
@@ -72,7 +76,11 @@ func testATranslucentFullscreenWindowIsComposited(t *testing.T, start gpuStarter
 }
 
 func TestInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo(t *testing.T) {
-	h := StartWith(t, func(cfg *compositor.Config) {
+	onEachConfiguredRenderer(t, testInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo)
+}
+
+func testInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo(t *testing.T, start gpuStarter) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Dim = compositor.Dim{Inactive: true, Strength: 0.5}
 		cfg.WM.Autotile.Enabled = false
 	}, tall)
@@ -112,7 +120,11 @@ func TestInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo(t *testing.T) {
 }
 
 func TestADimAroundWindowDimsWhatIsBelowIt(t *testing.T) {
-	h := StartWith(t, func(cfg *compositor.Config) {
+	onEachConfiguredRenderer(t, testADimAroundWindowDimsWhatIsBelowIt)
+}
+
+func testADimAroundWindowDimsWhatIsBelowIt(t *testing.T, start gpuStarter) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Dim.Strength = 0.5
 		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^dialog$`), Mode: wm.RuleFloat, Size: image.Pt(60, 40), DimAround: true}}
 	}, tall)

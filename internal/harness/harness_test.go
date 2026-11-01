@@ -237,6 +237,22 @@ func onEachDMABUFRenderer(t *testing.T, test func(t *testing.T, start gpuStarter
 	})
 }
 
+const gpuGoldenTolerance = 1
+
+func (h *Harness) assertGolden(name string) {
+	h.t.Helper()
+	tolerance := gpuGoldenTolerance
+	if _, isSoft := h.backend.Renderer().(*soft.Renderer); isSoft {
+		tolerance = 0
+	}
+	golden.Within(h.t, name, h.Rendered(0), tolerance)
+}
+
+func onEachConfiguredRenderer(t *testing.T, test func(t *testing.T, start gpuStarter)) {
+	t.Run("soft", func(t *testing.T) { test(t, StartWith) })
+	onEachGPURenderer(t, test)
+}
+
 func onEachRenderer(t *testing.T, test func(t *testing.T, start starter)) {
 	for _, r := range []struct {
 		name  string

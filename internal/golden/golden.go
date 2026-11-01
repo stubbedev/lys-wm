@@ -17,6 +17,14 @@ var update = flag.Bool("update", false, "rewrite golden images instead of compar
 
 func Assert(t testing.TB, name string, b *soft.Buffer) {
 	t.Helper()
+	Within(t, name, b, 0)
+}
+
+// Within is Assert allowing every channel to differ from the golden by
+// tolerance: a GPU's rounding against the software renderer's the
+// goldens were drawn with.
+func Within(t testing.TB, name string, b *soft.Buffer, tolerance int) {
+	t.Helper()
 	img := image.NewNRGBA(image.Rect(0, 0, b.W, b.H))
 	for y := range b.H {
 		for x := range b.W {
@@ -58,10 +66,14 @@ func Assert(t testing.TB, name string, b *soft.Buffer) {
 	}
 	for y := range b.H {
 		row := y * img.Stride
-		if !bytes.Equal(img.Pix[row:row+b.W*4], want.Pix[row:row+b.W*4]) {
-			for x := range b.W {
-				if !bytes.Equal(img.Pix[row+x*4:row+x*4+4], want.Pix[row+x*4:row+x*4+4]) {
-					t.Fatalf("golden %s: pixel (%d, %d) is %v, golden has %v", name, x, y, img.Pix[row+x*4:row+x*4+4], want.Pix[row+x*4:row+x*4+4])
+		if bytes.Equal(img.Pix[row:row+b.W*4], want.Pix[row:row+b.W*4]) {
+			continue
+		}
+		for x := range b.W {
+			got, wanted := img.Pix[row+x*4:row+x*4+4], want.Pix[row+x*4:row+x*4+4]
+			for c := range got {
+				if d := int(got[c]) - int(wanted[c]); d > tolerance || d < -tolerance {
+					t.Fatalf("golden %s: pixel (%d, %d) is %v, golden has %v", name, x, y, got, wanted)
 				}
 			}
 		}

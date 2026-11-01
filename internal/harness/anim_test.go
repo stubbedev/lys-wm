@@ -27,9 +27,13 @@ func linearMoves(t *testing.T, d time.Duration) anim.Table {
 }
 
 func TestAMovedWindowAnimatesOnTheFrameClock(t *testing.T) {
+	onEachConfiguredRenderer(t, testAMovedWindowAnimatesOnTheFrameClock)
+}
+
+func testAMovedWindowAnimatesOnTheFrameClock(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	var next compositor.Config
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor = compositor.DefaultDecor()
 		cfg.Animations = linearMoves(t, time.Second)
 		cfg.Clock = func() time.Duration { return now }
@@ -87,8 +91,12 @@ func TestAMovedWindowAnimatesOnTheFrameClock(t *testing.T) {
 }
 
 func TestADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T) {
+	onEachConfiguredRenderer(t, testADraggedWindowFollowsThePointerWithoutAnimating)
+}
+
+func testADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T, start gpuStarter) {
 	now := time.Hour
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = linearMoves(t, time.Hour)
 		cfg.Clock = func() time.Duration { return now }
 		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
@@ -117,6 +125,10 @@ func TestADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T) {
 }
 
 func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
+	onEachConfiguredRenderer(t, testWindowsPopInAndOutWhileTheyFade)
+}
+
+func testWindowsPopInAndOutWhileTheyFade(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	half := anim.Style{Kind: anim.Popin, Percent: 50}
@@ -128,7 +140,7 @@ func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 	}, tall)
@@ -185,6 +197,10 @@ func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
 }
 
 func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
+	onEachConfiguredRenderer(t, testAWorkspaceSwitchSlidesBothWorkspaces)
+}
+
+func testAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -192,7 +208,7 @@ func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 	}, tall)
@@ -236,6 +252,10 @@ func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
 }
 
 func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
+	onEachConfiguredRenderer(t, testLayerSurfacesSlideInAndFadeOut)
+}
+
+func testLayerSurfacesSlideInAndFadeOut(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -248,7 +268,7 @@ func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 	}, tall)
@@ -283,6 +303,10 @@ func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
 }
 
 func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
+	onEachConfiguredRenderer(t, testAFocusChangeFadesTheOpacityOfBothWindows)
+}
+
+func testAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -290,7 +314,7 @@ func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor.Opacity = compositor.Opacity{Active: 1, Inactive: 0.5, Fullscreen: 1}
@@ -327,6 +351,10 @@ func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
 }
 
 func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
+	onEachConfiguredRenderer(t, testBorderColoursFadeAndGradientsTurnOnlyTheRing)
+}
+
+func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -345,7 +373,7 @@ func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var next compositor.Config
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor = compositor.DefaultDecor()
@@ -398,6 +426,10 @@ func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
 }
 
 func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
+	onEachConfiguredRenderer(t, testASpringDraggedWindowTrailsThePointer)
+}
+
+func testASpringDraggedWindowTrailsThePointer(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	off, on := false, true
 	s, err := anim.NewSpring(300, 30, 1)
@@ -408,7 +440,7 @@ func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
@@ -449,6 +481,10 @@ func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
 }
 
 func TestAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T) {
+	onEachConfiguredRenderer(t, testAMorphingMoveStretchesTheWindowsContentAheadOfIt)
+}
+
+func testAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -457,7 +493,7 @@ func TestAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor = compositor.DefaultDecor()
@@ -485,6 +521,10 @@ func TestAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T) {
 }
 
 func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
+	onEachConfiguredRenderer(t, testAnElasticDragBendsTheWindowAndItSettlesFlat)
+}
+
+func testAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	off, on := false, true
 	elastic := anim.Style{Kind: anim.Elastic}
@@ -493,7 +533,7 @@ func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
@@ -544,6 +584,10 @@ func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
 }
 
 func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
+	onEachConfiguredRenderer(t, testAGooWorkspaceSwitchMeltsTheWindowsTogether)
+}
+
+func testAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -552,7 +596,7 @@ func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor = compositor.DefaultDecor()
@@ -591,6 +635,10 @@ func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
 }
 
 func TestANewWindowBudsOffItsNeighbour(t *testing.T) {
+	onEachConfiguredRenderer(t, testANewWindowBudsOffItsNeighbour)
+}
+
+func testANewWindowBudsOffItsNeighbour(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
@@ -599,7 +647,7 @@ func TestANewWindowBudsOffItsNeighbour(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	h := StartWith(t, func(cfg *compositor.Config) {
+	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor = compositor.DefaultDecor()
