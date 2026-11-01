@@ -1,7 +1,7 @@
 # Architecture
 
-The decisions every change builds on. Scope and non-goals are in the
-[README](../README.md); the plan is in the issues. When a decision changes,
+The decisions every change builds on. Scope and non-goals are in
+[Scope](./guide/scope); the plan is in the issues. When a decision changes,
 change it here in the same commit and say why in the issue that changed it.
 
 ## Pure Go

@@ -1,11 +1,11 @@
 # Config
 
 lys-wm reads one YAML file: `$XDG_CONFIG_HOME/lys-wm/config.yaml`, or
-`~/.config/lys-wm/config.yaml` when `XDG_CONFIG_HOME` is unset. `lys-wm --config
-<file>` reads another file instead, and that file must exist. With no file at
-the default path, lys-wm runs the built-in config,
-[`internal/config/default.yaml`](../internal/config/default.yaml), which is a
-good starting point to copy.
+`~/.config/lys-wm/config.yaml` when `XDG_CONFIG_HOME` is unset.
+`lys-wm --config <file>` reads another file instead, and that file must exist.
+With no file at the default path, lys-wm runs the built-in config,
+[`internal/config/default.yaml`](https://github.com/stubbedev/lys-wm/blob/main/internal/config/default.yaml),
+which is a good starting point to copy.
 
 Unknown keys are errors. Every error gives the file, the line and the key:
 
