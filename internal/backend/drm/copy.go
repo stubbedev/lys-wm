@@ -9,7 +9,6 @@ import (
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
 
-	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
 )
@@ -60,7 +59,7 @@ func NewSecondary(l *loop.Loop, dev *kdrm.Device, primary *Backend, opts Options
 	if err := atomic(dev); err != nil {
 		return nil, "", err
 	}
-	alloc, how := secondaryAllocator(dev, primary, opts.Paths, canRender)
+	alloc, how := secondaryAllocator(dev, primary, stacksFor(opts), canRender)
 	b, err := newBackend(l, dev, alloc, opts)
 	if err != nil {
 		return nil, "", errors.Join(err, alloc.close())
@@ -68,7 +67,32 @@ func NewSecondary(l *loop.Loop, dev *kdrm.Device, primary *Backend, opts Options
 	return b, how, nil
 }
 
-func secondaryAllocator(dev *kdrm.Device, primary *Backend, paths gpu.Paths, canRender bool) (allocator, string) {
+type namedStack struct {
+	name string
+	open func(dev *kdrm.Device) (*gbmAllocator, error)
+}
+
+func stacksFor(opts Options) []namedStack {
+	glesStack := namedStack{"GLES", func(dev *kdrm.Device) (*gbmAllocator, error) { return newGLESAllocator(dev, opts.Paths) }}
+	if !opts.Vulkan {
+		return []namedStack{glesStack}
+	}
+	return []namedStack{{"Vulkan", func(dev *kdrm.Device) (*gbmAllocator, error) { return newVulkanAllocator(dev, opts.Paths) }}, glesStack}
+}
+
+func openLocal(dev *kdrm.Device, stacks []namedStack) (*gbmAllocator, string, error) {
+	var errs []error
+	for _, s := range stacks {
+		a, err := s.open(dev)
+		if err == nil {
+			return a, s.name, nil
+		}
+		errs = append(errs, err)
+	}
+	return nil, "", errors.Join(errs...)
+}
+
+func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
 	cpu := &copyAllocator{dev: dev, primary: primary.Renderer()}
 	name := filepath.Base(dev.Path())
 	if !canRender {
@@ -78,17 +102,17 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, paths gpu.Paths, can
 	if !ok {
 		return cpu, fmt.Sprintf("a CPU copy, since the primary renders with %T, which shares no buffers", primary.alloc)
 	}
-	local, err := newGBMAllocator(dev, paths)
+	local, stack, err := openLocal(dev, stacks)
 	if err != nil {
 		return cpu, fmt.Sprintf("a CPU copy, since %s cannot render: %v", name, err)
 	}
 	a := &blitAllocator{primary: p, local: local}
 	direct := a.probe()
 	if direct == nil {
-		return a, "a GPU blit on " + name
+		return a, "a GPU blit with " + stack + " on " + name
 	}
 	if err := a.copyThroughVulkan(); err != nil {
 		return cpu, fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close()))
 	}
-	return a, "a GPU blit on " + name + ", from a linear copy of each frame that Vulkan makes on the primary GPU"
+	return a, "a GPU blit with " + stack + " on " + name + ", from a linear copy of each frame that Vulkan makes on the primary GPU"
 }

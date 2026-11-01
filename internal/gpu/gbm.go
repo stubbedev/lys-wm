@@ -89,8 +89,11 @@ func (d *GBM) Close() {
 
 type Buffer struct {
 	DMABUF
-	fn *gbmFuncs
-	bo uintptr
+	destroy func()
+}
+
+func NewBuffer(d DMABUF, destroy func()) *Buffer {
+	return &Buffer{DMABUF: d, destroy: destroy}
 }
 
 func (d *GBM) Allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, usage Usage) (*Buffer, error) {
@@ -111,7 +114,7 @@ func (d *GBM) Allocate(size image.Point, format fourcc.Format, modifiers []fourc
 	if bo == 0 {
 		return nil, fmt.Errorf("gpu: gbm cannot allocate a %dx%d buffer of format %v with modifiers %v", size.X, size.Y, format, modifiers)
 	}
-	b := &Buffer{fn: d.fn, bo: bo, Size: size, Format: format, Modifier: fourcc.Modifier(d.fn.modifier(bo))}
+	b := NewBuffer(DMABUF{Size: size, Format: format, Modifier: fourcc.Modifier(d.fn.modifier(bo))}, func() { d.fn.destroy(bo) })
 	for i := range d.fn.planeCount(bo) {
 		fd := d.fn.fdForPlane(bo, i)
 		if fd < 0 {
@@ -130,6 +133,6 @@ func (b *Buffer) Close() error {
 		}
 	}
 	b.Planes = nil
-	b.fn.destroy(b.bo)
+	b.destroy()
 	return errors.Join(errs...)
 }

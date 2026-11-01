@@ -14,16 +14,16 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
-func gbmOn(t *testing.T, card string) *gbmAllocator {
+func stackOn(t *testing.T, card string, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) *gbmAllocator {
 	t.Helper()
 	dev, err := kdrm.Open(card)
 	if err != nil {
 		t.Skipf("cannot open %s: %v", card, err)
 	}
 	t.Cleanup(func() { _ = dev.Close() })
-	a, err := newGBMAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+	a, err := open(dev, gpu.PathsFromEnv(os.Getenv))
 	if err != nil {
-		t.Skipf("no EGL vendor drives this card's GBM device here (unset __EGL_VENDOR_LIBRARY_DIRS on a GPU machine): %v", err)
+		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
 	}
 	return a
 }
@@ -93,6 +93,15 @@ func blitPair(t *testing.T, a *blitAllocator, size image.Point) (*scanout, *shar
 }
 
 func TestABlitThroughAVulkanLinearCopyShowsTheFrameOnHardware(t *testing.T) {
+	for _, stack := range []struct {
+		name string
+		open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
+	}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}} {
+		t.Run(stack.name, func(t *testing.T) { blitThroughACopy(t, stack.open) })
+	}
+}
+
+func blitThroughACopy(t *testing.T, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) {
 	cards, err := filepath.Glob("/dev/dri/card*")
 	if err != nil {
 		t.Fatal(err)
@@ -106,20 +115,20 @@ func TestABlitThroughAVulkanLinearCopyShowsTheFrameOnHardware(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	primary, local := gbmOn(t, cards[0]), gbmOn(t, cards[0])
+	primary, local := stackOn(t, cards[0], open), stackOn(t, cards[0], open)
 	a := &blitAllocator{primary: primary, local: local}
 	t.Cleanup(func() {
 		if err := errors.Join(a.close(), primary.close()); err != nil {
 			t.Error(err)
 		}
 	})
-	t.Logf("%s rendering into a linear buffer: %v", primary.stack.GBM.Backend(), a.probe())
+	t.Logf("%s rendering into a linear buffer: %v", cards[0], a.probe())
 	if err := a.copyThroughVulkan(); err != nil {
 		t.Fatalf("a linear copy through Vulkan on %s: %v", cards[0], err)
 	}
 	size := image.Pt(301, 203)
 	out, s := blitPair(t, a, size)
-	drawQuadrants(t, primary.stack.Renderer, s.target)
+	drawQuadrants(t, primary.gpu, s.target)
 	start := time.Now()
 	if err := a.blit(s, out.target, size); err != nil {
 		t.Fatal(err)
@@ -144,14 +153,14 @@ func TestABlitThroughAVulkanLinearCopyShowsTheFrameOnHardware(t *testing.T) {
 	}
 	big := image.Pt(2560, 1440)
 	out, s = blitPair(t, a, big)
-	drawQuadrants(t, primary.stack.Renderer, s.target)
+	drawQuadrants(t, primary.gpu, s.target)
 	const frames = 60
 	start = time.Now()
 	for range frames {
 		if err := a.blit(s, out.target, big); err != nil {
 			t.Fatal(err)
 		}
-		if err := local.stack.Renderer.Finish(); err != nil {
+		if err := local.gpu.Finish(); err != nil {
 			t.Fatal(err)
 		}
 	}

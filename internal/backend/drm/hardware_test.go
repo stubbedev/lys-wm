@@ -254,7 +254,7 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 				t.Skipf("cannot open %s: %v", card, err)
 			}
 			defer dev.Close()
-			a, err := newGBMAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+			a, err := newGLESAllocator(dev, gpu.PathsFromEnv(os.Getenv))
 			if err != nil {
 				t.Skipf("no GLES on %s: %v", card, err)
 			}
@@ -292,7 +292,7 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			tex, err := a.stack.Renderer.ImportTexture(bo.DMABUF)
+			tex, err := a.gpu.ImportTexture(bo.DMABUF)
 			if err != nil {
 				t.Fatal(err)
 			}
