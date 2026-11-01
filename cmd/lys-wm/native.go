@@ -124,8 +124,8 @@ func (n *native) gpuCards() ([]gpuCard, error) {
 	return cards, nil
 }
 
-func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, report func(error)) (n *native, err error) {
-	n = &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report, vulkan: opts.vulkan}
+func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, report func(error)) (_ *native, err error) {
+	n := &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report, vulkan: opts.vulkan}
 	if n.logind, err = session.Open(l, session.SystemBus(getenv), getenv, n); err != nil {
 		return nil, err
 	}
