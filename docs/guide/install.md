@@ -63,7 +63,7 @@ sudo apt install ./lys-wm_<version>_amd64.deb
 ```
 
 The package depends on `libegl1`, `libgles2`, `libgbm1`, `libinput10`,
-`libxkbcommon0`, `hwdata` and `fonts-dejavu-core`. It recommends `xwayland`,
+`xkb-data`, `hwdata` and `fonts-dejavu-core`. It recommends `xwayland`,
 `xdg-desktop-portal`, `xdg-desktop-portal-wlr`, `xdg-desktop-portal-gtk`,
 `lys-shell`, `foot`, `libvulkan1` and `mesa-vulkan-drivers`. CI installs and runs
 it on `ubuntu-latest`.
@@ -80,7 +80,7 @@ sudo dnf install ./lys-wm-<version>-1.fc<release>.x86_64.rpm
 ```
 
 The package requires `libglvnd-egl`, `libglvnd-gles`, `mesa-libgbm`, `libinput`,
-`libxkbcommon`, `hwdata` and `dejavu-sans-fonts`. It recommends
+`xkeyboard-config`, `hwdata` and `dejavu-sans-fonts`. It recommends
 `xorg-x11-server-Xwayland`, `xdg-desktop-portal`, `xdg-desktop-portal-wlr`,
 `xdg-desktop-portal-gtk`, `lys-shell`, `foot`, `vulkan-loader` and
 `mesa-vulkan-drivers`. It is built, installed and run on `fedora:latest`, and
@@ -110,7 +110,7 @@ your distribution:
 | GLES2 | `libGLESv2.so.2` | `LYS_WM_LIBGLESV2` |
 | GBM | `libgbm.so.1` | `LYS_WM_LIBGBM` |
 | libinput | `libinput.so.10` | `LYS_WM_LIBINPUT` |
-| libxkbcommon | `libxkbcommon.so.0` | `LYS_WM_LIBXKBCOMMON` |
+| xkeyboard-config | `/usr/share/X11/xkb` | `XKB_CONFIG_ROOT` |
 | PNP IDs, from hwdata | `/usr/share/hwdata/pnp.ids` | `LYS_PNP_IDS` |
 | Tab font | `/usr/share/lys-wm/DejaVuSans.ttf` | `tabs.font` in the config, or `LYS_WM_FONT` |
 | Xwayland, for X11 programs | `Xwayland` on `PATH` | `LYS_WM_XWAYLAND` |

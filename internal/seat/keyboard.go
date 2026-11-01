@@ -179,18 +179,13 @@ func Prepare(cfg Config) (Pending, error) {
 	if cfg.Keymap == nil {
 		return Pending{}, errors.New("seat: no keymap")
 	}
-	st, err := cfg.Keymap.NewState()
-	if err != nil {
-		return Pending{}, err
-	}
-	return Pending{cfg: cfg, state: st}, nil
+	return Pending{cfg: cfg, state: cfg.Keymap.NewState()}, nil
 }
 
 func (s *Seat) Reconfigure(p Pending) error {
 	for _, code := range s.keyboard.pressed {
 		p.state.Key(code, true)
 	}
-	s.state.Close()
 	s.state, s.cfg = p.state, p.cfg
 	s.listener.KeyboardStateChanged()
 	clear(s.keymaps)

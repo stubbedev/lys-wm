@@ -25,7 +25,7 @@ import (
 
 func TestReloadSwapsBindsKeymapAndRepeat(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "log")
-	dk, err := testenv.XKBLibrary(t).Compile(xkb.Names{Layout: "dk"})
+	dk, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "dk"})
 	if err != nil {
 		t.Fatal(err)
 	}

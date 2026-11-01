@@ -64,19 +64,14 @@ func Vulkan(t testing.TB) *vulkan.Renderer {
 	return r
 }
 
-func XKBLibrary(t testing.TB) *xkb.Library {
+func XKBCompiler(t testing.TB) *xkb.Compiler {
 	t.Helper()
-	l, err := xkb.Load(xkb.LibraryPath(os.Getenv))
-	if err != nil {
-		missing(t, "%v", err)
-	}
-	t.Cleanup(l.Close)
-	return l
+	return xkb.NewCompiler(os.Getenv)
 }
 
 func Keymap(t testing.TB) *xkb.Keymap {
 	t.Helper()
-	km, err := XKBLibrary(t).Compile(xkb.NamesFromEnv(os.Getenv))
+	km, err := XKBCompiler(t).Compile(xkb.NamesFromEnv(os.Getenv))
 	if err != nil {
 		missing(t, "no keymap: %v", err)
 	}

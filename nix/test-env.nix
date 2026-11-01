@@ -1,5 +1,5 @@
 pkgs: {
-  LYS_WM_LIBXKBCOMMON = "${pkgs.libxkbcommon}/lib/libxkbcommon.so.0";
+  XKB_CONFIG_ROOT = "${pkgs.xkeyboard-config}/share/X11/xkb";
   LYS_WM_TEST_XCURSOR_PATH = "${pkgs.vanilla-dmz}/share/icons";
   FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
   LYS_WM_FONT = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";

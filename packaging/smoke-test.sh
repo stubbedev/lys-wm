@@ -23,11 +23,11 @@ fail() {
 }
 
 for file in /usr/lib/systemd/user/lys-wm-session.target /usr/share/xdg-desktop-portal/lys-wm-portals.conf \
-	/usr/share/wayland-sessions/lys-wm.desktop /usr/share/lys-wm/DejaVuSans.ttf /usr/share/hwdata/pnp.ids; do
+	/usr/share/wayland-sessions/lys-wm.desktop /usr/share/lys-wm/DejaVuSans.ttf /usr/share/hwdata/pnp.ids /usr/share/X11/xkb/rules/evdev; do
 	[[ -f ${file} ]] || fail "${file} is missing"
 done
 
-for soname in libxkbcommon.so.0 libEGL.so.1 libGLESv2.so.2 libgbm.so.1 libinput.so.10; do
+for soname in libEGL.so.1 libGLESv2.so.2 libgbm.so.1 libinput.so.10; do
 	ldconfig -p | grep -qF "${soname} " || fail "${soname}, which lys-wm loads, is not on the library path"
 done
 

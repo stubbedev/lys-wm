@@ -225,7 +225,7 @@ func configPath(getenv func(string) string) (string, error) {
 type source struct {
 	path     string
 	explicit bool
-	lib      *xkb.Library
+	keymaps  *xkb.Compiler
 	getenv   func(string) string
 }
 
@@ -268,7 +268,7 @@ func (s source) load() (loaded, error) {
 	if names == (xkb.Names{}) {
 		names = xkb.NamesFromEnv(s.getenv)
 	}
-	keymap, err := s.lib.Compile(names)
+	keymap, err := s.keymaps.Compile(names)
 	if err != nil {
 		return loaded{}, err
 	}
@@ -371,12 +371,7 @@ func run(args []string) (err error) {
 	if dbg.wire {
 		trace = os.Stderr
 	}
-	lib, err := xkb.Load(xkb.LibraryPath(os.Getenv))
-	if err != nil {
-		return err
-	}
-	defer lib.Close()
-	s := &reloader{path: *path, explicit: *path != "", lib: lib, getenv: os.Getenv}
+	s := &reloader{path: *path, explicit: *path != "", keymaps: xkb.NewCompiler(os.Getenv), getenv: os.Getenv}
 	if !s.explicit {
 		if s.path, err = configPath(os.Getenv); err != nil {
 			return err

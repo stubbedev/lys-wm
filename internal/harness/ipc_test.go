@@ -173,7 +173,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 }
 
 func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
-	dk, err := testenv.XKBLibrary(t).Compile(xkb.Names{Layout: "dk"})
+	dk, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "dk"})
 	if err != nil {
 		t.Fatal(err)
 	}

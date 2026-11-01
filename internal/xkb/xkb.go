@@ -1,206 +1,80 @@
-// Package xkb compiles keymaps and tracks modifier and layout state with
-// libxkbcommon, loaded at runtime through purego, and serves keymaps to
-// clients as sealed memfds.
+// Package xkb compiles keymaps and tracks modifier and layout state through
+// lys-lib's xkb, and serves keymaps to clients as sealed memfds.
 package xkb
 
 import (
 	"errors"
 	"fmt"
 	"math"
-	"runtime"
 	"slices"
-	"strings"
-	"unsafe"
 
-	"github.com/ebitengine/purego"
+	lxkb "github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/sys/unix"
 )
 
-var defaultLibrary = "libxkbcommon.so.0"
+const evdevOffset = 8
 
-const (
-	LibraryEnv  = "LYS_WM_LIBXKBCOMMON"
-	libc        = "libc.so.6"
-	evdevOffset = 8
+// Names selects a keymap by rules, model, layout, variant and options.
+type Names = lxkb.Names
 
-	contextNoEnvironmentNames = 1 << 1
-	keymapFormatTextV1        = 1
-	keyUp                     = 0
-	keyDown                   = 1
-	modsDepressed             = 1 << 0
-	modsLatched               = 1 << 1
-	modsLocked                = 1 << 2
-	layoutEffective           = 1 << 7
-	keysymCaseInsensitive     = 1 << 0
-	modInvalid                = 0xffffffff
-)
+// NamesFromEnv reads the XKB_DEFAULT_* variables.
+func NamesFromEnv(getenv func(string) string) Names { return lxkb.NamesFromEnv(getenv) }
 
-func LibraryPath(getenv func(string) string) string {
-	if p := getenv(LibraryEnv); p != "" {
-		return p
-	}
-	return defaultLibrary
+// Compiler compiles keymaps against the include paths the environment names.
+type Compiler struct {
+	ctx *lxkb.Context
 }
 
-type Names struct {
-	Rules, Model, Layout, Variant, Options string
+// NewCompiler reads the environment for where keymaps include files from.
+func NewCompiler(getenv func(string) string) *Compiler {
+	return &Compiler{ctx: lxkb.NewContext(getenv)}
 }
 
-func NamesFromEnv(getenv func(string) string) Names {
-	return Names{
-		Rules:   getenv("XKB_DEFAULT_RULES"),
-		Model:   getenv("XKB_DEFAULT_MODEL"),
-		Layout:  getenv("XKB_DEFAULT_LAYOUT"),
-		Variant: getenv("XKB_DEFAULT_VARIANT"),
-		Options: getenv("XKB_DEFAULT_OPTIONS"),
-	}
+// ledIndex is an LED's slot in a keymap, and whether the keymap has it.
+type ledIndex struct {
+	slot uint32
+	ok   bool
 }
 
-func (n Names) withDefaults() Names {
-	if n.Rules == "" {
-		n.Rules = "evdev"
-	}
-	if n.Model == "" {
-		n.Model = "pc105"
-	}
-	if n.Layout == "" {
-		n.Layout = "us"
-	}
-	return n
+func (m *Keymap) led(name string) ledIndex {
+	slot, ok := m.keymap.LEDIndex(name)
+	return ledIndex{slot: slot, ok: ok}
 }
 
-type ruleNames struct {
-	rules, model, layout, variant, options *byte
-}
-
-func cString(s string) *byte {
-	b := append([]byte(s), 0)
-	return &b[0]
-}
-
-type Library struct {
-	context         uintptr
-	contextUnref    func(ctx uintptr)
-	keymapNew       func(ctx uintptr, names *ruleNames, flags int32) uintptr
-	keymapString    func(km uintptr, format int32) unsafe.Pointer
-	keymapUnref     func(km uintptr)
-	stateNew        func(km uintptr) uintptr
-	stateUnref      func(st uintptr)
-	updateKey       func(st uintptr, key uint32, direction int32) int32
-	serializeMods   func(st uintptr, components int32) uint32
-	serializeLayout func(st uintptr, components int32) uint32
-	strlen          func(s unsafe.Pointer) uintptr
-	free            func(p unsafe.Pointer)
-	keysymFromName  func(name *byte, flags int32) uint32
-	minKeycode      func(km uintptr) uint32
-	maxKeycode      func(km uintptr) uint32
-	numLevels       func(km uintptr, key, layout uint32) uint32
-	symsByLevel     func(km uintptr, key, layout, level uint32, syms **uint32) int32
-	modIndex        func(km uintptr, name *byte) uint32
-	numLayouts      func(km uintptr) uint32
-	keyGetOneSym    func(st uintptr, key uint32) uint32
-	layoutName      func(km uintptr, idx uint32) unsafe.Pointer
-	ledActive       func(st uintptr, name *byte) int32
-}
-
-func Load(path string) (*Library, error) {
-	handle, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_LOCAL)
-	if err != nil {
-		return nil, fmt.Errorf("xkb: load libxkbcommon from %s (set %s to its path): %w", path, LibraryEnv, err)
-	}
-	c, err := purego.Dlopen(libc, purego.RTLD_NOW|purego.RTLD_LOCAL)
-	if err != nil {
-		return nil, fmt.Errorf("xkb: load %s: %w", libc, err)
-	}
-	l := &Library{}
-	var contextNew func(flags int32) uintptr
-	for _, f := range []struct {
-		lib  uintptr
-		fn   any
-		name string
-	}{
-		{handle, &contextNew, "xkb_context_new"},
-		{handle, &l.contextUnref, "xkb_context_unref"},
-		{handle, &l.keymapNew, "xkb_keymap_new_from_names"},
-		{handle, &l.keymapString, "xkb_keymap_get_as_string"},
-		{handle, &l.keymapUnref, "xkb_keymap_unref"},
-		{handle, &l.stateNew, "xkb_state_new"},
-		{handle, &l.stateUnref, "xkb_state_unref"},
-		{handle, &l.updateKey, "xkb_state_update_key"},
-		{handle, &l.serializeMods, "xkb_state_serialize_mods"},
-		{handle, &l.serializeLayout, "xkb_state_serialize_layout"},
-		{handle, &l.keysymFromName, "xkb_keysym_from_name"},
-		{handle, &l.minKeycode, "xkb_keymap_min_keycode"},
-		{handle, &l.maxKeycode, "xkb_keymap_max_keycode"},
-		{handle, &l.numLevels, "xkb_keymap_num_levels_for_key"},
-		{handle, &l.symsByLevel, "xkb_keymap_key_get_syms_by_level"},
-		{handle, &l.modIndex, "xkb_keymap_mod_get_index"},
-		{handle, &l.numLayouts, "xkb_keymap_num_layouts"},
-		{handle, &l.keyGetOneSym, "xkb_state_key_get_one_sym"},
-		{handle, &l.layoutName, "xkb_keymap_layout_get_name"},
-		{handle, &l.ledActive, "xkb_state_led_name_is_active"},
-		{c, &l.strlen, "strlen"},
-		{c, &l.free, "free"},
-	} {
-		if _, err := purego.Dlsym(f.lib, f.name); err != nil {
-			return nil, fmt.Errorf("xkb: %s lacks %s: %w", path, f.name, err)
-		}
-		purego.RegisterLibFunc(f.fn, f.lib, f.name)
-	}
-	if l.context = contextNew(contextNoEnvironmentNames); l.context == 0 {
-		return nil, errors.New("xkb: xkb_context_new failed")
-	}
-	return l, nil
-}
-
-func (l *Library) Close() {
-	l.contextUnref(l.context)
-}
-
+// Keymap is a compiled keymap and the sealed memfd clients read it from.
 type Keymap struct {
-	lib     *Library
-	keymap  uintptr
+	keymap  *lxkb.Keymap
 	text    string
 	fd      int
 	size    uint32
 	layouts []string
+	caps    ledIndex
+	num     ledIndex
+	scroll  ledIndex
 }
 
-func (l *Library) Compile(names Names) (*Keymap, error) {
-	names = names.withDefaults()
-	rn := &ruleNames{cString(names.Rules), cString(names.Model), cString(names.Layout), cString(names.Variant), cString(names.Options)}
-	km := l.keymapNew(l.context, rn, 0)
-	runtime.KeepAlive(rn)
-	if km == 0 {
-		return nil, fmt.Errorf("xkb: libxkbcommon cannot compile a keymap from %+v", names)
+// Compile compiles names, with the format and limits libxkbcommon's
+// xkb_keymap_new_from_names has, and serves the keymap as xkb_v1 text.
+func (c *Compiler) Compile(names Names) (*Keymap, error) {
+	km, err := c.ctx.NewKeymapFromNames(names)
+	if err != nil {
+		return nil, fmt.Errorf("xkb: compile a keymap from %+v: %w", names, err)
 	}
-	p := l.keymapString(km, keymapFormatTextV1)
-	if p == nil {
-		l.keymapUnref(km)
-		return nil, fmt.Errorf("xkb: libxkbcommon cannot serialize the keymap for %+v", names)
-	}
-	text := l.goString(p)
-	l.free(p)
+	text := km.Text()
 	if len(text) >= math.MaxUint32 {
-		l.keymapUnref(km)
 		return nil, fmt.Errorf("xkb: the keymap for %+v is %d bytes, too large for wl_keyboard", names, len(text))
 	}
 	fd, err := sealedMemfd(text + "\x00")
 	if err != nil {
-		l.keymapUnref(km)
 		return nil, err
 	}
-	layouts := make([]string, l.numLayouts(km))
+	layouts := make([]string, km.NumLayouts())
 	for i := range layouts {
-		if p := l.layoutName(km, uint32(i)); p != nil {
-			layouts[i] = l.goString(p)
-		}
+		layouts[i] = km.LayoutName(uint32(i))
 	}
-	return &Keymap{lib: l, keymap: km, text: text, fd: fd, size: uint32(len(text) + 1), layouts: layouts}, nil //nolint:gosec // bounded by the check above
-}
-
-func (l *Library) goString(p unsafe.Pointer) string {
-	return strings.Clone(unsafe.String((*byte)(p), l.strlen(p))) //nolint:gosec // p is a NUL-terminated string from libxkbcommon
+	k := &Keymap{keymap: km, text: text, fd: fd, size: uint32(len(text) + 1), layouts: layouts} //nolint:gosec // bounded by the check above
+	k.caps, k.num, k.scroll = k.led("Caps Lock"), k.led("Num Lock"), k.led("Scroll Lock")
+	return k, nil
 }
 
 func sealedMemfd(content string) (int, error) {
@@ -241,7 +115,6 @@ func (k *Keymap) Text() string {
 }
 
 func (k *Keymap) Close() error {
-	k.lib.keymapUnref(k.keymap)
 	if err := unix.Close(k.fd); err != nil {
 		return fmt.Errorf("xkb: close keymap fd %d: %w", k.fd, err)
 	}
@@ -255,28 +128,24 @@ var (
 )
 
 func (k *Keymap) Keycode(keysym string) (uint32, error) {
-	l := k.lib
-	name := cString(keysym)
-	sym := l.keysymFromName(name, 0)
-	if sym == 0 {
-		sym = l.keysymFromName(name, keysymCaseInsensitive)
+	sym := lxkb.KeysymFromName(keysym, lxkb.KeysymNoFlags)
+	if sym == lxkb.KeyNoSymbol {
+		sym = lxkb.KeysymFromName(keysym, lxkb.KeysymNameCaseInsensitive)
 	}
-	runtime.KeepAlive(name)
-	if sym == 0 {
+	if sym == lxkb.KeyNoSymbol {
 		return 0, fmt.Errorf("%w %q", ErrUnknownKeysym, keysym)
 	}
-	lo, hi := l.minKeycode(k.keymap), l.maxKeycode(k.keymap)
+	km := k.keymap
+	lo, hi := km.MinKeycode(), km.MaxKeycode()
 	for _, anyLevel := range []bool{false, true} {
 		for key := lo; key <= hi; key++ {
-			levels := l.numLevels(k.keymap, key, 0)
+			levels := km.NumLevels(key, 0)
 			if !anyLevel {
 				levels = min(levels, 1)
 			}
 			for level := range levels {
-				var syms *uint32
-				n := l.symsByLevel(k.keymap, key, 0, level, &syms)
-				if n > 0 && slices.Contains(unsafe.Slice(syms, n), sym) && key >= evdevOffset { //nolint:gosec // libxkbcommon returned n keysyms at syms
-					return key - evdevOffset, nil
+				if slices.Contains(km.KeySymsByLevel(key, 0, level), sym) && key >= evdevOffset {
+					return uint32(key) - evdevOffset, nil
 				}
 			}
 		}
@@ -285,10 +154,8 @@ func (k *Keymap) Keycode(keysym string) (uint32, error) {
 }
 
 func (k *Keymap) ModMask(name string) (uint32, error) {
-	cname := cString(name)
-	i := k.lib.modIndex(k.keymap, cname)
-	runtime.KeepAlive(cname)
-	if i == modInvalid || i >= 32 {
+	i, ok := k.keymap.ModIndex(name)
+	if !ok || i >= 32 {
 		return 0, fmt.Errorf("%w %q", ErrUnknownModifier, name)
 	}
 	return 1 << i, nil
@@ -302,55 +169,44 @@ type Locks struct {
 	Caps, Num, Scroll bool
 }
 
-var (
-	ledCaps   = cString("Caps Lock")
-	ledNum    = cString("Num Lock")
-	ledScroll = cString("Scroll Lock")
-)
-
+// State tracks one keyboard's modifiers, layout and LEDs over a Keymap.
 type State struct {
-	lib   *Library
-	state uintptr
+	keymap *Keymap
+	state  *lxkb.State
 }
 
-func (k *Keymap) NewState() (*State, error) {
-	st := k.lib.stateNew(k.keymap)
-	if st == 0 {
-		return nil, errors.New("xkb: xkb_state_new failed")
-	}
-	return &State{lib: k.lib, state: st}, nil
+func (k *Keymap) NewState() *State {
+	return &State{keymap: k, state: k.keymap.NewState()}
 }
 
-func (s *State) Close() {
-	s.lib.stateUnref(s.state)
-}
+const reportedChanges = lxkb.StateModDepressed | lxkb.StateModLatched | lxkb.StateModLocked | lxkb.StateLayoutEffective
 
 func (s *State) Key(evdev uint32, pressed bool) bool {
-	direction := int32(keyUp)
+	dir := lxkb.KeyReleased
 	if pressed {
-		direction = keyDown
+		dir = lxkb.KeyPressed
 	}
-	changed := s.lib.updateKey(s.state, evdev+evdevOffset, direction)
-	return changed&(modsDepressed|modsLatched|modsLocked|layoutEffective) != 0
+	return s.state.UpdateKey(lxkb.Keycode(evdev+evdevOffset), dir)&reportedChanges != 0
 }
 
 func (s *State) Keysym(evdev uint32) uint32 {
-	return s.lib.keyGetOneSym(s.state, evdev+evdevOffset)
+	return uint32(s.state.KeyGetOneSym(lxkb.Keycode(evdev + evdevOffset)))
+}
+
+func (s *State) lit(l ledIndex) bool {
+	return l.ok && s.state.LEDIndexIsActive(l.slot)
 }
 
 func (s *State) Locks() Locks {
-	return Locks{
-		Caps:   s.lib.ledActive(s.state, ledCaps) == 1,
-		Num:    s.lib.ledActive(s.state, ledNum) == 1,
-		Scroll: s.lib.ledActive(s.state, ledScroll) == 1,
-	}
+	k := s.keymap
+	return Locks{Caps: s.lit(k.caps), Num: s.lit(k.num), Scroll: s.lit(k.scroll)}
 }
 
 func (s *State) Modifiers() Modifiers {
 	return Modifiers{
-		Depressed: s.lib.serializeMods(s.state, modsDepressed),
-		Latched:   s.lib.serializeMods(s.state, modsLatched),
-		Locked:    s.lib.serializeMods(s.state, modsLocked),
-		Group:     s.lib.serializeLayout(s.state, layoutEffective),
+		Depressed: uint32(s.state.SerializeMods(lxkb.StateModDepressed)),
+		Latched:   uint32(s.state.SerializeMods(lxkb.StateModLatched)),
+		Locked:    uint32(s.state.SerializeMods(lxkb.StateModLocked)),
+		Group:     s.state.SerializeLayout(lxkb.StateLayoutEffective),
 	}
 }

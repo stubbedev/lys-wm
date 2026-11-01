@@ -77,26 +77,18 @@ func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
 	}
 	s := &Seat{display: d, listener: listener, cfg: p.cfg, state: p.state, devices: map[sw.WlSeatCapability]int{}, keymaps: map[*sw.WlKeyboard]sentKeymap{}}
 	if _, err := d.AddGlobal(sw.WlSeatInterface, seatVersion, s.bind); err != nil {
-		s.Close()
 		return nil, err
 	}
 	if _, err := d.AddGlobal(scs.WpCursorShapeManagerV1Interface, cursorShapeVersion, s.bindCursorShape); err != nil {
-		s.Close()
 		return nil, err
 	}
 	if _, err := d.AddGlobal(srp.ZwpRelativePointerManagerV1Interface, relativePointerVersion, s.bindRelativePointer); err != nil {
-		s.Close()
 		return nil, err
 	}
 	if _, err := d.AddGlobal(spg.ZwpPointerGesturesV1Interface, gesturesVersion, s.bindGestures); err != nil {
-		s.Close()
 		return nil, err
 	}
 	return s, nil
-}
-
-func (s *Seat) Close() {
-	s.state.Close()
 }
 
 func (s *Seat) lookup(c *server.Client) *clientResources {

@@ -16,7 +16,7 @@ Requires:       hwdata
 Requires:       libglvnd-egl
 Requires:       libglvnd-gles
 Requires:       libinput
-Requires:       libxkbcommon
+Requires:       xkeyboard-config
 Requires:       mesa-libgbm
 Recommends:     xorg-x11-server-Xwayland
 Recommends:     xdg-desktop-portal

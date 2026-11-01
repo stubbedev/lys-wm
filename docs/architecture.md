@@ -15,7 +15,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | EGL, GLES2, GBM | `libEGL`, `libGLESv2`, `libgbm` through purego (#33) |
 | Vulkan | `libvulkan` through lys-lib's `third_party/vk` and `gpu` (#155) |
 | Input devices | `libinput` through purego (#42) |
-| Keymaps and keyboard state | `libxkbcommon` through purego (#13) |
+| Keymaps and keyboard state | lys-lib's `xkb`, in pure Go |
 | Wayland wire protocol | in-repo codec and scanner (#3, #4) |
 | DRM/KMS ioctls, pixel formats, EDID | lys-lib's `drm`, `fourcc` and `edid`, shared with lys-splash (stubbedev/lys-lib#30) |
 | epoll, timerfd, signalfd, memfd | [`golang.org/x/sys/unix`](https://pkg.go.dev/golang.org/x/sys/unix) |
@@ -28,14 +28,16 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 
 Adding a purego library, or a dependency to this table, is a decision issue.
 
-libxkbcommon replaced xkb-go (#13): xkb-go's RMLVO compiler drops the
-compatibility section, so no key sets a modifier, and serializes keys
-with several groups in a form libxkbcommon refuses to parse. Third-party
-clients read keymaps with libxkbcommon, so the compositor compiles and
-serves them with it too; lys-ui and lys-shell read them with xkb-go. The
-purego libraries' paths are baked in at build time by the Nix package, and
-the release builds load them by soname; `LYS_WM_LIBXKBCOMMON` overrides
-libxkbcommon's.
+Keymaps come from lys-lib's `xkb`, which replaced libxkbcommon so that no compositor
+needs the C library loaded, a key event allocates nothing, and every lys process
+shares one implementation. It is held to libxkbcommon by differential tests across
+every layout, variant, option and model xkeyboard-config offers. Keymaps compile in
+the v2 format, as `xkb_keymap_new_from_names` does, and clients are served xkb_v1
+text, what `wl_keyboard` carries; third-party clients read it with libxkbcommon, and
+`TestLibxkbcommonClientsReadAllThreeLayouts` holds it to `xkbcli`. Before that, xkb-go
+was dropped (#13) because its RMLVO compiler dropped the compatibility section.
+The remaining purego libraries' paths are baked in at build time by the Nix package,
+and the release builds load them by soname.
 
 Tab titles are drawn with lys-lib's `render` package, which lys-ui moved
 there with everything else that is not UI (stubbedev/lys-ui#357). lys-wm does
@@ -486,7 +488,7 @@ Everything lives under `internal/` except the commands.
 | `seat` | `wl_seat`, keyboard, pointer and touch, `wp_cursor_shape_v1`, and touchpad gestures through `zwp_pointer_gestures_v1`, which stay with the surface they began on (#13, #14, #108) |
 | `data` | `wl_data_device_manager` and `zwp_primary_selection_device_manager_v1`: the clipboard and primary selection offered to the keyboard focus, and drag and drop (#18) |
 | `xcursor` | Xcursor files and theme lookup through `XCURSOR_PATH` and `Inherits`, and the built-in arrow (#14) |
-| `xkb` | Keymap compilation, sealed keymap fds and modifier state through libxkbcommon (#13) |
+| `xkb` | Keymap compilation, sealed keymap fds and modifier state through lys-lib's `xkb` (#13) |
 | `shell` | xdg-shell and layer-shell glue between clients and `wm`: toplevels, popups placed by their positioner, explicit popup grabs, server-side decorations (xdg-decoration, and KDE's server-decoration for GTK3 clients, both always server-side; #180), activation tokens, and xdg-foreign handles that make another client's toplevel, such as a portal dialog, a child of the exported window, and xdg-dialog's modal hint; focus that would land on a window with a mapped modal dialog goes to the dialog, for X windows with `_NET_WM_STATE_MODAL` too (#15, #16, #17, #20, #48, #110, #111); `xdg_toplevel_icon_v1` icons, copied out of their shm buffers when assigned and latched with the toplevel's commit, for IPC and the tab bar (#154) |
 | `wm` | The pure core and the dispatcher (#21, #66) |
 | `anim` | Easing curves, springs, tweens and the per-event animation table (#223) |

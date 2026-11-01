@@ -505,9 +505,6 @@ func (c *Compositor) Close() error {
 		errs = append(errs, c.repeat.timer.Remove())
 		c.repeat.timer = nil
 	}
-	if c.seat != nil {
-		c.seat.Close()
-	}
 	return errors.Join(errs...)
 }
 

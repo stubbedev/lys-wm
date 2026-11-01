@@ -21,7 +21,7 @@ var layouts = xkb.Names{Layout: "us,dk,es", Options: "grp:toggle"}
 
 func compile(t *testing.T) *xkb.Keymap {
 	t.Helper()
-	km, err := testenv.XKBLibrary(t).Compile(layouts)
+	km, err := testenv.XKBCompiler(t).Compile(layouts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,12 +31,7 @@ func compile(t *testing.T) *xkb.Keymap {
 
 func state(t *testing.T) *xkb.State {
 	t.Helper()
-	st, err := compile(t).NewState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(st.Close)
-	return st
+	return compile(t).NewState()
 }
 
 const (
@@ -110,23 +105,17 @@ func TestKeymapFDIsSealedAndComplete(t *testing.T) {
 	}
 }
 
-func TestInvalidNamesAndLibraries(t *testing.T) {
-	if _, err := testenv.XKBLibrary(t).Compile(xkb.Names{Layout: "no-such-layout"}); err == nil {
+func TestInvalidNames(t *testing.T) {
+	if _, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "no-such-layout"}); err == nil {
 		t.Fatal("an unknown layout compiled")
-	}
-	if _, err := xkb.Load("/nonexistent/libxkbcommon.so.0"); err == nil {
-		t.Fatal("a missing library loaded")
 	}
 }
 
 func TestEnvironment(t *testing.T) {
-	env := map[string]string{"XKB_DEFAULT_LAYOUT": "us,dk", "XKB_DEFAULT_OPTIONS": "grp:toggle", xkb.LibraryEnv: "/lib/x.so"}
+	env := map[string]string{"XKB_DEFAULT_LAYOUT": "us,dk", "XKB_DEFAULT_OPTIONS": "grp:toggle"}
 	getenv := func(k string) string { return env[k] }
 	if got := xkb.NamesFromEnv(getenv); got != (xkb.Names{Layout: "us,dk", Options: "grp:toggle"}) {
 		t.Fatalf("names %+v", got)
-	}
-	if got := xkb.LibraryPath(getenv); got != "/lib/x.so" {
-		t.Fatalf("library %q", got)
 	}
 }
 

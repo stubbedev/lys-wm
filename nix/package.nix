@@ -30,17 +30,17 @@
 
         # Pins the module dependencies in go.sum; `just vendor-hash` recomputes
         # it, and CI does so on Dependabot's pull requests.
-        vendorHash = "sha256-p1/yoH3skHoAnIRuwDnGj5RFsmjj2ZQs6ny4C+ktyZw=";
+        vendorHash = "sha256-O6MOp6iDBv/Xv4AC63+ApZ9iLjdeNos8lSB8hjuePwU=";
 
         subPackages = ["cmd/lys-wm" "cmd/lys-wmctl"];
 
         # purego loads these at runtime; the store paths are baked in so the
         # binary needs no library search path.
         ldflags = with pkgs; [
-          "-X github.com/stubbedev/lys-wm/internal/xkb.defaultLibrary=${libxkbcommon}/lib/libxkbcommon.so.0"
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultEGL=${libglvnd}/lib/libEGL.so.1"
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultGLESv2=${libglvnd}/lib/libGLESv2.so.2"
           "-X github.com/stubbedev/lys-wm/internal/gpu.defaultGBM=${libgbm}/lib/libgbm.so.1"
+          "-X github.com/stubbedev/lys-lib/xkb.defaultRoot=${xkeyboard-config}/share/X11/xkb"
           "-X github.com/stubbedev/lys-lib/third_party/vk.defaultLibrary=${vulkan-loader}/lib/libvulkan.so.1"
           "-X github.com/stubbedev/lys-lib/edid.defaultPNP=${hwdata}/share/hwdata/pnp.ids"
           "-X github.com/stubbedev/lys-wm/internal/session.defaultLibinput=${libinput.out}/lib/libinput.so.10"

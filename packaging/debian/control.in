@@ -20,7 +20,7 @@ Depends:
  libgbm1,
  libgles2,
  libinput10,
- libxkbcommon0
+ xkb-data
 Recommends:
  xwayland,
  xdg-desktop-portal,

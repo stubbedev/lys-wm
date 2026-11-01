@@ -79,7 +79,6 @@ func setup(t *testing.T) *env {
 		if err := <-done; err != nil {
 			t.Errorf("Run: %v", err)
 		}
-		e.seat.Close()
 		_ = e.disp.Close()
 		_ = l.Close()
 		_ = os.RemoveAll(dir)
