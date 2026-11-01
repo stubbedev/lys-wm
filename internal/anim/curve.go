@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 type Curve interface {
@@ -157,13 +159,13 @@ func (s Spring) offset(t float64) float64 {
 	switch {
 	case z < 1:
 		wd := w * math.Sqrt(1-float64(z*z))
-		return -math.Exp(-z*w*t) * (math.Cos(wd*t) + float64(z*w/wd*math.Sin(wd*t)))
+		return -gomath.Exp(-z*w*t) * (gomath.Cos(wd*t) + float64(z*w/wd*gomath.Sin(wd*t)))
 	case z == 1:
-		return -(1 + float64(w*t)) * math.Exp(-w*t)
+		return -(1 + float64(w*t)) * gomath.Exp(-w*t)
 	}
 	r := float64(w * math.Sqrt(float64(z*z)-1))
 	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
-	return (float64(r2*math.Exp(r1*t)) - float64(r1*math.Exp(r2*t))) / (r1 - r2)
+	return (float64(r2*gomath.Exp(r1*t)) - float64(r1*gomath.Exp(r2*t))) / (r1 - r2)
 }
 
 func (s Spring) envelope(t float64) float64 {
@@ -171,13 +173,13 @@ func (s Spring) envelope(t float64) float64 {
 	switch {
 	case z < 1:
 		wd := w * math.Sqrt(1-float64(z*z))
-		return math.Exp(-z*w*t) * math.Hypot(1, z*w/wd)
+		return gomath.Exp(-z*w*t) * gomath.Hypot(1, z*w/wd)
 	case z == 1:
-		return (1 + float64(w*t)) * math.Exp(-w*t)
+		return (1 + float64(w*t)) * gomath.Exp(-w*t)
 	}
 	r := float64(w * math.Sqrt(float64(z*z)-1))
 	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
-	return (math.Abs(r2) + math.Abs(r1)) / (r1 - r2) * math.Exp(r1*t)
+	return (math.Abs(r2) + math.Abs(r1)) / (r1 - r2) * gomath.Exp(r1*t)
 }
 
 func (s Spring) settleTime() time.Duration {

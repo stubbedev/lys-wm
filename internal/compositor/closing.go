@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -84,11 +86,11 @@ func travelled(from, at, to image.Rectangle) float64 {
 	fx, fy := centre(from)
 	ax, ay := centre(at)
 	tx, ty := centre(to)
-	total := math.Hypot(tx-fx, ty-fy)
+	total := gomath.Hypot(tx-fx, ty-fy)
 	if total == 0 {
 		return 1
 	}
-	return min(max(1-math.Hypot(tx-ax, ty-ay)/total, 0), 1)
+	return min(max(1-gomath.Hypot(tx-ax, ty-ay)/total, 0), 1)
 }
 
 func (c *Compositor) drawBud(pass *frame, o *output.Output, neighbour, at image.Rectangle, strength float64) {

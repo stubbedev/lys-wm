@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -124,7 +126,7 @@ func (c *Compositor) clampToOutputs(p point) point {
 			X: math.Min(math.Max(p.X, float64(r.Min.X)), float64(r.Max.X)-1),
 			Y: math.Min(math.Max(p.Y, float64(r.Min.Y)), float64(r.Max.Y)-1),
 		}
-		if d := math.Hypot(q.X-p.X, q.Y-p.Y); d < nearest {
+		if d := gomath.Hypot(q.X-p.X, q.Y-p.Y); d < nearest {
 			best, nearest = q, d
 		}
 	}

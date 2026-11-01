@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/shell"
@@ -110,7 +112,7 @@ func (c *Compositor) xOutput(p image.Point, area func(*output.Output) image.Rect
 	for _, o := range c.outputs {
 		r := area(o)
 		q := image.Pt(min(max(p.X, r.Min.X), r.Max.X-1), min(max(p.Y, r.Min.Y), r.Max.Y-1))
-		if d := math.Hypot(float64(q.X-p.X), float64(q.Y-p.Y)); d < nearest {
+		if d := gomath.Hypot(float64(q.X-p.X), float64(q.Y-p.Y)); d < nearest {
 			best, nearest = o, d
 		}
 	}

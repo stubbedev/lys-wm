@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -72,7 +74,7 @@ func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 		return
 	}
 	p := min(max(sw.progress.At(c.frameTime), 0), 1)
-	strength := math.Sin(math.Pi * p)
+	strength := gomath.Sin(math.Pi * p)
 	if strength <= 0 {
 		return
 	}
@@ -109,7 +111,7 @@ func nearest(ws []*window, r image.Rectangle) *window {
 	best, dist := ws[0], math.MaxFloat64
 	for _, w := range ws {
 		d := w.tile.Min.Add(w.tile.Size().Div(2)).Sub(c)
-		if v := math.Hypot(float64(d.X), float64(d.Y)); v < dist {
+		if v := gomath.Hypot(float64(d.X), float64(d.Y)); v < dist {
 			best, dist = w, v
 		}
 	}

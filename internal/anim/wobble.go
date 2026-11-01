@@ -1,8 +1,9 @@
 package anim
 
 import (
-	"math"
 	"time"
+
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 const (
@@ -38,7 +39,7 @@ func (w *Wobble) Shift(dx, dy, grabU, grabV float64) {
 	for j := range w.rows + 1 {
 		for i := range w.cols + 1 {
 			du, dv := float64(i)/float64(w.cols)-grabU, float64(j)/float64(w.rows)-grabV
-			lag := 1 - math.Exp(-(float64(du*du)+float64(dv*dv))/(wobbleReach*wobbleReach))
+			lag := 1 - gomath.Exp(-(float64(du*du)+float64(dv*dv))/(wobbleReach*wobbleReach))
 			k := w.node(i, j)
 			w.off[k][0] -= float64(dx * lag)
 			w.off[k][1] -= float64(dy * lag)
@@ -96,7 +97,7 @@ func (w *Wobble) Offset(i, j int) (dx, dy float64) {
 
 func (w *Wobble) Resting() bool {
 	for k := range w.off {
-		if math.Hypot(w.off[k][0], w.off[k][1]) > wobbleRestPx || math.Hypot(w.vel[k][0], w.vel[k][1]) > wobbleRestVel {
+		if gomath.Hypot(w.off[k][0], w.off[k][1]) > wobbleRestPx || gomath.Hypot(w.vel[k][0], w.vel[k][1]) > wobbleRestVel {
 			return false
 		}
 	}

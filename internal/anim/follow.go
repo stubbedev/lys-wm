@@ -4,6 +4,8 @@ import (
 	"image"
 	"math"
 	"time"
+
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 const FollowTolerance = 0.25
@@ -34,20 +36,20 @@ func (f follower) offset(t float64) (u, v float64) {
 	case z < 1:
 		wd := w * math.Sqrt(1-float64(z*z))
 		a, b := f.u0, (f.v0+float64(z*w*f.u0))/wd
-		e := math.Exp(-z * w * t)
-		c, s := math.Cos(wd*t), math.Sin(wd*t)
+		e := gomath.Exp(-z * w * t)
+		c, s := gomath.Cos(wd*t), gomath.Sin(wd*t)
 		u = e * (float64(a*c) + float64(b*s))
 		v = e * (float64((float64(b*wd)-float64(z*w*a))*c) - float64((float64(a*wd)+float64(z*w*b))*s))
 		return u, v
 	case z == 1:
 		a, b := f.u0, f.v0+float64(w*f.u0)
-		e := math.Exp(-w * t)
+		e := gomath.Exp(-w * t)
 		return (a + float64(b*t)) * e, (b - float64(w*(a+float64(b*t)))) * e
 	}
 	r1, r2 := f.roots()
 	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
 	c2 := f.u0 - c1
-	e1, e2 := math.Exp(r1*t), math.Exp(r2*t)
+	e1, e2 := gomath.Exp(r1*t), gomath.Exp(r2*t)
 	return float64(c1*e1) + float64(c2*e2), float64(r1*c1*e1) + float64(r2*c2*e2)
 }
 
@@ -56,13 +58,13 @@ func (f follower) envelope(t float64) float64 {
 	switch {
 	case z < 1:
 		wd := w * math.Sqrt(1-float64(z*z))
-		return math.Exp(-z*w*t) * (math.Abs(f.u0) + math.Abs((f.v0+float64(z*w*f.u0))/wd))
+		return gomath.Exp(-z*w*t) * (math.Abs(f.u0) + math.Abs((f.v0+float64(z*w*f.u0))/wd))
 	case z == 1:
-		return (math.Abs(f.u0) + float64(math.Abs(f.v0+float64(w*f.u0))*t)) * math.Exp(-w*t)
+		return (math.Abs(f.u0) + float64(math.Abs(f.v0+float64(w*f.u0))*t)) * gomath.Exp(-w*t)
 	}
 	r1, r2 := f.roots()
 	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
-	return (math.Abs(c1) + math.Abs(f.u0-c1)) * math.Exp(r1*t)
+	return (math.Abs(c1) + math.Abs(f.u0-c1)) * gomath.Exp(r1*t)
 }
 
 func (f follower) settleTime() time.Duration {

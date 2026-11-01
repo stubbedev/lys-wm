@@ -5,6 +5,8 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	spc "github.com/stubbedev/lys-wm/internal/protocol/server/pointerconstraints"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
@@ -233,7 +235,7 @@ func (k *constraint) clamp(local point) point {
 			X: math.Min(math.Max(local.X, float64(r.Min.X)), float64(r.Max.X)-subpixel),
 			Y: math.Min(math.Max(local.Y, float64(r.Min.Y)), float64(r.Max.Y)-subpixel),
 		}
-		if d := math.Hypot(q.X-local.X, q.Y-local.Y); d < dist {
+		if d := gomath.Hypot(q.X-local.X, q.Y-local.Y); d < dist {
 			best, dist = q, d
 		}
 	}
