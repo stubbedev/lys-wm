@@ -602,8 +602,10 @@ func (s *Surface) apply(u *Update) (err error) {
 	st.bufferDamage.Reset()
 	st.offset = image.Point{}
 	superseded := s.current.feedbacks
-	s.current.feedbacks = nil
-	if err := discard(superseded); err != nil {
+	s.current.feedbacks = superseded[:0]
+	err = discard(superseded)
+	clear(superseded)
+	if err != nil {
 		return err
 	}
 	s.current.merge(st)

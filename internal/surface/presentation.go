@@ -49,12 +49,14 @@ func discard(feedbacks []*spt.WpPresentationFeedback) error {
 
 func (s *Surface) Latch() {
 	s.latched = append(s.latched, s.current.feedbacks...)
-	s.current.feedbacks = nil
+	clear(s.current.feedbacks)
+	s.current.feedbacks = s.current.feedbacks[:0]
 }
 
 func (s *Surface) Presented(outputs []*sw.WlOutput, at, refresh time.Duration, seq uint64, kind PresentationKind) error {
 	feedbacks := s.latched
-	s.latched = nil
+	s.latched = feedbacks[:0]
+	defer clear(feedbacks)
 	ts := wire.TimespecOf(at)
 	seqHi, seqLo := wire.Halves(seq)
 	for _, fb := range feedbacks {
