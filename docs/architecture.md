@@ -176,6 +176,13 @@ exactly what moved. After drawing, an output schedules its next frame for as
 long as an animation overlaps it, whether or not the frame changed anything,
 so an animation slower than a pixel per frame still reaches its end.
 
+A client commit runs a frame only on the outputs whose last frame drew a member
+of its surface tree, unless the commit may reach another: its tree's bounds, the
+role's geometry or popup position, a surface offset or a surface gaining or
+losing its texture changed, the surface is new, or its role does not state its
+placement (cursors, drag icons, input method popups). A missed wake is a stale
+picture, so anything not known to stay put wakes every output.
+
 A window that appears starts from its `windows_in` style and fades in; its
 ops are scaled by the fade, borders and shadows included (#231). A closing
 window is gone from the window list at once, so it takes no input and leaves
@@ -244,7 +251,9 @@ surface, into an offscreen target, and the drm backend copies it into a
 linear ARGB8888 dumb buffer, the only buffer every cursor plane takes:
 NVIDIA's cursor planes scan out linear only, and its EGL renders to no
 linear modifier. Pointer motion then moves the plane in an atomic commit of
-its own, or in the next frame's commit, and repaints nothing. An image
+its own, or in the next frame's commit, and repaints nothing. A cursor commit
+sets only what changed against what the last accepted commit left on the
+plane; a modeset, a resume or a cursor coming back from hidden sets it all. An image
 larger than the plane, or a plane whose test commit refuses it, puts the
 cursor back into the frame; a refusal is logged and lasts for the output's
 lifetime.
