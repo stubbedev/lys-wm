@@ -55,6 +55,10 @@ func (t xToplevel) prefersFloating() bool {
 	return t.PrefersFloating()
 }
 
+func (t xToplevel) wantsFullscreen() bool {
+	return t.Fullscreen()
+}
+
 func (t xToplevel) sizeLimits() (minimum, maximum image.Point) {
 	h, k := t.SizeHints(), output.Unit
 	if o := t.c.xOutput(t.Rect().Min, (*output.Output).XRect); o != nil {
@@ -150,14 +154,7 @@ func (c *Compositor) XWindowMapped(w *xwayland.Window) error {
 		c.unmanaged = append(c.unmanaged, w)
 		return errors.Join(c.refreshPointer(), c.scheduleAll())
 	}
-	t := xToplevel{w, c}
-	if err := c.mapToplevel(t); err != nil {
-		return err
-	}
-	if !w.Fullscreen() {
-		return nil
-	}
-	return c.update(c.wm.SetFullscreen(c.windowOf(t).id, true))
+	return c.mapToplevel(xToplevel{w, c})
 }
 
 func (c *Compositor) XWindowUnmapped(w *xwayland.Window) error {

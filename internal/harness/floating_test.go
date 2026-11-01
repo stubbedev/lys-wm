@@ -369,3 +369,25 @@ func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
 		t.Fatalf("a window asking for at least 400x300 floats at %v", w.Logical)
 	}
 }
+
+func TestFullscreenAskedBeforeMappingIsHonoured(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	red := c.Window("red", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("red to map", red.Mapped)
+	blue := c.WindowWith("blue", testclient.Fill(0xff, 0, 0), func(w *testclient.Window) error { return w.Toplevel.SetFullscreen(nil) })
+	c.DispatchUntil("blue's first configure", func() bool { return blue.Logical != (image.Point{}) })
+	if blue.Logical != small.Size || !slices.Contains(blue.States, cxdg.XdgToplevelStateFullscreen) {
+		t.Fatalf("the first configure was %v with states %v, want the whole output, fullscreen", blue.Logical, blue.States)
+	}
+	c.DispatchUntil("blue to map", blue.Mapped)
+	h.Eventually("blue covering the output", showing(10, 10, blueColor))
+
+	unset := c.WindowWith("unset", testclient.Fill(0, 0xff, 0), func(w *testclient.Window) error {
+		return errors.Join(w.Toplevel.SetFullscreen(nil), w.Toplevel.UnsetFullscreen())
+	})
+	c.DispatchUntil("the first configure of the window that changed its mind", func() bool { return unset.Logical != (image.Point{}) })
+	if slices.Contains(unset.States, cxdg.XdgToplevelStateFullscreen) {
+		t.Fatalf("a window that unset fullscreen before mapping was configured with %v", unset.States)
+	}
+}

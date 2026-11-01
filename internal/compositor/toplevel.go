@@ -28,6 +28,7 @@ type toplevel interface {
 	parent() toplevel
 	modal() bool
 	prefersFloating() bool
+	wantsFullscreen() bool
 	sizeLimits() (minimum, maximum image.Point)
 	scaled() bool
 	settled(w want) bool
@@ -57,6 +58,10 @@ func (t xdgToplevel) modal() bool {
 
 func (t xdgToplevel) prefersFloating() bool {
 	return t.Dialog()
+}
+
+func (t xdgToplevel) wantsFullscreen() bool {
+	return t.WantsFullscreen()
 }
 
 func (t xdgToplevel) sizeLimits() (minimum, maximum image.Point) {

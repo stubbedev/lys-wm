@@ -293,10 +293,10 @@ func fixedSize(minimum, maximum image.Point) bool {
 
 func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	t := xdgToplevel{st}
-	if float, size := c.floats(t); float {
+	if float, size := c.floats(t); float && !t.wantsFullscreen() {
 		return t.apply(want{rect: image.Rectangle{Max: floatSize(t, size)}, activated: true})
 	}
-	s, err := c.wm.MapWindow(c.nextWindow, c.settings.Autotile)
+	s, err := c.mapped(t, c.nextWindow)
 	if err != nil {
 		return err
 	}
@@ -306,6 +306,20 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 		}
 	}
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)
+}
+
+func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
+	var s wm.State
+	var err error
+	if float, size := c.floats(t); float {
+		s, err = c.wm.MapFloating(id, c.floatRect(t, size))
+	} else {
+		s, err = c.wm.MapWindow(id, c.settings.Autotile)
+	}
+	if err != nil || !t.wantsFullscreen() {
+		return s, err
+	}
+	return s.SetFullscreen(id, true)
 }
 
 func (c *Compositor) floatRect(t toplevel, size image.Point) image.Rectangle {
@@ -403,15 +417,8 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 func (c *Compositor) mapToplevel(t toplevel) error {
 	w := &window{id: c.nextWindow, top: t, motion: anim.NewRectMotion(image.Rectangle{}), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
 	c.nextWindow++
-	var s wm.State
-	var err error
-	float, size := c.floats(t)
-	w.floated = float
-	if float {
-		s, err = c.wm.MapFloating(w.id, c.floatRect(t, size))
-	} else {
-		s, err = c.wm.MapWindow(w.id, c.settings.Autotile)
-	}
+	w.floated, _ = c.floats(t)
+	s, err := c.mapped(t, w.id)
 	if err != nil {
 		return err
 	}

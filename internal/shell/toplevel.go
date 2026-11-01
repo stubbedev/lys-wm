@@ -27,25 +27,26 @@ func (s State) Has(st ToplevelState) bool {
 }
 
 type Toplevel struct {
-	xs          *XdgSurface
-	resource    *sxdg.XdgToplevel
-	title       string
-	appID       string
-	parent      *Toplevel
-	min, max    image.Point
-	pendingMin  image.Point
-	pendingMax  image.Point
-	minSet      bool
-	maxSet      bool
-	current     State
-	configures  configures[State]
-	decoration  *sxd.ZxdgToplevelDecorationV1
-	dialog      bool
-	modal       bool
-	icon        *Icon
-	pendingIcon *Icon
-	iconSet     bool
-	destroyed   bool
+	xs              *XdgSurface
+	resource        *sxdg.XdgToplevel
+	title           string
+	appID           string
+	parent          *Toplevel
+	min, max        image.Point
+	pendingMin      image.Point
+	pendingMax      image.Point
+	minSet          bool
+	maxSet          bool
+	current         State
+	configures      configures[State]
+	decoration      *sxd.ZxdgToplevelDecorationV1
+	dialog          bool
+	modal           bool
+	icon            *Icon
+	pendingIcon     *Icon
+	iconSet         bool
+	destroyed       bool
+	wantsFullscreen bool
 }
 
 func (t *Toplevel) Surface() *surface.Surface {
@@ -86,6 +87,10 @@ func (t *Toplevel) MaxSize() image.Point {
 
 func (t *Toplevel) Current() State {
 	return t.current
+}
+
+func (t *Toplevel) WantsFullscreen() bool {
+	return t.wantsFullscreen
 }
 
 func (t *Toplevel) Requested() State {
@@ -189,6 +194,7 @@ func (t *Toplevel) mapped() error {
 
 func (t *Toplevel) unmapped() error {
 	t.configures.reset()
+	t.wantsFullscreen = false
 	return t.xs.base.shell.listener.ToplevelUnmapped(t)
 }
 
@@ -312,10 +318,12 @@ func (t *Toplevel) UnsetMaximized(*sxdg.XdgToplevel) error {
 }
 
 func (t *Toplevel) SetFullscreen(*sxdg.XdgToplevel, *sw.WlOutput) error {
+	t.wantsFullscreen = true
 	return t.request(SetFullscreen{On: true})
 }
 
 func (t *Toplevel) UnsetFullscreen(*sxdg.XdgToplevel) error {
+	t.wantsFullscreen = false
 	return t.request(SetFullscreen{On: false})
 }
 
