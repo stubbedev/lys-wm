@@ -30,6 +30,7 @@ type drawOp struct {
 	goo       render.Goo
 	version   uint64
 	space     *colorspace.Description
+	pending   int32
 }
 
 func (op drawOp) covers() bool {
@@ -72,6 +73,8 @@ type frame struct {
 	ops        []drawOp
 	cursorFrom int
 	background int
+	blurs      []pendingBlur
+	below      []drawOp
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
@@ -315,6 +318,7 @@ func (sc *scene) draws(t render.Texture) bool {
 
 func (sc *scene) begin() *frame {
 	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background = sc.cur.ops[:0], 0, -1
+	sc.cur.blurs, sc.cur.below = sc.cur.blurs[:0], sc.cur.below[:0]
 	return &sc.cur
 }
 

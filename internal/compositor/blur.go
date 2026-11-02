@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"math"
 	"slices"
@@ -18,6 +19,15 @@ type Blur struct {
 	XRay    bool
 }
 
+type chainSpec struct {
+	offset float32
+	passes int
+}
+
+func (s chainSpec) reach() int {
+	return int(math.Ceil(float64(s.offset) * float64(int(1)<<(s.passes+1))))
+}
+
 type blurCache struct {
 	area    image.Rectangle
 	below   []drawOp
@@ -25,6 +35,7 @@ type blurCache struct {
 	version uint64
 	used    bool
 	to      colorOut
+	spec    chainSpec
 }
 
 func (b *blurCache) destroy() error {
@@ -52,7 +63,6 @@ func (b *blurCache) areaFor(needed, extent image.Rectangle) image.Rectangle {
 type blurCaches struct {
 	bySurface map[*surface.Surface]*blurCache
 	xray      *blurCache
-	below     []drawOp
 	shape     []image.Rectangle
 }
 
@@ -107,6 +117,10 @@ func (bc *blurCaches) drop() error {
 	return errors.Join(errs...)
 }
 
+func (c *Compositor) BlurRedraws() uint64 {
+	return c.blurGen
+}
+
 func (c *Compositor) dropBlurs() error {
 	var errs []error
 	for _, sc := range c.scenes {
@@ -131,16 +145,12 @@ func (c *Compositor) translucent(s *surface.Surface, opacity float32) bool {
 	return opacity*c.alpha.Alpha(s) < 1 || !c.opaque(s)
 }
 
-func (c *Compositor) blurOffset(o *output.Output) float32 {
-	return deviceLength(o, c.decor.Blur.Size)
+func (c *Compositor) blurSpec(o *output.Output) chainSpec {
+	return chainSpec{offset: deviceLength(o, c.decor.Blur.Size), passes: c.decor.Blur.Passes}
 }
 
-func (c *Compositor) blurReach(o *output.Output) int {
-	return int(math.Ceil(float64(c.blurOffset(o)) * float64(int(1)<<(c.decor.Blur.Passes+1))))
-}
-
-func blurChanged(sc *scene, cache *blurCache, area image.Rectangle, below []drawOp, to colorOut) bool {
-	if cache.area != area || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
+func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectangle, below []drawOp, to colorOut) bool {
+	if cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
 		return true
 	}
 	return slices.ContainsFunc(below, func(op drawOp) bool {
@@ -149,82 +159,179 @@ func blurChanged(sc *scene, cache *blurCache, area image.Rectangle, below []draw
 	})
 }
 
-func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask) error {
+func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask) {
+	if c.effects.BlurRegion(s).Empty() {
+		return
+	}
+	sc := c.sceneOf(o)
+	sc.blurs.shape = c.appendBlurRegion(sc.blurs.shape[:0], o, s, org)
+	c.drawBlur(pass, o, glassDraw{surface: s, shape: sc.blurs.shape, extent: org.device(o, s.Size()), mask: m, alpha: c.alpha.Alpha(s)})
+}
+
+func (c *Compositor) appendBlurRegion(rects []image.Rectangle, o *output.Output, s *surface.Surface, org origin) []image.Rectangle {
 	shape := c.effects.BlurRegion(s)
 	if shape.Empty() {
-		return nil
+		return rects
 	}
 	alpha := c.alpha.Alpha(s)
 	t, ok := c.textures[s]
 	if alpha == 1 && ok && t.opaque() {
-		return nil
+		return rects
 	}
-	sc := c.sceneOf(o)
-	sc.blurs.shape = sc.blurs.shape[:0]
 	bounds := image.Rectangle{Max: s.Size()}
 	for _, r := range shape.Rects() {
 		r = r.Intersect(bounds)
 		if r.Empty() || alpha == 1 && s.Opaque().Covers(r) {
 			continue
 		}
-		sc.blurs.shape = append(sc.blurs.shape, org.child(r.Min).device(o, r.Size()))
+		rects = append(rects, org.child(r.Min).device(o, r.Size()))
 	}
-	return c.drawBlur(pass, o, s, sc.blurs.shape, org.device(o, s.Size()), m, alpha)
+	return rects
 }
 
-func (c *Compositor) drawBlur(pass *frame, o *output.Output, s *surface.Surface, shape []image.Rectangle, extent image.Rectangle, m render.Mask, alpha float32) error {
-	if alpha <= 0 {
-		return nil
+type glassDraw struct {
+	surface *surface.Surface
+	shape   []image.Rectangle
+	extent  image.Rectangle
+	mask    render.Mask
+	alpha   float32
+}
+
+type pendingBlur struct {
+	cache    *blurCache
+	spec     chainSpec
+	area     image.Rectangle
+	from, to int
+	visible  bool
+	resolved bool
+	failed   bool
+}
+
+func (f *frame) pend(b *blurCache, spec chainSpec, area image.Rectangle, ops []drawOp, shared bool) int32 {
+	if shared {
+		for i := range f.blurs {
+			if f.blurs[i].cache == b {
+				return int32(i + 1)
+			}
+		}
+	}
+	from := len(f.below)
+	for _, op := range ops {
+		if op.dst.Overlaps(area) {
+			f.below = append(f.below, op)
+		}
+	}
+	f.blurs = append(f.blurs, pendingBlur{cache: b, spec: spec, area: area, from: from, to: len(f.below)})
+	return int32(len(f.blurs)) //nolint:gosec // one per drawn surface
+}
+
+func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
+	if g.alpha <= 0 {
+		return
 	}
 	var under image.Rectangle
-	for _, r := range shape {
+	for _, r := range g.shape {
 		under = under.Union(r)
 	}
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
-	reach := c.blurReach(o)
+	spec := c.blurSpec(o)
+	reach := spec.reach()
 	area := under.Inset(-reach).Intersect(bounds)
 	if area.Empty() || !under.Overlaps(area) {
-		return nil
+		return
 	}
 	ops := pass.ops
 	sc := c.sceneOf(o)
 	var b *blurCache
-	if c.decor.Blur.XRay && pass.background >= 0 {
+	shared := pass.background >= 0 && c.decor.Blur.XRay
+	if shared {
 		b = sc.blurs.shared()
 		area, ops = bounds, pass.ops[:pass.background]
 	} else {
-		b = sc.blurs.of(s)
-		area = b.areaFor(area, extent.Inset(-reach).Intersect(bounds))
+		b = sc.blurs.of(g.surface)
+		area = b.areaFor(area, g.extent.Inset(-reach).Intersect(bounds))
 	}
-	b.used = true
-	below := sc.blurs.below[:0]
-	for _, op := range ops {
-		if op.dst.Overlaps(area) {
-			below = append(below, op)
-		}
-	}
-	sc.blurs.below = below
-	to := c.sceneOut(o)
-	if blurChanged(sc, b, area, below, to) {
-		if err := c.renderBlur(o, b, area, below, c.blurOffset(o), to); err != nil {
-			return err
-		}
-	}
-	final := b.chain[len(b.chain)-1].Texture()
-	for _, r := range shape {
+	pending := pass.pend(b, spec, area, ops, shared)
+	for _, r := range g.shape {
 		r = r.Intersect(area)
 		if r.Empty() {
 			continue
 		}
 		src := r.Sub(area.Min)
-		pass.ops = append(pass.ops, drawOp{tex: final, src: render.FRect{X: float64(src.Min.X), Y: float64(src.Min.Y), W: float64(src.Dx()), H: float64(src.Dy())}, dst: r, alpha: alpha, mask: m, version: b.version})
+		pass.ops = append(pass.ops, drawOp{
+			src: render.FRect{X: float64(src.Min.X), Y: float64(src.Min.Y), W: float64(src.Dx()), H: float64(src.Dy())}, dst: r,
+			alpha: g.alpha, mask: g.mask, pending: pending,
+		})
 	}
-	return nil
 }
 
-func (c *Compositor) renderBlur(o *output.Output, b *blurCache, area image.Rectangle, below []drawOp, offset float32, to colorOut) error {
+func (c *Compositor) resolveBlurs(o *output.Output, f *frame, from int) {
+	if len(f.blurs) == 0 {
+		return
+	}
+	sc, to := c.sceneOf(o), c.sceneOut(o)
+	for _, op := range f.ops[from:] {
+		if op.pending != 0 {
+			f.blurs[op.pending-1].visible = true
+		}
+	}
+	for i := len(f.blurs) - 1; i >= 0; i-- {
+		p := &f.blurs[i]
+		if !p.visible || p.resolved {
+			continue
+		}
+		below := frame{ops: f.below[p.from:p.to], cursorFrom: p.to - p.from}
+		below.cull(&sc.covered)
+		p.to = p.from + len(below.ops)
+		for _, op := range below.ops {
+			if op.pending != 0 {
+				f.blurs[op.pending-1].visible = true
+			}
+		}
+	}
+	for i := range f.blurs {
+		p := &f.blurs[i]
+		if !p.visible || p.resolved {
+			continue
+		}
+		p.resolved = true
+		below := f.settle(f.below[p.from:p.to])
+		p.to = p.from + len(below)
+		p.cache.used = true
+		if blurChanged(sc, p.cache, p.spec, p.area, below, to) {
+			if err := c.renderBlur(func(size image.Point) (render.TextureTarget, error) { return c.newSceneTarget(o, size) }, p, below, to); err != nil {
+				p.failed = true
+				c.report(fmt.Errorf("compositor: redraw a blur: %w", err))
+			}
+		}
+	}
+	kept := f.settle(f.ops[from:])
+	removed := len(f.ops) - from - len(kept)
+	f.ops = f.ops[:from+len(kept)]
+	if f.cursorFrom > from {
+		f.cursorFrom -= removed
+	}
+}
+
+func (f *frame) settle(ops []drawOp) []drawOp {
+	kept := ops[:0]
+	for _, op := range ops {
+		if op.pending != 0 {
+			p := &f.blurs[op.pending-1]
+			if p.failed || len(p.cache.chain) == 0 {
+				continue
+			}
+			op.tex, op.version, op.pending = p.cache.chain[len(p.cache.chain)-1].Texture(), p.cache.version, 0
+		}
+		kept = append(kept, op)
+	}
+	return kept
+}
+
+func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarget, error), pb *pendingBlur, below []drawOp, to colorOut) error {
+	b, area := pb.cache, pb.area
 	sizes := []image.Point{area.Size()}
-	for range c.decor.Blur.Passes {
+	for range pb.spec.passes {
 		last := sizes[len(sizes)-1]
 		sizes = append(sizes, image.Pt(max(last.X/2, 1), max(last.Y/2, 1)))
 	}
@@ -236,7 +343,7 @@ func (c *Compositor) renderBlur(o *output.Output, b *blurCache, area image.Recta
 			return err
 		}
 		for _, s := range sizes {
-			t, err := c.newSceneTarget(o, s)
+			t, err := newTarget(s)
 			if err != nil {
 				return errors.Join(err, b.destroy())
 			}
@@ -259,12 +366,12 @@ func (c *Compositor) renderBlur(o *output.Output, b *blurCache, area image.Recta
 			return err
 		}
 		p.Clear(render.Color{})
-		p.Kawase(b.chain[i-1].Texture(), image.Rectangle{Max: sizes[i]}, offset, i > c.decor.Blur.Passes)
+		p.Kawase(b.chain[i-1].Texture(), image.Rectangle{Max: sizes[i]}, pb.spec.offset, i > pb.spec.passes)
 		if err := p.End(); err != nil {
 			return err
 		}
 	}
 	c.blurGen++
-	b.area, b.below, b.version, b.to = area, slices.Clone(below), c.blurGen, to
+	b.area, b.below, b.version, b.to, b.spec = area, slices.Clone(below), c.blurGen, to, pb.spec
 	return nil
 }

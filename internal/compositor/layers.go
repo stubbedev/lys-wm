@@ -2,7 +2,6 @@ package compositor
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"iter"
 	"slices"
@@ -198,9 +197,7 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 			from := len(pass.ops)
 			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
 				under := [1]image.Rectangle{deviceRect(o, e.bounds())}
-				if err := c.drawBlur(pass, o, e.surface.Surface(), under[:], under[0], render.Mask{}, c.alpha.Alpha(e.surface.Surface())); err != nil {
-					c.report(fmt.Errorf("compositor: blur behind the %q layer surface: %w", e.surface.Namespace(), err))
-				}
+				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: under[:], extent: under[0], alpha: c.alpha.Alpha(e.surface.Surface())})
 			}
 			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1)
 			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {

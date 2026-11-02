@@ -363,6 +363,16 @@ costs one map lookup per surface. A shape that grows past its chain's area takes
 the whole surface's, so a client animating its region reallocates at most once
 and redraws no chain while nothing behind it changes.
 
+`drawBlur` records what it needs, an op that names a pending chain, and the ops
+below it. Only once the whole frame is built and culled does `resolveBlurs` draw
+the chains that a surviving op still needs, in stacking order, so one chain's
+output reaches the next through its ops. A surface behind an opaque window draws
+no chain and keeps none; the ops under a chain are culled the same way before
+they are compared, so what an opaque window hides from a blur cannot redraw it;
+and a shared chain is drawn once however many surfaces use it. A deforming
+window replays its ops into a target as it is drawn, and resolves its own chains
+first.
+
 The offscreen frames behind closing snapshots and window captures draw no
 blur: they have nothing behind them to blur.
 

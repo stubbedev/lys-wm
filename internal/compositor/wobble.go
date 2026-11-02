@@ -86,6 +86,7 @@ func (c *Compositor) renderJelly(pass *frame, o *output.Output, w *window, area 
 		}
 		w.jelly = tt
 	}
+	c.resolveBlurs(o, pass, from)
 	f := frame{ops: pass.ops[from:]}
 	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: area.Size()}})
 	if err != nil {

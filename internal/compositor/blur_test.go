@@ -65,3 +65,36 @@ func TestABlurAreaFollowsAShapeWithoutReallocating(t *testing.T) {
 		t.Errorf("a shape far smaller than the area takes area %v, want %v", got, tiny)
 	}
 }
+
+func TestAChainRedrawsWhenItsBlurSettingsChange(t *testing.T) {
+	spec := chainSpec{offset: 2, passes: 1}
+	sc := newScene()
+	b := &blurCache{chain: []render.TextureTarget{countedTarget{}}, spec: spec, area: image.Rect(0, 0, 10, 10)}
+	if blurChanged(sc, b, spec, b.area, nil, colorOut{}) {
+		t.Error("a chain with nothing changed redraws")
+	}
+	if !blurChanged(sc, b, chainSpec{offset: 4, passes: 1}, b.area, nil, colorOut{}) {
+		t.Error("a chain does not redraw when its size changes")
+	}
+}
+
+func TestPendingOpsOfAFailedBlurAreDropped(t *testing.T) {
+	var f frame
+	b := &blurCache{}
+	p := f.pend(b, chainSpec{}, image.Rect(0, 0, 4, 4), nil, false)
+	f.blurs[p-1].failed = true
+	kept := f.settle([]drawOp{{pending: p}, {fill: true}})
+	if len(kept) != 1 || !kept[0].fill {
+		t.Fatalf("settled to %+v, want only the fill", kept)
+	}
+}
+
+func TestSharedChainsPendOnce(t *testing.T) {
+	var f frame
+	b := &blurCache{}
+	area := image.Rect(0, 0, 4, 4)
+	below := []drawOp{{fill: true, dst: area}}
+	if a, c := f.pend(b, chainSpec{}, area, below, true), f.pend(b, chainSpec{}, area, below, true); a != c || len(f.blurs) != 1 {
+		t.Fatalf("pended %d and %d, %d blurs", a, c, len(f.blurs))
+	}
+}
