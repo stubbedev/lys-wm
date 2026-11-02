@@ -1,4 +1,4 @@
-{
+{inputs, ...}: {
   perSystem = {
     inputs',
     pkgs,
@@ -20,6 +20,7 @@
           glslang
           spirv-tools
         ]
+        ++ ["${inputs.lys-ci}"]
         ++ import ./test-programs.nix {
           inherit pkgs;
           inherit (inputs'.lys-ui.packages) lys-ui;
