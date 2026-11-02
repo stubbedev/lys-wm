@@ -250,11 +250,16 @@ type configures[T any] struct {
 	pending []queued[T]
 	acked   *T
 	sent    *T
+	latest  uint32
 }
 
 func (q *configures[T]) push(serial uint32, state T) {
 	q.pending = append(q.pending, queued[T]{serial, state})
-	q.sent = &state
+	q.sent, q.latest = &state, serial
+}
+
+func (q *configures[T]) waiting(serial uint32) bool {
+	return slices.ContainsFunc(q.pending, func(c queued[T]) bool { return c.serial == serial })
 }
 
 func (q *configures[T]) last() (T, bool) {

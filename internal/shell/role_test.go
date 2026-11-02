@@ -45,3 +45,19 @@ func TestConfiguresRememberWhatWasLastSent(t *testing.T) {
 		t.Fatal("a reset kept the last configure")
 	}
 }
+
+func TestConfiguresWaitForTheirSerialOrALaterOne(t *testing.T) {
+	var q configures[int]
+	q.push(1, 10)
+	q.push(2, 20)
+	q.push(3, 30)
+	if q.latest != 3 || !q.waiting(1) || !q.waiting(3) {
+		t.Fatalf("latest %d, waiting on 1: %t, on 3: %t", q.latest, q.waiting(1), q.waiting(3))
+	}
+	if !q.ack(2) {
+		t.Fatal("serial 2 was sent")
+	}
+	if q.waiting(1) || q.waiting(2) || !q.waiting(3) {
+		t.Fatalf("after acking 2: waiting on 1: %t, on 2: %t, on 3: %t", q.waiting(1), q.waiting(2), q.waiting(3))
+	}
+}

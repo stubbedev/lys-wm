@@ -1141,3 +1141,131 @@ func TestACommitWaitsForItsBuffersWriter(t *testing.T) {
 		t.Fatalf("after its writers finished the commit applied size %v, want 4x4", size)
 	}
 }
+
+func TestABarrierHoldsAnUpdateBehindItsGatesAndSaysWhenItIsNext(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	if err := s.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	server := e.last(s).s
+	fence := false
+	arrivals := 0
+	var barrier *Barrier
+	first := true
+	hooks := &Hooks{Commit: func(u *Update) error {
+		if first {
+			first = false
+			u.Gate(func() bool { return fence })
+			barrier = u.Barrier(func() error { arrivals++; return nil })
+		}
+		return nil
+	}}
+	e.on(func() { server.AddHooks(hooks) })
+	if err := errors.Join(s.Commit(), s.Commit()); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	state := func() (int, int) {
+		var a, c int
+		e.on(func() { a, c = arrivals, len(e.rec.commits) })
+		return a, c
+	}
+	if a, c := state(); a != 0 || c != 1 {
+		t.Fatalf("behind a closed gate: %d arrivals, %d applied, want none of either beyond the first commit", a, c)
+	}
+	e.on(func() {
+		fence = true
+		if err := server.Retry(); err != nil {
+			t.Error(err)
+		}
+	})
+	if a, c := state(); a != 1 || c != 1 {
+		t.Fatalf("the gate open: %d arrivals, %d applied, want the barrier reached and nothing applied", a, c)
+	}
+	e.on(func() {
+		if err := server.Retry(); err != nil {
+			t.Error(err)
+		}
+	})
+	if a, _ := state(); a != 1 {
+		t.Fatalf("a retry repeated the arrival: %d", a)
+	}
+	e.on(func() {
+		if err := errors.Join(barrier.Release(), barrier.Release()); err != nil {
+			t.Error(err)
+		}
+	})
+	if a, c := state(); a != 1 || c != 3 {
+		t.Fatalf("released: %d arrivals, %d applied, want the held update and the one behind it", a, c)
+	}
+}
+
+func TestABarrierReleasedBeforeItsGatesOpenNeverArrives(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	if err := s.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	server := e.last(s).s
+	fence := false
+	arrivals := 0
+	var barrier *Barrier
+	hooks := &Hooks{Commit: func(u *Update) error {
+		u.Gate(func() bool { return fence })
+		barrier = u.Barrier(func() error { arrivals++; return nil })
+		return nil
+	}}
+	e.on(func() { server.AddHooks(hooks) })
+	if err := s.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	e.on(func() {
+		server.RemoveHooks(hooks)
+		if err := barrier.Release(); err != nil {
+			t.Error(err)
+		}
+	})
+	if n := len(e.commits()); n != 1 {
+		t.Fatalf("%d updates applied past a closed gate", n-1)
+	}
+	e.on(func() {
+		fence = true
+		if err := server.Retry(); err != nil {
+			t.Error(err)
+		}
+	})
+	var a int
+	e.on(func() { a = arrivals })
+	if n := len(e.commits()); n != 2 || a != 0 {
+		t.Fatalf("the gate open: %d applied, %d arrivals, want the update applied without an arrival", n, a)
+	}
+}
+
+func TestABarrierOnASurfaceDestroyedInTheMeantimeReleasesQuietly(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	if err := s.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	server := e.last(s).s
+	var barrier *Barrier
+	hooks := &Hooks{Commit: func(u *Update) error {
+		barrier = u.Barrier(func() error { return nil })
+		return nil
+	}}
+	e.on(func() { server.AddHooks(hooks) })
+	if err := errors.Join(s.Commit(), s.Destroy()); err != nil {
+		t.Fatal(err)
+	}
+	e.roundtrip()
+	e.on(func() {
+		if err := barrier.Release(); err != nil {
+			t.Error(err)
+		}
+	})
+}

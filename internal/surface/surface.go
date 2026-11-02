@@ -240,6 +240,7 @@ type Update struct {
 	state   state
 	gates   []func() bool
 	applied []func() error
+	barrier *Barrier
 }
 
 func (u *Update) Buffer() Buffer {
@@ -269,13 +270,22 @@ func (u *Update) OnApply(f func() error) {
 	u.applied = append(u.applied, f)
 }
 
-func (u *Update) ready() bool {
+func (u *Update) Barrier(arrived func() error) *Barrier {
+	u.barrier = &Barrier{s: u.s, arrived: arrived}
+	return u.barrier
+}
+
+func (u *Update) gatesOpen() bool {
 	for _, ready := range u.gates {
 		if !ready() {
 			return false
 		}
 	}
 	return true
+}
+
+func (u *Update) ready() bool {
+	return u.gatesOpen() && (u.barrier == nil || u.barrier.released)
 }
 
 func (u *Update) absorb(later *Update) error {
@@ -286,6 +296,9 @@ func (u *Update) absorb(later *Update) error {
 	u.state.merge(&later.state)
 	u.gates = append(u.gates, later.gates...)
 	u.applied = append(u.applied, later.applied...)
+	if later.barrier != nil {
+		u.barrier = later.barrier
+	}
 	u.s.recycle(later)
 	return unlock(replaced)
 }
@@ -294,7 +307,7 @@ func (s *Surface) recycle(u *Update) {
 	u.state.reset()
 	clear(u.gates)
 	clear(u.applied)
-	u.gates, u.applied = u.gates[:0], u.applied[:0]
+	u.gates, u.applied, u.barrier = u.gates[:0], u.applied[:0], nil
 	s.spare = append(s.spare, u)
 }
 
@@ -336,6 +349,21 @@ func (h *Hold) Release() error {
 	}
 	h.done = true
 	return h.s.Retry()
+}
+
+type Barrier struct {
+	s        *Surface
+	arrived  func() error
+	reached  bool
+	released bool
+}
+
+func (b *Barrier) Release() error {
+	if b.released {
+		return nil
+	}
+	b.released = true
+	return b.s.Retry()
 }
 
 func (s *Surface) Retry() error {
@@ -593,7 +621,20 @@ func (s *Surface) drain() error {
 		}
 		s.recycle(u)
 	}
-	return nil
+	return s.reachBarrier()
+}
+
+func (s *Surface) reachBarrier() error {
+	if len(s.queue) == 0 || s.destroyed {
+		return nil
+	}
+	head := s.queue[0]
+	b := head.barrier
+	if b == nil || b.reached || b.released || !head.gatesOpen() {
+		return nil
+	}
+	b.reached = true
+	return b.arrived()
 }
 
 func (s *Surface) apply(u *Update) (err error) {

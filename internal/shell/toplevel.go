@@ -98,6 +98,14 @@ func (t *Toplevel) Requested() State {
 	return s
 }
 
+func (t *Toplevel) LatestSerial() uint32 {
+	return t.configures.latest
+}
+
+func (t *Toplevel) Acked(serial uint32) bool {
+	return !t.configures.waiting(serial)
+}
+
 func (t *Toplevel) Configure(s State) (uint32, error) {
 	if t.destroyed {
 		return 0, errors.New("shell: configure of a destroyed xdg_toplevel")
