@@ -251,6 +251,7 @@ type scene struct {
 	image     render.TextureTarget
 	working   render.TextureTarget
 	zoom      *outputZoom
+	whole     [1]image.Rectangle
 }
 
 func newScene() *scene {

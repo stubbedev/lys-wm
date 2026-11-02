@@ -31,7 +31,7 @@ type bindSpec struct {
 	flags                 binds.Flags
 }
 
-func withBinds(t *testing.T, specs ...bindSpec) func(*compositor.Config) {
+func withBinds(t testing.TB, specs ...bindSpec) func(*compositor.Config) {
 	return func(cfg *compositor.Config) {
 		for _, s := range specs {
 			chord, err := binds.ParseChord(s.chord, cfg.Seat.Keymap)

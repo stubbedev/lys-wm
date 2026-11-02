@@ -194,6 +194,9 @@ func (c *Compositor) modalChild(w *window) *window {
 }
 
 func (c *Compositor) reconcile() error {
+	if c.interaction != nil {
+		c.interaction.drop.stale = true
+	}
 	focused, hasFocus := c.wm.Focused()
 	if hasFocus {
 		if m := c.modalChild(c.windowByID(focused)); m != nil {

@@ -89,8 +89,8 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 }
 
 func (c *Compositor) ipcZoom(o *output.Output) float64 {
-	if z := c.zoomTarget(o); z != 1 {
-		return z
+	if sc, ok := c.scenes[o]; ok && sc.zoom != nil && sc.zoom.told != 1 {
+		return sc.zoom.told
 	}
 	return 0
 }

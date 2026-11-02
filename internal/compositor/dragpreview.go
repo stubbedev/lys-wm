@@ -43,10 +43,40 @@ func (c *Compositor) dropTarget(it *interaction) (image.Rectangle, bool, error) 
 		if it.w.tile.Empty() {
 			return image.Rectangle{}, false, nil
 		}
-		r, err := c.wm.DropTarget(it.w.id, at, c.settings.Autotile, c.spacing())
+		r, err := c.tiledDropTarget(it, at)
 		return r, err == nil && r != it.w.tile, err
 	}
 	return image.Rectangle{}, false, nil
+}
+
+type tiledDrop struct {
+	zones  wm.DropZones
+	ready  bool
+	stale  bool
+	known  bool
+	zone   wm.DropZone
+	target image.Rectangle
+}
+
+func (c *Compositor) tiledDropTarget(it *interaction, at image.Point) (image.Rectangle, error) {
+	d := &it.drop
+	if d.stale || !d.ready {
+		var err error
+		if d.zones, err = c.wm.DropZones(it.w.id, d.zones); err != nil {
+			return image.Rectangle{}, err
+		}
+		d.ready, d.stale, d.known = true, false, false
+	}
+	zone := d.zones.At(at)
+	if d.known && zone == d.zone {
+		return d.target, nil
+	}
+	target, err := c.wm.DropTarget(it.w.id, at, c.settings.Autotile, c.spacing())
+	if err != nil {
+		return image.Rectangle{}, err
+	}
+	d.zone, d.target, d.known = zone, target, true
+	return target, nil
 }
 
 func (c *Compositor) sharedEdges(o *output.Output) wm.SharedEdges {

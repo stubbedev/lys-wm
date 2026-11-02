@@ -246,3 +246,33 @@ func TestADropTargetIsWhereReinsertPutsTheWindow(t *testing.T) {
 		t.Error("a target for an unknown window")
 	}
 }
+
+func TestPointsInTheSameDropZoneLandInTheSamePlace(t *testing.T) {
+	area := image.Rect(0, 0, 1000, 500)
+	s := ok(t)(State{}.AddOutput("DP-1", area, area))
+	for id := WindowID(1); id <= 5; id++ {
+		s = ok(t)(s.MapWindow(id, Autotile{}))
+	}
+	zones, err := s.DropZones(3, DropZones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[DropZone]image.Rectangle{}
+	for x := 0; x < area.Dx(); x += 13 {
+		for y := 0; y < area.Dy(); y += 11 {
+			at := image.Pt(x, y)
+			got, err := s.DropTarget(3, at, Autotile{}, Spacing{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			zone := zones.At(at)
+			if want, known := seen[zone]; known && want != got {
+				t.Fatalf("zone %+v at %v lands on %v, earlier on %v", zone, at, got, want)
+			}
+			seen[zone] = got
+		}
+	}
+	if len(seen) < 4 {
+		t.Errorf("only %d zones across the output", len(seen))
+	}
+}

@@ -331,11 +331,14 @@ func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
 	})
 	h.Eventually("the view following the fingers", showing(2, 2, zoomRed))
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		if err := b.Pointer().GestureEnd(backend.Pinch, false); err != nil {
+			return err
+		}
 		if z := comp.Snapshot().Outputs[0].Zoom; z != 2 {
-			t.Errorf("zoom %v, want 2", z)
+			t.Errorf("IPC says zoom %v after the pinch, want 2", z)
 		}
 		p := b.Pointer()
-		return errors.Join(p.Pinch(0, 0, 0.25, 0), p.GestureEnd(backend.Pinch, false))
+		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 0.25, 0), p.GestureEnd(backend.Pinch, false))
 	})
 	h.Eventually("back at one when the fingers pinch in", showing(10, 90, zoomBlue))
 	h.key(keySuper, false)

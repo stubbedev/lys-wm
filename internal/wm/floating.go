@@ -319,6 +319,18 @@ func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, dis
 	return s.limits[id].floored().fitRect(r, true, true), true
 }
 
+func (s State) DropZones(id WindowID, reuse DropZones) (DropZones, error) {
+	w := s.windowWorkspace(id)
+	if w == nil || !w.Tree.Contains(id) {
+		return DropZones{}, fmt.Errorf("drop window %d: %w", id, ErrUnknownWindow)
+	}
+	tree, err := w.Tree.Remove(id)
+	if err != nil {
+		return DropZones{}, err
+	}
+	return tree.dropZones(reuse, s.output(w.Output).Area), nil
+}
+
 func (s State) DropTarget(id WindowID, at image.Point, auto Autotile, sp Spacing) (image.Rectangle, error) {
 	dropped, err := s.Reinsert(id, at, auto)
 	if err != nil {

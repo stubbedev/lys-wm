@@ -18,6 +18,7 @@ type interaction struct {
 	rect   image.Rectangle
 	right  bool
 	bottom bool
+	drop   tiledDrop
 }
 
 var ErrNotFromMouseBind = errors.New("only a mouse bind can start a drag")

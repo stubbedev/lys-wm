@@ -299,21 +299,12 @@ func (s State) MoveDirection(d Direction, policy CollapsePolicy) (State, error) 
 }
 
 func (t Tree) InsertAt(id WindowID, area image.Rectangle, at image.Point, auto Autotile) (Tree, error) {
-	var target Placement
-	found := false
-	for _, p := range t.Arrange(area, Spacing{}).Windows {
-		if p.Visible && at.In(p.Rect) {
-			target, found = p, true
-		}
-	}
-	if !found {
+	zone := t.dropZones(DropZones{}, area).At(at)
+	if zone.Target == 0 {
 		return t.Place(id, area, auto)
 	}
-	groups, _, _ := t.path(target.ID)
-	parent := groups[len(groups)-1]
-	mid := target.Rect.Min.Add(target.Rect.Size().Div(2))
-	before := (parent.Layout == SplitH && at.X < mid.X) || (parent.Layout == SplitV && at.Y < mid.Y)
-	focused, err := t.Focus(target.ID)
+	before := zone.Before
+	focused, err := t.Focus(zone.Target)
 	if err != nil {
 		return Tree{}, err
 	}
@@ -326,6 +317,45 @@ func (t Tree) InsertAt(id WindowID, area image.Rectangle, at image.Point, auto A
 	g.Children[i-1], g.Children[i] = g.Children[i], g.Children[i-1]
 	g.Focus = i - 1
 	return placed, nil
+}
+
+type DropZone struct {
+	Target WindowID
+	Before bool
+}
+
+type dropRect struct {
+	id     WindowID
+	rect   image.Rectangle
+	layout Layout
+}
+
+type DropZones struct {
+	rects []dropRect
+}
+
+func (t Tree) dropZones(z DropZones, area image.Rectangle) DropZones {
+	z.rects = z.rects[:0]
+	for _, p := range t.Arrange(area, Spacing{}).Windows {
+		if !p.Visible {
+			continue
+		}
+		groups, _, _ := t.path(p.ID)
+		z.rects = append(z.rects, dropRect{id: p.ID, rect: p.Rect, layout: groups[len(groups)-1].Layout})
+	}
+	return z
+}
+
+func (z DropZones) At(at image.Point) DropZone {
+	for i := len(z.rects) - 1; i >= 0; i-- {
+		r := &z.rects[i]
+		if !at.In(r.rect) {
+			continue
+		}
+		mid := r.rect.Min.Add(r.rect.Size().Div(2))
+		return DropZone{Target: r.id, Before: (r.layout == SplitH && at.X < mid.X) || (r.layout == SplitV && at.Y < mid.Y)}
+	}
+	return DropZone{}
 }
 
 const minTile = 32

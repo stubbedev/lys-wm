@@ -24,6 +24,7 @@ const (
 type outputZoom struct {
 	level  anim.Motion
 	target float64
+	told   float64
 	focus  [2]float64
 	shown  render.FRect
 	cursor frame
@@ -74,7 +75,7 @@ func (c *Compositor) applyZoom(a wm.ZoomAction) error {
 func (c *Compositor) zoomOn(o *output.Output, sc *scene) *outputZoom {
 	if sc.zoom == nil {
 		bounds := o.Backend().State().Mode.Size
-		sc.zoom = &outputZoom{level: anim.NewMotion(0), target: 1, focus: [2]float64{float64(bounds.X) / 2, float64(bounds.Y) / 2}}
+		sc.zoom = &outputZoom{level: anim.NewMotion(0), target: 1, told: 1, focus: [2]float64{float64(bounds.X) / 2, float64(bounds.Y) / 2}}
 		sc.invalidate()
 	}
 	return sc.zoom
@@ -86,6 +87,7 @@ func (c *Compositor) setZoom(o *output.Output, factor float64) error {
 	}
 	z := c.zoomOn(o, c.sceneOf(o))
 	z.target = factor
+	z.told = factor
 	z.level.Set(zoomStops(factor), c.clock(), c.animations.Curve(anim.Zoom))
 	c.stateChanged()
 	return c.schedule(o)
@@ -98,7 +100,6 @@ func (c *Compositor) trackZoom(o *output.Output, factor float64) error {
 	z := c.zoomOn(o, c.sceneOf(o))
 	z.target = factor
 	z.level.Jump(zoomStops(factor))
-	c.stateChanged()
 	return c.schedule(o)
 }
 
@@ -121,6 +122,10 @@ func (d *zoomDrive) moved(scale float64, _ time.Duration) error {
 }
 
 func (d *zoomDrive) released(time.Duration, bool) error {
+	if sc, ok := d.c.scenes[d.o]; ok && sc.zoom != nil {
+		sc.zoom.told = sc.zoom.target
+	}
+	d.c.stateChanged()
 	return nil
 }
 
@@ -136,6 +141,9 @@ func (c *Compositor) zoomFollows(o *output.Output, z *outputZoom) {
 func (c *Compositor) settleZoom(sc *scene) error {
 	if sc.zoom == nil || !sc.zoom.atRest(c.frameTime) {
 		return nil
+	}
+	if sc.zoom.told != 1 {
+		c.stateChanged()
 	}
 	sc.zoom = nil
 	sc.invalidate()
@@ -169,13 +177,17 @@ func (c *Compositor) drawZoom(p render.Pass, o *output.Output, sc *scene, bounds
 		p.SetColor(c.plans.Of(hc.working.Description(), hc.signal))
 		to.to = hc.signal
 	}
-	p.Clear(opaque)
 	p.DrawTexture(sc.working.Texture(), sc.zoom.shown, bounds, render.Normal, 1, render.Mask{})
 	if err := c.zoomCursor(o, sc, z); err != nil {
 		return err
 	}
 	z.cursor.replay(p, to)
 	return nil
+}
+
+func (sc *scene) wholeRegion(bounds image.Rectangle) render.Region {
+	sc.whole[0] = bounds
+	return sc.whole[:]
 }
 
 func (c *Compositor) zoomCursor(o *output.Output, sc *scene, z *outputZoom) error {
@@ -230,15 +242,16 @@ func (c *Compositor) renderZoomed(o *output.Output, sc *scene, bounds image.Rect
 	if err != nil {
 		return err
 	}
-	whole := render.Region{bounds}
+	whole := sc.wholeRegion(bounds)
 	p, err := f.Renderer.Begin(f.Target, whole)
 	if err != nil {
 		o.Backend().AbortFrame()
 		return err
 	}
-	if err := errors.Join(c.drawZoom(p, o, sc, bounds), p.End()); err != nil {
+	drawErr := c.drawZoom(p, o, sc, bounds)
+	if err := p.End(); err != nil || drawErr != nil {
 		o.Backend().AbortFrame()
-		return err
+		return errors.Join(drawErr, err)
 	}
 	if err := o.Backend().Present(whole); err != nil {
 		return err
@@ -251,11 +264,15 @@ func (c *Compositor) zoomedImage(o *output.Output, sc *scene, bounds image.Recta
 	if err := c.zoomScene(o, sc, bounds); err != nil {
 		return err
 	}
-	p, err := c.renderer.Begin(sc.image, render.Region{bounds})
+	p, err := c.renderer.Begin(sc.image, sc.wholeRegion(bounds))
 	if err != nil {
 		return err
 	}
-	return errors.Join(c.drawZoom(p, o, sc, bounds), p.End())
+	drawErr := c.drawZoom(p, o, sc, bounds)
+	if err := p.End(); err != nil || drawErr != nil {
+		return errors.Join(drawErr, err)
+	}
+	return nil
 }
 
 func (c *Compositor) touchPoint(p point) point {
