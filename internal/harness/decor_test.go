@@ -19,7 +19,7 @@ func TestBordersAndTabBars(t *testing.T) {
 }
 
 func testBordersAndTabBars(t *testing.T, start gpuStarter) {
-	decor := compositor.DefaultDecor()
+	decor := compositor.PlainDecor()
 	h := start(t, func(cfg *compositor.Config) { cfg.Decor = decor }, tall)
 	c := testclient.Connect(t, h.Socket())
 	gray := testclient.Fill(0x60, 0x60, 0x60)
@@ -56,7 +56,7 @@ func TestGapsSeparateTiledWindowsAndReloadRearranges(t *testing.T) {
 func testGapsSeparateTiledWindowsAndReloadRearranges(t *testing.T, start gpuStarter) {
 	var next compositor.Config
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.WM.Gaps = wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}}
 		next = *cfg
 		next.WM.Gaps = wm.Gaps{}
@@ -85,7 +85,7 @@ func TestRoundedWindowsAndBorders(t *testing.T) {
 
 func testRoundedWindowsAndBorders(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 2, 8
 		cfg.WM.Gaps = wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 6, Right: 6, Bottom: 6, Left: 6}}
 	}, tall)
@@ -106,7 +106,7 @@ func TestARoundedWindowThatFillsTheOutputIsComposited(t *testing.T) {
 
 func testARoundedWindowThatFillsTheOutputIsComposited(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 0, 6
 	}, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -146,7 +146,7 @@ func testATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T, start gpuSt
 	var r reports
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Report = r.report
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
 		cfg.Decor.ActiveBorder = compositor.SolidBorder(render.Color{R: 0xff, A: 0x80})
 	}, tall)
@@ -176,7 +176,7 @@ func TestAFloatingWindowCastsARoundedShadow(t *testing.T) {
 
 func testAFloatingWindowCastsARoundedShadow(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 1, 6
 		cfg.Decor.Shadow = compositor.Shadow{Enabled: true, Range: 12, Power: 2, Offset: image.Pt(3, 5), Scale: 1, Active: render.Color{A: 0xc0}, Inactive: render.Color{A: 0xc0}}
 		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^float$`), Mode: wm.RuleFloat, Size: image.Pt(70, 40)}}
@@ -203,7 +203,7 @@ func testAGradientBorderRunsAlongItsAngle(t *testing.T, start gpuStarter) {
 		t.Fatal(err)
 	}
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 4, 10
 		cfg.Decor.ActiveBorder = border
 		cfg.WM.Gaps = wm.Gaps{Outer: wm.Insets{Top: 8, Right: 8, Bottom: 8, Left: 8}}

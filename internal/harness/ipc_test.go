@@ -180,7 +180,7 @@ func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
 	t.Cleanup(func() { _ = dk.Close() })
 	var comp *compositor.Compositor
 	h := StartWith(t, func(cfg *compositor.Config) {
-		next := compositor.DefaultConfig(dk, cfg.Font)
+		next := compositor.PlainConfig(dk, cfg.Font)
 		next.Report = cfg.Report
 		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
 	}, small)

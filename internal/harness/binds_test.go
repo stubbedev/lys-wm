@@ -230,7 +230,7 @@ func TestVTSwitchingSurvivesConfigReloads(t *testing.T) {
 	var switched []uint32
 	var comp *compositor.Compositor
 	h := StartWith(t, func(cfg *compositor.Config) {
-		next := compositor.DefaultConfig(cfg.Seat.Keymap, cfg.Font)
+		next := compositor.PlainConfig(cfg.Seat.Keymap, cfg.Font)
 		next.Report = cfg.Report
 		cfg.Hooks.SwitchVT = func(vt uint32) error {
 			switched = append(switched, vt)

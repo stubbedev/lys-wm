@@ -61,7 +61,7 @@ func startNestedOn(t *testing.T, host *Harness, renderer nested.Renderer, config
 		t.Fatal(err)
 	}
 	n.display = display.Name()
-	cfg := compositor.DefaultConfig(testenv.Keymap(t), testenv.Font(t))
+	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Report = func(err error) { t.Errorf("nested lys-wm reported: %v", err) }
 	configure(&cfg)
 	if n.comp, err = compositor.New(n.loop, display, b, cfg); err != nil {

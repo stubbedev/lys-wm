@@ -335,7 +335,7 @@ func TestOutputManagementAppliesAConfiguration(t *testing.T) {
 	first := m.head("HEADLESS-1")
 	c.DispatchUntil("the head disabled", func() bool { return !first.enabled })
 
-	cfg := compositor.DefaultConfig(testenv.Keymap(t), testenv.Font(t))
+	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Decor.BorderWidth = 0
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 		return comp.Reconfigure(cfg)

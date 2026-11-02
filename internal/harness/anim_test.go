@@ -34,7 +34,7 @@ func testAMovedWindowAnimatesOnTheFrameClock(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	var next compositor.Config
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Animations = linearMoves(t, time.Second)
 		cfg.Clock = func() time.Duration { return now }
 		next = *cfg
@@ -376,7 +376,7 @@ func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuSta
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
 		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(red), compositor.SolidBorder(blue)
 		next = *cfg
@@ -496,7 +496,7 @@ func testAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T, start gp
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 0
 	}, tall)
 	at := func(d time.Duration) {
@@ -599,7 +599,7 @@ func testAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T, start gpuStart
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 0
 		cfg.WM.Autotile.Enabled = false
 	}, tall)
@@ -650,7 +650,7 @@ func testANewWindowBudsOffItsNeighbour(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 0
 		cfg.WM.Autotile.Enabled = false
 	}, tall)

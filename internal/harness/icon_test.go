@@ -136,7 +136,7 @@ func TestIconBuffersInRGBOrderKeepTheirColours(t *testing.T) {
 }
 
 func TestToplevelIconsReachIPCAndTheTab(t *testing.T) {
-	decor := compositor.DefaultDecor()
+	decor := compositor.PlainDecor()
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Decor = decor }, tall)
 	c := testclient.Connect(t, h.Socket())
 	m := iconManager(t, c)
@@ -194,7 +194,7 @@ func iconTheme(t *testing.T, icons map[string]string) *icontheme.Theme {
 }
 
 func TestTabsDrawThemeIconsByNameAndBuffersWhenTheNameIsUnknown(t *testing.T) {
-	decor := compositor.DefaultDecor()
+	decor := compositor.PlainDecor()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Decor, cfg.Icons = decor, iconTheme(t, map[string]string{"lys-wm-red": "ff0000"})
 	}, tall)

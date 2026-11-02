@@ -95,25 +95,35 @@ type CursorConfig struct {
 
 const DefaultCursorSize = 24
 
-func DefaultSettings() wm.Settings {
+func PlainSettings() wm.Settings {
 	return wm.Settings{
 		Collapse: wm.CollapseEmptySplits,
 		Autotile: wm.Autotile{Enabled: true, Ephemeral: true, MinTrigger: 400, Divisor: 3},
 	}
 }
 
-func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
+func DefaultSettings() wm.Settings {
+	return PlainSettings()
+}
+
+func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 	return Config{
 		Seat:           seat.Config{Keymap: keymap, RepeatRate: seat.DefaultRepeatRate, RepeatDelay: seat.DefaultRepeatDelay},
 		Cursor:         CursorConfig{Size: DefaultCursorSize},
-		WM:             DefaultSettings(),
+		WM:             PlainSettings(),
 		Report:         func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
-		Decor:          DefaultDecor(),
+		Decor:          PlainDecor(),
 		Font:           font,
 		Icons:          icontheme.New("", nil),
 		InheritTimeout: DefaultInheritTimeout,
 		Clock:          backend.Now,
 	}
+}
+
+func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
+	cfg := PlainConfig(keymap, font)
+	cfg.WM, cfg.Decor = DefaultSettings(), DefaultDecor()
+	return cfg
 }
 
 type Compositor struct {

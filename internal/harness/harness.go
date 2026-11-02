@@ -159,7 +159,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 			t.Fatalf("harness: %v", err)
 		}
 	}
-	cfg := compositor.DefaultConfig(testenv.Keymap(t), testenv.Font(t))
+	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Report = func(err error) { t.Errorf("compositor reported: %v", err) }
 	cfg.Decor.BorderWidth = 0
 	s.configure(&cfg)

@@ -37,7 +37,7 @@ func TestReloadSwapsBindsKeymapAndRepeat(t *testing.T) {
 			bindSpec{chord: "SUPER + Return", action: "exec echo old >> " + log},
 			bindSpec{chord: "SUPER + Q", action: "reload"},
 		)(cfg)
-		next = compositor.DefaultConfig(dk, cfg.Font)
+		next = compositor.PlainConfig(dk, cfg.Font)
 		next.Report = cfg.Report
 		next.Seat.RepeatRate, next.Seat.RepeatDelay = 10, 700
 		next.Decor.BorderWidth = 3

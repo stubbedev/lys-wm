@@ -107,7 +107,7 @@ var (
 	red      = render.Color{R: 0xf3, G: 0x8b, B: 0xa8, A: 0xff}
 )
 
-func DefaultDecor() Decor {
+func PlainDecor() Decor {
 	return Decor{
 		BorderWidth: 1,
 		Opacity:     Opacity{Active: 1, Inactive: 1, Fullscreen: 1},
@@ -127,6 +127,10 @@ func DefaultDecor() Decor {
 			Urgent:   TabColors{Background: red, Text: crust},
 		},
 	}
+}
+
+func DefaultDecor() Decor {
+	return PlainDecor()
 }
 
 func (c *Compositor) spacing() wm.Spacing {

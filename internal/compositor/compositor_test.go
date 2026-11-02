@@ -98,7 +98,7 @@ func setup(t *testing.T) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.comp, err = New(l, disp, fakeBackend{r.renderer}, DefaultConfig(testenv.Keymap(t), testenv.Font(t))); err != nil {
+	if r.comp, err = New(l, disp, fakeBackend{r.renderer}, PlainConfig(testenv.Keymap(t), testenv.Font(t))); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -292,7 +292,7 @@ func TestAFailedStartReturnsItsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer disp.Close()
-	c, err := New(l, disp, rendererBackend{unsyncable{soft.New()}}, DefaultConfig(testenv.Keymap(t), testenv.Font(t)))
+	c, err := New(l, disp, rendererBackend{unsyncable{soft.New()}}, PlainConfig(testenv.Keymap(t), testenv.Font(t)))
 	if c != nil || err == nil || !strings.Contains(err.Error(), "no render node") {
 		t.Fatalf("New = %v, %v; want the render node error", c, err)
 	}
