@@ -146,6 +146,11 @@ func (s State) clone() State {
 	return c
 }
 
+func (s State) sharingWorkspaces() State {
+	s.workspaces = slices.Clone(s.workspaces)
+	return s
+}
+
 func (s State) Outputs() []Output {
 	return slices.Clone(s.outputs)
 }
@@ -571,14 +576,19 @@ const (
 )
 
 func (s State) Arrange(sp Spacing) Arrangement {
-	var all Arrangement
-	for _, w := range s.workspaces {
+	var x Arranger
+	s.ArrangeInto(&x, sp)
+	return x.Arrangement
+}
+
+func (s State) ArrangeInto(all *Arranger, sp Spacing) {
+	all.reset()
+	for i := range s.workspaces {
+		w := &s.workspaces[i]
 		from := len(all.Windows)
 		o := s.output(w.Output)
 		if o == nil {
-			for _, id := range w.Tree.Windows() {
-				all.Windows = append(all.Windows, Placement{ID: id})
-			}
+			all.Windows = appendTreeWindows(all.Windows, w.Tree.root)
 			for _, f := range w.Floating {
 				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Layer: LayerFloating})
 			}
@@ -586,28 +596,45 @@ func (s State) Arrange(sp Spacing) Arrangement {
 			all.inWorkspace(from, w.ID)
 			continue
 		}
-		placeWorkspace(&all, &w, o, o.Active == w.ID, sp)
+		placeWorkspace(all, w, o, o.Active == w.ID, sp)
 		all.inWorkspace(from, w.ID)
 	}
-	return all
 }
 
-func placeWorkspace(all *Arrangement, w *Workspace, o *Output, shown bool, sp Spacing) {
+func appendTreeWindows(out []Placement, n Node) []Placement {
+	switch n := n.(type) {
+	case Window:
+		out = append(out, Placement{ID: n.ID})
+	case *Group:
+		if n == nil {
+			return out
+		}
+		for _, c := range n.Children {
+			out = appendTreeWindows(out, c.Node)
+		}
+	}
+	return out
+}
+
+func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spacing) {
 	covered := w.Fullscreen != 0
-	a := w.Tree.Arrange(o.Area, sp)
-	for _, p := range a.Windows {
+	from, bars := len(all.Windows), len(all.TabBars)
+	w.Tree.arrangeInto(all, o.Area, sp)
+	kept := all.Windows[:from]
+	for _, p := range all.Windows[from:] {
 		if p.ID == w.Fullscreen {
 			continue
 		}
 		p.Laid = p.Visible && !covered
 		p.Visible = p.Laid && shown
-		all.Windows = append(all.Windows, p)
+		kept = append(kept, p)
 	}
-	if !covered {
-		for _, bar := range a.TabBars {
-			bar.Workspace, bar.Shown = w.ID, shown
-			all.TabBars = append(all.TabBars, bar)
-		}
+	all.Windows = kept
+	if covered {
+		all.TabBars = all.TabBars[:bars]
+	}
+	for i := bars; i < len(all.TabBars); i++ {
+		all.TabBars[i].Workspace, all.TabBars[i].Shown = w.ID, shown
 	}
 	for _, f := range w.Floating {
 		if f.ID != w.Fullscreen {

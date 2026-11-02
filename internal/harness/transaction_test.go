@@ -919,3 +919,81 @@ func TestALongDragEndsWhereThePointerDoes(t *testing.T) {
 	h.Eventually("left where the pointer left it", showing(last-2, 50, greenColor))
 	h.Eventually("right beside it", showing(last+2, 50, blueColor))
 }
+
+func TestDragFrameAllocations(t *testing.T) {
+	h := start(t, setup{open: softBackend, configure: func(cfg *compositor.Config) {
+		flat(cfg)
+		withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
+	}}, desktop)
+	var last *testclient.Window
+	var clients []*testclient.Client
+	for range 8 {
+		c := testclient.Connect(t, h.Socket())
+		last = c.Window("bench", fillGreen)
+		c.DispatchUntil("the window to map", last.Mapped)
+		c.Sync()
+		last.Stop()
+		clients = append(clients, c)
+	}
+	for _, c := range clients {
+		c.Sync()
+	}
+	h.Eventually("the layout landed", landed)
+	wider, err := wm.ParseAction("resizeactive 2 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrower, err := wm.ParseAction("resizeactive -2 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		i := 0
+		tiled := testing.AllocsPerRun(200, func() {
+			a := wider
+			if i%2 == 1 {
+				a = narrower
+			}
+			i++
+			if err := comp.Dispatch(a); err != nil {
+				t.Error(err)
+			}
+		})
+		if tiled > 3 {
+			t.Errorf("a tiled resize allocates %.1f times, want the workspace list and the group resized", tiled)
+		}
+		t.Logf("allocations: a tiled resize, 8 windows, %.1f", tiled)
+		return nil
+	})
+	for _, c := range clients {
+		c.Sync()
+	}
+	h.Eventually("the layout landed", landed)
+	h.dispatch("togglefloating")
+	clients[len(clients)-1].DispatchUntil("a floating window", func() bool { return last.Logical.X != 160 && last.Logical.Y != desktop.Size.Y })
+	for _, c := range clients {
+		c.Sync()
+	}
+	h.Eventually("the layout landed", landed)
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, p := b.Outputs()[0], b.Pointer()
+		return errors.Join(p.MoveTo(o, 0.5, 0.5), p.Frame(), p.Button(btnLeft, true), p.Frame())
+	})
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		o, p := b.Outputs()[0], b.Pointer()
+		x := 0.5
+		floating := testing.AllocsPerRun(200, func() {
+			x += 0.0005
+			if err := errors.Join(p.MoveTo(o, x, 0.5), p.Frame(), comp.Frame(o)); err != nil {
+				t.Error(err)
+			}
+		})
+		if floating > 4 {
+			t.Errorf("a frame of a floating drag allocates %.1f times; 2 are the fake pointer's event, 2 the workspace and floating lists", floating)
+		}
+		t.Logf("allocations: a frame of a floating drag, 8 windows, %.1f", floating)
+		return errors.Join(p.Button(btnLeft, false), p.Frame())
+	})
+	h.key(keySuper, false)
+}

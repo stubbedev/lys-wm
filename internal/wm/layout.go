@@ -60,20 +60,19 @@ func gapAround(i, n, inner int) (lead, trail int) {
 	return lead, trail
 }
 
-func edges(lo, span int, children []Child) []int {
+func ratioTotal(children []Child) float64 {
 	total := 0.0
 	for _, c := range children {
 		total += c.Ratio
 	}
-	out := make([]int, len(children)+1)
-	out[0] = lo
-	acc := 0.0
-	for i, c := range children[:len(children)-1] {
-		acc += c.Ratio
-		out[i+1] = lo + int(math.Round(float64(span)*acc/total))
+	return total
+}
+
+func edgeAfter(lo, span, i int, acc, total float64, n int) int {
+	if i == n-1 {
+		return lo + span
 	}
-	out[len(children)] = lo + span
-	return out
+	return lo + int(math.Round(float64(span)*acc/total))
 }
 
 func firstWindow(n Node) WindowID {
@@ -87,29 +86,60 @@ func firstWindow(n Node) WindowID {
 	}
 }
 
-func childRects(g *Group, r image.Rectangle, sp Spacing) []image.Rectangle {
-	out := make([]image.Rectangle, len(g.Children))
+func appendChildRects(out []image.Rectangle, g *Group, r image.Rectangle, sp Spacing) []image.Rectangle {
 	n, inner := len(g.Children), sp.Gaps.Inner
-	switch g.Layout {
-	case SplitH:
-		e := edges(r.Min.X, r.Dx(), g.Children)
-		for i := range out {
-			lead, trail := gapAround(i, n, inner)
-			out[i] = clampRect(e[i]+lead, r.Min.Y, e[i+1]-trail, r.Max.Y)
-		}
-	case SplitV:
-		e := edges(r.Min.Y, r.Dy(), g.Children)
-		for i := range out {
-			lead, trail := gapAround(i, n, inner)
-			out[i] = clampRect(r.Min.X, e[i]+lead, r.Max.X, e[i+1]-trail)
-		}
-	case Tabbed:
+	if g.Layout == Tabbed {
 		content := image.Rect(r.Min.X, r.Min.Y+min(sp.TabBar, r.Dy()), r.Max.X, r.Max.Y)
-		for i := range out {
-			out[i] = content
+		for range n {
+			out = append(out, content)
 		}
+		return out
+	}
+	lo, span := r.Min.X, r.Dx()
+	if g.Layout == SplitV {
+		lo, span = r.Min.Y, r.Dy()
+	}
+	total, acc, from := ratioTotal(g.Children), 0.0, lo
+	for i, c := range g.Children {
+		acc += c.Ratio
+		to := edgeAfter(lo, span, i, acc, total, n)
+		lead, trail := gapAround(i, n, inner)
+		if g.Layout == SplitV {
+			out = append(out, clampRect(r.Min.X, from+lead, r.Max.X, to-trail))
+		} else {
+			out = append(out, clampRect(from+lead, r.Min.Y, to-trail, r.Max.Y))
+		}
+		from = to
 	}
 	return out
+}
+
+func childRects(g *Group, r image.Rectangle, sp Spacing) []image.Rectangle {
+	return appendChildRects(make([]image.Rectangle, 0, len(g.Children)), g, r, sp)
+}
+
+func gaplessChildRect(g *Group, r image.Rectangle, target int) image.Rectangle {
+	if g.Layout == Tabbed {
+		return r
+	}
+	lo, span := r.Min.X, r.Dx()
+	if g.Layout == SplitV {
+		lo, span = r.Min.Y, r.Dy()
+	}
+	n := len(g.Children)
+	total, acc, from := ratioTotal(g.Children), 0.0, lo
+	for i, c := range g.Children {
+		acc += c.Ratio
+		to := edgeAfter(lo, span, i, acc, total, n)
+		if i == target {
+			if g.Layout == SplitV {
+				return clampRect(r.Min.X, from, r.Max.X, to)
+			}
+			return clampRect(from, r.Min.Y, to, r.Max.Y)
+		}
+		from = to
+	}
+	return image.Rectangle{}
 }
 
 func (t Tree) rectOf(area image.Rectangle, target *Group) image.Rectangle {
@@ -132,31 +162,47 @@ func (t Tree) rectOf(area image.Rectangle, target *Group) image.Rectangle {
 	return r
 }
 
-func (t Tree) Arrange(area image.Rectangle, sp Spacing) Arrangement {
-	var a Arrangement
-	var place func(n Node, r image.Rectangle, visible bool)
-	place = func(n Node, r image.Rectangle, visible bool) {
-		switch n := n.(type) {
-		case Window:
-			a.Windows = append(a.Windows, Placement{ID: n.ID, Rect: r, Visible: visible})
-		case *Group:
-			if n.Layout == Tabbed && visible {
-				tb := TabBar{Rect: image.Rect(r.Min.X, r.Min.Y, r.Max.X, r.Min.Y+min(sp.TabBar, r.Dy())), Active: n.Focus}
-				for _, c := range n.Children {
-					tb.Tabs = append(tb.Tabs, firstWindow(c.Node))
-				}
-				a.TabBars = append(a.TabBars, tb)
+type Arranger struct {
+	Arrangement
+	rects []image.Rectangle
+	tabs  []WindowID
+}
+
+func (x *Arranger) reset() {
+	x.Windows, x.TabBars, x.rects, x.tabs = x.Windows[:0], x.TabBars[:0], x.rects[:0], x.tabs[:0]
+}
+
+func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
+	switch n := n.(type) {
+	case Window:
+		x.Windows = append(x.Windows, Placement{ID: n.ID, Rect: r, Visible: visible})
+	case *Group:
+		if n.Layout == Tabbed && visible {
+			from := len(x.tabs)
+			for _, c := range n.Children {
+				x.tabs = append(x.tabs, firstWindow(c.Node))
 			}
-			rects := childRects(n, r, sp)
-			for i, c := range n.Children {
-				place(c.Node, rects[i], visible && (n.Layout != Tabbed || i == n.Focus))
-			}
+			x.TabBars = append(x.TabBars, TabBar{Rect: image.Rect(r.Min.X, r.Min.Y, r.Max.X, r.Min.Y+min(sp.TabBar, r.Dy())), Active: n.Focus, Tabs: x.tabs[from:len(x.tabs):len(x.tabs)]})
 		}
+		base := len(x.rects)
+		x.rects = appendChildRects(x.rects, n, r, sp)
+		for i, c := range n.Children {
+			x.place(c.Node, x.rects[base+i], visible && (n.Layout != Tabbed || i == n.Focus), sp)
+		}
+		x.rects = x.rects[:base]
 	}
+}
+
+func (t Tree) arrangeInto(x *Arranger, area image.Rectangle, sp Spacing) {
 	if t.root != nil {
-		place(t.root, sp.Gaps.Outer.shrink(area), true)
+		x.place(t.root, sp.Gaps.Outer.shrink(area), true, sp)
 	}
-	return a
+}
+
+func (t Tree) Arrange(area image.Rectangle, sp Spacing) Arrangement {
+	var x Arranger
+	t.arrangeInto(&x, area, sp)
+	return x.Arrangement
 }
 
 func (a *Arrangement) inWorkspace(from int, id WorkspaceID) {

@@ -148,13 +148,13 @@ func maxScale(outputs []*output.Output) output.Scale {
 }
 
 func (c *Compositor) scaleOver(r image.Rectangle) output.Scale {
-	var covered []*output.Output
+	var s output.Scale
 	for _, o := range c.outputs {
 		if o.Logical().Overlaps(r) {
-			covered = append(covered, o)
+			s = max(s, o.Scale())
 		}
 	}
-	return maxScale(covered)
+	return s
 }
 
 func (c *Compositor) update(s wm.State, err error) error {
@@ -206,7 +206,9 @@ func (c *Compositor) reconcile() error {
 	}
 	c.layoutDirty, c.lagging = false, false
 	now := c.clock()
-	a := c.wm.Arrange(c.spacing())
+	x := c.freeArranger()
+	c.wm.ArrangeInto(x, c.spacing())
+	a := x.Arrangement
 	var err error
 	if c.txn != nil && !sameArrangement(a, c.txn.goal) {
 		err = c.land(false)
@@ -218,9 +220,10 @@ func (c *Compositor) reconcile() error {
 	switch {
 	case held:
 	case len(awaited) > 0 && c.holdable():
-		err = errors.Join(err, c.begin(a, awaited))
+		err = errors.Join(err, c.begin(x, awaited))
 	default:
 		placed = true
+		c.shownArranger = x
 		err = errors.Join(err, c.install(a, now))
 	}
 	var target *window

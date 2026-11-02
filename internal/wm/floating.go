@@ -3,6 +3,7 @@ package wm
 import (
 	"fmt"
 	"image"
+	"slices"
 )
 
 type Limits struct {
@@ -126,12 +127,13 @@ func (s State) Tile(id WindowID, at Autotile) (State, error) {
 }
 
 func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error) {
-	s = s.clone()
+	s = s.sharingWorkspaces()
 	w := s.windowWorkspace(id)
 	if w == nil {
 		return State{}, fmt.Errorf("place floating window %d: %w", id, ErrUnknownWindow)
 	}
 	if i := w.minimizedIndex(id); i >= 0 && w.Minimized[i].Layer == LayerFloating {
+		w.Minimized = slices.Clone(w.Minimized)
 		w.Minimized[i].Rect = s.limits[id].fitRect(rect, true, true)
 		return s, nil
 	}
@@ -139,6 +141,7 @@ func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error)
 	if i < 0 {
 		return State{}, fmt.Errorf("wm: window %d is not floating", id)
 	}
+	w.Floating = slices.Clone(w.Floating)
 	w.Floating[i].Rect = s.limits[id].fitRect(rect, true, true)
 	return s, nil
 }
@@ -231,7 +234,7 @@ func (s State) Reinsert(id WindowID, at image.Point, auto Autotile) (State, erro
 }
 
 func (s State) ResizeTiled(id WindowID, d Direction, delta int) (State, error) {
-	s = s.clone()
+	s = s.sharingWorkspaces()
 	w := s.windowWorkspace(id)
 	if w == nil || !w.Tree.Contains(id) {
 		return State{}, fmt.Errorf("resize window %d: %w", id, ErrUnknownWindow)
@@ -249,11 +252,12 @@ func (s State) ResizeFocused(dx, dy int) (State, error) {
 	if !ok {
 		return s, nil
 	}
-	s = s.clone()
+	s = s.sharingWorkspaces()
 	w := s.windowWorkspace(id)
 	if i := w.floatingIndex(id); i >= 0 {
 		r := w.Floating[i].Rect
 		r.Max = r.Max.Add(image.Pt(dx, dy))
+		w.Floating = slices.Clone(w.Floating)
 		w.Floating[i].Rect = s.limits[id].floored().fitRect(r, true, true)
 		return s, nil
 	}

@@ -236,7 +236,8 @@ one comparison per drawn window. A crossfade from a snapshot looks a little bett
 large size changes and costs a texture and a second pass per window, per frame; a clip
 shows holes. This is only for a client that has not answered: one that acked and drew
 a different size (a terminal rounding to its cell grid, say) said what it wants and is
-drawn at its own size. Hit testing stays at the client's real geometry.
+drawn at its own size, clipped to its frame when it drew larger, so it stays out of the
+gaps and its neighbours. Hit testing stays at the client's real geometry.
 
 A drag coalesces. A pointer motion only notes that it happened and allocates nothing;
 the next frame moves `wm` state to where the pointer is and reconciles, one configure per
@@ -244,7 +245,10 @@ frame however fast the mouse, and never while a change is in flight, so a client
 what the pointer did last. The hold's own bookkeeping is kept per window and reused,
 so a transaction allocates nothing beyond the `wm` state and arrangement it is about, and
 costs one `timerfd_settime` for its bound; a drag leaves the timer armed when a change
-lands, as the next one re-arms it.
+lands, as the next one re-arms it. A drag step copies only what it changes: the
+workspace list and either its floating list or the groups on the way to the window,
+sharing the rest with the state before it. The arrangement is built in one of three
+reused `wm.Arranger`s, since the one shown and the one held may both still be read.
 A drag holds for at most 17 ms (`dragHoldBound`). A client that misses that is not waited
 for again until the drag ends, and gets a new size only after it answered the last,
 so a slow client lags at its own pace, stretched, while the frame keeps up with the

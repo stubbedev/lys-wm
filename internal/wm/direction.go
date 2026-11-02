@@ -361,37 +361,50 @@ func (z DropZones) At(at image.Point) DropZone {
 const minTile = 32
 
 func (t Tree) Resize(id WindowID, area image.Rectangle, d Direction, delta int) (Tree, bool, error) {
-	t = t.clone()
-	groups, idx, ok := t.path(id)
-	if !ok {
+	if !t.Contains(id) {
 		return Tree{}, false, fmt.Errorf("resize window %d: %w", id, ErrUnknownWindow)
 	}
+	root, _ := t.root.resized(id, area, d, delta)
+	if root == nil {
+		return t, false, nil
+	}
+	return Tree{root: root}, true, nil
+}
+
+func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) (next *Group, settled bool) {
+	i := slices.IndexFunc(g.Children, func(c Child) bool { return nodeContains(c.Node, id) })
+	if sub, ok := g.Children[i].Node.(*Group); ok {
+		inner, settled := sub.resized(id, gaplessChildRect(g, r, i), d, delta)
+		if inner != nil {
+			c := *g
+			c.Children = slices.Clone(g.Children)
+			c.Children[i].Node = inner
+			return &c, true
+		}
+		if settled {
+			return nil, true
+		}
+	}
 	want := SplitH
+	span := r.Dx()
 	if d.vertical() {
-		want = SplitV
+		want, span = SplitV, r.Dy()
 	}
-	for level, g := range slices.Backward(groups) {
-		i := idx[level]
-		j := step(i, d)
-		if g.Layout != want || j < 0 || j >= len(g.Children) {
-			continue
-		}
-		r := t.rectOf(area, g)
-		span := r.Dx()
-		if d.vertical() {
-			span = r.Dy()
-		}
-		if span <= 0 {
-			return t, false, nil
-		}
-		perPixel := float64(len(g.Children)) / float64(span)
-		floor := float64(minTile * perPixel)
-		dr := float64(delta) * perPixel
-		dr = min(dr, max(0, g.Children[j].Ratio-floor))
-		dr = max(dr, -max(0, g.Children[i].Ratio-floor))
-		g.Children[i].Ratio += dr
-		g.Children[j].Ratio -= dr
-		return t, true, nil
+	j := step(i, d)
+	if g.Layout != want || j < 0 || j >= len(g.Children) {
+		return nil, false
 	}
-	return t, false, nil
+	if span <= 0 {
+		return nil, true
+	}
+	perPixel := float64(len(g.Children)) / float64(span)
+	floor := float64(minTile * perPixel)
+	dr := float64(delta) * perPixel
+	dr = min(dr, max(0, g.Children[j].Ratio-floor))
+	dr = max(dr, -max(0, g.Children[i].Ratio-floor))
+	c := *g
+	c.Children = slices.Clone(g.Children)
+	c.Children[i].Ratio += dr
+	c.Children[j].Ratio -= dr
+	return &c, true
 }

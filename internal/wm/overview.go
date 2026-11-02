@@ -217,7 +217,7 @@ func (s State) WorkspacePlacements(id WorkspaceID, sp Spacing) []Placement {
 	if o == nil {
 		return nil
 	}
-	var a Arrangement
+	var a Arranger
 	placeWorkspace(&a, w, o, true, sp)
 	return a.Windows
 }

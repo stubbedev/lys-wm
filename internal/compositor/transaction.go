@@ -32,6 +32,7 @@ type member struct {
 
 type transaction struct {
 	goal    wm.Arrangement
+	source  *wm.Arranger
 	members []*member
 	began   time.Duration
 }
@@ -114,9 +115,19 @@ func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 	return awaited, err
 }
 
-func (c *Compositor) begin(a wm.Arrangement, awaited []*window) error {
+func (c *Compositor) freeArranger() *wm.Arranger {
+	for i := range c.arrangers {
+		x := &c.arrangers[i]
+		if x != c.shownArranger && (c.txn == nil || x != c.txn.source) {
+			return x
+		}
+	}
+	panic("compositor: three arrangers, two in use")
+}
+
+func (c *Compositor) begin(x *wm.Arranger, awaited []*window) error {
 	t := &c.txnStore
-	t.goal, t.members, t.began = a, t.members[:0], backend.Now()
+	t.goal, t.source, t.members, t.began = x.Arrangement, x, t.members[:0], backend.Now()
 	var err error
 	for _, w := range awaited {
 		m := c.await(w)
@@ -213,6 +224,7 @@ func (c *Compositor) land(expired bool) error {
 	if c.interaction == nil {
 		err = c.holdTimer.Disarm()
 	}
+	c.shownArranger = t.source
 	err = errors.Join(err, c.install(t.goal, c.clock()), c.publish())
 	c.releasing = true
 	for _, m := range t.members {

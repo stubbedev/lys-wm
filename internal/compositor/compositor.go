@@ -201,6 +201,8 @@ type Compositor struct {
 	dragPending     bool
 	dragMovedAt     time.Duration
 	releasing       bool
+	arrangers       [3]wm.Arranger
+	shownArranger   *wm.Arranger
 	lagging         bool
 	wm              wm.State
 	settings        wm.Settings
