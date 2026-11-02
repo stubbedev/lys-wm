@@ -238,9 +238,9 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		return c.seat.PointerFrame()
 	case backend.GestureBegin:
 		return c.gestureBegin(d, e)
-	case backend.SwipeUpdate:
+	case *backend.SwipeUpdate:
 		return c.swipeUpdate(e)
-	case backend.PinchUpdate:
+	case *backend.PinchUpdate:
 		return c.pinchUpdate(e)
 	case backend.GestureEnd:
 		return c.gestureEnd(e)

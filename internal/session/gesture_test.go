@@ -51,10 +51,10 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	want := []backend.Event{
 		backend.GestureBegin{Time: ms(1), Gesture: backend.Swipe, Fingers: 3},
-		backend.SwipeUpdate{Time: ms(2), DX: 4.5, DY: -1, UnaccelDX: 3, UnaccelDY: -0.5},
+		&backend.SwipeUpdate{Time: ms(2), DX: 4.5, DY: -1, UnaccelDX: 3, UnaccelDY: -0.5},
 		backend.GestureEnd{Time: ms(3), Gesture: backend.Swipe},
 		backend.GestureBegin{Time: ms(4), Gesture: backend.Pinch, Fingers: 2},
-		backend.PinchUpdate{Time: ms(5), DX: 1, DY: 2, Scale: 1.25, Rotation: -10},
+		&backend.PinchUpdate{Time: ms(5), DX: 1, DY: 2, Scale: 1.25, Rotation: -10},
 		backend.GestureEnd{Time: ms(6), Gesture: backend.Pinch, Cancelled: true},
 		backend.GestureBegin{Time: ms(7), Gesture: backend.Hold, Fingers: 4},
 		backend.GestureEnd{Time: ms(8), Gesture: backend.Hold, Cancelled: true},

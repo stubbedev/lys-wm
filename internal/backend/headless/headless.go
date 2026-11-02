@@ -42,7 +42,7 @@ type Backend struct {
 func New(l *loop.Loop) *Backend {
 	b := &Backend{loop: l, renderer: soft.New()}
 	b.keyboard = &Keyboard{device: device{b, "headless-keyboard", backend.Keyboard}}
-	b.pointer = &Pointer{device{b, "headless-pointer", backend.Pointer}}
+	b.pointer = &Pointer{device: device{b, "headless-pointer", backend.Pointer}}
 	b.touch = &Touch{device{b, "headless-touch", backend.Touch}}
 	b.switches = &Switches{device{b, "headless-switches", 0}}
 	return b
@@ -669,7 +669,11 @@ func (k *Keyboard) Key(code uint32, pressed bool) error {
 	return k.backend.emit(k, backend.Key{Time: now(), Code: code, Pressed: pressed})
 }
 
-type Pointer struct{ device }
+type Pointer struct {
+	device
+	swipe backend.SwipeUpdate
+	pinch backend.PinchUpdate
+}
 
 func (b *Backend) Pointer() *Pointer {
 	return b.pointer
@@ -700,15 +704,18 @@ func (p *Pointer) GestureBegin(g backend.Gesture, fingers uint32) error {
 }
 
 func (p *Pointer) Swipe(dx, dy float64) error {
-	return p.backend.emit(p, backend.SwipeUpdate{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
+	p.swipe = backend.SwipeUpdate{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy}
+	return p.backend.emit(p, &p.swipe)
 }
 
 func (p *Pointer) SwipeAt(at time.Duration, dx, dy float64) error {
-	return p.backend.emit(p, backend.SwipeUpdate{Time: at, DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
+	p.swipe = backend.SwipeUpdate{Time: at, DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy}
+	return p.backend.emit(p, &p.swipe)
 }
 
 func (p *Pointer) Pinch(dx, dy, scale, rotation float64) error {
-	return p.backend.emit(p, backend.PinchUpdate{Time: now(), DX: dx, DY: dy, Scale: scale, Rotation: rotation})
+	p.pinch = backend.PinchUpdate{Time: now(), DX: dx, DY: dy, Scale: scale, Rotation: rotation}
+	return p.backend.emit(p, &p.pinch)
 }
 
 func (p *Pointer) GestureEnd(g backend.Gesture, cancelled bool) error {

@@ -354,6 +354,6 @@ func (e TouchUp) Timestamp() time.Duration               { return e.Time }
 func (e TouchCancel) Timestamp() time.Duration           { return e.Time }
 func (e TouchFrame) Timestamp() time.Duration            { return e.Time }
 func (e GestureBegin) Timestamp() time.Duration          { return e.Time }
-func (e SwipeUpdate) Timestamp() time.Duration           { return e.Time }
-func (e PinchUpdate) Timestamp() time.Duration           { return e.Time }
+func (e *SwipeUpdate) Timestamp() time.Duration          { return e.Time }
+func (e *PinchUpdate) Timestamp() time.Duration          { return e.Time }
 func (e GestureEnd) Timestamp() time.Duration            { return e.Time }

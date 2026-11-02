@@ -195,6 +195,8 @@ type Libinput struct {
 	openErr error
 	out     []backend.Event
 	motion  backend.PointerMotion
+	swipe   backend.SwipeUpdate
+	pinch   backend.PinchUpdate
 	frame   backend.PointerFrame
 	// suspended: the devices were let go for an inactive session, and a
 	// resume takes them again. A resume without one would take each
@@ -609,10 +611,12 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 		return append(out, backend.GestureBegin{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Fingers: uint32(max(f.fingers(g), 0))})
 	case evSwipeUpdate:
 		g := f.gestureEvent(ev)
-		return append(out, backend.SwipeUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), UnaccelDX: f.gestureUnaccelDX(g), UnaccelDY: f.gestureUnaccelDY(g)})
+		in.swipe = backend.SwipeUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), UnaccelDX: f.gestureUnaccelDX(g), UnaccelDY: f.gestureUnaccelDY(g)}
+		return append(out, &in.swipe)
 	case evPinchUpdate:
 		g := f.gestureEvent(ev)
-		return append(out, backend.PinchUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), Scale: f.gestureScale(g), Rotation: f.gestureAngle(g)})
+		in.pinch = backend.PinchUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), Scale: f.gestureScale(g), Rotation: f.gestureAngle(g)}
+		return append(out, &in.pinch)
 	case evSwipeEnd, evPinchEnd, evHoldEnd:
 		g := f.gestureEvent(ev)
 		return append(out, backend.GestureEnd{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Cancelled: f.cancelled(g) != 0})

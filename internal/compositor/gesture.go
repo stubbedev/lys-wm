@@ -52,6 +52,7 @@ type gestureInput struct {
 	natural    bool
 	binds      []binds.GestureBind
 	drive      driven
+	workspaces workspaceDrive
 	held       *workspaceSwitch
 	heldOn     *output.Output
 	overview   bool
@@ -87,20 +88,20 @@ func (c *Compositor) gestureBegin(d backend.Device, e backend.GestureBegin) erro
 }
 
 func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
-	var errs []error
+	var cancelled, released, claimed error
 	if step.CancelClient {
-		errs = append(errs, c.seat.GestureEnd(at, c.gesture.kind, true))
+		cancelled = c.seat.GestureEnd(at, c.gesture.kind, true)
 	}
 	if step.Passed {
-		errs = append(errs, c.releaseHeld(at))
+		released = c.releaseHeld(at)
 	}
 	if step.Claimed {
-		errs = append(errs, c.claimGesture(step.Bind, at))
+		claimed = c.claimGesture(step.Bind, at)
 	}
 	if step.Fire {
 		c.run(step.Bind.Action, nil)
 	}
-	return errors.Join(errs...)
+	return errors.Join(cancelled, released, claimed)
 }
 
 func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration) error {
@@ -141,7 +142,7 @@ func (c *Compositor) releaseHeld(at time.Duration) error {
 	return c.schedule(o)
 }
 
-func (c *Compositor) swipeUpdate(e backend.SwipeUpdate) error {
+func (c *Compositor) swipeUpdate(e *backend.SwipeUpdate) error {
 	step := c.gesture.recognizer.Swipe(e.UnaccelDX, e.UnaccelDY)
 	if step.Forward {
 		return c.seat.SwipeUpdate(e.Time, e.DX, e.DY)
@@ -153,7 +154,7 @@ func (c *Compositor) swipeUpdate(e backend.SwipeUpdate) error {
 	return errors.Join(err, c.gesture.drive.moved(step.Travel/c.gestures.Distance, e.Time))
 }
 
-func (c *Compositor) pinchUpdate(e backend.PinchUpdate) error {
+func (c *Compositor) pinchUpdate(e *backend.PinchUpdate) error {
 	step := c.gesture.recognizer.Pinch(e.Scale)
 	if step.Forward {
 		return c.seat.PinchUpdate(e.Time, e.DX, e.DY, e.Scale, e.Rotation)
@@ -168,17 +169,17 @@ func (c *Compositor) pinchUpdate(e backend.PinchUpdate) error {
 func (c *Compositor) gestureEnd(e backend.GestureEnd) error {
 	g := &c.gesture
 	step := g.recognizer.End(e.Cancelled)
-	var errs []error
+	var ended, released error
 	if step.Forward {
-		errs = append(errs, c.seat.GestureEnd(e.Time, e.Gesture, e.Cancelled))
+		ended = c.seat.GestureEnd(e.Time, e.Gesture, e.Cancelled)
 	} else {
-		errs = append(errs, c.gestureStep(step, e.Time))
+		ended = c.gestureStep(step, e.Time)
 	}
 	if g.drive != nil {
-		errs = append(errs, g.drive.released(e.Time, e.Cancelled))
+		released = g.drive.released(e.Time, e.Cancelled)
 		g.drive = nil
 	}
-	return errors.Join(append(errs, c.releaseHeld(e.Time))...)
+	return errors.Join(ended, released, c.releaseHeld(e.Time))
 }
 
 func (c *Compositor) endDrive() error {
@@ -218,7 +219,8 @@ func (c *Compositor) driveWorkspaces(at time.Duration) driven {
 		sw.pos.Track(0, at)
 		c.switches[o] = sw
 	}
-	return &workspaceDrive{c: c, o: o, sw: sw}
+	g.workspaces = workspaceDrive{c: c, o: o, sw: sw}
+	return &g.workspaces
 }
 
 func (d *workspaceDrive) live() bool {
