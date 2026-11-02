@@ -324,7 +324,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	}
 	delete(c.dropped, o)
 	delete(c.switches, o)
-	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.dropClosingOn(o), c.power.Removed(o), c.gamma.Removed(o))
+	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.overviewOutputGone(o), c.dropClosingOn(o), c.power.Removed(o), c.gamma.Removed(o))
 	c.ctm.Removed(o)
 	for _, e := range c.entered {
 		if slices.Contains(e.outputs, o) {

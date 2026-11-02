@@ -299,7 +299,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	ops := pass.ops
 	sc := c.sceneOf(o)
 	var b *blurCache
-	shared := pass.background >= 0 && (g.mica || c.decor.Blur.XRay)
+	shared := pass.background >= 0 && (g.mica || c.decor.Blur.XRay || pass.sharedBlur)
 	switch {
 	case shared && spec != plain:
 		b = sc.blurs.micaChain()

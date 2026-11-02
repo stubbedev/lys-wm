@@ -31,9 +31,10 @@ const (
 	KindDispatch      Kind = "dispatch"
 	KindWatch         Kind = "watch"
 	KindIcon          Kind = "icon"
+	KindOverview      Kind = "overview"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -193,6 +194,7 @@ type Snapshot struct {
 	Layout        Layout
 	Locks         Locks
 	ReducedMotion bool
+	Overview      bool
 }
 
 func (s Snapshot) active() (Window, bool) {
@@ -225,6 +227,8 @@ func (s Snapshot) answer(k Kind) any {
 		return s.Locks
 	case KindReducedMotion:
 		return s.ReducedMotion
+	case KindOverview:
+		return s.Overview
 	}
 	return nil
 }

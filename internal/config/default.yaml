@@ -14,6 +14,7 @@ binds:
   - {chord: SUPER + SHIFT + R, action: reload}
   - {chord: SUPER + SHIFT + E, action: exit}
   - {chord: SUPER + F, action: fullscreen}
+  - {chord: SUPER + Tab, action: overview toggle}
   - {chord: SUPER + V, action: togglefloating}
   - {chord: SUPER + T, action: makegroup tab ephemeral}
   - {chord: SUPER + S, action: makegroup v ephemeral}
@@ -68,6 +69,7 @@ binds:
 gestures:
   swipe:
     - {fingers: 3, direction: horizontal, drive: workspaces}
+    - {fingers: 3, direction: vertical, drive: overview}
   pinch:
     - {fingers: 2, modifiers: SUPER, direction: both, drive: zoom}
 

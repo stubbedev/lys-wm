@@ -10,7 +10,7 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 ```sh
 lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
 ```
@@ -28,7 +28,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `dispatch` (which needs `action`), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`) and `watch`. Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
@@ -91,11 +91,14 @@ from 0; `name` is the layout's description from the keymap.
 `locks`: the lock keys' state as the keymap's LEDs show it,
 `{"caps":true,"num":false,"scroll":false}`.
 
+`overview`: whether the [overview](./config#overview) has the input, `true` or
+`false`.
+
 `reducedmotion`: whether `animations.reduced_motion` is in force, `true` or
 `false`. lys-shell follows it, and serves it to apps as the portal's
 `org.freedesktop.appearance` `reduced-motion`.
 
-These four answer at any time what the `submap`, `layout`, `locks` and `reducedmotion`
+These five answer at any time what the `submap`, `layout`, `locks`, `overview` and `reducedmotion`
 events report when they change, so a client that starts later knows them at
 once.
 
@@ -133,6 +136,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `layout` | `layout` (`index`, `name`) | The keyboard layout group changed |
 | `locks` | `locks` (`caps`, `num`, `scroll`) | Caps, Num or Scroll Lock turned on or off |
 | `reducedmotion` | `reduced_motion` | A reload turned `animations.reduced_motion` on or off |
+| `overview` | `open` | The overview opened or started closing. `open` is true from the moment it takes input, before its animation ends |
 
 A watcher that falls 256 events behind is disconnected. Reconnect and
 re-query to resynchronise.

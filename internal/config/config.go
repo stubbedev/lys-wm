@@ -126,6 +126,7 @@ type rawConfig struct {
 	DragPreview     rawDragPreview        `yaml:"drag_preview"`
 	Animations      rawAnimations         `yaml:"animations"`
 	Tabs            rawTabs               `yaml:"tabs"`
+	Overview        rawOverview           `yaml:"overview"`
 	Autotile        rawAutotile           `yaml:"autotile"`
 	Binds           []rawBind             `yaml:"binds"`
 	Submaps         map[string][]rawBind  `yaml:"submaps"`
@@ -322,6 +323,11 @@ type rawTabColors struct {
 	Text       At[string] `yaml:"text"`
 }
 
+type rawOverview struct {
+	Blur *bool        `yaml:"blur"`
+	Dim  *At[float64] `yaml:"dim"`
+}
+
 type rawTabs struct {
 	Height      *At[int]      `yaml:"height"`
 	Padding     *At[int]      `yaml:"padding"`
@@ -423,6 +429,7 @@ type Config struct {
 	Animations      anim.Table
 	BlurLayers      []string
 	Gestures        compositor.Gestures
+	Overview        compositor.OverviewStyle
 }
 
 var mocha = map[string]render.Color{
@@ -557,6 +564,21 @@ func (p *parser) curve(name string, at At[rawCurve]) anim.Shape {
 		return s
 	}
 	return nil
+}
+
+func (p *parser) overview(r rawOverview) compositor.OverviewStyle {
+	style := compositor.DefaultOverviewStyle()
+	if r.Blur != nil {
+		style.Blur = *r.Blur
+	}
+	if r.Dim != nil {
+		if r.Dim.V < 0 || r.Dim.V > 1 {
+			p.fail(r.Dim.Line, "overview.dim", "%v is not between 0 and 1", r.Dim.V)
+		} else {
+			style.Dim = float32(r.Dim.V)
+		}
+	}
+	return style
 }
 
 func (p *parser) animations(r rawAnimations) anim.Table {
@@ -995,7 +1017,7 @@ var swipeDirections = map[string]binds.GestureDirection{
 
 var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut, "both": binds.PinchBoth}
 
-var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom}
+var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview}
 
 func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r rawGesture, directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
 	key := fmt.Sprintf("gestures.%s[%d]", name, i)
@@ -1037,6 +1059,8 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r
 			p.fail(r.Drive.Line, key+".drive", "only a swipe can drive something")
 		} else if b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical {
 			p.fail(r.Drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
+		} else if b.Drive == binds.DriveOverview && b.Direction != binds.SwipeVertical && b.Direction != binds.SwipeUp && b.Direction != binds.SwipeDown {
+			p.fail(r.Drive.Line, key+".drive", "overview takes the direction up, down or vertical")
 		}
 	default:
 		a, err := wm.ParseAction(r.Action.V)
@@ -1250,6 +1274,7 @@ func Parse(file string, data []byte) (Config, error) {
 	cfg.WM.Gaps = p.gaps(raw.Gaps)
 	cfg.Animations = p.animations(raw.Animations)
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
+	cfg.Overview = p.overview(raw.Overview)
 	for _, l := range raw.Decoration.Blur.Layers {
 		cfg.BlurLayers = append(cfg.BlurLayers, l.V)
 	}
@@ -1335,6 +1360,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err
 	}
+	cfg.Animations, cfg.BlurLayers, cfg.Overview = c.Animations, c.BlurLayers, c.Overview
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

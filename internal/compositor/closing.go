@@ -213,8 +213,12 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 		fr = c.windowFrost(w)
 	}
 	w.snapshot, w.frost = nil, nil
-	cl := &closing{snapshot: tt, frost: fr, output: w.output, level: windowLevel, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
-	end := c.styled(anim.WindowsOut, w.output, w.tile)
+	start, goal := w.motion.At(now), w.tile
+	if at, ok := c.overviewRect(w, now); ok {
+		start, goal = at, at
+	}
+	cl := &closing{snapshot: tt, frost: fr, output: w.output, level: windowLevel, motion: anim.NewTween(start, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	end := c.styled(anim.WindowsOut, w.output, goal)
 	if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
 		if n, ok := c.neighbour(w, w.tile); ok {
 			cl.bud, end = n, budRect(n, w.tile)
@@ -249,16 +253,7 @@ func (c *Compositor) drawClosing(pass *frame, o *output.Output, at level) {
 }
 
 func (c *Compositor) dropClosing(cl *closing) error {
-	var errs []error
-	for o, sc := range c.scenes {
-		if sc.draws(cl.snapshot.Texture()) {
-			sc.stale = true
-			if c.outputLive(o) {
-				errs = append(errs, c.schedule(o))
-			}
-		}
-	}
-	return errors.Join(append(errs, cl.snapshot.Destroy())...)
+	return c.releaseTarget(cl.snapshot)
 }
 
 func (c *Compositor) finishClosing(o *output.Output, now time.Duration) error {

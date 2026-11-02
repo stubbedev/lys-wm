@@ -94,6 +94,10 @@ func (v *virtualKeyboard) takeEscape(code uint32, pressed bool) (bool, error) {
 	if i >= 0 {
 		return true, nil
 	}
+	if v.c.overviewHolds() && v.c.seat.Focus() == nil && v.c.seat.VirtualBareEscape(v.kb, code) {
+		v.taken = append(v.taken, code)
+		return true, v.c.closeOverview()
+	}
 	a := v.c.escapeTaker()
 	if a == nil || !v.c.seat.VirtualBareEscape(v.kb, code) {
 		return false, nil

@@ -22,7 +22,7 @@ func (c *Compositor) LockChanged() error {
 	}
 	var errs []error
 	if c.shell.Locked() {
-		errs = append(errs, c.shell.DismissGrab())
+		errs = append(errs, c.shell.DismissGrab(), c.overviewLocked())
 	}
 	return errors.Join(append(errs, c.refocus(), c.refreshPointer(), c.scheduleAll(), c.confirmLock())...)
 }

@@ -175,7 +175,7 @@ func TestQueriesAndDispatch(t *testing.T) {
 
 func TestSubmapLayoutAndLocksAreQueries(t *testing.T) {
 	r := start(t)
-	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`, KindLocks: `{"caps":false,"num":false,"scroll":false}`, KindReducedMotion: `false`} {
+	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`, KindLocks: `{"caps":false,"num":false,"scroll":false}`, KindReducedMotion: `false`, KindOverview: `false`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s before any change: %s, %v; want %s", kind, got, err, want)
 		}
@@ -185,8 +185,9 @@ func TestSubmapLayoutAndLocksAreQueries(t *testing.T) {
 		f.snap.Layout = Layout{Index: 1, Name: "Danish"}
 		f.snap.Locks = Locks{Num: true}
 		f.snap.ReducedMotion = true
+		f.snap.Overview = true
 	})
-	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`, KindLocks: `{"caps":false,"num":true,"scroll":false}`, KindReducedMotion: `true`} {
+	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`, KindLocks: `{"caps":false,"num":true,"scroll":false}`, KindReducedMotion: `true`, KindOverview: `true`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s: %s, %v; want %s", kind, got, err, want)
 		}

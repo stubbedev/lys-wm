@@ -415,6 +415,7 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows | still |
 | `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window | still |
 | `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output; `fade`: it fades where it is | cross-fade |
+| `overview` | `global` | The [overview](#overview) opening and closing, its windows moving to new places in it, and a window dropped on a thumbnail. Unlike the other events its curve does not come from `global`: it is `spring` unless this event names one, because a spring keeps its velocity when the overview reverses or a gesture lets go, and a bézier given here starts each move from rest. `enabled: false` or `animations.enabled: false` jumps, and so does `reduced_motion`. | |
 | `fade` | `global` | Every fade | | fade |
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | | fade |
 | `fade_out` | `fade` | A closing window fading out | | fade |
@@ -473,13 +474,13 @@ gestures:
 
 | Key | Value |
 | --- | --- |
-| `swipe` | Default: three fingers `horizontal` drive `workspaces`, or `vertical` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
+| `swipe` | Default: three fingers `horizontal` drive `workspaces` and `vertical` drive `overview`, or `vertical` drive `workspaces` and nothing drives `overview` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
 | `pinch`, `hold` | Default: none. The built-in config binds SUPER and a two-finger pinch to `drive: zoom` |
 | `fingers` | How many; at least 3 for a swipe, since two are scrolling, 2 for a pinch and 1 for a hold |
 | `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal` or `vertical`. Pinch: `in`, `out` or `both`. A hold has none |
 | `modifiers` | Keys to hold, as in a chord: `SUPER + CTRL`. A gesture with modifiers is taken only while exactly those are held, ahead of one without, which matches whatever is held. Optional |
 | `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
-| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `zoom`, pinches only, takes `both` |
+| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `overview`, swipes only, takes `up`, `down` or `vertical`; `zoom`, pinches only, takes `both` |
 | `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
 
 Two entries for the same finger count that could match the same movement are an
@@ -506,6 +507,16 @@ since a bézier cannot take a starting velocity. With animations off it jumps.
 Three fingers on a settling switch grab it where it is. A workspace switch from
 anywhere else ends the gesture, and the rest of its movement is ignored.
 
+`drive: overview` holds the [overview](#overview) at a position the fingers set on
+every output together, one `distance` for the whole way, resisting past fully open.
+Opening is up on `vertical` and `up`, and along the bound direction on `down`, and
+`natural` does not flip it. It takes the input as soon as the swipe is claimed.
+On release the position plus 0.15 seconds of velocity decides open or closed from
+halfway, and a spring carries that velocity to rest: the `overview` curve when it is
+a spring, otherwise the built-in `spring`. With animations off it jumps. Three fingers
+on an overview still settling grab it where it is. While it is open, a swipe bound
+to `workspaces` does nothing.
+
 `drive: zoom` sets the [zoom](#animations) of the output under the pointer by the
 pinch's scale, from the moment the fingers land: the client sees nothing of the
 gesture, and the level follows the fingers without animating, from 1 to 16.
@@ -513,6 +524,54 @@ gesture, and the level follows the fingers without animating, from 1 to 16.
 The fingers move the content unless `natural_scroll` is `false`, read from
 `input.devices` for that device and then `input.touchpad`. Left unset it counts as
 on for gestures, whatever libinput's default for scrolling is.
+
+## overview
+
+```yaml
+overview:
+  blur: true
+  dim: 0.35
+```
+
+The `overview` action opens every output's overview together: the windows of the
+workspace the output shows, side by side and uniformly shrunk so none overlap and
+each keeps its shape and its place relative to the others, under a strip of live
+thumbnails of the output's workspaces and a `+` tile. `SUPER + Tab` opens it in the
+built-in config, and three fingers up scrub it open, [down closed](#gestures).
+
+| Key | Default |
+| --- | --- |
+| `blur` | `true`: the layers below the windows blur over the mica chain (`decoration.blur.mica`'s size and passes), which redraws only when they change. Independent of `decoration.blur.enabled` |
+| `dim` | `0.35`: how far those layers darken, from 0 to 1 |
+
+Everything on the workspace takes part: tiled, floating and fullscreen windows,
+every tab of a tab group and windows a fullscreen one covers, on Wayland or X11.
+Dialogs stay with their parent as one tile, and popups scale with their window.
+Minimized windows sit in a row along the bottom, and a click there brings one back.
+
+Layer surfaces: `background` and `bottom` stay, and blur and dim. `top`, so bars,
+fade out as the overview opens and back as it closes, keeping their frame callbacks.
+`overlay`, so notifications and launchers, stays on top and takes its own input,
+and one with exclusive or clicked keyboard focus keeps the keyboard. X11
+override-redirect windows fade out and take no input.
+
+While it is open the overview has the pointer and keyboard. Clients get
+`wl_pointer.leave` and `wl_keyboard.leave`, and `enter` with the current keys when
+it closes. Binds with modifiers still run.
+
+| Input | Does |
+| --- | --- |
+| Hover | Rings a window and shows its title, or highlights a thumbnail |
+| Click a window | Focuses it, or restores it from the minimized row, and closes |
+| Click a thumbnail | Shows that workspace and stays open; on the workspace already shown, closes |
+| Click `+` | Shows a new workspace, the lowest number free, and stays open |
+| Click anywhere else, `Escape` | Closes |
+| Drag a window onto a thumbnail, `+`, or another output | Moves it there with its dialogs; dropped anywhere else it springs back. Minimized windows do not drag |
+| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, then act as a click does. Other keys do nothing |
+| Touch | As the pointer, with the first finger |
+
+A session lock closes it at once and it will not open under one, or during a
+client's drag and drop.
 
 ## tabs
 

@@ -405,3 +405,27 @@ func TestReducedMotionHonoursAnEventTurnedOff(t *testing.T) {
 		t.Errorf("fade_in %v, fade_out %v", table.Curve(FadeIn), table.Curve(FadeOut))
 	}
 }
+
+func TestTheOverviewIsOnASpringUnlessToldOtherwise(t *testing.T) {
+	d := 300 * time.Millisecond
+	table, errs := Resolve(true, map[Event]Setting{Global: {Shape: Linear, Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if _, ok := table.Curve(Overview).(Spring); !ok {
+		t.Errorf("the overview's curve is %T", table.Curve(Overview))
+	}
+	table, errs = Resolve(true, map[Event]Setting{Overview: {Shape: Linear, Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if _, ok := table.Curve(Overview).(Spring); ok {
+		t.Error("the overview ignored the curve given to it")
+	}
+	if table, _ = Resolve(false, nil); table.Curve(Overview) != Instant {
+		t.Errorf("animations off leave the overview %T", table.Curve(Overview))
+	}
+	if table, _ = ResolveReduced(nil); table.Curve(Overview) != Instant {
+		t.Errorf("reduced motion leaves the overview %T", table.Curve(Overview))
+	}
+}

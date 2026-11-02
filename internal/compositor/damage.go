@@ -75,6 +75,7 @@ type frame struct {
 	ops        []drawOp
 	cursorFrom int
 	background int
+	sharedBlur bool
 	blurs      []pendingBlur
 	below      []drawOp
 	rims       []rim
@@ -347,7 +348,7 @@ func (sc *scene) draws(t render.Texture) bool {
 }
 
 func (sc *scene) begin() *frame {
-	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background = sc.cur.ops[:0], 0, -1
+	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background, sc.cur.sharedBlur = sc.cur.ops[:0], 0, -1, false
 	sc.cur.blurs, sc.cur.below, sc.cur.rims = sc.cur.blurs[:0], sc.cur.below[:0], sc.cur.rims[:0]
 	return &sc.cur
 }

@@ -50,6 +50,8 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.withWindow(e.ID, c.minimize)
 	case wm.RestoreAction:
 		return c.withWindow(e.ID, c.restore)
+	case wm.OverviewAction:
+		return c.overviewAction(e.Mode)
 	case wm.ExecAction:
 		return c.spawn(e.Command)
 	case wm.GlobalAction:

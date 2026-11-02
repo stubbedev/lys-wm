@@ -76,6 +76,9 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 	reach := c.footprintMoved(s, root) || drawable != stillDrawable
 	err := errors.Join(c.noteCommit(s), c.updateCursorSessions())
 	d := s.Damage()
+	if c.overview != nil {
+		c.overviewCommitted(root)
+	}
 	for _, o := range c.outputs {
 		shows := showsTree(c.shown[o], root)
 		if shows && len(d) > 0 {
@@ -287,6 +290,9 @@ func (c *Compositor) textureOf(s *surface.Surface) render.Texture {
 }
 
 func (c *Compositor) Destroyed(s *surface.Surface) error {
+	if c.overview != nil {
+		c.overviewForget(s)
+	}
 	if err := c.seat.SurfaceDestroyed(s); err != nil {
 		return err
 	}

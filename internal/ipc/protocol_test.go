@@ -20,7 +20,7 @@ func TestParseRequest(t *testing.T) {
 	if r, err := parseRequest([]byte(`{"request":"icon","window":7,"size":32}`)); err != nil || r.kind != KindIcon || r.icon != (iconRequest{window: 7, size: 32}) {
 		t.Fatalf("icon parsed to %+v, %v", r, err)
 	}
-	for _, kind := range []Kind{KindSubmap, KindLayout, KindLocks, KindReducedMotion} {
+	for _, kind := range []Kind{KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindOverview} {
 		if r, err := parseRequest([]byte(`{"request":"` + string(kind) + `"}`)); err != nil || r.kind != kind {
 			t.Fatalf("%s parsed to %+v, %v", kind, r, err)
 		}
@@ -99,6 +99,7 @@ func TestDiff(t *testing.T) {
 	next.Layout = Layout{Index: 1, Name: "Danish"}
 	next.Locks = Locks{Caps: true}
 	next.ReducedMotion = true
+	next.Overview = true
 	want := []string{
 		`{"event":"output","change":"changed","output":{"name":"DP-1","description":"","rect":{"x":0,"y":0,"width":100,"height":50},"scale":2,"mode":{"width":0,"height":0,"refresh_mhz":0},"workspace":1,"focused":false,"powered":false}}`,
 		`{"event":"workspace","output":"HDMI-A-1","workspace":3}`,
@@ -113,6 +114,7 @@ func TestDiff(t *testing.T) {
 		`{"event":"layout","layout":{"index":1,"name":"Danish"}}`,
 		`{"event":"locks","locks":{"caps":true,"num":false,"scroll":false}}`,
 		`{"event":"reducedmotion","reduced_motion":true}`,
+		`{"event":"overview","open":true}`,
 	}
 	if got := names(Diff(prev, next)); !slices.Equal(got, want) {
 		t.Fatalf("diff\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))

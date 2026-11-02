@@ -234,7 +234,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"animations:\n  curves:\n    a: {spring: {stiffness: 1}}\n":             "t.yaml:3: animations.curves.a.spring: anim: spring stiffness 1, damping 0",
 		"animations:\n  curves:\n    linear: {bezier: [0, 0, 1, 1]}\n":          "t.yaml:3: animations.curves.linear: is a built-in curve",
 		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n":   "t.yaml:3: animations.curves.a.tension: unknown key",
-		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap)",
+		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
 		"animations:\n  events:\n    windows: {curve: bouncy}\n":                `t.yaml:3: animations.events.windows.curve: "bouncy" is not a curve (known: ease,`,
 		"animations:\n  events:\n    windows_in: {style: popin 120%}\n":         "t.yaml:3: animations.events.windows_in.style: anim: popin takes a percentage from 0% to 100%",
 		"animations:\n  events:\n    windows_in: {style: wobble}\n":             `t.yaml:3: animations.events.windows_in.style: anim: unknown style "wobble"`,
@@ -448,9 +448,12 @@ func gestureConfig(t *testing.T, text string) compositor.Gestures {
 	return cfg.Gestures
 }
 
-func TestThreeFingersSwitchWorkspacesOutOfTheBox(t *testing.T) {
+func TestThreeFingersSwitchWorkspacesAndScrubTheOverviewOutOfTheBox(t *testing.T) {
 	g := gestureConfig(t, "")
-	want := []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces}}
+	want := []binds.GestureBind{
+		{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces},
+		{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeVertical, Drive: binds.DriveOverview},
+	}
 	if !slices.Equal(g.Binds, want) || !g.Natural || g.Distance != compositor.DefaultGestureDistance {
 		t.Fatalf("defaults %+v", g)
 	}
@@ -543,5 +546,21 @@ func TestBadGesturesAreReported(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: error %v, want one naming %s", tc.text, err, tc.want)
 		}
+	}
+}
+
+func TestTheOverviewKeysParseAndCheck(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("overview:\n  blur: false\n  dim: 0.5\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Overview.Blur || cfg.Overview.Dim != 0.5 {
+		t.Errorf("overview %+v", cfg.Overview)
+	}
+	if _, err := Parse("t.yaml", []byte("overview:\n  dim: 2\n")); err == nil || !strings.Contains(err.Error(), "overview.dim") {
+		t.Errorf("a dim of 2: %v", err)
+	}
+	if _, err := Parse("t.yaml", []byte("gestures:\n  swipe:\n    - {fingers: 3, direction: left, drive: overview}\n")); err == nil || !strings.Contains(err.Error(), "overview takes") {
+		t.Errorf("a sideways overview: %v", err)
 	}
 }

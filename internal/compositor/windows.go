@@ -235,7 +235,7 @@ func (c *Compositor) reconcile() error {
 }
 
 func (c *Compositor) publish() error {
-	return errors.Join(c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())
+	return errors.Join(c.syncOverview(c.clock()), c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())
 }
 
 func errUnknownWindow(id wm.WindowID) error {
@@ -255,6 +255,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 		rect := c.content(p.Rect, p.Layer)
 		moved := rect != w.rect
 		switch {
+		case c.overview != nil:
 		case p.Minimized && !w.minimized:
 			errs = append(errs, c.startMinimize(w, now))
 		case !p.Minimized && w.minimized:
@@ -301,7 +302,7 @@ func (c *Compositor) springMoves() bool {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
+	}) || c.overviewAnimating(o, now) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
 }
@@ -435,6 +436,9 @@ func (c *Compositor) keyboardTarget() *surface.Surface {
 	if c.shell.Locked() {
 		return c.lockTarget()
 	}
+	if c.overviewHolds() {
+		return c.overviewKeyboardTarget()
+	}
 	exclusive := c.exclusiveLayer()
 	if top := c.grabTop(); top != nil && (exclusive == nil || top.Client() == exclusive.Surface().Client()) {
 		return top
@@ -512,6 +516,9 @@ func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) err
 		return errors.Join(c.reconcile(), c.syncForeign())
 	case shell.ChangedIcon:
 		return c.scheduleAll()
+	}
+	if c.overview != nil {
+		return errors.Join(c.scheduleAll(), c.syncForeign())
 	}
 	return c.syncForeign()
 }

@@ -29,6 +29,7 @@ const (
 	NoDrive Drive = iota
 	DriveWorkspaces
 	DriveZoom
+	DriveOverview
 )
 
 type GestureBind struct {

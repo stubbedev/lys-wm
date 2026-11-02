@@ -80,6 +80,9 @@ type (
 	DispatchEvent struct {
 		Action string `json:"action"`
 	}
+	OverviewEvent struct {
+		Open bool `json:"open"`
+	}
 )
 
 func (OutputEvent) Name() string        { return "output" }
@@ -99,6 +102,7 @@ func (LayoutEvent) Name() string        { return "layout" }
 func (LocksEvent) Name() string         { return "locks" }
 func (ReducedMotionEvent) Name() string { return "reducedmotion" }
 func (DispatchEvent) Name() string      { return "dispatch" }
+func (OverviewEvent) Name() string      { return "overview" }
 
 func Encode(e Event) ([]byte, error) {
 	body, err := json.Marshal(e)
@@ -209,6 +213,9 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	if prev.ReducedMotion != next.ReducedMotion {
 		out = append(out, ReducedMotionEvent{ReducedMotion: next.ReducedMotion})
+	}
+	if prev.Overview != next.Overview {
+		out = append(out, OverviewEvent{Open: next.Overview})
 	}
 	return out
 }

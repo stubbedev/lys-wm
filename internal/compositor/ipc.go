@@ -25,6 +25,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 	locks := c.seat.Locks()
 	snap := ipc.Snapshot{
 		Submap:        c.submap,
+		Overview:      c.overviewHolds(),
 		Layout:        c.keyboardLayout(),
 		Locks:         ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
 		ReducedMotion: c.animations.Reduced(),

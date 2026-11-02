@@ -457,7 +457,9 @@ func TestAClaimedSwipeCancelsOnTheClient(t *testing.T) {
 }
 
 func TestASwipeOnAnUnboundAxisStaysWithTheClient(t *testing.T) {
-	h := Start(t, tall)
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Gestures.Binds = []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces}}
+	}, tall)
 	c, log := gestureClient(t, h, "gestures")
 	h.gesture(func(o *headless.Output, p *headless.Pointer) error {
 		return errors.Join(p.MoveTo(o, 0.5, 0.5), p.Frame(), p.GestureBegin(backend.Swipe, 3), p.Swipe(0, 50), p.Swipe(300, 0), p.GestureEnd(backend.Swipe, false))

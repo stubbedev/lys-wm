@@ -35,6 +35,7 @@ const (
 	Zoom
 	Snap
 	FadeSnap
+	Overview
 	eventCount
 )
 
@@ -135,6 +136,7 @@ var events = [eventCount]struct {
 	Zoom:            {name: "zoom", parent: Global, shape: Smooth},
 	Snap:            {name: "snap", parent: Windows, shape: Smooth},
 	FadeSnap:        {name: "fade_snap", parent: Fade, reduced: fades},
+	Overview:        {name: "overview", parent: Global, shape: Smooth},
 }
 
 func (e Event) String() string {

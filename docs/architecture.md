@@ -473,6 +473,15 @@ what is behind it changes. A minimize's genie cuts the snapshot into strips and
 keeps no frost. The offscreen frames behind snapshots and window captures draw
 no blur: they have nothing behind them to blur.
 
+The overview draws the windows it moves as they are: their ops, remapped from tile
+to slot as any window animation does, because a live window is already a texture
+and a screenshot of it would be one more texture drawn just as often. 30 floating
+1000x700 windows moving cost the same draws either way. What it does cache is
+thumbnails: one target per workspace, redrawn only when a window in it commits, so
+a thumbnail is one op in the frame. All windows blur over one shared chain of the
+layers below them while it is open, since their own chains would redraw whenever
+any window moved.
+
 A screen shader is the last of these: an output's ops replay into a retained
 image with the scene's damage, and one pass draws the whole output from it through
 the shader. Its language lives in `internal/shader`, a parser and type checker

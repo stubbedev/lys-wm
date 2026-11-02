@@ -25,11 +25,13 @@ func DefaultGestures() Gestures {
 }
 
 func DefaultGestureBinds(workspaces anim.Style) []binds.GestureBind {
-	axis := binds.SwipeHorizontal
 	if workspaces.Kind == anim.SlideVert {
-		axis = binds.SwipeVertical
+		return []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeVertical, Drive: binds.DriveWorkspaces}}
 	}
-	return []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: axis, Drive: binds.DriveWorkspaces}}
+	return []binds.GestureBind{
+		{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces},
+		{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeVertical, Drive: binds.DriveOverview},
+	}
 }
 
 func (g Gestures) natural(d backend.Device) bool {
@@ -52,6 +54,7 @@ type gestureInput struct {
 	drive      driven
 	held       *workspaceSwitch
 	heldOn     *output.Output
+	overview   bool
 }
 
 func (c *Compositor) gestureBegin(d backend.Device, e backend.GestureBegin) error {
@@ -71,6 +74,11 @@ func (c *Compositor) gestureBegin(d backend.Device, e backend.GestureBegin) erro
 				return ended
 			}
 		}
+	}
+	if g.recognizer.Drives(binds.DriveOverview) && c.grabOverview() {
+		g.overview = true
+		g.recognizer.Swallow()
+		return ended
 	}
 	if step.Forward {
 		return errors.Join(ended, c.seat.GestureBegin(e.Time, e.Gesture, e.Fingers))
@@ -97,13 +105,19 @@ func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
 
 func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration) error {
 	g := &c.gesture
-	switch b.Drive {
-	case binds.DriveWorkspaces:
+	switch {
+	case b.Drive == binds.DriveWorkspaces && !c.overviewHolds():
 		g.drive = c.driveWorkspaces(at)
 		return nil
-	case binds.DriveZoom:
+	case b.Drive == binds.DriveZoom:
 		g.drive = c.driveZoom()
 		return c.releaseHeld(at)
+	case b.Drive == binds.DriveOverview:
+		g.overview = false
+		err := c.releaseHeld(at)
+		drive, opened := c.driveOverview(b, at)
+		g.drive = drive
+		return errors.Join(err, opened)
 	}
 	return c.releaseHeld(at)
 }
@@ -112,6 +126,10 @@ func (c *Compositor) releaseHeld(at time.Duration) error {
 	g := &c.gesture
 	sw, o := g.held, g.heldOn
 	g.held, g.heldOn = nil, nil
+	if g.overview {
+		g.overview = false
+		return c.releaseOverview(at)
+	}
 	if sw == nil || c.switches[o] != sw || !sw.pos.Tracking() {
 		return nil
 	}

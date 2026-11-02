@@ -76,6 +76,7 @@ type Config struct {
 	Animations      anim.Table
 	BlurLayers      []string
 	Gestures        Gestures
+	Overview        OverviewStyle
 	Clock           func() time.Duration
 }
 
@@ -122,6 +123,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		HoldBound:      DefaultHoldBound,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
+		Overview:       DefaultOverviewStyle(),
 	}
 }
 
@@ -259,6 +261,9 @@ type Compositor struct {
 	jellyGen        uint64
 	genieStrips     []anim.GenieStrip
 	blurLayers      []string
+	overview        *overview
+	overviewStyle   OverviewStyle
+	thumbRedraws    uint64
 	switches        map[*output.Output]*workspaceSwitch
 	gestures        Gestures
 	gesture         gestureInput
@@ -319,6 +324,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
+	c.overviewStyle = cfg.Overview
 	c.rulesGen++
 }
 
@@ -507,7 +513,7 @@ func (c *Compositor) dropDecor() error {
 	for o := range c.labels {
 		errs = append(errs, c.dropLabels(o))
 	}
-	return errors.Join(append(errs, c.dropPointers(), c.dropStops(), c.dropGrain())...)
+	return errors.Join(append(errs, c.dropPointers(), c.dropStops(), c.dropGrain(), c.dropOverviewTargets())...)
 }
 
 func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
@@ -536,7 +542,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.landInFlight(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
+	errs := []error{c.landInFlight(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
 	for _, sc := range c.scenes {
 		errs = append(errs, sc.dropImage())
 	}

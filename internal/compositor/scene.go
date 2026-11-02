@@ -95,6 +95,9 @@ func (c *Compositor) sceneOf(o *output.Output) *scene {
 
 func (c *Compositor) render(o *output.Output) error {
 	c.frameTime = c.clock()
+	if err := c.settleOverview(c.frameTime); err != nil {
+		return err
+	}
 	sc := c.sceneOf(o)
 	if err := c.settleZoom(sc); err != nil {
 		return err
@@ -183,6 +186,11 @@ func (c *Compositor) render(o *output.Output) error {
 var windowLayers = []wm.PlacementLayer{wm.LayerTiled, wm.LayerFloating}
 
 func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface.Surface) ([]*surface.Surface, error) {
+	if c.overview != nil {
+		if v := c.overview.views[o]; v != nil {
+			return c.drawOverview(pass, o, v, shown)
+		}
+	}
 	shown = c.drawLayers(pass, o, belowWindows, shown)
 	pass.background = len(pass.ops)
 	for _, layer := range windowLayers {
@@ -241,6 +249,15 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		c.drawBud(pass, o, w.bud, at, 1-travelled(w.motion.Source(), w.motion.At(c.frameTime), w.motion.Target()))
 	}
 	from := len(pass.ops)
+	shown = c.paintWindow(pass, o, w, at, w.fade.At(c.frameTime)*v.alpha, shown)
+	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from), c.drawWindowGenie(pass, o, w, from)); err != nil {
+		c.report(fmt.Errorf("compositor: deform window %d: %w", w.id, err))
+	}
+	return shown
+}
+
+func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at image.Rectangle, alpha float64, shown []*surface.Surface) []*surface.Surface {
+	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
 	top := w.top.Surface()
@@ -267,18 +284,19 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))
 	}
-	if a := w.fade.At(c.frameTime) * v.alpha; a < 1 {
-		pass.fade(from, float32(max(a, 0)))
-	}
-	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from), c.drawWindowGenie(pass, o, w, from)); err != nil {
-		c.report(fmt.Errorf("compositor: deform window %d: %w", w.id, err))
+	if alpha < 1 {
+		pass.fade(from, float32(max(alpha, 0)))
 	}
 	return shown
 }
 
+func (c *Compositor) drawOwnPopups(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
+	return c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w) || w.decided.mica, look: &w.decided.look})
+}
+
 func (c *Compositor) drawWindowPopups(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
 	from := len(pass.ops)
-	shown = c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w) || w.decided.mica, look: &w.decided.look})
+	shown = c.drawOwnPopups(pass, o, w, shown)
 	v, _ := c.workspaceView(o, w)
 	if at := v.rect(w.motion.At(c.frameTime), o.Logical()); at.Min != w.tile.Min {
 		goal := deviceRect(o, w.tile)
