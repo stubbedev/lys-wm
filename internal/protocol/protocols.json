@@ -24,6 +24,11 @@
       "name": "hyprland-protocols",
       "url": "https://raw.githubusercontent.com/hyprwm/hyprland-protocols/{ref}/{path}",
       "ref": "4c27ba9ce104782bf718aabf59df3f503afe7caa"
+    },
+    {
+      "name": "lys-lib",
+      "url": "https://raw.githubusercontent.com/stubbedev/lys-lib/{ref}/{path}",
+      "ref": "3b712d99de0e6ed983af4511165e39603ce35534"
     }
   ],
   "protocols": [
@@ -296,6 +301,11 @@
       "package": "xdgtoplevelicon",
       "source": "wayland-protocols",
       "path": "staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml"
+    },
+    {
+      "package": "lysescape",
+      "source": "lys-lib",
+      "path": "wlr/lys-escape-v1.xml"
     }
   ]
 }

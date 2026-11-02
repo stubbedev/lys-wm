@@ -540,6 +540,26 @@ interfaces;
 backends and renderers do not import `server`, `shell` or `wm`. `cmd/lys-wm`
 is the only place that knows every package.
 
+## Escape beside a dropdown
+
+`lys_escape_v1`, a private protocol pinned from lys-lib, lets a client claim the
+next unmodified Escape press without taking the keyboard, because no standard
+protocol takes one key from the focused window and taking the whole keyboard
+traps the user. A key goes to the first of these that wants it: a compositor
+bind (a client cannot shadow a user's `Escape`, such as `submap reset`); the
+lock surface; a popup grab, exclusive layer, input method grab or drag; the
+focused surface when it inhibits shortcuts, which asked for every key; the
+armed client's `wl_keyboard` when it holds the focus, so one press never
+arrives twice; the newest arm; the focused surface.
+
+An arm is one-shot, so a client that stopped reading costs one key press. It
+dies with its client, and sandboxed clients cannot bind it. A taken press stays
+in `held` until its release, so disarming mid-press leaks nothing to the window,
+and a repeated press is swallowed without a second event. A key the window
+already saw go down is never taken, as its release is owed. Virtual keyboards
+take part, with the keysym read from their own keymap, compiled on the first
+press an arm could take.
+
 ## Protocol bindings
 
 `internal/protocol/protocols.json` pins every protocol source and maps each

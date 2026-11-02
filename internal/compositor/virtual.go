@@ -51,8 +51,9 @@ func (m virtualKeyboards) CreateVirtualKeyboard(_ *svk.ZwpVirtualKeyboardManager
 }
 
 type virtualKeyboard struct {
-	c  *Compositor
-	kb *seat.VirtualKeyboard
+	c     *Compositor
+	kb    *seat.VirtualKeyboard
+	taken []uint32
 }
 
 func (v *virtualKeyboard) Keymap(_ *svk.ZwpVirtualKeyboardV1, format uint32, fd int, size uint32) error {
@@ -66,7 +67,14 @@ func (v *virtualKeyboard) Key(obj *svk.ZwpVirtualKeyboardV1, ms, key, state uint
 	if !v.kb.HasKeymap() {
 		return obj.ProtocolError(svk.ZwpVirtualKeyboardV1ErrorNoKeymap, "key before keymap")
 	}
-	return errors.Join(v.c.idle.Activity(), v.c.seat.VirtualKey(v.kb, key, state == uint32(sw.WlKeyboardKeyStatePressed), millis(ms)))
+	pressed := state == uint32(sw.WlKeyboardKeyStatePressed)
+	if err := v.c.idle.Activity(); err != nil {
+		return err
+	}
+	if taken, err := v.takeEscape(key, pressed); taken || err != nil {
+		return err
+	}
+	return v.c.seat.VirtualKey(v.kb, key, pressed, millis(ms))
 }
 
 func (v *virtualKeyboard) Modifiers(obj *svk.ZwpVirtualKeyboardV1, depressed, latched, locked, group uint32) error {

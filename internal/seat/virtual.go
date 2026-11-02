@@ -1,6 +1,7 @@
 package seat
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -8,13 +9,16 @@ import (
 	"golang.org/x/sys/unix"
 
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 type VirtualKeyboard struct {
-	fd      int
-	size    uint32
-	mods    [4]uint32
-	version uint64
+	fd         int
+	size       uint32
+	mods       [4]uint32
+	version    uint64
+	keysyms    *xkb.ClientKeymap
+	unreadable bool
 }
 
 type sentKeymap struct {
@@ -41,6 +45,7 @@ func (v *VirtualKeyboard) SetKeymap(fd int, size uint32) error {
 	err := v.Close()
 	v.fd, v.size = fd, size
 	v.version++
+	v.keysyms, v.unreadable = nil, false
 	return err
 }
 
@@ -95,4 +100,47 @@ func (s *Seat) VirtualModifiers(v *VirtualKeyboard, depressed, latched, locked, 
 		}
 	}
 	return errors.Join(errs...)
+}
+
+const maxVirtualKeymap = 1 << 22
+
+func readKeymap(fd int, size uint32) ([]byte, error) {
+	if size > maxVirtualKeymap {
+		return nil, fmt.Errorf("seat: a virtual keymap of %d bytes, over the %d the compositor reads", size, maxVirtualKeymap)
+	}
+	text := make([]byte, size)
+	for off := 0; off < len(text); {
+		n, err := unix.Pread(fd, text[off:], int64(off))
+		if err != nil {
+			return nil, fmt.Errorf("seat: read a virtual keymap: %w", err)
+		}
+		if n == 0 {
+			return nil, fmt.Errorf("seat: a virtual keymap ends at %d of its %d bytes", off, size)
+		}
+		off += n
+	}
+	return bytes.TrimRight(text, "\x00"), nil
+}
+
+func (s *Seat) compileVirtual(v *VirtualKeyboard) (*xkb.ClientKeymap, error) {
+	text, err := readKeymap(v.fd, v.size)
+	if err != nil {
+		return nil, err
+	}
+	return s.cfg.Keymap.CompileClient(text)
+}
+
+func (s *Seat) VirtualBareEscape(v *VirtualKeyboard, code uint32) bool {
+	if !v.HasKeymap() || v.unreadable {
+		return false
+	}
+	if v.keysyms == nil {
+		km, err := s.compileVirtual(v)
+		if err != nil {
+			v.unreadable = true
+			return false
+		}
+		v.keysyms = km
+	}
+	return v.keysyms.BareEscape(code, xkb.Modifiers{Depressed: v.mods[0], Latched: v.mods[1], Locked: v.mods[2], Group: v.mods[3]})
 }

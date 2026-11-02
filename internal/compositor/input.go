@@ -159,6 +159,9 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		if bound, err := c.bindKey(e.Code, e.Pressed); bound || err != nil {
 			return err
 		}
+		if taken, err := c.takeEscape(e.Code, e.Pressed); taken || err != nil {
+			return err
+		}
 		err := c.seat.Key(e.Code, e.Pressed, e.Time)
 		c.syncLEDs()
 		return err

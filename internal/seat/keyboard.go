@@ -244,3 +244,11 @@ func (s *Seat) Layout() uint32 {
 func (s *Seat) Locks() xkb.Locks {
 	return s.state.Locks()
 }
+
+func (s *Seat) BareEscape(code uint32) bool {
+	return !slices.Contains(s.keyboard.pressed, code) && s.state.BareEscape(code)
+}
+
+func (s *Seat) KeyboardGrabbed() bool {
+	return s.keyboard.grab != nil
+}

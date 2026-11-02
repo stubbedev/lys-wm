@@ -210,6 +210,7 @@ type Compositor struct {
 	constraint      *constraint
 	keyInhibitors   map[*surface.Surface]*shortcutsInhibitor
 	inhibiting      *shortcutsInhibitor
+	escapeArms      []*escapeArm
 	globalShortcuts []*globalShortcut
 	heldShortcuts   []heldShortcut
 	cursorGen       uint64
@@ -399,7 +400,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.addImageCapture(display, offer); err != nil {
 		return err
 	}
-	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display)); err != nil {
+	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display)); err != nil {
 		return err
 	}
 	if c.data, err = data.New(display, c); err != nil {

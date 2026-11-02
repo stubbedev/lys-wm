@@ -12,6 +12,7 @@ import (
 	sew "github.com/stubbedev/lys-wm/internal/protocol/server/extworkspace"
 	shgs "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandglobalshortcuts"
 	sksi "github.com/stubbedev/lys-wm/internal/protocol/server/keyboardshortcutsinhibit"
+	sle "github.com/stubbedev/lys-wm/internal/protocol/server/lysescape"
 	svk "github.com/stubbedev/lys-wm/internal/protocol/server/virtualkeyboard"
 	swdc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrdatacontrol"
 	swft "github.com/stubbedev/lys-wm/internal/protocol/server/wlrforeigntoplevel"
@@ -43,6 +44,7 @@ var privileged = []*wire.Interface{
 	sew.ExtWorkspaceManagerV1Interface,
 	shgs.HyprlandGlobalShortcutsManagerV1Interface,
 	sksi.ZwpKeyboardShortcutsInhibitManagerV1Interface,
+	sle.LysEscapeManagerV1Interface,
 	securitycontext.Interface,
 	gammacontrol.Interface,
 	ctmcontrol.Interface,

@@ -43,14 +43,15 @@ func (m *Keymap) led(name string) ledIndex {
 
 // Keymap is a compiled keymap and the sealed memfd clients read it from.
 type Keymap struct {
-	keymap  *lxkb.Keymap
-	text    string
-	fd      int
-	size    uint32
-	layouts []string
-	caps    ledIndex
-	num     ledIndex
-	scroll  ledIndex
+	compiler *Compiler
+	keymap   *lxkb.Keymap
+	text     string
+	fd       int
+	size     uint32
+	layouts  []string
+	caps     ledIndex
+	num      ledIndex
+	scroll   ledIndex
 }
 
 // Compile compiles names, with the format and limits libxkbcommon's
@@ -72,7 +73,7 @@ func (c *Compiler) Compile(names Names) (*Keymap, error) {
 	for i := range layouts {
 		layouts[i] = km.LayoutName(uint32(i))
 	}
-	k := &Keymap{keymap: km, text: text, fd: fd, size: uint32(len(text) + 1), layouts: layouts} //nolint:gosec // bounded by the check above
+	k := &Keymap{compiler: c, keymap: km, text: text, fd: fd, size: uint32(len(text) + 1), layouts: layouts} //nolint:gosec // bounded by the check above
 	k.caps, k.num, k.scroll = k.led("Caps Lock"), k.led("Num Lock"), k.led("Scroll Lock")
 	return k, nil
 }
@@ -209,4 +210,37 @@ func (s *State) Modifiers() Modifiers {
 		Locked:    uint32(s.state.SerializeMods(lxkb.StateModLocked)),
 		Group:     s.state.SerializeLayout(lxkb.StateLayoutEffective),
 	}
+}
+
+func bareEscape(s *lxkb.State, evdev uint32) bool {
+	return s.KeyGetOneSym(lxkb.Keycode(evdev+evdevOffset)) == lxkb.KeyEscape &&
+		s.SerializeMods(lxkb.StateModDepressed|lxkb.StateModLatched) == 0
+}
+
+// BareEscape reports whether evdev is Escape with no modifier depressed or
+// latched; locked modifiers do not count.
+func (s *State) BareEscape(evdev uint32) bool {
+	return bareEscape(s.state, evdev)
+}
+
+// ClientKeymap is a keymap a client typed with, compiled only to read its
+// keysyms.
+type ClientKeymap struct {
+	state *lxkb.State
+}
+
+// CompileClient compiles a client's xkb_v1 keymap text in the context k was
+// compiled in.
+func (k *Keymap) CompileClient(text []byte) (*ClientKeymap, error) {
+	km, err := k.compiler.ctx.NewKeymapFromString(text)
+	if err != nil {
+		return nil, fmt.Errorf("xkb: compile a client keymap of %d bytes: %w", len(text), err)
+	}
+	return &ClientKeymap{state: km.NewState()}, nil
+}
+
+// BareEscape is State.BareEscape under a client's modifiers.
+func (k *ClientKeymap) BareEscape(evdev uint32, m Modifiers) bool {
+	k.state.UpdateMask(lxkb.ModMask(m.Depressed), lxkb.ModMask(m.Latched), lxkb.ModMask(m.Locked), 0, 0, m.Group)
+	return bareEscape(k.state, evdev)
 }
