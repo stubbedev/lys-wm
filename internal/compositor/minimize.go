@@ -21,6 +21,7 @@ type genie struct {
 	window   *window
 	from, to image.Rectangle
 	progress anim.Tween[float64]
+	fades    bool
 }
 
 func (c *Compositor) family(w *window) []*window {
@@ -176,7 +177,7 @@ func (c *Compositor) startMinimize(w *window, now time.Duration) error {
 	c.closing = append(c.closing, &closing{
 		snapshot: tt, output: w.output, level: windowLevel,
 		motion: anim.NewTween(at, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp),
-		genie: &genie{window: w, from: at, to: to, progress: progress},
+		genie: &genie{window: w, from: at, to: to, progress: progress, fades: c.minimizeFades()},
 	})
 	return nil
 }
@@ -197,12 +198,22 @@ func (c *Compositor) startRestore(w *window, goal image.Rectangle, now time.Dura
 		w.output = o
 	}
 	progress.Set(0, now, curve)
-	w.genie = &genie{window: w, from: goal, to: c.genieTarget(w, goal), progress: progress}
+	w.genie = &genie{window: w, from: goal, to: c.genieTarget(w, goal), progress: progress, fades: c.minimizeFades()}
 	return errs
+}
+
+func (c *Compositor) minimizeFades() bool {
+	return c.animations.Style(anim.WindowsMinimize).Kind == anim.FadeStyle
 }
 
 func (c *Compositor) drawGenie(pass *frame, o *output.Output, g *genie, tex render.Texture, version uint64) {
 	from, to := deviceRect(o, g.from), deviceRect(o, g.to)
+	if g.fades {
+		size := tex.Size()
+		alpha := float32(min(max(1-g.progress.At(c.frameTime), 0), 1))
+		pass.ops = append(pass.ops, drawOp{tex: tex, src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: from, alpha: alpha, version: version})
+		return
+	}
 	strips, alongX := anim.GenieLayout(c.genieStrips[:0], from, to, g.progress.At(c.frameTime))
 	c.genieStrips = strips
 	size := tex.Size()

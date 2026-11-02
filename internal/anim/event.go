@@ -95,30 +95,39 @@ func ParseStyle(text string) (Style, error) {
 	return Style{}, fmt.Errorf("anim: unknown style %q", fields[0])
 }
 
+type reduction uint8
+
+const (
+	still reduction = iota
+	fades
+	crossFades
+)
+
 var events = [eventCount]struct {
-	name   string
-	parent Event
-	styles []StyleKind
-	style  Style
+	name    string
+	parent  Event
+	styles  []StyleKind
+	style   Style
+	reduced reduction
 }{
-	Global:          {name: "global", parent: Global},
+	Global:          {name: "global", parent: Global, reduced: fades},
 	Windows:         {name: "windows", parent: Global},
 	WindowsMove:     {name: "windows_move", parent: Windows, styles: []StyleKind{Morph, Elastic}},
 	WindowsIn:       {name: "windows_in", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
 	WindowsOut:      {name: "windows_out", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
-	Fade:            {name: "fade", parent: Global},
-	FadeIn:          {name: "fade_in", parent: Fade},
-	FadeOut:         {name: "fade_out", parent: Fade},
-	Workspaces:      {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin, Goo}, style: Style{Kind: Slide}},
-	Layers:          {name: "layers", parent: Global},
-	LayersIn:        {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
-	LayersOut:       {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
-	FadeSwitch:      {name: "fade_switch", parent: Fade},
-	FadeDim:         {name: "fade_dim", parent: Fade},
-	FadeShadow:      {name: "fade_shadow", parent: Fade},
-	Border:          {name: "border", parent: Global},
+	Fade:            {name: "fade", parent: Global, reduced: fades},
+	FadeIn:          {name: "fade_in", parent: Fade, reduced: fades},
+	FadeOut:         {name: "fade_out", parent: Fade, reduced: fades},
+	Workspaces:      {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin, Goo}, style: Style{Kind: Slide}, reduced: crossFades},
+	Layers:          {name: "layers", parent: Global, reduced: fades},
+	LayersIn:        {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}, reduced: crossFades},
+	LayersOut:       {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}, reduced: crossFades},
+	FadeSwitch:      {name: "fade_switch", parent: Fade, reduced: fades},
+	FadeDim:         {name: "fade_dim", parent: Fade, reduced: fades},
+	FadeShadow:      {name: "fade_shadow", parent: Fade, reduced: fades},
+	Border:          {name: "border", parent: Global, reduced: fades},
 	BorderAngle:     {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
-	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie}, style: Style{Kind: Genie}},
+	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie, FadeStyle}, style: Style{Kind: Genie}, reduced: crossFades},
 }
 
 func (e Event) String() string {
@@ -181,11 +190,22 @@ func Builtins() map[string]Shape {
 const DefaultDuration = 250 * time.Millisecond
 
 type Table struct {
-	curves [eventCount]Curve
-	styles [eventCount]Style
+	curves  [eventCount]Curve
+	styles  [eventCount]Style
+	reduced bool
+}
+
+func (t Table) Reduced() bool {
+	return t.reduced
 }
 
 func (t Table) Style(e Event) Style {
+	if t.reduced {
+		if events[e].reduced == crossFades {
+			return Style{Kind: FadeStyle}
+		}
+		return Style{}
+	}
 	if s := t.styles[e]; s != (Style{}) {
 		return s
 	}
@@ -200,7 +220,15 @@ func (t Table) Curve(e Event) Curve {
 }
 
 func Resolve(enabled bool, settings map[Event]Setting) (Table, map[Event]error) {
-	var t Table
+	return resolve(enabled, false, settings)
+}
+
+func ResolveReduced(settings map[Event]Setting) (Table, map[Event]error) {
+	return resolve(true, true, settings)
+}
+
+func resolve(enabled, reduced bool, settings map[Event]Setting) (Table, map[Event]error) {
+	t := Table{reduced: reduced}
 	var got [eventCount]resolved
 	errs := map[Event]error{}
 	for _, e := range Events() {
@@ -232,8 +260,12 @@ func Resolve(enabled bool, settings map[Event]Setting) (Table, map[Event]error) 
 			errs[e] = fmt.Errorf("event %s: %w", e, err)
 			continue
 		}
-		if enabled && r.enabled {
+		switch {
+		case !enabled || !r.enabled:
+		case !reduced:
 			t.curves[e] = c
+		case events[e].reduced != still:
+			t.curves[e] = eased{EaseOut, r.duration}
 		}
 	}
 	return t, errs

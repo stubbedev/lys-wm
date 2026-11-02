@@ -14,6 +14,7 @@ import (
 	cwft "github.com/stubbedev/lys-wm/internal/protocol/client/wlrforeigntoplevel"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 func genieTable(t *testing.T, d time.Duration) anim.Table {
@@ -251,4 +252,30 @@ func TestReversingAGenieMidwayKeepsItsPlace(t *testing.T) {
 		return nil
 	})
 	h.Eventually("the window whole", showing(5, 5, gray))
+}
+
+func TestUnderReducedMotionAWindowMinimizesAsAFade(t *testing.T) {
+	d := 10 * time.Second
+	table, errs := anim.ResolveReduced(map[anim.Event]anim.Setting{anim.Global: {Shape: anim.Linear, Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.WM.Gaps = wm.Gaps{}
+		cfg.Decor.BorderWidth = 0
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	gray := [3]byte{0xf0, 0xf0, 0xf0}
+	w := c.Window("fading", testclient.Fill(gray[0], gray[1], gray[2]))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.Eventually("the window at full strength, its fade in done", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		return pixel(snapshot(b.Outputs()[0]), 2, 2)[0] > 0x10
+	})
+	h.dispatch("minimize")
+	h.Eventually("a fade across the whole rectangle, not a funnel", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		img := snapshot(b.Outputs()[0])
+		corner, far := pixel(img, 2, 2), pixel(img, small.Size.X-3, small.Size.Y-3)
+		return corner == far && corner[0] > 0 && corner[0] < 0xf0
+	})
 }

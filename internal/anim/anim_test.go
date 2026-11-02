@@ -304,3 +304,104 @@ func TestAWobbleLagsAwayFromTheGrabAndSettles(t *testing.T) {
 		t.Fatal("a wobble an hour on has not settled, or ran unbounded")
 	}
 }
+
+func TestReducedMotionReachesEveryEvent(t *testing.T) {
+	overshoot, err := NewBezier(0.3, 1.8, 0.6, 1.8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bouncy := mustSpring(300, 6, 1)
+	d := 200 * time.Millisecond
+	for _, shape := range []Shape{overshoot, bouncy} {
+		settings := map[Event]Setting{}
+		for _, e := range Events() {
+			s := Setting{Shape: shape}
+			if shape == Shape(overshoot) {
+				s.Duration = &d
+			}
+			if styles := events[e].styles; len(styles) > 0 {
+				s.Style = &Style{Kind: styles[0], Percent: 50}
+			}
+			settings[e] = s
+		}
+		table, errs := ResolveReduced(settings)
+		if len(errs) != 0 {
+			t.Fatal(errs)
+		}
+		if !table.Reduced() {
+			t.Error("the table does not say it is reduced")
+		}
+		for _, e := range Events() {
+			c, st := table.Curve(e), table.Style(e)
+			switch st.Kind {
+			case NoStyle, FadeStyle:
+			default:
+				t.Errorf("%s keeps the spatial style %s", e, st)
+			}
+			if c == Instant {
+				continue
+			}
+			if _, spring := c.(Spring); spring {
+				t.Errorf("%s still runs on a spring", e)
+			}
+			last := 0.0
+			for at := time.Duration(0); at <= c.Duration(); at += c.Duration() / 64 {
+				v := c.At(at)
+				if v < last || v > 1 {
+					t.Errorf("%s at %v gives %v after %v: it overshoots or turns back", e, at, v, last)
+				}
+				last = v
+			}
+		}
+	}
+}
+
+func TestAnEventNamingNoReductionStaysStill(t *testing.T) {
+	var unnamed reduction
+	if unnamed != still {
+		t.Fatal("the zero reduction must be still, or a new event would keep its motion under reduced motion")
+	}
+	table, errs := ResolveReduced(nil)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	for _, e := range Events() {
+		if events[e].reduced == still && table.Curve(e) != Instant {
+			t.Errorf("%s moves under reduced motion", e)
+		}
+	}
+}
+
+func TestReducedMotionKeepsFadesAndDropsMotion(t *testing.T) {
+	d := 120 * time.Millisecond
+	table, errs := ResolveReduced(map[Event]Setting{Global: {Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	for _, e := range []Event{WindowsMove, WindowsIn, WindowsOut, BorderAngle} {
+		if table.Curve(e) != Instant {
+			t.Errorf("%s still animates", e)
+		}
+	}
+	for _, e := range []Event{FadeIn, FadeOut, FadeSwitch, FadeDim, FadeShadow, Border, Workspaces, LayersIn, LayersOut, WindowsMinimize} {
+		if table.Curve(e).Duration() != d {
+			t.Errorf("%s lasts %v, want the configured %v", e, table.Curve(e).Duration(), d)
+		}
+	}
+	for _, e := range []Event{Workspaces, LayersIn, LayersOut, WindowsMinimize} {
+		if table.Style(e).Kind != FadeStyle {
+			t.Errorf("%s has style %s, want fade", e, table.Style(e))
+		}
+	}
+}
+
+func TestReducedMotionHonoursAnEventTurnedOff(t *testing.T) {
+	off := false
+	table, errs := ResolveReduced(map[Event]Setting{FadeIn: {Enabled: &off}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if table.Curve(FadeIn) != Instant || table.Curve(FadeOut) == Instant {
+		t.Errorf("fade_in %v, fade_out %v", table.Curve(FadeIn), table.Curve(FadeOut))
+	}
+}

@@ -232,7 +232,7 @@ decoration:
 | `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha, and its popups |
 | `size` | 8: the distance between the blur's taps, in logical pixels |
 | `passes` | 1: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
-| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups |
+| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups | fade |
 | `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
 
 A window rule's `blur: true` or `blur: false` overrides `enabled` for the
@@ -290,8 +290,8 @@ rounded corners, or the bounding box of a client's region on a surface without
 them. The sheen is brightest on the side of the surface that faces the pointer,
 with a fainter echo opposite, and turns in steps of 5.6 degrees: a pointer move
 redraws only the rims it turned, and a move that turns none draws nothing. A
-moving window turns its sheen as well. With `animations.enabled: false`, which
-is lys-wm's reduced motion, the light rests at the top left and never moves.
+moving window turns its sheen as well. With `animations.reduced_motion` or
+without `animations.enabled`, the light rests at the top left and never moves.
 
 `mica` draws a window's translucent parts over a heavily blurred sample of the
 background and bottom layers, as `xray` does, instead of over what lies behind
@@ -334,6 +334,7 @@ sit inside the group's tile.
 ```yaml
 animations:
   enabled: true
+  reduced_motion: false
   curves:
     snappy: {bezier: [0.05, 0.9, 0.1, 1.05]}
     wobbly: {spring: {stiffness: 200, damping: 12, mass: 1}}
@@ -343,6 +344,17 @@ animations:
 ```
 
 Off unless `enabled: true`.
+
+`reduced_motion: true` is for people whom motion on screen bothers. Things no
+longer travel, stretch, bounce or follow the pointer: what the table below marks
+**still** happens at once, and what it marks **fade** or **cross-fade** keeps its
+`enabled` and `duration` as a plain `ease_out` fade without overshoot, whichever
+`curve` and `style` it was given. A window still fades in and out, so state changes
+stay readable; specular light rests at the top left. It applies to every event,
+including any added later, and a reload applies it. `lys-wmctl reducedmotion` and
+the `reducedmotion` IPC event report it; lys-shell follows that and publishes it to
+apps as `reduced-motion` in the portal's `org.freedesktop.appearance` namespace, so
+in a lys-wm session this one key sets it for the desktop.
 
 `curves` names curves for the events to use. A curve is either a cubic
 `bezier: [x1, y1, x2, y2]`, as in CSS `cubic-bezier()`, whose x coordinates lie
@@ -358,26 +370,26 @@ curves) and `spring` (stiffness 170, damping 26).
 lists styles, `style`. Each key an event leaves out comes from its parent;
 `style` comes from the event's own default:
 
-| Event | Parent | Animates | Styles |
-| --- | --- | --- | --- |
-| `global` | | Defaults: `ease_out` over 250 ms | |
-| `windows` | `global` | Every window animation | |
-| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | `morph`: the window stretches ahead of itself toward where it is going, its content filling a liquid blob that melts the rectangle it is at into the one it is about to reach; `elastic`: a window dragged with the mouse bends like jelly, the part under the pointer following it and the rest catching up on a spring (`windows_move`'s, when its curve is a spring) until it settles flat |
-| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows |
-| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window |
-| `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output |
-| `fade` | `global` | Every fade | |
-| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | |
-| `fade_out` | `fade` | A closing window fading out | |
-| `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | |
-| `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | |
-| `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | |
-| `border` | `global` | A border changing between `borders.active` and `borders.inactive` as focus moves: the new border fades in over the old one | |
-| `borderangle` | `global` | A gradient border's angle turning | `once` (the default): one full turn whenever the window gains or loses focus; `loop`: a full turn per `duration` for as long as the window is shown, which keeps its output drawing, but only the border |
-| `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out; `goo`: they cross-fade while each window of the old workspace flows into the nearest window of the new one as a liquid blob in its border colour |
-| `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | |
-| `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` |
-| `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` |
+| Event | Parent | Animates | Styles | Reduced motion |
+| --- | --- | --- | --- | --- |
+| `global` | | Defaults: `ease_out` over 250 ms | | fade |
+| `windows` | `global` | Every window animation | | still |
+| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between, while the client draws at the new size at once | `morph`: the window stretches ahead of itself toward where it is going, its content filling a liquid blob that melts the rectangle it is at into the one it is about to reach; `elastic`: a window dragged with the mouse bends like jelly, the part under the pointer following it and the rest catching up on a spring (`windows_move`'s, when its curve is a spring) until it settles flat | still |
+| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows | still |
+| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window | still |
+| `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output; `fade`: it fades where it is | cross-fade |
+| `fade` | `global` | Every fade | | fade |
+| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | | fade |
+| `fade_out` | `fade` | A closing window fading out | | fade |
+| `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | | fade |
+| `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | | fade |
+| `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | | fade |
+| `border` | `global` | A border changing between `borders.active` and `borders.inactive` as focus moves: the new border fades in over the old one | | fade |
+| `borderangle` | `global` | A gradient border's angle turning | `once` (the default): one full turn whenever the window gains or loses focus; `loop`: a full turn per `duration` for as long as the window is shown, which keeps its output drawing, but only the border | still |
+| `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out; `goo`: they cross-fade while each window of the old workspace flows into the nearest window of the new one as a liquid blob in its border colour | cross-fade |
+| `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |
+| `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` | cross-fade |
+| `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` | cross-fade |
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its

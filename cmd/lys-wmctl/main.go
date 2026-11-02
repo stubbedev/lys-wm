@@ -28,6 +28,7 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   submap                       print the bind submap as JSON, "" for the default binds
   layout                       print the keyboard layout group as JSON
   locks                        print the Caps, Num and Scroll Lock state as JSON
+  reducedmotion                print whether animations.reduced_motion is on as JSON
   version                      print the IPC protocol version
   watch                        print events as JSON lines until lys-wm exits
   icon <window> <size>         print a window's icon buffer closest to size pixels
@@ -46,7 +47,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindVersion, ipc.KindWatch}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindVersion, ipc.KindWatch}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {

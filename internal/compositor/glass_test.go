@@ -47,3 +47,14 @@ func animatedTable(t *testing.T) anim.Table {
 	}
 	return table
 }
+
+func TestUnderReducedMotionTheLightRests(t *testing.T) {
+	table, errs := anim.ResolveReduced(nil)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	c := &Compositor{animations: table}
+	if got := c.rimStep(image.Pt(200, 50), image.Rect(0, 0, 100, 100)); got != rimResting {
+		t.Errorf("the light moves to step %d", got)
+	}
+}

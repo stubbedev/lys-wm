@@ -74,6 +74,9 @@ type (
 	LocksEvent struct {
 		Locks Locks `json:"locks"`
 	}
+	ReducedMotionEvent struct {
+		ReducedMotion bool `json:"reduced_motion"`
+	}
 	DispatchEvent struct {
 		Action string `json:"action"`
 	}
@@ -94,6 +97,7 @@ func (FocusEvent) Name() string         { return "focus" }
 func (SubmapEvent) Name() string        { return "submap" }
 func (LayoutEvent) Name() string        { return "layout" }
 func (LocksEvent) Name() string         { return "locks" }
+func (ReducedMotionEvent) Name() string { return "reducedmotion" }
 func (DispatchEvent) Name() string      { return "dispatch" }
 
 func Encode(e Event) ([]byte, error) {
@@ -202,6 +206,9 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	if prev.Locks != next.Locks {
 		out = append(out, LocksEvent{Locks: next.Locks})
+	}
+	if prev.ReducedMotion != next.ReducedMotion {
+		out = append(out, ReducedMotionEvent{ReducedMotion: next.ReducedMotion})
 	}
 	return out
 }

@@ -24,6 +24,7 @@ func TestParseArgs(t *testing.T) {
 		"submap":                     {Request: ipc.KindSubmap},
 		"layout":                     {Request: ipc.KindLayout},
 		"locks":                      {Request: ipc.KindLocks},
+		"reducedmotion":              {Request: ipc.KindReducedMotion},
 		"watch":                      {Request: ipc.KindWatch},
 		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {

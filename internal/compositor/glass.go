@@ -136,7 +136,7 @@ func (f *frame) addRim(g glassDraw, m render.Mask, under image.Rectangle, o *out
 }
 
 func (c *Compositor) rimStep(tip image.Point, box image.Rectangle) int {
-	if c.animations.Curve(anim.Global) == anim.Instant {
+	if c.animations.Reduced() || c.animations.Curve(anim.Global) == anim.Instant {
 		return rimResting
 	}
 	centre := box.Min.Add(box.Size().Div(2))

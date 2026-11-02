@@ -19,20 +19,21 @@ const Version = 1
 type Kind string
 
 const (
-	KindVersion      Kind = "version"
-	KindOutputs      Kind = "outputs"
-	KindWorkspaces   Kind = "workspaces"
-	KindWindows      Kind = "windows"
-	KindActiveWindow Kind = "activewindow"
-	KindSubmap       Kind = "submap"
-	KindLayout       Kind = "layout"
-	KindLocks        Kind = "locks"
-	KindDispatch     Kind = "dispatch"
-	KindWatch        Kind = "watch"
-	KindIcon         Kind = "icon"
+	KindVersion       Kind = "version"
+	KindOutputs       Kind = "outputs"
+	KindWorkspaces    Kind = "workspaces"
+	KindWindows       Kind = "windows"
+	KindActiveWindow  Kind = "activewindow"
+	KindSubmap        Kind = "submap"
+	KindLayout        Kind = "layout"
+	KindLocks         Kind = "locks"
+	KindReducedMotion Kind = "reducedmotion"
+	KindDispatch      Kind = "dispatch"
+	KindWatch         Kind = "watch"
+	KindIcon          Kind = "icon"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindDispatch, KindWatch, KindIcon}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -184,12 +185,13 @@ type Locks struct {
 }
 
 type Snapshot struct {
-	Outputs    []Output
-	Workspaces []Workspace
-	Windows    []Window
-	Submap     string
-	Layout     Layout
-	Locks      Locks
+	Outputs       []Output
+	Workspaces    []Workspace
+	Windows       []Window
+	Submap        string
+	Layout        Layout
+	Locks         Locks
+	ReducedMotion bool
 }
 
 func (s Snapshot) active() (Window, bool) {
@@ -220,6 +222,8 @@ func (s Snapshot) answer(k Kind) any {
 		return s.Layout
 	case KindLocks:
 		return s.Locks
+	case KindReducedMotion:
+		return s.ReducedMotion
 	}
 	return nil
 }

@@ -206,9 +206,10 @@ func (b *rawBorder) UnmarshalYAML(n *yaml.Node) error {
 }
 
 type rawAnimations struct {
-	Enabled *bool                   `yaml:"enabled"`
-	Curves  map[string]At[rawCurve] `yaml:"curves"`
-	Events  map[string]At[rawEvent] `yaml:"events"`
+	Enabled       *bool                   `yaml:"enabled"`
+	ReducedMotion *bool                   `yaml:"reduced_motion"`
+	Curves        map[string]At[rawCurve] `yaml:"curves"`
+	Events        map[string]At[rawEvent] `yaml:"events"`
 }
 
 type rawCurve struct {
@@ -585,7 +586,12 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 		}
 		settings[e] = s
 	}
-	table, errs := anim.Resolve(r.Enabled != nil && *r.Enabled, settings)
+	enabled := r.Enabled != nil && *r.Enabled
+	resolve := func(s map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error) { return anim.Resolve(enabled, s) }
+	if enabled && r.ReducedMotion != nil && *r.ReducedMotion {
+		resolve = anim.ResolveReduced
+	}
+	table, errs := resolve(settings)
 	for _, e := range anim.Events() {
 		if err := errs[e]; err != nil {
 			p.fail(lines[e], "animations.events."+e.String(), "%v", err)

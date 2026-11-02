@@ -120,6 +120,15 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("animations:\n  events:\n    global: {curve: linear, duration: 100}\n")); err != nil || c.Animations.Curve(anim.Global) != anim.Instant {
 		t.Errorf("animations are on without enabled: true: %v, %v", c.Animations, err)
 	}
+	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n  reduced_motion: true\n")); err != nil || !c.Animations.Reduced() || c.Animations.Curve(anim.WindowsMove) != anim.Instant || c.Animations.Curve(anim.FadeIn) == anim.Instant {
+		t.Errorf("reduced_motion: %v, %v", c.Animations, err)
+	}
+	if c, err := Parse("t.yaml", []byte("animations:\n  reduced_motion: true\n")); err != nil || c.Animations != (anim.Table{}) {
+		t.Errorf("reduced_motion without enabled animates: %v, %v", c.Animations, err)
+	}
+	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n")); err != nil || c.Animations.Reduced() {
+		t.Errorf("reduced motion is on unasked: %v", err)
+	}
 	if cfg.WM.Gaps != (wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 12, Right: 8, Bottom: 12, Left: 8}}) {
 		t.Errorf("gaps %+v", cfg.WM.Gaps)
 	}

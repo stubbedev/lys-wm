@@ -19,9 +19,10 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 	focusedOutput := s.FocusedOutput()
 	locks := c.seat.Locks()
 	snap := ipc.Snapshot{
-		Submap: c.submap,
-		Layout: c.keyboardLayout(),
-		Locks:  ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
+		Submap:        c.submap,
+		Layout:        c.keyboardLayout(),
+		Locks:         ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
+		ReducedMotion: c.animations.Reduced(),
 	}
 	for _, o := range c.outputs {
 		b := o.Backend()
