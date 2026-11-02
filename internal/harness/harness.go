@@ -277,7 +277,12 @@ func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error
 
 func (h *Harness) Eventually(what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {
 	h.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	h.Within(5*time.Second, what, cond)
+}
+
+func (h *Harness) Within(d time.Duration, what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {
+	h.t.Helper()
+	deadline := time.Now().Add(d)
 	for {
 		var ok bool
 		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
