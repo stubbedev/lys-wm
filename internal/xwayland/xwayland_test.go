@@ -270,6 +270,7 @@ func (quietListener) XWindowUnmapped(*Window) error             { return nil }
 func (quietListener) XWindowChanged(*Window) error              { return nil }
 func (quietListener) XWindowRequest(*Window, Request) error     { return nil }
 func (quietListener) XWindowResponsive(*Window, bool) error     { return nil }
+func (quietListener) XWindowSynced(*Window) error               { return nil }
 func (quietListener) CurrentSelection(data.Kind) data.Source    { return nil }
 func (quietListener) SetSelection(data.Kind, data.Source) error { return nil }
 

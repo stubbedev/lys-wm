@@ -199,7 +199,14 @@ commit-timing gates are open, so a member is ready when its pixels are, not when
 asked. The commit's frame callback stays parked too, so a client does not draw on
 ahead. An answer is the ack of the last configure on xdg-shell, with a buffer
 attached; a client that commits while the configure is unacked just goes on showing
-its old size. A null attach is not an answer and unmaps at once. Subsurfaces in sync
+its old size. A null attach is not an answer and unmaps at once. An X window has no ack: its answer
+is a commit at the size it was configured to. A client that speaks
+`_NET_WM_SYNC_REQUEST` also has to raise its counter, watched with a SYNC alarm, since
+the X server's own repaint of a resized window commits before the client has drawn; a
+client that misses a request is not waited for on that counter again until it answers
+one. A window that is itself new and not shown yet gets its frame callbacks during the
+hold, as Xwayland will not commit the new size before the callback of its last commit.
+Subsurfaces in sync
 mode are parked with their parent, as the protocol has them; a desynchronized one
 updates inside the old frame, which is what it asked for. When the last member is
 ready, or at the bound, the placements are installed and every barrier released in

@@ -15,6 +15,7 @@ import (
 	"github.com/jezek/xgb/xproto"
 
 	"github.com/stubbedev/lys-wm/internal/wire"
+	"github.com/stubbedev/lys-wm/internal/xsync"
 )
 
 func init() {
@@ -68,6 +69,8 @@ const (
 	atomNetFrameExtents
 	atomNetRequestFrameExtents
 	atomNetWMPing
+	atomNetWMSyncRequest
+	atomNetWMSyncRequestCounter
 	atomCount
 )
 
@@ -116,6 +119,8 @@ var atomNames = [atomCount]string{
 	atomNetFrameExtents:             "_NET_FRAME_EXTENTS",
 	atomNetRequestFrameExtents:      "_NET_REQUEST_FRAME_EXTENTS",
 	atomNetWMPing:                   "_NET_WM_PING",
+	atomNetWMSyncRequest:            "_NET_WM_SYNC_REQUEST",
+	atomNetWMSyncRequestCounter:     "_NET_WM_SYNC_REQUEST_COUNTER",
 }
 
 func (a atom) String() string {
@@ -125,11 +130,11 @@ func (a atom) String() string {
 type atoms [atomCount]xproto.Atom
 
 var supported = []atom{
-	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing,
+	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing, atomNetWMSyncRequest, atomNetWMSyncRequestCounter,
 }
 
 var watched = []atom{
-	atomWMClass, atomWMName, atomNetWMName, atomWMHints, atomWMNormalHints, atomWMTransientFor, atomNetWMWindowType, atomNetWMState, atomWMProtocols, atomNetWMPID,
+	atomWMClass, atomWMName, atomNetWMName, atomWMHints, atomWMNormalHints, atomWMTransientFor, atomNetWMWindowType, atomNetWMState, atomWMProtocols, atomNetWMPID, atomNetWMSyncRequestCounter,
 }
 
 func intern(x *xgb.Conn, names []string) ([]xproto.Atom, error) {
@@ -181,6 +186,9 @@ func (c *xconn) own() error {
 	}
 	if _, err := xfixes.QueryVersion(x, 5, 0).Reply(); err != nil {
 		return fmt.Errorf("the XFixes version: %w", err)
+	}
+	if err := xsync.Init(x); err != nil {
+		return err
 	}
 	screen := xproto.Setup(x).DefaultScreen(x)
 	c.root = screen.Root
@@ -239,7 +247,7 @@ func (c *xconn) run() {
 		case ev == nil && xerr == nil:
 			return
 		case xerr != nil:
-			if _, gone := xerr.(xproto.WindowError); !gone {
+			if !goneError(xerr) {
 				c.report(fmt.Errorf("xwayland: X error: %w", xerr))
 			}
 		default:
@@ -248,8 +256,18 @@ func (c *xconn) run() {
 	}
 }
 
+func goneError(err xgb.Error) bool {
+	switch err.(type) {
+	case xproto.WindowError, xsync.Error:
+		return true
+	}
+	return false
+}
+
 func (c *xconn) handle(ev xgb.Event) {
 	switch e := ev.(type) {
+	case xsync.AlarmNotify:
+		c.post(func(m *wm) error { return m.alarmed(e) })
 	case xproto.CreateNotifyEvent:
 		xproto.ChangeWindowAttributes(c.x, e.Window, xproto.CwEventMask, []uint32{xproto.EventMaskPropertyChange})
 		rect := rectOf(e.X, e.Y, e.Width, e.Height)
@@ -485,6 +503,13 @@ func parseProps(values rawProps) (props, error) {
 		w, err := cardinals(v, atomWMTransientFor, 1)
 		if err == nil {
 			p.transient = xproto.Window(w[0])
+		}
+		errs = append(errs, err)
+	}
+	if v, ok := values[atomNetWMSyncRequestCounter]; ok {
+		counter, err := cardinals(v, atomNetWMSyncRequestCounter, 1)
+		if err == nil {
+			p.syncCounter = xsync.Counter(counter[0])
 		}
 		errs = append(errs, err)
 	}

@@ -133,6 +133,8 @@ func (c *xclient) window(rect image.Rectangle, pixel uint32, override bool, prop
 			typ = c.atoms["UTF8_STRING"]
 		case "_NET_WM_WINDOW_TYPE", "_NET_WM_STATE", "WM_PROTOCOLS":
 			typ, format = xproto.Atom(xproto.AtomAtom), 32
+		case "_NET_WM_SYNC_REQUEST_COUNTER":
+			typ, format = xproto.Atom(xproto.AtomCardinal), 32
 		case "WM_TRANSIENT_FOR":
 			typ, format = xproto.Atom(xproto.AtomWindow), 32
 		case "WM_NORMAL_HINTS":

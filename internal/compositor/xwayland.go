@@ -103,8 +103,8 @@ func (t xToplevel) answer() func(*surface.Update) bool {
 	}
 }
 
-func (xToplevel) synced() bool {
-	return true
+func (t xToplevel) synced() bool {
+	return t.Synced()
 }
 
 func (t xToplevel) stale() bool {
@@ -209,6 +209,10 @@ func (c *Compositor) XWindowResponsive(w *xwayland.Window, responsive bool) erro
 		c.stateChanged()
 	}
 	return nil
+}
+
+func (c *Compositor) XWindowSynced(*xwayland.Window) error {
+	return c.landIfComplete()
 }
 
 func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) error {

@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wire"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -111,11 +112,14 @@ func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 
 func (c *Compositor) begin(a wm.Arrangement, awaited []*window) error {
 	t := &transaction{goal: a, members: make([]*member, len(awaited)), began: backend.Now()}
+	var errs []error
 	for i, w := range awaited {
-		t.members[i] = c.await(w)
+		m := c.await(w)
+		t.members[i] = m
+		errs = append(errs, m.unthrottle())
 	}
 	c.txn = t
-	return c.holdTimer.Arm(holdBound(c.interaction != nil, c.holdBound))
+	return errors.Join(append(errs, c.holdTimer.Arm(holdBound(c.interaction != nil, c.holdBound)))...)
 }
 
 func (c *Compositor) await(w *window) *member {
@@ -130,9 +134,16 @@ func (c *Compositor) await(w *window) *member {
 			return c.landIfComplete()
 		})
 		return nil
-	}}
+	}, Applied: m.unthrottle}
 	m.surface.AddHooks(m.hooks)
 	return m
+}
+
+func (m *member) unthrottle() error {
+	if m.w.visible {
+		return nil
+	}
+	return m.surface.FrameDone(wire.Millis(backend.Now()))
 }
 
 func (c *Compositor) landIfComplete() error {

@@ -131,8 +131,13 @@ const XTransferTimeout = 2 * time.Second
 
 func StartXwayland(t *testing.T, report func(error), modes ...backend.Mode) *Harness {
 	t.Helper()
+	return StartXwaylandWith(t, func(*compositor.Config) {}, report, modes...)
+}
+
+func StartXwaylandWith(t *testing.T, configure func(*compositor.Config), report func(error), modes ...backend.Mode) *Harness {
+	t.Helper()
 	testenv.Require(t, xwayland.Path(os.Getenv))
-	return start(t, setup{open: softBackend, configure: func(*compositor.Config) {}, traced: true, xwayland: report}, modes...)
+	return start(t, setup{open: softBackend, configure: configure, traced: true, xwayland: report}, modes...)
 }
 
 func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {

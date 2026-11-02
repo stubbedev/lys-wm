@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/xsync"
 )
 
 type Listener interface {
@@ -24,6 +25,7 @@ type Listener interface {
 	XWindowChanged(w *Window) error
 	XWindowRequest(w *Window, r Request) error
 	XWindowResponsive(w *Window, responsive bool) error
+	XWindowSynced(w *Window) error
 	CurrentSelection(k data.Kind) data.Source
 	SetSelection(k data.Kind, src data.Source) error
 }
@@ -75,6 +77,8 @@ type props struct {
 	states    []xproto.Atom
 	protocols []xproto.Atom
 	pid       uint32
+
+	syncCounter xsync.Counter
 }
 
 type Window struct {
@@ -93,6 +97,11 @@ type Window struct {
 	ping     uint32
 	timer    *loop.Timer
 	hung     bool
+
+	alarm        xsync.Alarm
+	alarmCounter xsync.Counter
+	syncWanted   uint64
+	syncMissed   bool
 }
 
 type wm struct {
@@ -207,6 +216,11 @@ func (w *Window) Apply(s State) error {
 	prev := w.applied
 	w.applied = s
 	if s.Rect != prev.Rect && !s.Rect.Empty() {
+		if s.Rect.Size() != w.rect.Size() {
+			if err := w.requestSync(); err != nil {
+				return err
+			}
+		}
 		w.rect = s.Rect
 		xproto.ConfigureWindow(w.wm.x, w.id, xproto.ConfigWindowX|xproto.ConfigWindowY|xproto.ConfigWindowWidth|xproto.ConfigWindowHeight|xproto.ConfigWindowBorderWidth,
 			[]uint32{uint32(int32(s.Rect.Min.X)), uint32(int32(s.Rect.Min.Y)), uint32(s.Rect.Dx()), uint32(s.Rect.Dy()), 0}) //nolint:gosec // X geometry is 16-bit and travels as 32-bit words
@@ -225,6 +239,64 @@ func (w *Window) Apply(s State) error {
 	}
 	if s.Activated != prev.Activated {
 		w.wm.activate(w, s.Activated)
+	}
+	return nil
+}
+
+func (w *Window) requestSync() error {
+	counter := w.props.syncCounter
+	if counter == 0 || !w.has(w.props.protocols, atomNetWMSyncRequest) {
+		w.syncWanted = 0
+		return nil
+	}
+	w.syncMissed = w.syncWanted != 0
+	w.wm.stamps++
+	w.syncWanted = uint64(w.wm.stamps)
+	if err := w.armAlarm(counter); err != nil {
+		return err
+	}
+	w.wm.protocol(w.id, atomNetWMSyncRequest, xproto.TimeCurrentTime, w.wm.stamps)
+	return nil
+}
+
+func (w *Window) armAlarm(counter xsync.Counter) error {
+	if w.alarm != 0 && w.alarmCounter == counter {
+		xsync.ChangeAlarm(w.wm.x, w.alarm, w.syncWanted)
+		return nil
+	}
+	if w.alarm != 0 {
+		xsync.DestroyAlarm(w.wm.x, w.alarm)
+	}
+	id, err := w.wm.x.NewId()
+	if err != nil {
+		return fmt.Errorf("xwayland: allocate a sync alarm for window %#x: %w", w.id, err)
+	}
+	w.alarm, w.alarmCounter = xsync.Alarm(id), counter
+	xsync.CreateAlarm(w.wm.x, w.alarm, counter, w.syncWanted)
+	return nil
+}
+
+func (w *Window) Synced() bool {
+	return w.syncWanted == 0 || w.syncMissed
+}
+
+func (m *wm) alarmed(e xsync.AlarmNotify) error {
+	for _, w := range m.windows {
+		if w.alarm != e.Alarm {
+			continue
+		}
+		switch {
+		case e.State == xsync.AlarmDestroyed:
+			w.alarm, w.syncWanted, w.syncMissed = 0, 0, false
+		case e.Value >= w.syncWanted:
+			w.syncWanted, w.syncMissed = 0, false
+		default:
+			return nil
+		}
+		if !w.shown {
+			return nil
+		}
+		return m.listener.XWindowSynced(w)
 	}
 	return nil
 }
@@ -358,6 +430,9 @@ func (m *wm) destroyed(id xproto.Window) error {
 		return nil
 	}
 	delete(m.windows, id)
+	if w.alarm != 0 {
+		xsync.DestroyAlarm(m.x, w.alarm)
+	}
 	var err error
 	if w.timer != nil {
 		err = w.timer.Remove()
@@ -551,6 +626,7 @@ func (m *wm) hide(w *Window) error {
 		return nil
 	}
 	w.shown, w.applied = false, State{}
+	w.syncWanted, w.syncMissed = 0, false
 	if m.focused == w.id {
 		m.focused = 0
 	}
