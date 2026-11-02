@@ -129,10 +129,26 @@ func BenchmarkMovingFrameZoomed(b *testing.B) {
 }
 
 func BenchmarkMovingFrameDragging(b *testing.B) {
-	for name, floating := range map[string]bool{"tiled": false, "floating": true} {
-		b.Run(name, func(b *testing.B) {
+	cases := []struct {
+		name          string
+		floating      bool
+		preview, blur bool
+	}{
+		{"tiled", false, true, false},
+		{"floating", true, true, false},
+		{"floating-no-preview", true, false, false},
+		{"floating-blur", true, true, true},
+		{"floating-rounded", true, true, false},
+	}
+	for _, tc := range cases {
+		floating := tc.floating
+		b.Run(tc.name, func(b *testing.B) {
 			s := setup{open: softBackend, configure: func(cfg *compositor.Config) {
 				withBinds(b, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"})(cfg)
+				cfg.Decor.DragPreview.Enabled, cfg.Decor.DragPreview.Blur = tc.preview, tc.blur
+				if tc.name == "floating-rounded" {
+					cfg.Decor.Rounding = 12
+				}
 			}}
 			h := start(b, s, benchMode)
 			c := testclient.Connect(b, h.Socket())

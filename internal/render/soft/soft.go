@@ -290,9 +290,10 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		clip := r.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			row := p.buf.Pix[y*p.buf.Stride:]
+			from, to := solidSpan(m, y)
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				k := uint32(0xff)
-				if masked {
+				if masked && (x < from || x >= to) {
 					k = toByte(coverage(m, x, y))
 				}
 				switch k {

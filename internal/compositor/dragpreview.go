@@ -24,6 +24,7 @@ type dragPreview struct {
 	motion anim.RectMotion
 	fade   anim.Tween[float64]
 	target image.Rectangle
+	shape  [1]image.Rectangle
 }
 
 func (c *Compositor) dropTarget(it *interaction) (image.Rectangle, bool, error) {
@@ -152,11 +153,14 @@ func (c *Compositor) drawDragPreview(pass *frame, o *output.Output) {
 	}
 	d := deviceRect(o, rect)
 	radius := min(deviceLength(o, c.decor.Rounding), float32(min(d.Dx(), d.Dy()))/2)
-	keep := render.Mask{Keep: render.RoundRect{Rect: d, Radius: radius}}
+	var keep render.Mask
+	if radius > 0 {
+		keep.Keep = render.RoundRect{Rect: d, Radius: radius}
+	}
 	cfg := c.decor.DragPreview
 	if cfg.Blur {
-		under := [1]image.Rectangle{d}
-		c.drawBlur(pass, o, glassDraw{shape: under[:], extent: d, mask: keep, alpha: strength, look: &c.decor.Blur.Look})
+		p.shape[0] = d
+		c.drawBlur(pass, o, glassDraw{shape: p.shape[:], extent: d, mask: keep, alpha: strength, look: &c.decor.Blur.Look})
 	}
 	border := c.decor.ActiveBorder
 	pass.fillMasked(d, scaleColor(border.colors[0].Premultiply(), strength*cfg.Opacity), keep)
@@ -165,7 +169,7 @@ func (c *Compositor) drawDragPreview(pass *frame, o *output.Output) {
 	if inner.Empty() {
 		return
 	}
-	ring := render.Mask{Keep: keep.Keep, Cut: render.RoundRect{Rect: inner, Radius: max(radius-float32(width), 0)}}
+	ring := render.Mask{Keep: render.RoundRect{Rect: d, Radius: radius}, Cut: render.RoundRect{Rect: inner, Radius: max(radius-float32(width), 0)}}
 	c.paintBorder(pass, border, d, inner, ring, strength, 0)
 }
 
