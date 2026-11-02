@@ -61,8 +61,9 @@ hardware min_fps="57" max_late="5":
     fi
     go build -o "$dir/lys-wm" ./cmd/lys-wm
     printf 'xwayland:\n  enabled: false\n' > "$dir/config.yaml"
+    compositor=
     pace() {
-        local renderer=$1 run="$dir/run-$1" compositor socket fps
+        local renderer=$1 run="$dir/run-$1" socket fps
         mkdir -m 0700 "$run"
         XDG_RUNTIME_DIR="$run" WAYLAND_DISPLAY='' "$dir/lys-wm" -backend headless -renderer "$renderer" -config "$dir/config.yaml" 2> "$dir/lys-wm-$renderer.log" &
         compositor=$!
