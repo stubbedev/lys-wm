@@ -279,3 +279,67 @@ func TestUnderReducedMotionAWindowMinimizesAsAFade(t *testing.T) {
 		return corner == far && corner[0] > 0 && corner[0] < 0xf0
 	})
 }
+
+func TestAGenieDrawsItsWindowOnceUntilTheWindowChanges(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		now := time.Hour
+		at := func(h *Harness, d time.Duration) {
+			h.Do(func(*headless.Backend, *compositor.Compositor) error {
+				now = time.Hour + d
+				return nil
+			})
+		}
+		h := start(t, func(cfg *compositor.Config) {
+			cfg.Animations = genieTable(t, time.Second)
+			cfg.Clock = func() time.Duration { return now }
+		}, small)
+		redraws := func() (n uint64) {
+			h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+				n = comp.JellyRedraws()
+				return nil
+			})
+			return n
+		}
+		c := testclient.Connect(t, h.Socket())
+		gray := [3]byte{0x60, 0x60, 0x60}
+		bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+		green := [3]byte{0, 0xc0, 0}
+		painted := gray
+		w := c.Window("genie", func(pix []byte, _ int, _ image.Point, _ int) {
+			for i := 0; i < len(pix); i += 4 {
+				pix[i], pix[i+1], pix[i+2], pix[i+3] = painted[2], painted[1], painted[0], 0xff
+			}
+		})
+		c.DispatchUntil("the window to map", w.Mapped)
+		w.Stop()
+		h.dispatch("togglefloating")
+		c.DispatchUntil("a floating window", func() bool { return w.Logical == image.Pt(80, 50) })
+		h.Eventually("the window in the middle", showing(80, 45, gray))
+		h.dispatch("minimize")
+		at(h, 2*time.Second)
+		h.Eventually("the window gone", showing(80, 45, bg))
+		h.dispatch("restore")
+		h.Eventually("the restored window starts collapsed", showing(45, 30, bg))
+		before := redraws()
+		for _, d := range []time.Duration{2100, 2300, 2500} {
+			shown := frames(h)
+			at(h, d*time.Millisecond)
+			pump(c, 40*time.Millisecond)
+			if frames(h) == shown {
+				t.Fatalf("no frame ran at %d ms", d)
+			}
+		}
+		if got := redraws() - before; got > 1 {
+			t.Fatalf("a window that did not change was drawn %d times for its genie", got)
+		}
+		before = redraws()
+		painted = green
+		if err := w.Redraw(); err != nil {
+			t.Fatal(err)
+		}
+		at(h, 2700*time.Millisecond)
+		c.DispatchUntil("the commit to redraw the genie's window", func() bool { return redraws() > before })
+		at(h, 4*time.Second)
+		h.Eventually("the window whole in its new colour", showing(80, 45, green))
+	})
+}

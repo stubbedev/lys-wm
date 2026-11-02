@@ -311,9 +311,8 @@ func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view,
 	}
 	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2
 	size := w.jelly.Size()
-	c.jellyGen++
 	pass.ops = append(pass.ops, drawOp{
-		tex: w.jelly.Texture(), src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: a.Union(b), alpha: 1, version: c.jellyGen,
+		tex: w.jelly.Texture(), src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: a.Union(b), alpha: 1, version: w.jellyVersion,
 		mask: render.Mask{Keep: render.RoundRect{Rect: a, Radius: c.outerRadius(o, w)}, Merge: b, Smooth: smooth},
 	})
 	return nil

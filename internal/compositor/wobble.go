@@ -4,6 +4,7 @@ import (
 	"errors"
 	"image"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
@@ -57,7 +58,6 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 		return float64(tile.Min.X) + float64(tile.Dx()*i)/float64(cols) + float64(dx*scale), float64(tile.Min.Y) + float64(tile.Dy()*j)/float64(rows) + float64(dy*scale)
 	}
 	round := func(v float64) int { return int(math.Round(v)) }
-	c.jellyGen++
 	for j := range rows {
 		for i := range cols {
 			lx0, ly0 := node(i, j)
@@ -69,7 +69,7 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 				continue
 			}
 			src := render.FRect{X: float64(tile.Dx()*i) / float64(cols), Y: float64(tile.Dy()*j) / float64(rows), W: float64(tile.Dx()) / float64(cols), H: float64(tile.Dy()) / float64(rows)}
-			pass.ops = append(pass.ops, drawOp{tex: w.jelly.Texture(), src: src, dst: dst, alpha: 1, version: c.jellyGen})
+			pass.ops = append(pass.ops, drawOp{tex: w.jelly.Texture(), src: src, dst: dst, alpha: 1, version: w.jellyVersion})
 		}
 	}
 	return nil
@@ -87,18 +87,30 @@ func (c *Compositor) renderJelly(pass *frame, o *output.Output, w *window, area 
 		w.jelly = tt
 	}
 	c.resolveBlurs(o, pass, from)
-	f := frame{ops: pass.ops[from:]}
+	ops, out := pass.ops[from:], c.sceneOut(o)
+	if w.jellyVersion != 0 && w.jellyArea == area && w.jellyOut == out && slices.Equal(w.jellyOps, ops) && !c.sceneOf(o).contentChanged(ops) {
+		pass.ops = pass.ops[:from]
+		return nil
+	}
+	f := frame{ops: ops}
 	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: area.Size()}})
 	if err != nil {
 		return err
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, area.Min, c.sceneOut(o))
+	f.replayFrom(p, area.Min, out)
 	if err := p.End(); err != nil {
 		return err
 	}
+	c.jellyGen++
+	w.jellyVersion, w.jellyArea, w.jellyOut = c.jellyGen, area, out
+	w.jellyOps = append(w.jellyOps[:0], ops...)
 	pass.ops = pass.ops[:from]
 	return nil
+}
+
+func (c *Compositor) JellyRedraws() uint64 {
+	return c.jellyGen
 }
 
 func (c *Compositor) dropJelly(w *window) error {
@@ -115,7 +127,7 @@ func (c *Compositor) dropJelly(w *window) error {
 		}
 	}
 	errs = append(errs, w.jelly.Destroy())
-	w.jelly = nil
+	w.jelly, w.jellyOps, w.jellyVersion = nil, nil, 0
 	return errors.Join(errs...)
 }
 

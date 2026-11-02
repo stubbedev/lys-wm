@@ -299,6 +299,10 @@ func (w *Window) Stop() {
 	w.stopped = true
 }
 
+func (w *Window) Redraw() error {
+	return w.draw()
+}
+
 func (c *Client) Window(title string, paint Painter) *Window {
 	c.t.Helper()
 	return c.ScaledWindow(title, Unscaled, paint)

@@ -198,10 +198,7 @@ func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectang
 	if cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(below, func(op drawOp) bool {
-		d, ok := sc.content[op.surface]
-		return op.surface != nil && ok && len(d.Rects()) > 0
-	})
+	return sc.contentChanged(below)
 }
 
 func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look *wm.Look) {

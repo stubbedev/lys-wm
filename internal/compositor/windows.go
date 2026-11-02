@@ -17,36 +17,40 @@ import (
 )
 
 type window struct {
-	id          wm.WindowID
-	top         toplevel
-	tile        image.Rectangle
-	rect        image.Rectangle
-	visible     bool
-	laid        bool
-	layer       wm.PlacementLayer
-	output      *output.Output
-	urgent      bool
-	hung        bool
-	scale       output.Scale
-	floated     bool
-	motion      anim.RectMotion
-	fade        anim.Tween[float64]
-	appeared    bool
-	look        focusLook
-	looked      bool
-	borderFrom  Border
-	borderTo    Border
-	borderFade  anim.Tween[float64]
-	borderAngle anim.Tween[float64]
-	snapshot    render.TextureTarget
-	frost       *frost
-	decided     decided
-	wobble      *anim.Wobble
-	bud         image.Rectangle
-	jelly       render.TextureTarget
-	minimized   bool
-	icon        iconHint
-	genie       *genie
+	id           wm.WindowID
+	top          toplevel
+	tile         image.Rectangle
+	rect         image.Rectangle
+	visible      bool
+	laid         bool
+	layer        wm.PlacementLayer
+	output       *output.Output
+	urgent       bool
+	hung         bool
+	scale        output.Scale
+	floated      bool
+	motion       anim.RectMotion
+	fade         anim.Tween[float64]
+	appeared     bool
+	look         focusLook
+	looked       bool
+	borderFrom   Border
+	borderTo     Border
+	borderFade   anim.Tween[float64]
+	borderAngle  anim.Tween[float64]
+	snapshot     render.TextureTarget
+	frost        *frost
+	decided      decided
+	wobble       *anim.Wobble
+	bud          image.Rectangle
+	jelly        render.TextureTarget
+	jellyOps     []drawOp
+	jellyArea    image.Rectangle
+	jellyOut     colorOut
+	jellyVersion uint64
+	minimized    bool
+	icon         iconHint
+	genie        *genie
 }
 
 type decided struct {

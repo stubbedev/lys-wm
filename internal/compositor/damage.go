@@ -268,6 +268,16 @@ func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {
 	}
 }
 
+func (sc *scene) contentChanged(ops []drawOp) bool {
+	return slices.ContainsFunc(ops, func(op drawOp) bool {
+		if op.surface == nil {
+			return false
+		}
+		content, ok := sc.content[op.surface]
+		return ok && !content.Empty()
+	})
+}
+
 func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 	sc.damage.Reset()
 	if !sc.drawn {

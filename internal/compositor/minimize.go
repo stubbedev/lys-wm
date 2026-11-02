@@ -237,8 +237,7 @@ func (c *Compositor) drawWindowGenie(pass *frame, o *output.Output, w *window, f
 	if err := c.renderJelly(pass, o, w, tile, from); err != nil {
 		return err
 	}
-	c.jellyGen++
-	c.drawGenie(pass, o, w.genie, w.jelly.Texture(), c.jellyGen)
+	c.drawGenie(pass, o, w.genie, w.jelly.Texture(), w.jellyVersion)
 	return nil
 }
 
