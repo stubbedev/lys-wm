@@ -1,12 +1,13 @@
 package seat
 
 import (
+	"github.com/stubbedev/lys-lib/xcursor"
+
 	scs "github.com/stubbedev/lys-wm/internal/protocol/server/cursorshape"
 	"github.com/stubbedev/lys-wm/internal/protocol/server/tablet"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
-	"github.com/stubbedev/lys-wm/internal/xcursor"
 )
 
 const cursorShapeVersion = 2

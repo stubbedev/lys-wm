@@ -17,6 +17,7 @@ import (
 	"time"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-lib/xdg"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -32,7 +33,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/systemd"
 	"github.com/stubbedev/lys-wm/internal/wlclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
-	"github.com/stubbedev/lys-wm/internal/xcursor"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 	"github.com/stubbedev/lys-wm/internal/xwayland"
 )

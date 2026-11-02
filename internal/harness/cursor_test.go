@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/xcursor"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -17,7 +19,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
-	"github.com/stubbedev/lys-wm/internal/xcursor"
 )
 
 func arrowAt(tip image.Point) func(*headless.Backend, *compositor.Compositor) bool {

@@ -14,10 +14,10 @@ import (
 	"testing"
 
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/xcursor"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
-	"github.com/stubbedev/lys-wm/internal/xcursor"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 

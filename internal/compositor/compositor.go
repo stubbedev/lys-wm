@@ -13,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/drm"
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
@@ -49,7 +50,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/syncobj"
 	"github.com/stubbedev/lys-wm/internal/tearingcontrol"
 	"github.com/stubbedev/lys-wm/internal/wm"
-	"github.com/stubbedev/lys-wm/internal/xcursor"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 	"github.com/stubbedev/lys-wm/internal/xwayland"
 )
