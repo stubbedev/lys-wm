@@ -261,3 +261,14 @@ start issue:
     gh project item-edit --project-id PVT_kwHOBU6Wkc4Bm521 --id "$item" \
         --field-id PVTSSF_lAHOBU6Wkc4Bm521zhlg6Ew --single-select-option-id 47fc9ee4 >/dev/null
     echo "#$issue is In Progress"
+
+# Tag the current commit as the next release and push it, refusing anything but
+# a clean default branch whose CI succeeded.
+release-patch:
+    nix run github:stubbedev/lys-ci#release -- patch
+
+release-minor:
+    nix run github:stubbedev/lys-ci#release -- minor
+
+release-major:
+    nix run github:stubbedev/lys-ci#release -- major
