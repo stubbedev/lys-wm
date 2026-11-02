@@ -43,7 +43,12 @@ func (z *outputZoom) atRest(now time.Duration) bool {
 
 func zoomView(bounds image.Point, focus [2]float64, factor float64) render.FRect {
 	shrink := 1 - 1/factor
-	return render.FRect{X: float64(focus[0] * shrink), Y: float64(focus[1] * shrink), W: float64(bounds.X) / factor, H: float64(bounds.Y) / factor}
+	w, h := float64(bounds.X)/factor, float64(bounds.Y)/factor
+	return render.FRect{
+		X: min(max(float64(focus[0]*shrink), 0), float64(bounds.X)-w),
+		Y: min(max(float64(focus[1]*shrink), 0), float64(bounds.Y)-h),
+		W: w, H: h,
+	}
 }
 
 func (c *Compositor) zoomed(o *output.Output) bool {

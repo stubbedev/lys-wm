@@ -59,6 +59,8 @@ which is the full list.
 | `SUPER + F` | Fullscreen |
 | `SUPER + V` | Float or tile the focused window |
 | `SUPER + R` | Resize with the arrows; `Return` or `Escape` leaves |
+| `SUPER + =`, `SUPER + -`, `SUPER + Backspace` | Zoom in, zoom out and back to normal |
+| `SUPER + CTRL` and scroll, or `SUPER` and a two-finger pinch | Zoom smoothly around the pointer |
 | `SUPER` + left or right drag | Move or resize the window under the pointer |
 | `SUPER` + scroll | Step through the open workspaces |
 | `SUPER + SHIFT + R` | Read the config file again |
