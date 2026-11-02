@@ -89,14 +89,22 @@ func (v *virtualKeyboard) takeEscape(code uint32, pressed bool) (bool, error) {
 			return false, nil
 		}
 		v.taken = slices.Delete(v.taken, i, i+1)
+		if h := v.c.repeat.held; h != nil && h.key == code {
+			return true, v.c.repeat.stop()
+		}
 		return true, nil
 	}
 	if i >= 0 {
 		return true, nil
 	}
-	if v.c.overviewHolds() && v.c.seat.Focus() == nil && v.c.seat.VirtualBareEscape(v.kb, code) {
-		v.taken = append(v.taken, code)
-		return true, v.c.closeOverview()
+	if v.c.overviewHolds() && v.c.seat.Focus() == nil {
+		if sym, ok := v.c.seat.VirtualBareKeysym(v.kb, code); ok {
+			taken, err := v.c.overviewSym(sym, code)
+			if taken {
+				v.taken = append(v.taken, code)
+				return true, err
+			}
+		}
 	}
 	a := v.c.escapeTaker()
 	if a == nil || !v.c.seat.VirtualBareEscape(v.kb, code) {

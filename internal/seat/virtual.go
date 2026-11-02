@@ -130,17 +130,34 @@ func (s *Seat) compileVirtual(v *VirtualKeyboard) (*xkb.ClientKeymap, error) {
 	return s.cfg.Keymap.CompileClient(text)
 }
 
-func (s *Seat) VirtualBareEscape(v *VirtualKeyboard, code uint32) bool {
+func (s *Seat) virtualKeysyms(v *VirtualKeyboard) *xkb.ClientKeymap {
 	if !v.HasKeymap() || v.unreadable {
-		return false
+		return nil
 	}
 	if v.keysyms == nil {
 		km, err := s.compileVirtual(v)
 		if err != nil {
 			v.unreadable = true
-			return false
+			return nil
 		}
 		v.keysyms = km
 	}
-	return v.keysyms.BareEscape(code, xkb.Modifiers{Depressed: v.mods[0], Latched: v.mods[1], Locked: v.mods[2], Group: v.mods[3]})
+	return v.keysyms
+}
+
+func (v *VirtualKeyboard) modifiers() xkb.Modifiers {
+	return xkb.Modifiers{Depressed: v.mods[0], Latched: v.mods[1], Locked: v.mods[2], Group: v.mods[3]}
+}
+
+func (s *Seat) VirtualBareEscape(v *VirtualKeyboard, code uint32) bool {
+	km := s.virtualKeysyms(v)
+	return km != nil && km.BareEscape(code, v.modifiers())
+}
+
+func (s *Seat) VirtualBareKeysym(v *VirtualKeyboard, code uint32) (uint32, bool) {
+	km := s.virtualKeysyms(v)
+	if km == nil || v.mods[0] != 0 || v.mods[1] != 0 {
+		return 0, false
+	}
+	return km.Keysym(code, v.modifiers()), true
 }

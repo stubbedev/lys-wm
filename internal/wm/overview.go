@@ -60,58 +60,67 @@ func planStrip(row image.Rectangle, spaces int, screen image.Point, gap int) ([]
 }
 
 func packWindows(area image.Rectangle, rects []image.Rectangle, gap int) []image.Rectangle {
-	var best []image.Rectangle
-	bestScale := -1.0
-	for rows := 1; rows <= len(rects); rows++ {
-		order := rowsOf(rects, rows)
-		if s := scaleFor(area, rects, order, gap); s > bestScale {
-			bestScale, best = s, place(area, rects, order, gap, s)
+	out := make([]image.Rectangle, len(rects))
+	order := make([]int, len(rects))
+	rows := make([][]int, 0, len(rects))
+	bestScale, bestRows := -1.0, 0
+	for n := 1; n <= len(rects); n++ {
+		rows = rowsOf(rows[:0], order, rects, n)
+		if s := scaleFor(area, rects, rows, gap); s > bestScale {
+			bestScale, bestRows = s, n
 		}
 	}
-	return best
+	if bestRows > 0 {
+		place(out, area, rects, rowsOf(rows[:0], order, rects, bestRows), gap, bestScale)
+	}
+	return out
 }
 
-func packRows(area image.Rectangle, rects []image.Rectangle, gap, rows int) []image.Rectangle {
-	order := rowsOf(rects, rows)
-	return place(area, rects, order, gap, scaleFor(area, rects, order, gap))
+func packRows(area image.Rectangle, rects []image.Rectangle, gap, n int) []image.Rectangle {
+	out := make([]image.Rectangle, len(rects))
+	rows := rowsOf(make([][]int, 0, n), make([]int, len(rects)), rects, n)
+	place(out, area, rects, rows, gap, scaleFor(area, rects, rows, gap))
+	return out
 }
 
 func centreOf(r image.Rectangle) image.Point {
 	return image.Pt(r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2)
 }
 
-func rowsOf(rects []image.Rectangle, rows int) [][]int {
-	byHeight := make([]int, len(rects))
-	total := 0
-	for i, r := range rects {
-		byHeight[i] = i
-		total += max(r.Dx(), 1)
-	}
-	slices.SortStableFunc(byHeight, func(a, b int) int {
+func byHeight(rects []image.Rectangle) func(a, b int) int {
+	return func(a, b int) int {
 		ca, cb := centreOf(rects[a]), centreOf(rects[b])
 		if ca.Y != cb.Y {
 			return ca.Y - cb.Y
 		}
 		return ca.X - cb.X
-	})
-	out := make([][]int, 0, rows)
+	}
+}
+
+func rowsOf(rows [][]int, order []int, rects []image.Rectangle, n int) [][]int {
+	total := 0
+	for i, r := range rects {
+		order[i] = i
+		total += max(r.Dx(), 1)
+	}
+	slices.SortStableFunc(order, byHeight(rects))
 	start, width := 0, 0
-	target := total / max(rows, 1)
-	for n, i := range byHeight {
+	target := total / max(n, 1)
+	for at, i := range order {
 		width += max(rects[i].Dx(), 1)
-		left := len(byHeight) - n - 1
-		if len(out) < rows-1 && (width >= target || left == rows-1-len(out)) {
-			out = append(out, slices.Clone(byHeight[start:n+1]))
-			start, width = n+1, 0
+		left := len(order) - at - 1
+		if len(rows) < n-1 && (width >= target || left == n-1-len(rows)) {
+			rows = append(rows, order[start:at+1])
+			start, width = at+1, 0
 		}
 	}
-	if start < len(byHeight) {
-		out = append(out, slices.Clone(byHeight[start:]))
+	if start < len(order) {
+		rows = append(rows, order[start:])
 	}
-	for _, row := range out {
+	for _, row := range rows {
 		slices.SortStableFunc(row, func(a, b int) int { return centreOf(rects[a]).X - centreOf(rects[b]).X })
 	}
-	return out
+	return rows
 }
 
 func scaleFor(area image.Rectangle, rects []image.Rectangle, rows [][]int, gap int) float64 {
@@ -136,18 +145,22 @@ func scaled(v int, s float64) int {
 	return max(int(float64(max(v, 1))*s), 1)
 }
 
-func place(area image.Rectangle, rects []image.Rectangle, rows [][]int, gap int, s float64) []image.Rectangle {
-	out := make([]image.Rectangle, len(rects))
+func rowHeight(rects []image.Rectangle, row []int, s float64) int {
+	h := 0
+	for _, i := range row {
+		h = max(h, scaled(rects[i].Dy(), s))
+	}
+	return h
+}
+
+func place(out []image.Rectangle, area image.Rectangle, rects []image.Rectangle, rows [][]int, gap int, s float64) {
 	total := gap * (len(rows) - 1)
-	heights := make([]int, len(rows))
-	for r, row := range rows {
-		for _, i := range row {
-			heights[r] = max(heights[r], scaled(rects[i].Dy(), s))
-		}
-		total += heights[r]
+	for _, row := range rows {
+		total += rowHeight(rects, row, s)
 	}
 	y := area.Min.Y + (area.Dy()-total)/2
-	for r, row := range rows {
+	for _, row := range rows {
+		height := rowHeight(rects, row, s)
 		width := gap * (len(row) - 1)
 		for _, i := range row {
 			width += scaled(rects[i].Dx(), s)
@@ -155,13 +168,12 @@ func place(area image.Rectangle, rects []image.Rectangle, rows [][]int, gap int,
 		x := area.Min.X + (area.Dx()-width)/2
 		for _, i := range row {
 			w, h := scaled(rects[i].Dx(), s), scaled(rects[i].Dy(), s)
-			top := y + (heights[r]-h)/2
+			top := y + (height-h)/2
 			out[i] = image.Rect(x, top, x+w, top+h)
 			x += w + gap
 		}
-		y += heights[r] + gap
+		y += height + gap
 	}
-	return out
 }
 
 func OverviewNeighbour(rects []image.Rectangle, from int, d Direction) (int, bool) {

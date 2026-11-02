@@ -635,7 +635,7 @@ it closes. Binds with modifiers still run.
 | Click `+` | Shows a new workspace, the lowest number free, and stays open |
 | Click anywhere else, `Escape` | Closes |
 | Drag a window onto a thumbnail, `+`, or another output | Moves it there with its dialogs; dropped anywhere else it springs back. Minimized windows do not drag |
-| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, then act as a click does. Other keys do nothing |
+| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Other keys do nothing. Virtual keyboards work the same, through their own keymap |
 | Touch | As the pointer, with the first finger |
 
 A session lock closes it at once and it will not open under one, or during a

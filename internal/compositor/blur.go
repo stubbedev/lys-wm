@@ -83,6 +83,11 @@ type blurCaches struct {
 	shape     []image.Rectangle
 }
 
+func (bc *blurCaches) one(r image.Rectangle) []image.Rectangle {
+	bc.shape = append(bc.shape[:0], r)
+	return bc.shape
+}
+
 func (bc *blurCaches) of(s *surface.Surface) *blurCache {
 	b, ok := bc.bySurface[s]
 	if !ok {

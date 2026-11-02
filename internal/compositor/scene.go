@@ -250,14 +250,14 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		c.drawBud(pass, o, w.bud, at, 1-travelled(w.motion.Source(), w.motion.At(c.frameTime), w.motion.Target()))
 	}
 	from := len(pass.ops)
-	shown = c.paintWindow(pass, o, w, at, w.fade.At(c.frameTime)*v.alpha, shown)
+	shown = c.paintWindow(pass, o, w, at, w.fade.At(c.frameTime)*v.alpha, false, shown)
 	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from), c.drawWindowGenie(pass, o, w, from)); err != nil {
 		c.report(fmt.Errorf("compositor: deform window %d: %w", w.id, err))
 	}
 	return shown
 }
 
-func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at image.Rectangle, alpha float64, shown []*surface.Surface) []*surface.Surface {
+func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at image.Rectangle, alpha float64, wholeBorder bool, shown []*surface.Surface) []*surface.Surface {
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
@@ -265,8 +265,8 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	look, mica := &w.decided.look, w.decided.mica
 	rims := len(pass.rims)
 	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
-		under := [1]image.Rectangle{deviceRect(o, w.rect)}
-		c.drawBlur(pass, o, glassDraw{surface: top, shape: under[:], extent: under[0], mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
+		under := deviceRect(o, w.rect)
+		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
 	}
 	tree := len(pass.ops)
 	if c.honoursBlurRegions(w) {
@@ -281,9 +281,15 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	if err := c.drawRims(pass, o, rims); err != nil {
 		c.report(fmt.Errorf("compositor: the rim of window %d: %w", w.id, err))
 	}
-	c.drawBorder(pass, o, w)
+	if !wholeBorder {
+		c.drawBorder(pass, o, w)
+	}
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))
+	}
+	if wholeBorder {
+		outer := deviceRect(o, at)
+		c.drawBorderIn(pass, o, w, outer, outer.Inset(o.Scale().ToDevice(c.decor.BorderWidth)))
 	}
 	if alpha < 1 {
 		pass.fade(from, float32(max(alpha, 0)))
@@ -324,8 +330,8 @@ func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPo
 		s := p.popup.Surface()
 		rims := len(pass.rims)
 		if blur.whole && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
-			under := [1]image.Rectangle{deviceRect(o, p.geometry())}
-			c.drawBlur(pass, o, glassDraw{surface: s, shape: under[:], extent: under[0], mask: c.popupMask(o, under[0]), alpha: c.alpha.Alpha(s), look: blur.look})
+			under := deviceRect(o, p.geometry())
+			c.drawBlur(pass, o, glassDraw{surface: s, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: c.popupMask(o, under), alpha: c.alpha.Alpha(s), look: blur.look})
 		}
 		if blur.regions {
 			shown = c.drawBlurredTree(pass, o, s, flat(p.origin), shown, render.Mask{}, 1, blur.look)

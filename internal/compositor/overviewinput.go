@@ -1,6 +1,8 @@
 package compositor
 
 import (
+	"errors"
+	"fmt"
 	"image"
 	"slices"
 	"time"
@@ -61,11 +63,11 @@ func (c *Compositor) overviewTargetAt(p point) overviewTarget {
 	at := p.pixel()
 	for _, t := range v.spaces {
 		if at.In(t.rect) {
-			return overviewSpace{o, t.id}
+			return overviewSpace{t}
 		}
 	}
 	if at.In(v.plus) {
-		return overviewPlus{o}
+		return overviewPlus{v}
 	}
 	now := c.clock()
 	progress := ov.progress.At(now)
@@ -125,7 +127,7 @@ func (c *Compositor) overviewReleased(at point) error {
 	pr := ov.press
 	ov.press = nil
 	if pr.dragging {
-		return c.overviewDrop(pr, at)
+		return errors.Join(c.overviewDrop(pr, at), c.cursorMoved())
 	}
 	if t := c.overviewTargetAt(at); t != pr.target {
 		return nil
@@ -141,13 +143,13 @@ func (c *Compositor) overviewActivate(t overviewTarget) error {
 		}
 		return c.closeOverview()
 	case overviewSpace:
-		name := t.o.Backend().Name()
-		if active, ok := c.wm.ActiveOn(name); ok && active == t.id {
+		name := t.t.o.Backend().Name()
+		if active, ok := c.wm.ActiveOn(name); ok && active == t.t.id {
 			return c.closeOverview()
 		}
-		return c.overviewShowSpace(name, t.id)
+		return c.overviewShowSpace(name, t.t.id)
 	case overviewPlus:
-		return c.overviewShowSpace(t.o.Backend().Name(), c.wm.UnusedWorkspace())
+		return c.overviewShowSpace(t.v.output.Backend().Name(), c.wm.UnusedWorkspace())
 	}
 	return c.closeOverview()
 }
@@ -171,17 +173,12 @@ func (c *Compositor) overviewDrop(pr *overviewPress, at point) error {
 	var into image.Rectangle
 	switch t := c.overviewTargetAt(at).(type) {
 	case overviewSpace:
-		dest = t.id
-		for _, sp := range ov.views[t.o].spaces {
-			if sp.id == t.id {
-				into = sp.rect
-			}
-		}
+		dest, into = t.t.id, t.t.rect
 	case overviewPlus:
-		if s, err = s.FocusOutput(t.o.Backend().Name()); err != nil {
+		if s, err = s.FocusOutput(t.v.output.Backend().Name()); err != nil {
 			return err
 		}
-		dest, into = s.UnusedWorkspace(), ov.views[t.o].plus
+		dest, into = s.UnusedWorkspace(), t.v.plus
 	default:
 		if o := c.outputAt(at); o != nil && o != home {
 			dest, _ = s.ActiveOn(o.Backend().Name())
@@ -232,21 +229,21 @@ func (c *Compositor) overviewItemOutput(it *overviewItem) *output.Output {
 }
 
 func (c *Compositor) overviewTargets() ([]overviewTarget, []image.Rectangle) {
-	var targets []overviewTarget
-	var rects []image.Rectangle
+	targets, rects := c.overview.targets[:0], c.overview.rects[:0]
 	for _, o := range c.outputs {
 		v := c.overview.views[o]
 		if v == nil {
 			continue
 		}
 		for _, t := range v.spaces {
-			targets, rects = append(targets, overviewSpace{o, t.id}), append(rects, t.rect)
+			targets, rects = append(targets, overviewSpace{t}), append(rects, t.rect)
 		}
-		targets, rects = append(targets, overviewPlus{o}), append(rects, v.plus)
+		targets, rects = append(targets, overviewPlus{v}), append(rects, v.plus)
 		for _, it := range v.items {
 			targets, rects = append(targets, overviewWindow{it.root}), append(rects, it.goal)
 		}
 	}
+	c.overview.targets, c.overview.rects = targets, rects
 	return targets, rects
 }
 
@@ -280,25 +277,59 @@ func (c *Compositor) overviewKey(code uint32) (bool, error) {
 	if c.seat.Focus() != nil || c.seat.DepressedModifiers() != 0 {
 		return false, nil
 	}
-	var err error
-	switch c.seat.Keysym(code) {
-	case keysymEscape:
-		err = c.closeOverview()
-	case keysymReturn, keysymKPEnter, keysymSpace:
-		err = c.overviewActivate(c.overview.selected)
-	case keysymLeft:
-		err = c.overviewStep(wm.Left)
-	case keysymRight:
-		err = c.overviewStep(wm.Right)
-	case keysymUp:
-		err = c.overviewStep(wm.Up)
-	case keysymDown:
-		err = c.overviewStep(wm.Down)
-	default:
-		return false, nil
+	taken, err := c.overviewSym(c.seat.Keysym(code), code)
+	if taken {
+		c.held = append(c.held, code)
 	}
-	c.held = append(c.held, code)
-	return true, err
+	return taken, err
+}
+
+func arrowOf(sym uint32) (wm.Direction, bool) {
+	switch sym {
+	case keysymLeft:
+		return wm.Left, true
+	case keysymRight:
+		return wm.Right, true
+	case keysymUp:
+		return wm.Up, true
+	case keysymDown:
+		return wm.Down, true
+	}
+	return 0, false
+}
+
+func (c *Compositor) overviewSym(sym, code uint32) (bool, error) {
+	if d, ok := arrowOf(sym); ok {
+		return true, errors.Join(c.overviewStep(d), c.repeatOverview(code, d))
+	}
+	switch sym {
+	case keysymEscape:
+		return true, c.closeOverview()
+	case keysymReturn, keysymKPEnter, keysymSpace:
+		return true, c.overviewActivate(c.overview.selected)
+	}
+	return false, nil
+}
+
+func (c *Compositor) repeatOverview(code uint32, d wm.Direction) error {
+	if c.seatConfig.RepeatRate == 0 {
+		return nil
+	}
+	return c.repeatKey(code, func() {
+		var err error
+		if c.overviewHolds() {
+			err = c.overviewStep(d)
+		} else {
+			err = c.repeat.stop()
+		}
+		if err != nil {
+			c.report(fmt.Errorf("compositor: repeat an arrow in the overview: %w", err))
+		}
+	})
+}
+
+func (c *Compositor) overviewDragging() bool {
+	return c.overview != nil && c.overview.press != nil && c.overview.press.dragging
 }
 
 func (c *Compositor) overviewTouching(id int32) bool {

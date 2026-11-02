@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"strconv"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -57,10 +56,10 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 		v.leaving = nil
 	}
 	shown = c.drawOverviewEntries(pass, o, v, p, shown)
-	c.drawClosing(pass, o, windowLevel)
 	if err := c.drawOverviewStrip(pass, o, v, p, in); err != nil {
 		return shown, err
 	}
+	c.drawClosing(pass, o, windowLevel)
 	if in > 0 {
 		for _, t := range v.spaces {
 			if t.id != v.workspace {
@@ -103,9 +102,7 @@ func (c *Compositor) drawOverviewBackdrop(pass *frame, o *output.Output, in floa
 	}
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	if c.overviewStyle.Blur {
-		sc := c.sceneOf(o)
-		sc.blurs.shape = append(sc.blurs.shape[:0], bounds)
-		c.drawBlur(pass, o, glassDraw{shape: sc.blurs.shape, extent: bounds, alpha: in, look: &overviewGlass, mica: true})
+		c.drawBlur(pass, o, glassDraw{shape: c.sceneOf(o).blurs.one(bounds), extent: bounds, alpha: in, look: &overviewGlass, mica: true})
 	}
 	if d := c.overviewStyle.Dim; d > 0 {
 		pass.FillRect(bounds, render.Color{A: uint8(math.Round(float64(d * in * 0xff)))})
@@ -148,7 +145,11 @@ func (c *Compositor) drawOverviewEntry(pass *frame, o *output.Output, e overview
 		pass.fillMasked(r, scaleColor(c.decor.Tab.Inactive.Background, float32(alpha)), render.Mask{Keep: render.RoundRect{Rect: r, Radius: deviceLength(o, overviewRadius)}})
 		return shown
 	}
-	shown = c.paintWindow(pass, o, w, at, alpha, shown)
+	painted := len(pass.ops)
+	shown = c.paintWindow(pass, o, w, at, alpha, true, shown)
+	if w.layer == wm.LayerFullscreen && c.decor.Rounding > 0 {
+		pass.roundBare(painted, deviceRect(o, at), float32(float64(deviceLength(o, c.decor.Rounding))*min(max(p, 0), 1)))
+	}
 	from := len(pass.ops)
 	shown = c.drawOwnPopups(pass, o, w, shown)
 	if at != w.tile {
@@ -175,7 +176,7 @@ func (c *Compositor) drawOverviewDragged(pass *frame, o *output.Output, p float6
 			if !at.Overlaps(o.Logical()) {
 				continue
 			}
-			shown = c.paintWindow(pass, o, e.w, at, alpha, shown)
+			shown = c.paintWindow(pass, o, e.w, at, alpha, true, shown)
 		}
 	}
 	return shown
@@ -190,14 +191,22 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 		return anim.LerpRect(r.Sub(image.Pt(0, r.Max.Y-top)), r, p)
 	}
 	radius := deviceLength(o, overviewRadius)
+	redrawn := false
 	for _, t := range v.spaces {
 		if t.rect.Empty() {
 			continue
 		}
-		if err := c.refreshThumb(o, t); err != nil {
-			return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
+		if !redrawn && t.due(deviceRect(o, t.rect).Size(), c.frameTime) {
+			redrawn = true
+			if err := c.refreshThumb(o, v, t); err != nil {
+				return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
+			}
 		}
 		dst := deviceRect(o, slide(t.rect))
+		if t.version == 0 {
+			pass.fillMasked(dst, scaleColor(Background, in), render.Mask{Keep: render.RoundRect{Rect: dst, Radius: radius}})
+			continue
+		}
 		size := t.target.Size()
 		pass.ops = append(pass.ops, drawOp{
 			tex: t.target.Texture(), src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: dst, alpha: in, version: t.version,
@@ -229,7 +238,44 @@ func (c *Compositor) drawOverviewRing(pass *frame, o *output.Output, r image.Rec
 	c.paintBorder(pass, c.decor.ActiveBorder, outer, inner, ring, a, 0)
 }
 
-func (c *Compositor) refreshThumb(o *output.Output, t *overviewThumb) error {
+func thumbStep(i int, size, screen image.Point) (image.Point, bool) {
+	at := image.Pt(screen.X>>i, screen.Y>>i)
+	if i == 0 {
+		return at, size.X < screen.X && size.Y < screen.Y
+	}
+	return at, at.X >= size.X && at.Y >= size.Y
+}
+
+func (c *Compositor) thumbFilter(o *output.Output, v *overviewView, size image.Point) error {
+	screen := o.Backend().State().Mode.Size
+	n, same := 0, true
+	for {
+		at, ok := thumbStep(n, size, screen)
+		if !ok {
+			break
+		}
+		same = same && n < len(v.filter) && v.filter[n].Size() == at
+		n++
+	}
+	if same && n == len(v.filter) {
+		return nil
+	}
+	if err := c.dropFilter(v); err != nil {
+		return err
+	}
+	for i := range n {
+		at, _ := thumbStep(i, size, screen)
+		t, err := c.newSceneTarget(o, at)
+		if err != nil {
+			return err
+		}
+		v.filter = append(v.filter, t)
+	}
+	return nil
+}
+
+func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb) error {
+	started := c.clock()
 	size := deviceRect(o, t.rect).Size()
 	if t.target == nil || t.target.Size() != size {
 		if t.target != nil {
@@ -242,10 +288,7 @@ func (c *Compositor) refreshThumb(o *output.Output, t *overviewThumb) error {
 			t.target = nil
 			return err
 		}
-		t.target, t.dirty = target, true
-	}
-	if !t.dirty {
-		return nil
+		t.target = target
 	}
 	f := &c.overview.scratch
 	f.ops = f.ops[:0]
@@ -259,8 +302,17 @@ func (c *Compositor) refreshThumb(o *output.Output, t *overviewThumb) error {
 		shown = c.drawClippedTree(f, o, m.w.top.Surface(), c.windowOrigin(m.w), shown, c.windowMask(o, m.w), c.opacity(m.w))
 	}
 	t.surfaces = shown
-	f.remap(0, bounds, image.Rectangle{Max: size})
-	pass, err := c.renderer.Begin(t.target, render.Region{{Max: size}})
+	if err := c.thumbFilter(o, v, size); err != nil {
+		return err
+	}
+	draw := t.target
+	if len(v.filter) > 0 {
+		draw = v.filter[0]
+	}
+	f.remap(0, bounds, image.Rectangle{Max: draw.Size()})
+	region := c.overview.region[:]
+	region[0] = image.Rectangle{Max: draw.Size()}
+	pass, err := c.renderer.Begin(draw, region)
 	if err != nil {
 		return err
 	}
@@ -269,8 +321,25 @@ func (c *Compositor) refreshThumb(o *output.Output, t *overviewThumb) error {
 	if err := pass.End(); err != nil {
 		return err
 	}
+	for i, from := range v.filter {
+		to := t.target
+		if i+1 < len(v.filter) {
+			to = v.filter[i+1]
+		}
+		region[0] = image.Rectangle{Max: to.Size()}
+		step, err := c.renderer.Begin(to, region)
+		if err != nil {
+			return err
+		}
+		step.Clear(render.Color{})
+		step.Kawase(from.Texture(), image.Rectangle{Max: to.Size()}, 1, false)
+		if err := step.End(); err != nil {
+			return err
+		}
+	}
 	c.jellyGen++
 	t.version, t.dirty = c.jellyGen, false
+	t.next = c.frameTime + min(thumbShare*(c.clock()-started), thumbMaxWait)
 	c.thumbRedraws++
 	return nil
 }
@@ -291,16 +360,11 @@ func (c *Compositor) drawOverviewSelection(pass *frame, o *output.Output, v *ove
 			return c.drawOverviewLabel(pass, o, t.w.top.Title(), t.w.top.Icon(), dev.Max.Y-o.Scale().ToDevice(overviewLabelHeight+overviewLabelGap), dev, in)
 		}
 	case overviewSpace:
-		if t.o != o {
-			return nil
-		}
-		for _, sp := range v.spaces {
-			if sp.id == t.id {
-				return c.drawOverviewHover(pass, o, sp.rect, "Workspace "+strconv.Itoa(int(sp.id)), in)
-			}
+		if t.t.o == o {
+			return c.drawOverviewHover(pass, o, t.t.rect, t.t.label, in)
 		}
 	case overviewPlus:
-		if t.o == o {
+		if t.v == v {
 			return c.drawOverviewHover(pass, o, v.plus, "New workspace", in)
 		}
 	}
@@ -313,13 +377,21 @@ func (c *Compositor) drawOverviewHover(pass *frame, o *output.Output, r image.Re
 	return c.drawOverviewLabel(pass, o, text, nil, dev.Max.Y+o.Scale().ToDevice(overviewLabelGap), dev, in)
 }
 
+func (c *Compositor) overviewLabelWidth(text string, px int) int {
+	m := &c.overview.measured
+	if m.text != text || m.px != px {
+		*m = measuredLabel{text: text, px: px, w: int(math.Ceil(c.font.Shape(text, float64(px)).Advance()))}
+	}
+	return m.w
+}
+
 func (c *Compositor) drawOverviewLabel(pass *frame, o *output.Output, text string, icon *shell.Icon, y int, under image.Rectangle, in float32) error {
 	if text == "" {
 		return nil
 	}
 	s := o.Scale()
 	px, pad, h := s.ToDevice(overviewLabelPx), s.ToDevice(c.decor.Tab.TextPadding), s.ToDevice(overviewLabelHeight)
-	w := int(math.Ceil(c.font.Shape(text, float64(px)).Advance())) + 2*pad
+	w := c.overviewLabelWidth(text, px) + 2*pad
 	if icon != nil {
 		w += h
 	}

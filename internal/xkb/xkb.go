@@ -240,6 +240,11 @@ func (k *Keymap) CompileClient(text []byte) (*ClientKeymap, error) {
 }
 
 // BareEscape is State.BareEscape under a client's modifiers.
+func (k *ClientKeymap) Keysym(evdev uint32, m Modifiers) uint32 {
+	k.state.UpdateMask(lxkb.ModMask(m.Depressed), lxkb.ModMask(m.Latched), lxkb.ModMask(m.Locked), 0, 0, m.Group)
+	return uint32(k.state.KeyGetOneSym(lxkb.Keycode(evdev + evdevOffset)))
+}
+
 func (k *ClientKeymap) BareEscape(evdev uint32, m Modifiers) bool {
 	k.state.UpdateMask(lxkb.ModMask(m.Depressed), lxkb.ModMask(m.Latched), lxkb.ModMask(m.Locked), 0, 0, m.Group)
 	return bareEscape(k.state, evdev)

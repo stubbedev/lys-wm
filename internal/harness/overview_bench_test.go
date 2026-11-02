@@ -131,3 +131,46 @@ func BenchmarkReadback(b *testing.B) {
 		})
 	})
 }
+
+func BenchmarkOverviewFrameAllocs(b *testing.B) {
+	benchRenderers(b, func(b *testing.B, open func(testing.TB) setup) {
+		var now time.Duration
+		h, _ := overviewBenchHarness(b, open, &now, 30, true)
+		h.dispatch("overview show")
+		h.Rendered(0)
+		h.Do(func(bk *headless.Backend, c *compositor.Compositor) error {
+			o := bk.Outputs()[0]
+			b.ReportAllocs()
+			for b.Loop() {
+				now += time.Millisecond
+				if err := c.Frame(o); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	})
+}
+
+func BenchmarkThumbRedraw(b *testing.B) {
+	benchRenderers(b, func(b *testing.B, open func(testing.TB) setup) {
+		var now time.Duration
+		h, _ := overviewBenchHarness(b, open, &now, 10, true)
+		h.dispatch("overview show")
+		now += time.Minute
+		h.Rendered(0)
+		h.Do(func(bk *headless.Backend, c *compositor.Compositor) error {
+			o := bk.Outputs()[0]
+			for b.Loop() {
+				c.DirtyOverviewThumbs()
+				if err := c.Frame(o); err != nil {
+					return err
+				}
+				if _, err := o.Snapshot(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	})
+}

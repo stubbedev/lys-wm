@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jezek/xgb/xproto"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -17,7 +19,9 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -560,10 +564,8 @@ func TestThumbnailsRedrawOnlyWhenTheirWindowsDamage(t *testing.T) {
 		})
 		return n
 	}
+	h.Eventually("both thumbnails drawn, one a frame", func(_ *headless.Backend, comp *compositor.Compositor) bool { return comp.OverviewThumbRedraws() == 2 })
 	first := count()
-	if first != 2 {
-		t.Fatalf("opening drew %d thumbnails, want 2", first)
-	}
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 		for range 5 {
 			if err := comp.Frame(b.Outputs()[0]); err != nil {
@@ -928,4 +930,358 @@ func TestAnOutputGoingAwayAndAReloadLeaveTheOverviewWhole(t *testing.T) {
 	h.Rendered(0)
 	h.dispatch("overview hide")
 	h.Eventually("the desktop back", showing(10, 10, redPix))
+}
+
+func TestAHeldArrowRepeats(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = 200, 10
+	}, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	for _, name := range []string{"a", "b", "c", "d"} {
+		w := c.Window(name, testclient.Fill(0, 0, 0xff))
+		c.DispatchUntil(name+" to map", w.Mapped)
+	}
+	h.dispatch("overview show")
+	plan := planOf(h, 0)
+	leftmost, focused := wm.WindowID(0), wm.WindowID(0)
+	for id, r := range plan.windows {
+		if leftmost == 0 || r.Min.X < plan.windows[leftmost].Min.X || r.Min.X == plan.windows[leftmost].Min.X && r.Min.Y < plan.windows[leftmost].Min.Y {
+			leftmost = id
+		}
+	}
+	h.key(keyLeft, true)
+	h.key(keyUp, true)
+	time.Sleep(150 * time.Millisecond)
+	h.key(keyUp, false)
+	h.key(keyLeft, false)
+	h.key(keyLeft, true)
+	time.Sleep(150 * time.Millisecond)
+	h.key(keyLeft, false)
+	h.tap(keyEnter)
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		focused, _ = comp.WM().Focused()
+		return nil
+	})
+	if comp := plan.windows[focused]; comp.Min.X != plan.windows[leftmost].Min.X {
+		t.Errorf("holding left ended on window %d at %v, not in the leftmost column at %v", focused, comp, plan.windows[leftmost])
+	}
+}
+
+func TestDraggingAWindowShowsAGrabbingCursor(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = testenv.CursorTheme(t) }, overviewMode)
+	colouredPair(t, h)
+	h.dispatch("overview show")
+	plan := planOf(h, 0)
+	shape := func() string {
+		var s string
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+			s = comp.CursorShape()
+			return nil
+		})
+		return s
+	}
+	from := centre(plan.windows[1])
+	h.moveAt(from, overviewMode.Size)
+	if got := shape(); got != "default" {
+		t.Fatalf("hovering shows %q", got)
+	}
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Pointer().Button(btnLeft, true), b.Pointer().Frame())
+	})
+	h.moveAt(from.Add(image.Pt(30, 30)), overviewMode.Size)
+	if got := shape(); got != "grabbing" {
+		t.Fatalf("dragging shows %q", got)
+	}
+	h.Rendered(0)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Pointer().Button(btnLeft, false), b.Pointer().Frame())
+	})
+	if got := shape(); got != "default" {
+		t.Fatalf("after the drop the cursor is %q", got)
+	}
+}
+
+func TestAThumbnailOfFineLinesIsGrey(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, plainOverview, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("lines", func(pix []byte, stride int, size image.Point, _ int) {
+			for y := range size.Y {
+				v := byte(0xf0)
+				if y%2 == 0 {
+					v = 0x10
+				}
+				for x := range size.X {
+					at := y*stride + x*4
+					pix[at], pix[at+1], pix[at+2], pix[at+3] = v, v, v, 0xff
+				}
+			}
+		})
+		c.DispatchUntil("the lines to map", w.Mapped)
+		w.Stop()
+		h.Rendered(0)
+		h.dispatch("overview show")
+		h.Rendered(0)
+		inner := planOf(h, 0).Strip[0].Inset(8)
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			px := snapshot(b.Outputs()[0])
+			lo, hi := byte(0xff), byte(0)
+			for y := inner.Min.Y; y < inner.Max.Y; y++ {
+				v := pixel(px, centre(inner).X, y)[0]
+				lo, hi = min(lo, v), max(hi, v)
+			}
+			if hi-lo > 8 {
+				t.Errorf("rows of the thumbnail run from %#x to %#x: moire", lo, hi)
+			}
+			return nil
+		})
+	})
+}
+
+func TestABorderStaysWholeAsAWindowShrinks(t *testing.T) {
+	magenta := render.Color{R: 0xff, B: 0xff, A: 0xff}
+	want := [3]byte{0xff, 0, 0xff}
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		var now time.Duration
+		h := start(t, func(cfg *compositor.Config) {
+			cfg.Animations = springTable(t)
+			cfg.Clock = func() time.Duration { return now }
+			cfg.Decor.BorderWidth = 1
+			cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(magenta), compositor.SolidBorder(magenta)
+			plainOverview(cfg)
+		}, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("win", testclient.Fill(0x40, 0x40, 0x40))
+		c.DispatchUntil("the window to map", w.Mapped)
+		w.Stop()
+		h.Rendered(0)
+		h.dispatch("overview show")
+		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+			o := b.Outputs()[0]
+			for range 40 {
+				now += 8 * time.Millisecond
+				if err := comp.Frame(o); err != nil {
+					return err
+				}
+				r, ok := comp.OverviewWindowRect(1, now)
+				if !ok {
+					t.Fatal("no rectangle for the window")
+				}
+				px := snapshot(o)
+				mid := centre(r)
+				for _, at := range []image.Point{{mid.X, r.Min.Y}, {mid.X, r.Max.Y - 1}, {r.Min.X, mid.Y}, {r.Max.X - 1, mid.Y}} {
+					if at.In(image.Rectangle{Max: overviewMode.Size}) && pixel(px, at.X, at.Y) != want {
+						t.Errorf("at %v with the window at %v the edge is %v", now, r, pixel(px, at.X, at.Y))
+						return nil
+					}
+				}
+			}
+			return nil
+		})
+	})
+}
+
+func TestAFullscreenWindowGetsTheCornersOfTheRest(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, func(cfg *compositor.Config) {
+			cfg.Decor.Rounding = 24
+			plainOverview(cfg)
+		}, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		green := c.Window("green", testclient.Fill(0, 0xff, 0))
+		c.DispatchUntil("green to map", green.Mapped)
+		h.dispatch("fullscreen")
+		h.dispatch("overview show")
+		slot := planOf(h, 0).windows[1]
+		mid := centre(slot)
+		h.Eventually("the slot", showingAbout(mid.X, mid.Y, greenPix))
+		h.Eventually("the corners of the slot "+slot.String()+" rounded", func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return pixel(snapshot(b.Outputs()[0]), slot.Min.X, slot.Min.Y) != greenPix
+		})
+	})
+}
+
+func TestAVirtualKeyboardDrivesTheOverview(t *testing.T) {
+	h := Start(t, overviewMode)
+	colouredPair(t, h)
+	typist := testclient.Connect(t, h.Socket())
+	kb := virtualKeyboardWith(t, typist, testenv.Keymap(t).Text())
+	h.dispatch("overview show")
+	virtualTap(t, typist, kb, keyLeft)
+	virtualTap(t, typist, kb, keyEnter)
+	typist.Sync()
+	h.expectOverview(false)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if id, ok := c.WM().Focused(); !ok || id != 1 {
+			t.Errorf("focused %d %v", id, ok)
+		}
+		return nil
+	})
+	h.dispatch("overview show")
+	virtualTap(t, typist, kb, keyEsc)
+	typist.Sync()
+	h.expectOverview(false)
+	h.dispatch("overview show")
+	virtualTap(t, typist, kb, keyA)
+	typist.Sync()
+	h.expectOverview(true)
+}
+
+func TestAnIconifiedXWindowKeepsItsContentInTheRow(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland: %v", err) }, overviewMode)
+	xc := xDial(t, h)
+	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
+	h.Eventually("the X window drawn", showing(100, 100, redPix))
+	iconify := xproto.ClientMessageEvent{Format: 32, Window: main, Type: xc.atoms["WM_CHANGE_STATE"], Data: xproto.ClientMessageDataUnionData32New([]uint32{3, 0, 0, 0, 0})}
+	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureRedirect|xproto.EventMaskSubstructureNotify, string(iconify.Bytes())).Check(); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the X window minimized", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Minimized
+	})
+	h.dispatch("overview show")
+	var slots []image.Rectangle
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		slots = c.OverviewSlots(c.Outputs()[0])
+		return nil
+	})
+	if len(slots) != 1 {
+		t.Fatalf("slots %v", slots)
+	}
+	at := centre(slots[0])
+	h.Rendered(0)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if got := pixel(snapshot(b.Outputs()[0]), at.X, at.Y); got != redPix {
+			t.Errorf("the slot %v of an iconified X window shows %v, not its content", slots[0], got)
+		}
+		return nil
+	})
+	h.clickAt(at)
+	h.expectOverview(false)
+	h.Eventually("the X window back", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && !ws[0].Minimized
+	})
+}
+
+func TestAFingerDragsAWindowOntoAThumbnail(t *testing.T) {
+	h := Start(t, overviewMode)
+	colouredPair(t, h)
+	h.dispatch("overview show")
+	plan := planOf(h, 0)
+	from, to := centre(plan.windows[2]), centre(plan.Plus)
+	norm := func(p image.Point) (float64, float64) { return float64(p.X) / 800, float64(p.Y) / 500 }
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, tp := b.Outputs()[0], b.Touch()
+		fx, fy := norm(from)
+		tx, ty := norm(to)
+		return errors.Join(tp.Down(0, o, fx, fy), tp.Frame(), tp.Motion(0, fx+0.05, fy+0.05), tp.Frame(), tp.Motion(0, tx, ty), tp.Frame(), tp.Up(0), tp.Frame())
+	})
+	h.expectOverview(true)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if ws, _ := c.WM().WorkspaceOf(2); ws != 2 {
+			t.Errorf("the window is on workspace %d", ws)
+		}
+		return nil
+	})
+}
+
+func TestADroppedWindowFliesIntoItsThumbnail(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		var now time.Duration
+		h := start(t, func(cfg *compositor.Config) {
+			cfg.Animations = springTable(t)
+			cfg.Clock = func() time.Duration { return now }
+			plainOverview(cfg)
+		}, overviewMode)
+		_, red, blue := colouredPair(t, h)
+		red.Stop()
+		blue.Stop()
+		h.dispatch("overview show")
+		now += time.Minute
+		h.Rendered(0)
+		plan := planOf(h, 0)
+		drop := centre(plan.Plus)
+		dragBetween(h, centre(plan.windows[2]), drop)
+		now += 30 * time.Millisecond
+		var mid image.Point
+		var closing int
+		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+			closing = comp.ClosingCount()
+			if err := comp.Frame(b.Outputs()[0]); err != nil {
+				return err
+			}
+			mid = comp.ClosingAt(now).Add(image.Pt(30, 15))
+			return nil
+		})
+		if closing != 1 {
+			t.Fatalf("%d windows in flight", closing)
+		}
+		if ws := planOf(h, 0); len(ws.spaces) != 2 {
+			t.Fatalf("spaces %v", ws.spaces)
+		}
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			if got := pixel(snapshot(b.Outputs()[0]), mid.X, mid.Y); got[2] < 0x40 {
+				t.Errorf("no blue at %v along the way: %v", mid, got)
+			}
+			return nil
+		})
+		now += time.Minute
+		h.Eventually("the flight over", func(b *headless.Backend, comp *compositor.Compositor) bool {
+			if err := comp.Frame(b.Outputs()[0]); err != nil {
+				return false
+			}
+			return comp.ClosingCount() == 0
+		})
+	})
+}
+
+func TestAMovingOverviewFrameAllocatesNothing(t *testing.T) {
+	var now time.Duration
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = springTable(t)
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor.Rounding = 12
+		cfg.Decor.BorderWidth = 2
+	}, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	for _, name := range []string{"a", "b"} {
+		w := c.Window(name, testclient.Fill(0, 0, 0xff))
+		c.DispatchUntil(name+" to map", w.Mapped)
+		w.Stop()
+	}
+	hover := func(b *headless.Backend) {
+		o := b.Outputs()[0]
+		if err := errors.Join(b.Pointer().MoveTo(o, 0.3, 0.5), b.Pointer().Frame(), b.Pointer().MoveTo(o, 0.7, 0.5), b.Pointer().Frame()); err != nil {
+			t.Error(err)
+		}
+	}
+	var closed float64
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		hover(b)
+		closed = testing.AllocsPerRun(100, func() { hover(b) })
+		return nil
+	})
+	h.dispatch("overview show")
+	h.Rendered(0)
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		o := b.Outputs()[0]
+		step := func() {
+			now += time.Millisecond
+			if err := comp.Frame(o); err != nil {
+				t.Error(err)
+			}
+		}
+		for range 5 {
+			step()
+		}
+		if got := testing.AllocsPerRun(100, step); got != 0 {
+			t.Errorf("a moving frame allocates %v times", got)
+		}
+		if got := testing.AllocsPerRun(100, func() { hover(b) }); got > closed {
+			t.Errorf("hovering allocates %v times, against %v with the overview closed", got, closed)
+		}
+		return nil
+	})
 }

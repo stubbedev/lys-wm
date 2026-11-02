@@ -4,6 +4,7 @@ import (
 	"errors"
 	"image"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
@@ -29,11 +30,8 @@ type overviewTarget interface{ isOverviewTarget() }
 
 type (
 	overviewWindow struct{ w *window }
-	overviewSpace  struct {
-		o  *output.Output
-		id wm.WorkspaceID
-	}
-	overviewPlus struct{ o *output.Output }
+	overviewSpace  struct{ t *overviewThumb }
+	overviewPlus   struct{ v *overviewView }
 )
 
 func (overviewWindow) isOverviewTarget() {}
@@ -48,6 +46,16 @@ type overview struct {
 	press    *overviewPress
 	carried  *overviewCarried
 	scratch  frame
+	region   [1]image.Rectangle
+	targets  []overviewTarget
+	rects    []image.Rectangle
+	measured measuredLabel
+}
+
+type measuredLabel struct {
+	text string
+	px   int
+	w    int
 }
 
 type overviewCarried struct {
@@ -56,12 +64,14 @@ type overviewCarried struct {
 }
 
 type overviewView struct {
+	output    *output.Output
 	workspace wm.WorkspaceID
 	items     []*overviewItem
 	order     []overviewEntry
 	leaving   []overviewEntry
 	left      wm.WorkspaceID
 	spaces    []*overviewThumb
+	filter    []render.TextureTarget
 	plus      image.Rectangle
 }
 
@@ -86,13 +96,28 @@ type thumbMember struct {
 }
 
 type overviewThumb struct {
+	o        *output.Output
 	id       wm.WorkspaceID
+	label    string
 	rect     image.Rectangle
 	members  []thumbMember
 	surfaces []*surface.Surface
 	target   render.TextureTarget
 	version  uint64
 	dirty    bool
+	next     time.Duration
+}
+
+const (
+	thumbShare   = 4
+	thumbMaxWait = 500 * time.Millisecond
+)
+
+func (t *overviewThumb) due(size image.Point, now time.Duration) bool {
+	if t.target == nil || t.target.Size() != size {
+		return true
+	}
+	return t.dirty && now >= t.next
 }
 
 func (c *Compositor) overviewHolds() bool {
@@ -264,7 +289,7 @@ func (c *Compositor) dropOverview() error {
 	c.overview = nil
 	var errs []error
 	for _, v := range ov.views {
-		errs = append(errs, c.dropThumbs(v.spaces))
+		errs = append(errs, c.dropThumbs(v.spaces), c.dropFilter(v))
 	}
 	return errors.Join(errs...)
 }
@@ -299,12 +324,21 @@ func (c *Compositor) releaseTarget(t render.TextureTarget) error {
 	return errors.Join(append(errs, t.Destroy())...)
 }
 
+func (c *Compositor) dropFilter(v *overviewView) error {
+	var errs []error
+	for _, t := range v.filter {
+		errs = append(errs, t.Destroy())
+	}
+	v.filter = nil
+	return errors.Join(errs...)
+}
+
 func (c *Compositor) dropThumbs(thumbs []*overviewThumb) error {
 	var errs []error
 	for _, t := range thumbs {
 		if t.target != nil {
 			errs = append(errs, c.releaseTarget(t.target))
-			t.target = nil
+			t.target, t.version, t.dirty = nil, 0, true
 		}
 	}
 	return errors.Join(errs...)
@@ -319,7 +353,7 @@ func (c *Compositor) overviewOutputGone(o *output.Output) error {
 		return nil
 	}
 	delete(c.overview.views, o)
-	return c.dropThumbs(v.spaces)
+	return errors.Join(c.dropThumbs(v.spaces), c.dropFilter(v))
 }
 
 func (c *Compositor) dropOverviewTargets() error {
@@ -328,7 +362,7 @@ func (c *Compositor) dropOverviewTargets() error {
 	}
 	var errs []error
 	for _, v := range c.overview.views {
-		errs = append(errs, c.dropThumbs(v.spaces))
+		errs = append(errs, c.dropThumbs(v.spaces), c.dropFilter(v))
 	}
 	return errors.Join(errs...)
 }
@@ -375,10 +409,10 @@ func (c *Compositor) overviewTargetLive(t overviewTarget) bool {
 	case overviewWindow:
 		return c.live(t.w) && c.overviewItemOf(t.w) != nil
 	case overviewSpace:
-		w, ok := c.wm.Workspace(t.id)
-		return ok && slices.Contains(c.outputs, t.o) && w.Output == t.o.Backend().Name()
+		v := c.overview.views[t.t.o]
+		return v != nil && slices.Contains(v.spaces, t.t)
 	case overviewPlus:
-		return slices.Contains(c.outputs, t.o)
+		return c.overview.views[t.v.output] == t.v
 	}
 	return true
 }
@@ -406,7 +440,7 @@ func findItem(items []*overviewItem, root *window, minimized bool) *overviewItem
 func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.Duration) error {
 	v, ok := ov.views[o]
 	if !ok {
-		v = &overviewView{}
+		v = &overviewView{output: o}
 		ov.views[o] = v
 	}
 	name := o.Backend().Name()
@@ -482,7 +516,7 @@ func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.D
 		c.moveOverviewItem(ov, it, goal, now)
 	}
 	v.plus = plan.Plus
-	return c.syncThumbs(v, spaces, plan.Strip, placements)
+	return c.syncThumbs(v, o, spaces, plan.Strip, placements)
 }
 
 func (c *Compositor) moveOverviewItem(ov *overview, it *overviewItem, goal image.Rectangle, now time.Duration) {
@@ -503,7 +537,7 @@ func (c *Compositor) moveOverviewItem(ov *overview, it *overviewItem, goal image
 	}
 }
 
-func (c *Compositor) syncThumbs(v *overviewView, spaces []wm.WorkspaceID, strip []image.Rectangle, shown []wm.Placement) error {
+func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.WorkspaceID, strip []image.Rectangle, shown []wm.Placement) error {
 	old := v.spaces
 	v.spaces = make([]*overviewThumb, 0, len(spaces))
 	for i, id := range spaces {
@@ -512,7 +546,7 @@ func (c *Compositor) syncThumbs(v *overviewView, spaces []wm.WorkspaceID, strip 
 			t = old[at]
 			old = slices.Delete(slices.Clone(old), at, at+1)
 		} else {
-			t = &overviewThumb{id: id, dirty: true}
+			t = &overviewThumb{o: o, id: id, label: "Workspace " + strconv.Itoa(int(id)), dirty: true}
 		}
 		t.rect = strip[i]
 		places := shown
@@ -567,7 +601,11 @@ func (c *Compositor) overviewAnimating(o *output.Output, now time.Duration) bool
 		return true
 	}
 	v, ok := ov.views[o]
-	return ok && slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) })
+	if !ok {
+		return false
+	}
+	return slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) }) ||
+		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty })
 }
 
 func placedIn(r, from, to image.Rectangle) image.Rectangle {
@@ -651,6 +689,18 @@ func (c *Compositor) OverviewSlots(o *output.Output) []image.Rectangle {
 	return out
 }
 
+func (c *Compositor) CursorShape() string {
+	return c.cursorShape()
+}
+
+func (c *Compositor) OverviewWindowRect(id wm.WindowID, now time.Duration) (image.Rectangle, bool) {
+	w := c.windowByID(id)
+	if w == nil {
+		return image.Rectangle{}, false
+	}
+	return c.overviewRect(w, now)
+}
+
 func (c *Compositor) OverviewProgress(now time.Duration) float64 {
 	if c.overview == nil {
 		return 0
@@ -660,4 +710,27 @@ func (c *Compositor) OverviewProgress(now time.Duration) float64 {
 
 func (c *Compositor) Now() time.Duration {
 	return c.clock()
+}
+
+func (c *Compositor) DirtyOverviewThumbs() {
+	if c.overview == nil {
+		return
+	}
+	for _, v := range c.overview.views {
+		for _, t := range v.spaces {
+			t.dirty = true
+		}
+	}
+}
+
+func (c *Compositor) ClosingCount() int {
+	return len(c.closing)
+}
+
+func (c *Compositor) ClosingAt(now time.Duration) image.Point {
+	if len(c.closing) == 0 {
+		return image.Point{}
+	}
+	r := c.closing[0].motion.At(now)
+	return r.Min.Add(r.Size().Div(2))
 }

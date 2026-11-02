@@ -16,8 +16,8 @@ type repeat struct {
 }
 
 type repeating struct {
-	key    uint32
-	action wm.Action
+	key  uint32
+	fire func()
 }
 
 func (r *repeat) stop() error {
@@ -73,8 +73,12 @@ func (c *Compositor) bindKey(code uint32, pressed bool) (bool, error) {
 	if !b.Flags.Repeating || c.seatConfig.RepeatRate == 0 {
 		return true, nil
 	}
-	c.repeat.held = &repeating{code, b.Action}
-	return true, c.repeat.timer.Arm(time.Duration(c.seatConfig.RepeatDelay) * time.Millisecond)
+	return true, c.repeatKey(code, func() { c.run(b.Action, nil) })
+}
+
+func (c *Compositor) repeatKey(code uint32, fire func()) error {
+	c.repeat.held = &repeating{code, fire}
+	return c.repeat.timer.Arm(time.Duration(c.seatConfig.RepeatDelay) * time.Millisecond)
 }
 
 func (c *Compositor) repeatFired() error {
@@ -82,7 +86,7 @@ func (c *Compositor) repeatFired() error {
 	if h == nil {
 		return nil
 	}
-	c.run(h.action, nil)
+	h.fire()
 	if c.repeat.held != h {
 		return nil
 	}

@@ -359,11 +359,13 @@ func scaleColor(c render.Color, a float32) render.Color {
 }
 
 func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
+	c.drawBorderIn(pass, o, w, deviceRect(o, w.tile), deviceRect(o, w.rect))
+}
+
+func (c *Compositor) drawBorderIn(pass *frame, o *output.Output, w *window, outer, inner image.Rectangle) {
 	if c.decor.BorderWidth <= 0 || w.layer == wm.LayerFullscreen {
 		return
 	}
-	outer := deviceRect(o, w.tile)
-	inner := deviceRect(o, w.rect)
 	ring := render.Mask{Keep: render.RoundRect{Rect: outer}, Cut: render.RoundRect{Rect: inner}}
 	if c.rounded(w) {
 		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.decor.Rounding)

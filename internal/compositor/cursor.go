@@ -177,6 +177,9 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 }
 
 func (c *Compositor) cursorShape() string {
+	if c.overviewDragging() {
+		return "grabbing"
+	}
 	if cur, ok := c.seat.Cursor().(seat.ShapeCursor); ok {
 		return cur.Shape
 	}

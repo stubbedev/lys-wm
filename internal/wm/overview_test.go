@@ -254,3 +254,11 @@ func TestMoveWindowToWorkspaceTakesAnyWindow(t *testing.T) {
 		t.Error("moved an unknown window")
 	}
 }
+
+func BenchmarkPlanOverview30Windows(b *testing.B) {
+	windows := randomWindows(rand.New(rand.NewPCG(7, 8)), 30)
+	b.ReportAllocs()
+	for b.Loop() {
+		PlanOverview(overviewScreen, 3, windows, nil)
+	}
+}

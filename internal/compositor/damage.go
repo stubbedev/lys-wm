@@ -144,6 +144,17 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	}
 }
 
+func (f *frame) roundBare(from int, r image.Rectangle, radius float32) {
+	if radius <= 0 {
+		return
+	}
+	for i := range f.ops[from:] {
+		if op := &f.ops[from+i]; op.mask == (render.Mask{}) {
+			op.mask.Keep = render.RoundRect{Rect: r, Radius: radius}
+		}
+	}
+}
+
 func (f *frame) fade(from int, a float32) {
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]

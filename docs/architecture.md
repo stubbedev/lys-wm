@@ -485,7 +485,12 @@ to slot as any window animation does, because a live window is already a texture
 and a screenshot of it would be one more texture drawn just as often. 30 floating
 1000x700 windows moving cost the same draws either way. What it does cache is
 thumbnails: one target per workspace, redrawn only when a window in it commits, so
-a thumbnail is one op in the frame. All windows blur over one shared chain of the
+a thumbnail is one op in the frame. A redraw draws the workspace at full size and
+halves it with the blur chains' Kawase step down to the thumbnail, the one filter
+every renderer has, because a straight draw at a seventh of the size turns fine
+lines into moire on all of them. That costs a full-size draw per redraw, so an output
+redraws one thumbnail a frame, and a thumbnail waits four times its last redraw, at
+most half a second, before the next. All windows blur over one shared chain of the
 layers below them while it is open, since their own chains would redraw whenever
 any window moved.
 
