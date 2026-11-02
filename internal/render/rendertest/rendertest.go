@@ -791,7 +791,7 @@ func DMABUFTextures(t *testing.T, g GPU, node string) {
 	}
 }
 
-func sampleNV12(t *testing.T, g GPU, node string, y, cb, cr byte, yuv gpu.YUVEncoding) [4]byte {
+func sampleNV12(t *testing.T, g GPU, node string, color *render.ColorTransform, y, cb, cr byte, yuv gpu.YUVEncoding) [4]byte {
 	t.Helper()
 	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -851,6 +851,7 @@ func sampleNV12(t *testing.T, g GPU, node string, y, cb, cr byte, yuv gpu.YUVEnc
 	}
 	defer check(t, fb.Destroy)
 	Paint(t, g, fb, render.Region{image.Rect(0, 0, 16, 16)}, func(p render.Pass) {
+		p.SetColor(color)
 		p.DrawTexture(tex, render.FRect{W: 16, H: 16}, image.Rect(0, 0, 16, 16), render.Normal, 1, render.Mask{})
 	})
 	got := make([]byte, 16*16*4)
@@ -862,7 +863,7 @@ func sampleNV12(t *testing.T, g GPU, node string, y, cb, cr byte, yuv gpu.YUVEnc
 
 func ExternalYUV(t *testing.T, g GPU, node string) {
 	t.Helper()
-	px := sampleNV12(t, g, node, 126, 128, 128, gpu.YUVEncoding{})
+	px := sampleNV12(t, g, node, nil, 126, 128, 128, gpu.YUVEncoding{})
 	for c := range 3 {
 		if d := int(px[c]) - 128; d < -4 || d > 4 {
 			t.Fatalf("mid-gray NV12 sampled as %v", px)
@@ -879,7 +880,7 @@ func YUVHintsSelectTheConversion(t *testing.T, g GPU, node string) {
 		{gpu.YUVEncoding{Coefficients: gpu.BT601, Range: gpu.LimitedRange}, 0},
 		{gpu.YUVEncoding{Coefficients: gpu.BT709, Range: gpu.LimitedRange}, 24},
 	} {
-		px := sampleNV12(t, g, node, 81, 90, 240, c.yuv)
+		px := sampleNV12(t, g, node, nil, 81, 90, 240, c.yuv)
 		if d := int(px[1]) - c.green; d < -6 || d > 6 || px[2] < 0xf0 {
 			t.Errorf("Y=81 Cb=90 Cr=240 tagged %+v sampled as %v, want green near %d and full red", c.yuv, px, c.green)
 		}

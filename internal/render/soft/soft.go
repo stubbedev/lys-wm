@@ -58,6 +58,7 @@ type texture struct {
 	size   image.Point
 	format render.Format
 	drawn  *Buffer
+	float  *workingTarget
 }
 
 func (t *texture) Size() image.Point {
@@ -156,14 +157,19 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	if tt, isTT := target.(*TextureTarget); isTT {
 		buf, ok = tt.Buffer, true
 	}
-	if !ok {
+	work, isWork := target.(*workingTarget)
+	if !ok && !isWork {
 		return nil, fmt.Errorf("soft: cannot render into %T", target)
 	}
 	if r.pass.active {
 		return nil, errors.New("soft: Begin while a pass is active")
 	}
 	p := &r.pass
-	p.active, p.buf, p.err = true, buf, nil
+	p.active, p.buf, p.work, p.color, p.err = true, buf, work, nil, nil
+	if isWork {
+		damage.ClipInto(&p.damage, work.bounds())
+		return p, nil
+	}
 	damage.ClipInto(&p.damage, buf.bounds())
 	return p, nil
 }
@@ -172,6 +178,8 @@ type pass struct {
 	owner  *Renderer
 	active bool
 	buf    *Buffer
+	work   *workingTarget
+	color  *render.ColorTransform
 	damage region.Set
 	err    error
 	cols   []int
@@ -188,7 +196,7 @@ func (p *pass) End() error {
 	if !p.active {
 		return errors.New("soft: End without an active pass")
 	}
-	p.active, p.buf = false, nil
+	p.active, p.buf, p.work = false, nil, nil
 	return p.err
 }
 
@@ -215,6 +223,10 @@ func (p *pass) Clear(c render.Color) {
 	}
 	if !c.Premultiplied() {
 		p.fail(fmt.Errorf("soft: color %+v is not premultiplied", c))
+		return
+	}
+	if p.floatPath(nil) {
+		p.clearFloat(c)
 		return
 	}
 	for _, d := range p.damage.Rects() {
@@ -246,6 +258,10 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	}
 	if err := m.Check(); err != nil {
 		p.fail(err)
+		return
+	}
+	if p.floatPath(nil) {
+		p.fillFloat(r, c, func(x, y int) float32 { return coverage(m, x, y) })
 		return
 	}
 	masked := m != (render.Mask{})
@@ -282,6 +298,10 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 		p.fail(fmt.Errorf("soft: goo %+v is not two rounded rectangles with a smoothing of zero or more", g))
 		return
 	}
+	if p.floatPath(nil) {
+		p.fillFloat(r, c, func(x, y int) float32 { return lgpu.GooCoverage(g, float32(x)+0.5, float32(y)+0.5) })
+		return
+	}
 	for _, d := range p.damage.Rects() {
 		clip := r.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
@@ -311,13 +331,17 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 	case tex.pix == nil:
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
-	case tex.drawn == p.buf:
+	case tex.owned(p):
 		p.fail(errors.New("soft: Kawase of the pass's own target"))
 		return
 	case !(offset >= 0) || math.IsInf(float64(offset), 0):
 		p.fail(fmt.Errorf("soft: Kawase offset %v is not zero or more", offset))
 		return
 	case dst.Empty():
+		return
+	}
+	if p.work != nil || tex.float != nil {
+		p.kawaseFloat(tex, dst, offset, up)
 		return
 	}
 	sample := func(u, v float32) [4]float32 { return lgpu.Bilinear(tex.pix, tex.stride, tex.size.X, tex.size.Y, u, v) }
@@ -443,7 +467,7 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 	case tex.pix == nil:
 		p.fail(errors.New("soft: gradient stops used after Destroy"))
 		return
-	case tex.drawn == p.buf:
+	case tex.owned(p):
 		p.fail(errors.New("soft: FillGradient with the pass's own target as stops"))
 		return
 	}
@@ -455,6 +479,10 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 	for i := range stops {
 		px := tex.pix[i*4:]
 		stops[i] = color.RGBA{R: px[2], G: px[1], B: px[0], A: px[3]}
+	}
+	if p.floatPath(nil) {
+		p.gradientFloat(r, g, stops, m)
+		return
 	}
 	for _, d := range p.damage.Rects() {
 		clip := r.Intersect(d)
@@ -486,7 +514,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case tex.pix == nil:
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
-	case tex.drawn == p.buf:
+	case tex.owned(p):
 		p.fail(errors.New("soft: DrawTexture of the pass's own target"))
 		return
 	case dst.Empty():
@@ -505,6 +533,10 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	p.cols = sampleMap(p.cols[:0], dst.Dx(), horizontal, src, tex.size)
 	p.rows = sampleMap(p.rows[:0], dst.Dy(), vertical, src, tex.size)
 	swap := transform.SwapsAxes()
+	if p.floatPath(tex) {
+		p.drawFloat(tex, dst, alpha, m, swap)
+		return
+	}
 	for _, d := range p.damage.Rects() {
 		clip := dst.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {

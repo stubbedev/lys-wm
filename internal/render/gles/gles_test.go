@@ -159,6 +159,11 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	rendertest.ExternalYUV(t, g, node)
 }
 
+func TestYUVThroughAColorTransformOnHardware(t *testing.T) {
+	g, node := hardware(t)
+	rendertest.YUVThroughAColorTransform(t, g, node)
+}
+
 func TestYUVHintsSelectTheConversionOnHardware(t *testing.T) {
 	g, node := hardware(t)
 	rendertest.YUVHintsSelectTheConversion(t, g, node)
@@ -344,4 +349,9 @@ func TestTheRendererKnowsItsNameOutsideItsContext(t *testing.T) {
 	if name := renderer(t).Name(); name == "" {
 		t.Fatal("no GL_RENDERER: glGetString was asked without a current context")
 	}
+}
+
+func TestColorParityWithTheSoftwareRenderer(t *testing.T) {
+	g := renderer(t)
+	rendertest.ColorParity(t, g, framebuffer(t, g, rendertest.Size))
 }

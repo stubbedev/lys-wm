@@ -102,8 +102,13 @@ func fourccOf(f render.Format) (fourcc.Format, error) {
 }
 
 type texture struct {
-	r *Renderer
-	t *lgpu.Texture
+	r       *Renderer
+	t       *lgpu.Texture
+	working bool
+}
+
+func (t *texture) Working() bool {
+	return t.working
 }
 
 func (t *texture) Size() image.Point {
@@ -219,6 +224,19 @@ func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, err
 		return nil, err
 	}
 	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex}}, nil
+}
+
+func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
+	t, err := r.d.NewOffscreenFloat(size.X, size.Y)
+	if err != nil {
+		return nil, fmt.Errorf("vulkan: a %v working target: %w", size, err)
+	}
+	tex, err := t.Texture()
+	if err != nil {
+		t.Close()
+		return nil, err
+	}
+	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex, working: true}}, nil
 }
 
 func (r *Renderer) RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier, error) {
@@ -444,6 +462,10 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 
 func rgba(c render.Color) color.RGBA {
 	return color.RGBA{R: c.R, G: c.G, B: c.B, A: c.A}
+}
+
+func (p *pass) SetColor(t *render.ColorTransform) {
+	p.p.SetColor(t)
 }
 
 func (p *pass) Clear(c render.Color) {

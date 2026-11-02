@@ -10,6 +10,7 @@ import (
 	"math"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -53,6 +54,12 @@ var (
 	kawaseShader   = "#define SAMPLE texture2D\n" + maskHeader + "uniform sampler2D tex;\nuniform vec2 taps;\nuniform float up;\nvarying vec2 v_texcoord;\nvoid main() { gl_FragColor = up > 0.5 ? kawaseUp(tex, v_texcoord, taps) : kawaseDown(tex, v_texcoord, taps); }"
 	gooShader      = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
+
+	colorHeader         = maskHeader + "uniform vec4 cp[" + strconv.Itoa(lgpu.ColorUniforms) + "];\n#define CP cp\n" + lgpu.ColorGLSL
+	rgbaColorShader     = colorHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "colorApply(texture2D(tex, v_texcoord))")
+	rgbxColorShader     = colorHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "colorApply(vec4(texture2D(tex, v_texcoord).rgb, 1.0))")
+	gradientColorShader = colorHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = colorApply(texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops))) * (alpha * " + coverage + "); }"
+	externalColorShader = "#extension GL_OES_EGL_image_external : require\n" + colorHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "colorApply(texture2D(tex, v_texcoord))")
 )
 
 const float32Mantissa = 23
@@ -74,30 +81,35 @@ type program struct {
 	colored            bool
 	maskSet            render.Mask
 	masked             bool
+	cp                 [lgpu.ColorUniforms]int32
+	transform          render.ColorTransform
+	transformed        bool
 }
 
 type Renderer struct {
-	d         *gpu.Display
-	gl        *gpu.GL
-	name      string
-	solid     program
-	gradient  program
-	kawase    program
-	goo       program
-	rgba      program
-	rgbx      program
-	external  program
-	modifiers map[fourcc.Format][]gpu.ModifierSupport
-	vbo       uint32
-	verts     [16]float32
-	pass      pass
-	closed    bool
-	es3       bool
-	async     bool
-	unpack    uint32
-	ringCap   int
-	ringAt    int
-	band      []byte
+	d            *gpu.Display
+	gl           *gpu.GL
+	name         string
+	solid        program
+	gradient     program
+	kawase       program
+	goo          program
+	rgba         program
+	rgbx         program
+	external     program
+	colored      coloredPrograms
+	modifiers    map[fourcc.Format][]gpu.ModifierSupport
+	vbo          uint32
+	verts        [16]float32
+	pass         pass
+	closed       bool
+	es3          bool
+	async        bool
+	unpack       uint32
+	ringCap      int
+	ringAt       int
+	band         []byte
+	floatTargets bool
 }
 
 func (r *Renderer) enter() error {
@@ -124,10 +136,15 @@ type shader struct {
 	prog      *program
 	fragment  string
 	extension string
+	lazy      bool
 }
 
-func (r *Renderer) programs() [7]shader {
-	return [7]shader{
+func (r *Renderer) programs() [11]shader {
+	return [11]shader{
+		{prog: &r.colored.rgba, fragment: rgbaColorShader, lazy: true},
+		{prog: &r.colored.rgbx, fragment: rgbxColorShader, lazy: true},
+		{prog: &r.colored.gradient, fragment: gradientColorShader, lazy: true},
+		{prog: &r.colored.external, fragment: externalColorShader, extension: "GL_OES_EGL_image_external", lazy: true},
 		{prog: &r.solid, fragment: solidShader},
 		{prog: &r.rgba, fragment: rgbaShader},
 		{prog: &r.rgbx, fragment: rgbxShader},
@@ -150,33 +167,12 @@ func (r *Renderer) setup() error {
 		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.name, bits, float32Mantissa)
 	}
 	for _, p := range r.programs() {
-		if p.extension != "" && !slices.Contains(exts, p.extension) {
+		if p.lazy || p.extension != "" && !slices.Contains(exts, p.extension) {
 			continue
 		}
-		id, err := r.gl.Link(vertexShader, p.fragment)
-		if err != nil {
+		if err := r.link(p); err != nil {
 			return err
 		}
-		*p.prog = program{
-			id:        id,
-			pos:       r.gl.GetAttribLocation(id, "pos"),
-			texcoord:  r.gl.GetAttribLocation(id, "texcoord"),
-			size:      r.gl.GetUniformLocation(id, "size"),
-			color:     r.gl.GetUniformLocation(id, "color"),
-			alpha:     r.gl.GetUniformLocation(id, "alpha"),
-			keep:      r.gl.GetUniformLocation(id, "keep"),
-			cut:       r.gl.GetUniformLocation(id, "cut"),
-			radii:     r.gl.GetUniformLocation(id, "radii"),
-			line:      r.gl.GetUniformLocation(id, "line"),
-			stops:     r.gl.GetUniformLocation(id, "stops"),
-			taps:      r.gl.GetUniformLocation(id, "taps"),
-			up:        r.gl.GetUniformLocation(id, "up"),
-			merge:     r.gl.GetUniformLocation(id, "merge"),
-			smoothing: r.gl.GetUniformLocation(id, "smoothing"),
-			alphaSet:  -1,
-		}
-		r.gl.UseProgram(id)
-		r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
 	}
 	r.gl.GenBuffers(1, &r.vbo)
 	r.es3 = esMajor(r.gl.Version()) >= 3
@@ -184,6 +180,40 @@ func (r *Renderer) setup() error {
 		r.gl.GenBuffers(1, &r.unpack)
 	}
 	r.async = r.es3 && r.d.Has("EGL_KHR_fence_sync")
+	r.floatTargets = r.es3 && (slices.Contains(exts, "GL_EXT_color_buffer_float") || slices.Contains(exts, "GL_EXT_color_buffer_half_float"))
+	return nil
+}
+
+func (r *Renderer) link(p shader) error {
+	id, err := r.gl.Link(vertexShader, p.fragment)
+	if err != nil {
+		return err
+	}
+	*p.prog = program{
+		id:        id,
+		pos:       r.gl.GetAttribLocation(id, "pos"),
+		texcoord:  r.gl.GetAttribLocation(id, "texcoord"),
+		size:      r.gl.GetUniformLocation(id, "size"),
+		color:     r.gl.GetUniformLocation(id, "color"),
+		alpha:     r.gl.GetUniformLocation(id, "alpha"),
+		keep:      r.gl.GetUniformLocation(id, "keep"),
+		cut:       r.gl.GetUniformLocation(id, "cut"),
+		radii:     r.gl.GetUniformLocation(id, "radii"),
+		line:      r.gl.GetUniformLocation(id, "line"),
+		stops:     r.gl.GetUniformLocation(id, "stops"),
+		taps:      r.gl.GetUniformLocation(id, "taps"),
+		up:        r.gl.GetUniformLocation(id, "up"),
+		merge:     r.gl.GetUniformLocation(id, "merge"),
+		smoothing: r.gl.GetUniformLocation(id, "smoothing"),
+		alphaSet:  -1,
+	}
+	if p.lazy {
+		for i := range p.prog.cp {
+			p.prog.cp[i] = r.gl.GetUniformLocation(id, "cp["+strconv.Itoa(i)+"]")
+		}
+	}
+	r.gl.UseProgram(id)
+	r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
 	return nil
 }
 
@@ -292,6 +322,10 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	}
 	uploaded = true
 	return t, nil
+}
+
+func (t *texture) Working() bool {
+	return t.drawn != nil && t.drawn.float
 }
 
 func (t *texture) Size() image.Point {
@@ -488,6 +522,7 @@ type Framebuffer struct {
 	pbo     uint32
 	reading bool
 	img     *gpu.Image
+	float   bool
 }
 
 func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
@@ -509,6 +544,41 @@ func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	return r.NewFramebuffer(size)
+}
+
+func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
+	switch {
+	case !r.floatTargets:
+		return nil, fmt.Errorf("%w: %s has no float render targets: they take GLES 3 and GL_EXT_color_buffer_float or GL_EXT_color_buffer_half_float", gpu.ErrUnsupported, r.name)
+	case size.X <= 0 || size.Y <= 0:
+		return nil, fmt.Errorf("gles: cannot make a %v working target", size)
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	f := &Framebuffer{r: r, size: size, float: true}
+	r.gl.GenTextures(1, &f.tex)
+	r.gl.BindTexture(gpu.Texture2D, f.tex)
+	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
+	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
+	r.gl.TexImage2D(gpu.Texture2D, gpu.RGBA16F, int32(size.X), int32(size.Y), gpu.RGBA, gpu.HalfFloat, nil) //nolint:gosec // framebuffer sizes fit GLsizei
+	r.gl.GenFramebuffers(1, &f.fbo)
+	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
+	r.gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, f.tex, 0)
+	if err := f.complete(); err != nil {
+		return nil, err
+	}
+	if err := r.enter(); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
+	r.gl.ClearColor(0, 0, 0, 0)
+	r.gl.Clear(gpu.ColorBufferBit)
+	r.gl.BindFramebuffer(gpu.Framebuffer, 0)
+	if err := r.leave("gles: clear a working target"); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	return &TextureTarget{Framebuffer: f, tex: &texture{r: r, id: f.tex, size: size, target: gpu.Texture2D, drawn: f}}, nil
 }
 
 type TextureTarget struct {
@@ -596,6 +666,9 @@ func (f *Framebuffer) Size() image.Point {
 }
 
 func (f *Framebuffer) Read(pix []byte, stride int) error {
+	if f.float {
+		return errors.New("gles: a working target's pixels are not read back")
+	}
 	if err := render.CheckPixels(f.size, stride, len(pix)); err != nil {
 		return err
 	}
@@ -639,6 +712,7 @@ type pass struct {
 	damage region.Set
 	err    error
 	prog   *program
+	color  *render.ColorTransform
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
@@ -658,7 +732,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, err
 	}
 	p := &r.pass
-	p.active, p.fb, p.err, p.prog = true, fb, nil, nil
+	p.active, p.fb, p.err, p.prog, p.color = true, fb, nil, nil, nil
 	damage.ClipInto(&p.damage, image.Rectangle{Max: fb.size})
 	gl := r.gl
 	gl.BindFramebuffer(gpu.Framebuffer, fb.fbo)
@@ -753,7 +827,8 @@ func (p *pass) Clear(c render.Color) {
 		return
 	}
 	gl := p.owner.gl
-	gl.ClearColor(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+	v := p.fillColor(c)
+	gl.ClearColor(v[0], v[1], v[2], v[3])
 	for _, d := range p.damage.Rects() {
 		gl.Scissor(int32(d.Min.X), int32(d.Min.Y), int32(d.Dx()), int32(d.Dy())) //nolint:gosec // inside the framebuffer
 		gl.Clear(gpu.ColorBufferBit)
@@ -778,7 +853,11 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	prog := &p.owner.solid
 	p.use(prog)
 	p.setMask(prog, m)
-	if !prog.colored || prog.colorSet != c {
+	if p.color != nil {
+		prog.colored = false
+		v := p.fillColor(c)
+		p.owner.gl.Uniform4f(prog.color, v[0], v[1], v[2], v[3])
+	} else if !prog.colored || prog.colorSet != c {
 		prog.colored, prog.colorSet = true, c
 		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
 	}
@@ -809,7 +888,8 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
 	}
 	gl.Uniform4f(prog.radii, g.A.Radius, g.B.Radius, g.Smooth, 0)
-	gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+	v := p.fillColor(c)
+	gl.Uniform4f(prog.color, v[0], v[1], v[2], v[3])
 	prog.colored = false
 	p.draw(r)
 }
@@ -888,9 +968,13 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 		p.fail(err)
 		return
 	}
-	prog := &p.owner.gradient
+	prog := p.textureProgram(&p.owner.gradient, shader{prog: &p.owner.colored.gradient, fragment: gradientColorShader, lazy: true})
+	if prog == nil {
+		return
+	}
 	gl := p.owner.gl
 	p.use(prog)
+	p.setTransform(prog)
 	p.setMask(prog, m)
 	gl.Uniform4f(prog.line, g.From[0], g.From[1], g.To[0], g.To[1])
 	gl.Uniform1f(prog.stops, float32(tex.size.X))
@@ -932,15 +1016,19 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	if alpha == 0 {
 		return
 	}
-	prog := &p.owner.rgba
+	prog := p.textureProgram(&p.owner.rgba, shader{prog: &p.owner.colored.rgba, fragment: rgbaColorShader, lazy: true})
 	switch {
 	case tex.target == gpu.TextureExternalOES:
-		prog = &p.owner.external
+		prog = p.textureProgram(&p.owner.external, shader{prog: &p.owner.colored.external, fragment: externalColorShader, lazy: true})
 	case tex.opaque:
-		prog = &p.owner.rgbx
+		prog = p.textureProgram(&p.owner.rgbx, shader{prog: &p.owner.colored.rgbx, fragment: rgbxColorShader, lazy: true})
+	}
+	if prog == nil {
+		return
 	}
 	gl := p.owner.gl
 	p.use(prog)
+	p.setTransform(prog)
 	p.setMask(prog, m)
 	if prog.alphaSet != alpha {
 		prog.alphaSet = alpha
@@ -966,6 +1054,47 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		verts[i*4+3] = float32((src.Y + float64(s[1]*src.H)) / float64(tex.size.Y))
 	}
 	p.draw(dst)
+}
+
+type coloredPrograms struct {
+	rgba, rgbx, gradient, external program
+}
+
+func (p *pass) SetColor(t *render.ColorTransform) {
+	p.color = t
+}
+
+func (p *pass) fillColor(c render.Color) [4]float32 {
+	v := [4]float32{float32(c.R) / 255, float32(c.G) / 255, float32(c.B) / 255, float32(c.A) / 255}
+	if p.color == nil {
+		return v
+	}
+	return p.color.Apply(v)
+}
+
+func (p *pass) textureProgram(plain *program, colored shader) *program {
+	if p.color == nil {
+		return plain
+	}
+	if colored.prog.id == 0 {
+		if err := p.owner.link(colored); err != nil {
+			p.fail(err)
+			return nil
+		}
+		p.prog = nil
+	}
+	return colored.prog
+}
+
+func (p *pass) setTransform(prog *program) {
+	if p.color == nil || prog.transformed && prog.transform == *p.color {
+		return
+	}
+	prog.transformed, prog.transform = true, *p.color
+	u := p.color.Uniforms()
+	for i, v := range u {
+		p.owner.gl.Uniform4f(prog.cp[i], v[0], v[1], v[2], v[3])
+	}
 }
 
 func flip(f float64, reversed bool) float64 {

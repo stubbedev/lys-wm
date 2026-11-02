@@ -16,10 +16,11 @@ import (
 )
 
 type (
-	Mask      = lgpu.Mask
-	RoundRect = lgpu.RoundRect
-	Falloff   = lgpu.Falloff
-	Goo       = lgpu.Goo
+	Mask           = lgpu.Mask
+	RoundRect      = lgpu.RoundRect
+	Falloff        = lgpu.Falloff
+	Goo            = lgpu.Goo
+	ColorTransform = lgpu.ColorTransform
 )
 
 type Transform uint8
@@ -303,6 +304,7 @@ type AsyncReader interface {
 // a renderer reads data only from Go on the calling goroutine and stays
 // usable when that read panics, and keeps no reference to data.
 type Texture interface {
+	Working() bool
 	Size() image.Point
 	Update(dst image.Rectangle, stride int, data []byte) error
 	Destroy() error
@@ -322,6 +324,7 @@ type Renderer interface {
 	NewTarget(size image.Point) (ReadTarget, error)
 	NewTextureTarget(size image.Point) (TextureTarget, error)
 	NewScreenShader(p *shader.Program) (ScreenShader, error)
+	NewWorkingTarget(size image.Point) (TextureTarget, error)
 	Begin(target Target, damage Region) (Pass, error)
 }
 
@@ -347,6 +350,7 @@ func CheckGradient(g Gradient, m Mask) error {
 }
 
 type Pass interface {
+	SetColor(t *ColorTransform)
 	Clear(c Color)
 	FillRect(r image.Rectangle, c Color, m Mask)
 	FillGradient(r image.Rectangle, g Gradient, m Mask)

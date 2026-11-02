@@ -213,6 +213,11 @@ func TestExternalYUVTexturesOnHardware(t *testing.T) {
 	rendertest.ExternalYUV(t, r, node)
 }
 
+func TestYUVThroughAColorTransformOnHardware(t *testing.T) {
+	r, node := hardware(t)
+	rendertest.YUVThroughAColorTransform(t, r, node)
+}
+
 func TestYUVHintsSelectTheConversionOnHardware(t *testing.T) {
 	r, node := hardware(t)
 	rendertest.YUVHintsSelectTheConversion(t, r, node)
@@ -232,4 +237,9 @@ func TestARenderNodeNamesTheMainDeviceOnHardware(t *testing.T) {
 	if got != node {
 		t.Fatalf("a renderer opened on %s names %s", node, got)
 	}
+}
+
+func TestColorParityWithTheSoftwareRenderer(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.ColorParity(t, r, target(t, r, rendertest.Size))
 }

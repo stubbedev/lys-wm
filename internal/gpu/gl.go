@@ -25,6 +25,8 @@ const (
 	BGRAExt                       = 0x80E1
 	RGBA8OES                      = 0x8058
 	RGB10A2                       = 0x8059
+	RGBA16F                       = 0x881A
+	HalfFloat                     = 0x140B
 	Red                           = 0x1903
 	Blue                          = 0x1905
 	TextureSwizzleR               = 0x8E42
