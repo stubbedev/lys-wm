@@ -79,6 +79,9 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 	if c.overview != nil {
 		c.overviewCommitted(root)
 	}
+	if c.keptBackdrop && c.overview == nil {
+		err = errors.Join(err, c.backdropCommitted(root))
+	}
 	for _, o := range c.outputs {
 		shows := showsTree(c.shown[o], root)
 		if shows && len(d) > 0 {

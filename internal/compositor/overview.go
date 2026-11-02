@@ -106,6 +106,7 @@ type overviewThumb struct {
 	version  uint64
 	dirty    bool
 	next     time.Duration
+	rough    bool
 }
 
 const (
@@ -113,11 +114,11 @@ const (
 	thumbMaxWait = 500 * time.Millisecond
 )
 
-func (t *overviewThumb) due(size image.Point, now time.Duration) bool {
+func (t *overviewThumb) due(size image.Point, settled bool, now time.Duration) bool {
 	if t.target == nil || t.target.Size() != size {
 		return true
 	}
-	return t.dirty && now >= t.next
+	return (t.dirty || settled && t.rough) && now >= t.next
 }
 
 func (c *Compositor) overviewHolds() bool {
@@ -288,6 +289,12 @@ func (c *Compositor) dropOverview() error {
 	}
 	c.overview = nil
 	var errs []error
+	for _, o := range c.outputs {
+		if sc := c.sceneOf(o); sc.blurs.mica != nil && c.overviewStyle.Blur {
+			errs = append(errs, sc.blurs.mica.trim())
+			sc.blurs.keepMica, c.keptBackdrop = true, true
+		}
+	}
 	for _, v := range ov.views {
 		errs = append(errs, c.dropThumbs(v.spaces), c.dropFilter(v))
 	}
@@ -578,6 +585,14 @@ func (c *Compositor) overviewForget(s *surface.Surface) {
 	}
 }
 
+func (c *Compositor) backdropCommitted(root *surface.Surface) error {
+	e := c.layerWithSurface(root)
+	if e == nil || !slices.Contains(belowWindows, e.surface.Current().Layer) {
+		return nil
+	}
+	return c.sceneOf(e.output).blurs.dropMica()
+}
+
 func (c *Compositor) overviewCommitted(root *surface.Surface) {
 	for o, v := range c.overview.views {
 		wallpaper := false
@@ -605,7 +620,7 @@ func (c *Compositor) overviewAnimating(o *output.Output, now time.Duration) bool
 		return false
 	}
 	return slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) }) ||
-		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty })
+		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty || t.rough })
 }
 
 func placedIn(r, from, to image.Rectangle) image.Rectangle {

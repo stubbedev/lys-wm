@@ -192,13 +192,14 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 	}
 	radius := deviceLength(o, overviewRadius)
 	redrawn := false
+	settled := c.overview.progress.Done(c.frameTime)
 	for _, t := range v.spaces {
 		if t.rect.Empty() {
 			continue
 		}
-		if !redrawn && t.due(deviceRect(o, t.rect).Size(), c.frameTime) {
+		if !redrawn && t.due(deviceRect(o, t.rect).Size(), settled, c.frameTime) {
 			redrawn = true
-			if err := c.refreshThumb(o, v, t); err != nil {
+			if err := c.refreshThumb(o, v, t, settled); err != nil {
 				return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
 			}
 		}
@@ -274,7 +275,7 @@ func (c *Compositor) thumbFilter(o *output.Output, v *overviewView, size image.P
 	return nil
 }
 
-func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb) error {
+func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb, settled bool) error {
 	started := c.clock()
 	size := deviceRect(o, t.rect).Size()
 	if t.target == nil || t.target.Size() != size {
@@ -302,12 +303,14 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 		shown = c.drawClippedTree(f, o, m.w.top.Surface(), c.windowOrigin(m.w), shown, c.windowMask(o, m.w), c.opacity(m.w))
 	}
 	t.surfaces = shown
-	if err := c.thumbFilter(o, v, size); err != nil {
-		return err
-	}
-	draw := t.target
-	if len(v.filter) > 0 {
-		draw = v.filter[0]
+	draw, chain := t.target, []render.TextureTarget(nil)
+	if settled {
+		if err := c.thumbFilter(o, v, size); err != nil {
+			return err
+		}
+		if chain = v.filter; len(chain) > 0 {
+			draw = chain[0]
+		}
 	}
 	f.remap(0, bounds, image.Rectangle{Max: draw.Size()})
 	region := c.overview.region[:]
@@ -321,10 +324,10 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 	if err := pass.End(); err != nil {
 		return err
 	}
-	for i, from := range v.filter {
+	for i, from := range chain {
 		to := t.target
-		if i+1 < len(v.filter) {
-			to = v.filter[i+1]
+		if i+1 < len(chain) {
+			to = chain[i+1]
 		}
 		region[0] = image.Rectangle{Max: to.Size()}
 		step, err := c.renderer.Begin(to, region)
@@ -338,7 +341,7 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 		}
 	}
 	c.jellyGen++
-	t.version, t.dirty = c.jellyGen, false
+	t.version, t.dirty, t.rough = c.jellyGen, false, !settled
 	t.next = c.frameTime + min(thumbShare*(c.clock()-started), thumbMaxWait)
 	c.thumbRedraws++
 	return nil

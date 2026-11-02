@@ -285,6 +285,7 @@ type Compositor struct {
 	blurLayers      []string
 	overview        *overview
 	overviewStyle   OverviewStyle
+	keptBackdrop    bool
 	thumbRedraws    uint64
 	switches        map[*output.Output]*workspaceSwitch
 	drawnSwitch     *workspaceSwitch

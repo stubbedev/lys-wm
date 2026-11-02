@@ -1293,3 +1293,49 @@ func (h *Harness) advanceClock(now *time.Duration, by time.Duration) {
 		return nil
 	})
 }
+
+func TestAClosedOverviewKeepsItsBlurUntilTheWallpaperChanges(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, func(*compositor.Config) {}, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		all := cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorBottom | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight
+		wallpaper := c.Layer(testclient.LayerSpec{Layer: cwlr.ZwlrLayerShellV1LayerBackground, Anchor: all, ExclusiveZone: -1}, testclient.Fill(0, 0, 0xff))
+		c.DispatchUntil("the wallpaper to map", wallpaper.Mapped)
+		wallpaper.Stop()
+		h.Eventually("the wallpaper", showing(10, 10, redPix))
+		redraws := func() uint64 {
+			var n uint64
+			h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+				n = comp.BlurRedraws()
+				return nil
+			})
+			return n
+		}
+		h.dispatch("overview show")
+		h.Rendered(0)
+		first := redraws()
+		if first == 0 {
+			t.Fatal("no blur chain ran")
+		}
+		h.dispatch("overview hide")
+		h.Rendered(0)
+		h.Rendered(0)
+		h.dispatch("overview show")
+		h.Rendered(0)
+		if got := redraws(); got != first {
+			t.Fatalf("opening again redrew the chain %d times", got-first)
+		}
+		h.dispatch("overview hide")
+		h.Rendered(0)
+		h.Rendered(0)
+		if err := errors.Join(wallpaper.Surface.Attach(c.Buffer(wallpaper.Size, 0, testclient.Fill(0xff, 0, 0)), 0, 0), wallpaper.Surface.Damage(0, 0, 800, 500), wallpaper.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		h.Eventually("the new wallpaper", showing(10, 10, bluePix))
+		h.dispatch("overview show")
+		h.Rendered(0)
+		if got := redraws(); got == first {
+			t.Fatal("a wallpaper changed while closed kept its old blur")
+		}
+	})
+}

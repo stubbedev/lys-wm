@@ -81,6 +81,30 @@ type blurCaches struct {
 	xray      *blurCache
 	mica      *blurCache
 	shape     []image.Rectangle
+	keepMica  bool
+}
+
+func (b *blurCache) trim() error {
+	if len(b.chain) < 2 {
+		return nil
+	}
+	var errs []error
+	last := len(b.chain) - 1
+	for _, t := range b.chain[:last] {
+		errs = append(errs, t.Destroy())
+	}
+	b.chain = append(b.chain[:0], b.chain[last])
+	return errors.Join(errs...)
+}
+
+func (bc *blurCaches) dropMica() error {
+	bc.keepMica = false
+	if bc.mica == nil {
+		return nil
+	}
+	err := bc.mica.destroy()
+	bc.mica = nil
+	return err
 }
 
 func (bc *blurCaches) one(r image.Rectangle) []image.Rectangle {
@@ -130,7 +154,7 @@ func (bc *blurCaches) dropUnused() error {
 	if bc.xray != nil {
 		bc.xray.used = false
 	}
-	if bc.mica != nil && !bc.mica.used {
+	if bc.mica != nil && !bc.mica.used && !bc.keepMica {
 		errs = append(errs, bc.mica.destroy())
 		bc.mica = nil
 	}
@@ -150,6 +174,7 @@ func (bc *blurCaches) drop() error {
 		errs = append(errs, bc.xray.destroy())
 		bc.xray = nil
 	}
+	bc.keepMica = false
 	if bc.mica != nil {
 		errs = append(errs, bc.mica.destroy())
 		bc.mica = nil
