@@ -20,9 +20,12 @@ Times read p50 / p95 / p99 / worst, in milliseconds. `-json <file>` writes the
 same summaries with every frame.
 
 The steps cover opening and closing a window, moving one on a spring and
-interrupting that, switching workspaces, the genie, and glass: over a client
-redrawing every frame, over nothing moving (which must draw nothing), and
-sliding with a workspace.
+interrupting that, switching workspaces, a three-finger swipe following the
+fingers and its release, the genie, and glass: over a client redrawing every
+frame, over nothing moving (which must draw nothing), and sliding with a
+workspace. Swipes come from the headless backend's fake touchpad, through
+`lys-wm -headless-swipes`; `-backend drm` has no fingers to fake, and says it did
+not measure them.
 
 ## Running it
 

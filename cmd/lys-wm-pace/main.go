@@ -126,6 +126,7 @@ type compositor struct {
 	cmd     *exec.Cmd
 	exited  chan error
 	logPath string
+	swipes  io.Writer
 	socket  string
 	display string
 	trace   string
@@ -169,12 +170,20 @@ func startCompositor(o options, binary, run string) (*compositor, error) {
 	}
 	defer func() { _ = logFile.Close() }()
 	args := []string{"-backend", o.backend, "-renderer", o.renderer, "-config", config, "-frame-trace", c.trace}
+	if o.backend == "headless" {
+		args = append(args, "-headless-swipes")
+	}
 	if o.cpuProfile != "" {
 		args = append(args, "-cpu-profile", o.cpuProfile)
 	}
 	c.cmd = exec.Command(binary, args...) //nolint:gosec // the binary is what the user asked to measure
 	c.cmd.Env = childEnv(run)
 	c.cmd.Stdout, c.cmd.Stderr = logFile, logFile
+	if o.backend == "headless" {
+		if c.swipes, err = c.cmd.StdinPipe(); err != nil {
+			return nil, fmt.Errorf("make the fake touchpad's pipe: %w", err)
+		}
+	}
 	c.cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}
 	if err := c.cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", binary, err)
@@ -274,7 +283,7 @@ func (t *tb) cleanup() {
 	}
 }
 
-func drive(o options, c *compositor, run string) (marks []mark, err error) {
+func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, err error) {
 	t := &tb{}
 	defer t.cleanup()
 	defer func() {
@@ -286,10 +295,14 @@ func drive(o options, c *compositor, run string) (marks []mark, err error) {
 			err = f.err
 		}
 	}()
-	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, now: backend.Now, exited: c.exited}
+	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, now: backend.Now, swipes: c.swipes}
 	for i := range scenarios {
 		sc := &scenarios[i]
 		if len(o.only) > 0 && !slices.Contains(o.only, sc.name) {
+			continue
+		}
+		if sc.fakeInput && c.swipes == nil {
+			fmt.Fprintf(out, "not measured: %s needs fingers on a touchpad that -backend %s cannot fake; measure it with -backend headless\n", sc.name, o.backend)
 			continue
 		}
 		s.run(sc, o.rounds)
@@ -327,7 +340,7 @@ func measure(o options, stdout io.Writer, getenv func(string) string) error {
 		_ = c.stop(true)
 		return err
 	}
-	marks, driveErr := drive(o, c, run)
+	marks, driveErr := drive(o, c, run, stdout)
 	if driveErr != nil {
 		driveErr = fmt.Errorf("drive the animations: %w. The compositor's log:\n%s", driveErr, tail(c.logPath))
 	}

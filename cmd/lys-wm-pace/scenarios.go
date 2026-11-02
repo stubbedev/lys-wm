@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
+	"io"
 	"strconv"
 	"time"
 
@@ -47,6 +49,9 @@ const (
 	settleGap   = 150 * time.Millisecond
 	pumpChunk   = 4 * time.Second
 	bandHeight  = 64
+	swipeEvents = 30
+	swipeStep   = 12.0
+	swipeEvery  = 8 * time.Millisecond
 	quiet       = 5 * time.Millisecond
 	settleTries = 20
 )
@@ -54,15 +59,17 @@ const (
 type step struct {
 	name       string
 	act        func(*session)
+	after      func(*session)
 	measure    time.Duration
 	continuous bool
 }
 
 type scenario struct {
-	name  string
-	setup func(*session)
-	steps []step
-	once  bool
+	name      string
+	setup     func(*session)
+	steps     []step
+	once      bool
+	fakeInput bool
 }
 
 type mark struct {
@@ -75,7 +82,7 @@ type session struct {
 	client  *testclient.Client
 	ipc     string
 	now     func() time.Duration
-	exited  <-chan error
+	swipes  io.Writer
 	marks   []mark
 	windows []*testclient.Window
 	opened  *testclient.Window
@@ -152,6 +159,10 @@ func (s *session) play(st *step) {
 	s.pump(st.measure)
 	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, from: from, to: s.now()})
 	s.pump(settleGap)
+	if st.after != nil {
+		s.settle()
+		st.after(s)
+	}
 }
 
 func (s *session) run(sc *scenario, rounds int) {
@@ -168,6 +179,42 @@ func (s *session) run(sc *scenario, rounds int) {
 		}
 	}
 	s.clear()
+}
+
+func (s *session) swipe(line string) {
+	if _, err := io.WriteString(s.swipes, line+"\n"); err != nil {
+		panic(fatal{fmt.Errorf("send the fake touchpad %q: %w", line, err)})
+	}
+}
+
+func fingers(dx float64) func(*session) {
+	return func(s *session) {
+		s.swipe("begin")
+		for range swipeEvents {
+			s.swipe("swipe " + strconv.FormatFloat(dx, 'f', 1, 64))
+			s.pump(swipeEvery)
+		}
+	}
+}
+
+func lifted(s *session) {
+	s.swipe("end")
+}
+
+func showsWindow(title string) func(*session) {
+	return func(s *session) {
+		data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindActiveWindow})
+		if err != nil {
+			panic(fatal{fmt.Errorf("ask for the active window: %w", err)})
+		}
+		var w ipc.Window
+		if err := json.Unmarshal(data, &w); err != nil {
+			panic(fatal{fmt.Errorf("read the active window %s: %w", data, err)})
+		}
+		if w.Title != title {
+			panic(fatal{fmt.Errorf("the swipe left window %q active, want %q", w.Title, title)})
+		}
+	}
 }
 
 func dispatches(action string) func(*session) {
@@ -227,6 +274,17 @@ var scenarios = []scenario{
 		steps: []step{
 			{name: "workspace-there", measure: eased, act: dispatches("workspace 2")},
 			{name: "workspace-back", measure: eased, act: dispatches("workspace 1")},
+		},
+	},
+	{
+		name:      "swipe",
+		fakeInput: true,
+		setup:     twoWorkspaces,
+		steps: []step{
+			{name: "swipe-follow-there", measure: 0, continuous: true, act: fingers(-swipeStep)},
+			{name: "swipe-release-there", measure: sprung, act: lifted, after: showsWindow("second")},
+			{name: "swipe-follow-back", measure: 0, continuous: true, act: fingers(swipeStep)},
+			{name: "swipe-release-back", measure: sprung, act: lifted, after: showsWindow("first too")},
 		},
 	},
 	{

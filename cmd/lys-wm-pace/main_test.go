@@ -102,7 +102,7 @@ func TestMeasuringASoftwareRendererEndToEnd(t *testing.T) {
 		t.Fatalf("the software renderer passed for a GPU: %v", refused)
 	}
 	var text strings.Builder
-	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "glass-still"}, maxLatePercent: -1, allowSoftware: true, jsonPath: jsonPath}
+	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "swipe", "glass-still"}, maxLatePercent: -1, allowSoftware: true, jsonPath: jsonPath}
 	if err := measure(o, &text, os.Getenv); err != nil {
 		t.Fatal(err)
 	}
@@ -117,13 +117,13 @@ func TestMeasuringASoftwareRendererEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.RealGPU || len(r.Steps) != 3 {
+	if r.RealGPU || len(r.Steps) != 7 {
 		t.Fatalf("report = %+v", r)
 	}
 	if s := r.Steps[0].Summary; r.Steps[0].Name != "window-open" || s.Presented == 0 || s.CPU.Samples == 0 {
 		t.Fatalf("window-open = %+v", s)
 	}
-	still := r.Steps[2]
+	still := r.Steps[6]
 	if still.Name != "glass-over-still" || still.Summary.Presented != 0 {
 		t.Fatalf("glass over nothing moving redrew: %+v", still.Summary)
 	}
