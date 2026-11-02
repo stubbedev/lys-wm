@@ -1,6 +1,7 @@
 package binds
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -191,5 +192,41 @@ func BenchmarkRecognizerSwipe(b *testing.B) {
 		if s := r.Swipe(1, 0); s.Forward {
 			b.Fatal("a claimed swipe went to the client")
 		}
+	}
+}
+
+func TestAGestureWithModifiersIsTakenOnlyWhileTheyAreHeld(t *testing.T) {
+	zoom := GestureBind{Kind: backend.Pinch, Fingers: 2, Direction: PinchBoth, Drive: DriveZoom, Modifiers: ModSuper, Mods: 0x40}
+	plain := GestureBind{Kind: backend.Pinch, Fingers: 2, Direction: PinchIn}
+	all := []GestureBind{plain, zoom}
+	if got := HeldFor(nil, all, 0); !slices.Equal(got, []GestureBind{plain}) {
+		t.Errorf("nothing held: %+v", got)
+	}
+	if got := HeldFor(nil, all, 0x41); !slices.Equal(got, []GestureBind{plain}) {
+		t.Errorf("more than its modifiers held: %+v", got)
+	}
+	if got := HeldFor(nil, all, 0x40); !slices.Equal(got, []GestureBind{zoom, plain}) {
+		t.Errorf("its modifiers held: %+v", got)
+	}
+	if zoom.Overlaps(plain) {
+		t.Error("different modifiers overlap")
+	}
+	if !zoom.Overlaps(GestureBind{Kind: backend.Pinch, Fingers: 2, Direction: PinchIn, Modifiers: ModSuper}) {
+		t.Error("both ways with the same modifiers does not cover in")
+	}
+}
+
+func TestAZoomPinchIsClaimedFromItsFirstMoment(t *testing.T) {
+	bind := GestureBind{Kind: backend.Pinch, Fingers: 2, Direction: PinchBoth, Drive: DriveZoom}
+	var r Recognizer
+	s := r.Begin([]GestureBind{bind}, backend.Pinch, 2, true)
+	if s.Forward || !s.Claimed || s.Bind != bind {
+		t.Fatalf("begin: %+v", s)
+	}
+	if s := r.Pinch(1.01); s.Forward || s.Claimed {
+		t.Errorf("update: %+v", s)
+	}
+	if s := r.Begin([]GestureBind{bind}, backend.Pinch, 2, false); !s.Forward {
+		t.Errorf("locked: %+v", s)
 	}
 }

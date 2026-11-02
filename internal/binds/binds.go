@@ -73,6 +73,45 @@ var modifiers = map[string]string{
 	"ALT":     "Mod1", "MOD1": "Mod1",
 }
 
+type ModifierSet uint8
+
+const (
+	ModShift ModifierSet = 1 << iota
+	ModControl
+	ModAlt
+	ModSuper
+)
+
+var modifierBits = map[string]ModifierSet{"Shift": ModShift, "Control": ModControl, "Mod1": ModAlt, "Mod4": ModSuper}
+
+func ParseModifiers(text string) (ModifierSet, error) {
+	var set ModifierSet
+	for p := range strings.SplitSeq(text, "+") {
+		p = strings.TrimSpace(p)
+		name, ok := modifiers[strings.ToUpper(p)]
+		if !ok {
+			return 0, fmt.Errorf("%w %q: unknown modifier %q", ErrBadChord, text, p)
+		}
+		set |= modifierBits[name]
+	}
+	return set, nil
+}
+
+func (s ModifierSet) Mask(r Resolver) (uint32, error) {
+	var mask uint32
+	for name, bit := range modifierBits {
+		if s&bit == 0 {
+			continue
+		}
+		m, err := r.ModMask(name)
+		if err != nil {
+			return 0, err
+		}
+		mask |= m
+	}
+	return mask, nil
+}
+
 func Relevant(r Resolver) (uint32, error) {
 	var mask uint32
 	for _, name := range []string{"Shift", "Control", "Mod1", "Mod4"} {
@@ -130,6 +169,10 @@ func ParseChord(text string, r Resolver) (Chord, error) {
 type Map struct {
 	binds    []Bind
 	relevant uint32
+}
+
+func (m Map) Held(depressed uint32) uint32 {
+	return depressed & m.relevant
 }
 
 func Duplicates(binds []Bind) [][2]int {

@@ -2,6 +2,7 @@ package binds
 
 import (
 	"math"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -19,6 +20,7 @@ const (
 	SwipeVertical
 	PinchIn
 	PinchOut
+	PinchBoth
 )
 
 type Drive uint8
@@ -26,6 +28,7 @@ type Drive uint8
 const (
 	NoDrive Drive = iota
 	DriveWorkspaces
+	DriveZoom
 )
 
 type GestureBind struct {
@@ -34,6 +37,34 @@ type GestureBind struct {
 	Direction GestureDirection
 	Drive     Drive
 	Action    wm.Action
+	Modifiers ModifierSet
+	Mods      uint32
+}
+
+func ResolveGestures(all []GestureBind, r Resolver) ([]GestureBind, error) {
+	out := slices.Clone(all)
+	for i := range out {
+		mask, err := out[i].Modifiers.Mask(r)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Mods = mask
+	}
+	return out, nil
+}
+
+func HeldFor(dst, all []GestureBind, held uint32) []GestureBind {
+	for _, b := range all {
+		if b.Mods != 0 && b.Mods == held {
+			dst = append(dst, b)
+		}
+	}
+	for _, b := range all {
+		if b.Mods == 0 {
+			dst = append(dst, b)
+		}
+	}
+	return dst
 }
 
 func (d GestureDirection) covers(actual GestureDirection) bool {
@@ -42,12 +73,14 @@ func (d GestureDirection) covers(actual GestureDirection) bool {
 		return actual == SwipeLeft || actual == SwipeRight || actual == SwipeHorizontal
 	case SwipeVertical:
 		return actual == SwipeUp || actual == SwipeDown || actual == SwipeVertical
+	case PinchBoth:
+		return actual == PinchIn || actual == PinchOut || actual == PinchBoth
 	}
 	return d == actual
 }
 
 func (b GestureBind) Overlaps(o GestureBind) bool {
-	return b.Kind == o.Kind && b.Fingers == o.Fingers && (b.Direction.covers(o.Direction) || o.Direction.covers(b.Direction))
+	return b.Kind == o.Kind && b.Fingers == o.Fingers && b.Modifiers == o.Modifiers && (b.Direction.covers(o.Direction) || o.Direction.covers(b.Direction))
 }
 
 func (b GestureBind) along(dx, dy float64) float64 {
@@ -108,7 +141,7 @@ func (r *Recognizer) Begin(binds []GestureBind, kind backend.Gesture, fingers ui
 		if b.Kind != kind || b.Fingers != fingers {
 			continue
 		}
-		if kind == backend.Hold {
+		if kind == backend.Hold || b.Drive == DriveZoom {
 			r.state, r.bind = claimed, b
 			return Step{Claimed: true, Bind: b}
 		}

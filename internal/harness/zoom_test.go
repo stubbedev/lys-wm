@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
+	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cwsc "github.com/stubbedev/lys-wm/internal/protocol/client/wlrscreencopy"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -296,4 +298,50 @@ func TestZoomAppliesUnderAScreenShader(t *testing.T) {
 			return pixel(snap, 10, 90) == want && pixel(snap, 150, 10) == want
 		})
 	})
+}
+
+func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) {
+		zoomConfig(cfg)
+		mods, err := binds.ModSuper.Mask(cfg.Seat.Keymap)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Gestures.Binds = []binds.GestureBind{{Kind: backend.Pinch, Fingers: 2, Direction: binds.PinchBoth, Drive: binds.DriveZoom, Modifiers: binds.ModSuper, Mods: mods}}
+	}, small)
+	c, log := gestureClient(t, h, "quadrants")
+	movePointer(h, 80, 50)
+	h.Eventually("the window", showing(10, 90, zoomBlue))
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		p := b.Pointer()
+		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 2, 0), p.GestureEnd(backend.Pinch, false))
+	})
+	c.DispatchUntil("the pinch at the client, which has no modifier to match", func() bool { return len(log.events) >= 3 })
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		if z := comp.Snapshot().Outputs[0].Zoom; z != 0 {
+			t.Errorf("a pinch with no modifier zoomed to %v", z)
+		}
+		return nil
+	})
+	seen := len(log.events)
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		p := b.Pointer()
+		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 2, 0))
+	})
+	h.Eventually("the view following the fingers", showing(2, 2, zoomRed))
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		if z := comp.Snapshot().Outputs[0].Zoom; z != 2 {
+			t.Errorf("zoom %v, want 2", z)
+		}
+		p := b.Pointer()
+		return errors.Join(p.Pinch(0, 0, 0.25, 0), p.GestureEnd(backend.Pinch, false))
+	})
+	h.Eventually("back at one when the fingers pinch in", showing(10, 90, zoomBlue))
+	h.key(keySuper, false)
+	settle(t, h)
+	c.Sync()
+	if len(log.events) != seen {
+		t.Errorf("the client saw the zoom pinch: %q", log.events[seen:])
+	}
 }

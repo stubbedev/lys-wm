@@ -40,7 +40,7 @@ func (g Gestures) natural(d backend.Device) bool {
 }
 
 type driven interface {
-	moved(delta float64, at time.Duration) error
+	moved(by float64, at time.Duration) error
 	released(at time.Duration, cancelled bool) error
 }
 
@@ -48,6 +48,7 @@ type gestureInput struct {
 	recognizer binds.Recognizer
 	kind       backend.Gesture
 	natural    bool
+	binds      []binds.GestureBind
 	drive      driven
 	held       *workspaceSwitch
 	heldOn     *output.Output
@@ -57,7 +58,8 @@ func (c *Compositor) gestureBegin(d backend.Device, e backend.GestureBegin) erro
 	g := &c.gesture
 	ended := c.endDrive()
 	g.kind, g.natural = e.Gesture, c.gestures.natural(d)
-	step := g.recognizer.Begin(c.gestures.Binds, e.Gesture, e.Fingers, !c.shell.Locked() && c.inhibiting == nil)
+	g.binds = binds.HeldFor(g.binds[:0], c.gestures.Binds, c.binds.Held(c.seat.DepressedModifiers()))
+	step := g.recognizer.Begin(g.binds, e.Gesture, e.Fingers, !c.shell.Locked() && c.inhibiting == nil)
 	if g.recognizer.Drives(binds.DriveWorkspaces) {
 		if o := c.outputAt(c.cursor); o != nil {
 			now := c.clock()
@@ -95,9 +97,13 @@ func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
 
 func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration) error {
 	g := &c.gesture
-	if b.Drive == binds.DriveWorkspaces {
+	switch b.Drive {
+	case binds.DriveWorkspaces:
 		g.drive = c.driveWorkspaces(at)
 		return nil
+	case binds.DriveZoom:
+		g.drive = c.driveZoom()
+		return c.releaseHeld(at)
 	}
 	return c.releaseHeld(at)
 }
@@ -134,7 +140,11 @@ func (c *Compositor) pinchUpdate(e backend.PinchUpdate) error {
 	if step.Forward {
 		return c.seat.PinchUpdate(e.Time, e.DX, e.DY, e.Scale, e.Rotation)
 	}
-	return c.gestureStep(step, e.Time)
+	err := c.gestureStep(step, e.Time)
+	if c.gesture.drive == nil {
+		return err
+	}
+	return errors.Join(err, c.gesture.drive.moved(e.Scale, e.Time))
 }
 
 func (c *Compositor) gestureEnd(e backend.GestureEnd) error {

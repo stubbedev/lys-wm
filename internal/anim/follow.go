@@ -107,6 +107,11 @@ func (m *Motion) Set(to float64, now time.Duration, c Curve) {
 	m.tween.Set(to, now, c)
 }
 
+func (m *Motion) Jump(to float64) {
+	m.spring = nil
+	m.tween.Jump(to)
+}
+
 type RectMotion struct {
 	tween   Tween[image.Rectangle]
 	springs *[4]follower

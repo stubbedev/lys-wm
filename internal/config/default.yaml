@@ -67,6 +67,8 @@ binds:
 gestures:
   swipe:
     - {fingers: 3, direction: horizontal, drive: workspaces}
+  pinch:
+    - {fingers: 2, modifiers: SUPER, direction: both, drive: zoom}
 
 submaps:
   resize:

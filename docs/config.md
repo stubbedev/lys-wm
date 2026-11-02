@@ -465,6 +465,7 @@ gestures:
     - {fingers: 4, direction: up, action: exec foot}
   pinch:
     - {fingers: 3, direction: in, action: kill}
+    - {fingers: 2, modifiers: SUPER, direction: both, drive: zoom}
   hold:
     - {fingers: 4, action: fullscreen}
 ```
@@ -472,11 +473,12 @@ gestures:
 | Key | Value |
 | --- | --- |
 | `swipe` | Default: three fingers `horizontal` drive `workspaces`, or `vertical` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
-| `pinch`, `hold` | Default: none |
+| `pinch`, `hold` | Default: none. The built-in config binds SUPER and a two-finger pinch to `drive: zoom` |
 | `fingers` | How many; at least 3 for a swipe, since two are scrolling, 2 for a pinch and 1 for a hold |
-| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal` or `vertical`. Pinch: `in` or `out`. A hold has none |
+| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal` or `vertical`. Pinch: `in`, `out` or `both`. A hold has none |
+| `modifiers` | Keys to hold, as in a chord: `SUPER + CTRL`. A gesture with modifiers is taken only while exactly those are held, ahead of one without, which matches whatever is held. Optional |
 | `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
-| `drive` | Instead of `action`, swipes only: something that follows the fingers. `workspaces` takes `horizontal` or `vertical` |
+| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `zoom`, pinches only, takes `both` |
 | `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
 
 Two entries for the same finger count that could match the same movement are an
@@ -502,6 +504,10 @@ rest: the `workspaces` curve when it is a spring, otherwise the built-in `spring
 since a bézier cannot take a starting velocity. With animations off it jumps.
 Three fingers on a settling switch grab it where it is. A workspace switch from
 anywhere else ends the gesture, and the rest of its movement is ignored.
+
+`drive: zoom` sets the [zoom](#animations) of the output under the pointer by the
+pinch's scale, from the moment the fingers land: the client sees nothing of the
+gesture, and the level follows the fingers without animating, from 1 to 16.
 
 The fingers move the content unless `natural_scroll` is `false`, read from
 `input.devices` for that device and then `input.touchpad`. Left unset it counts as

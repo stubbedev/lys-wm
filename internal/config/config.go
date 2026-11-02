@@ -356,6 +356,7 @@ type rawGestures struct {
 
 type rawGesture struct {
 	Fingers   At[int]     `yaml:"fingers"`
+	Modifiers *At[string] `yaml:"modifiers"`
 	Direction *At[string] `yaml:"direction"`
 	Action    *At[string] `yaml:"action"`
 	Drive     *At[string] `yaml:"drive"`
@@ -992,9 +993,9 @@ var swipeDirections = map[string]binds.GestureDirection{
 	"horizontal": binds.SwipeHorizontal, "vertical": binds.SwipeVertical,
 }
 
-var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut}
+var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut, "both": binds.PinchBoth}
 
-var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces}
+var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom}
 
 func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r rawGesture, directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
 	key := fmt.Sprintf("gestures.%s[%d]", name, i)
@@ -1004,6 +1005,13 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r
 		p.fail(r.Fingers.Line, key+".fingers", "%d is not a %s; it takes at least %d fingers", r.Fingers.V, name, minFingers)
 	}
 	b.Fingers = uint32(max(r.Fingers.V, 0)) //nolint:gosec // clamped above zero; finger counts are small
+	if r.Modifiers != nil {
+		set, err := binds.ParseModifiers(r.Modifiers.V)
+		if err != nil {
+			p.fail(r.Modifiers.Line, key+".modifiers", "%v", err)
+		}
+		b.Modifiers = set
+	}
 	switch {
 	case directions == nil && r.Direction != nil:
 		p.fail(r.Direction.Line, key+".direction", "a %s has no direction", name)
@@ -1021,7 +1029,11 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r
 		if d := choice(p, r.Drive, key+".drive", gestureDrives); d != nil {
 			b.Drive = *d
 		}
-		if kind != backend.Swipe {
+		if b.Drive == binds.DriveZoom {
+			if kind != backend.Pinch || b.Direction != binds.PinchBoth {
+				p.fail(r.Drive.Line, key+".drive", "only a pinch can drive zoom, and it goes both ways, so it takes the direction both")
+			}
+		} else if kind != backend.Swipe {
 			p.fail(r.Drive.Line, key+".drive", "only a swipe can drive something")
 		} else if b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical {
 			p.fail(r.Drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
@@ -1320,6 +1332,9 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.ColorManagement = c.ColorManagement
 	cfg.Animations, cfg.BlurLayers = c.Animations, c.BlurLayers
 	cfg.Gestures = c.Gestures
+	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
+		return compositor.Config{}, err
+	}
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

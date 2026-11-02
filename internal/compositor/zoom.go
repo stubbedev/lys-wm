@@ -66,24 +66,57 @@ func (c *Compositor) applyZoom(a wm.ZoomAction) error {
 	return c.setZoom(o, a.Next(c.zoomTarget(o)))
 }
 
-func (c *Compositor) setZoom(o *output.Output, factor float64) error {
-	sc := c.sceneOf(o)
-	z := sc.zoom
-	switch {
-	case z == nil && factor == 1:
-		return nil
-	case z == nil:
+func (c *Compositor) zoomOn(o *output.Output, sc *scene) *outputZoom {
+	if sc.zoom == nil {
 		bounds := o.Backend().State().Mode.Size
-		z = &outputZoom{level: anim.NewMotion(0), target: 1, focus: [2]float64{float64(bounds.X) / 2, float64(bounds.Y) / 2}}
-		sc.zoom = z
+		sc.zoom = &outputZoom{level: anim.NewMotion(0), target: 1, focus: [2]float64{float64(bounds.X) / 2, float64(bounds.Y) / 2}}
 		sc.invalidate()
-	case z.target == factor:
+	}
+	return sc.zoom
+}
+
+func (c *Compositor) setZoom(o *output.Output, factor float64) error {
+	if factor == c.zoomTarget(o) {
 		return nil
 	}
+	z := c.zoomOn(o, c.sceneOf(o))
 	z.target = factor
 	z.level.Set(zoomStops(factor), c.clock(), c.animations.Curve(anim.Zoom))
 	c.stateChanged()
 	return c.schedule(o)
+}
+
+func (c *Compositor) trackZoom(o *output.Output, factor float64) error {
+	if factor == c.zoomTarget(o) {
+		return nil
+	}
+	z := c.zoomOn(o, c.sceneOf(o))
+	z.target = factor
+	z.level.Jump(zoomStops(factor))
+	c.stateChanged()
+	return c.schedule(o)
+}
+
+type zoomDrive struct {
+	c    *Compositor
+	o    *output.Output
+	from float64
+}
+
+func (c *Compositor) driveZoom() driven {
+	o := c.outputAt(c.cursor)
+	if o == nil {
+		return nil
+	}
+	return &zoomDrive{c: c, o: o, from: c.zoomTarget(o)}
+}
+
+func (d *zoomDrive) moved(scale float64, _ time.Duration) error {
+	return d.c.trackZoom(d.o, min(max(d.from*scale, 1), wm.MaxZoom))
+}
+
+func (d *zoomDrive) released(time.Duration, bool) error {
+	return nil
 }
 
 func (c *Compositor) zoomFollows(o *output.Output, z *outputZoom) {

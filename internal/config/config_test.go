@@ -494,6 +494,27 @@ gestures:
 	}
 }
 
+func TestAPinchDrivesZoomWithItsModifiers(t *testing.T) {
+	g := gestureConfig(t, "gestures:\n  swipe: []\n  pinch:\n    - {fingers: 2, modifiers: SUPER + CTRL, direction: both, drive: zoom}\n    - {fingers: 2, direction: in, action: kill}\n")
+	want := []binds.GestureBind{
+		{Kind: backend.Pinch, Fingers: 2, Direction: binds.PinchBoth, Drive: binds.DriveZoom, Modifiers: binds.ModSuper | binds.ModControl},
+		{Kind: backend.Pinch, Fingers: 2, Direction: binds.PinchIn, Action: wm.KillAction{}},
+	}
+	if !slices.Equal(g.Binds, want) {
+		t.Fatalf("binds %+v\nwant %+v", g.Binds, want)
+	}
+	for text, key := range map[string]string{
+		"gestures:\n  swipe:\n    - {fingers: 3, direction: horizontal, drive: zoom}\n":             "gestures.swipe[0].drive",
+		"gestures:\n  pinch:\n    - {fingers: 2, direction: in, drive: zoom}\n":                     "gestures.pinch[0].drive",
+		"gestures:\n  pinch:\n    - {fingers: 2, modifiers: HYPER, direction: both, drive: zoom}\n": "gestures.pinch[0].modifiers",
+		"gestures:\n  pinch:\n    - {fingers: 2, direction: both, drive: workspaces}\n":             "gestures.pinch[0].drive",
+	} {
+		if _, err := Parse("gestures.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("%q: %v, want %s named", text, err, key)
+		}
+	}
+}
+
 func TestAnEmptySwipeListTurnsTheDefaultOff(t *testing.T) {
 	if g := gestureConfig(t, "gestures:\n  swipe: []\n"); len(g.Binds) != 0 {
 		t.Fatalf("binds %+v", g.Binds)
