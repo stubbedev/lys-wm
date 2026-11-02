@@ -9,7 +9,9 @@ Every keybind and `lys-wmctl dispatch` takes one of these. This file is generate
 | `workspace` | `<n\|e+n\|e-n\|previous>` | Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it. |
 | `movetoworkspace` | `<n\|e+n\|e-n\|previous>` | Move the focused window to a workspace without following it. |
 | `kill` |  | Ask the focused window to close. |
-| `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped. |
+| `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back. |
+| `minimize` | `[id]` | Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space. |
+| `restore` | `[id]` | Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it. |
 | `closewindow` | `<id>` | Ask the window with this IPC ID to close. |
 | `dpms` | `<on\|off\|toggle> [output]` | Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on. |
 | `reload` |  | Read the config file again; a bad file keeps the running config and reports the error. |

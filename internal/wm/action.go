@@ -41,6 +41,8 @@ func (ReloadAction) isEffect()      {}
 func (ExitAction) isEffect()        {}
 func (GlobalAction) isEffect()      {}
 func (DPMSAction) isEffect()        {}
+func (MinimizeAction) isEffect()    {}
+func (RestoreAction) isEffect()     {}
 
 func emit(s State, e Effect) (State, []Effect, error) {
 	return s, []Effect{e}, nil
@@ -108,7 +110,49 @@ type (
 		Mode   PowerMode
 		Output string
 	}
+	MinimizeAction struct{ ID WindowID }
+	RestoreAction  struct{ ID WindowID }
 )
+
+func optionalWindow(name string, id WindowID) string {
+	if id == 0 {
+		return name
+	}
+	return name + " " + strconv.FormatUint(uint64(id), 10)
+}
+
+func (a MinimizeAction) String() string { return optionalWindow("minimize", a.ID) }
+func (a RestoreAction) String() string  { return optionalWindow("restore", a.ID) }
+
+func (a MinimizeAction) apply(s State, _ Settings) (State, []Effect, error) {
+	id := a.ID
+	if id == 0 {
+		focused, ok := s.Focused()
+		if !ok {
+			return s, nil, nil
+		}
+		id = focused
+	}
+	if _, ok := s.WorkspaceOf(id); !ok {
+		return State{}, nil, fmt.Errorf("minimize window %d: %w", id, ErrUnknownWindow)
+	}
+	return emit(s, MinimizeAction{ID: id})
+}
+
+func (a RestoreAction) apply(s State, _ Settings) (State, []Effect, error) {
+	id := a.ID
+	if id == 0 {
+		last, ok := s.LastMinimized()
+		if !ok {
+			return s, nil, nil
+		}
+		id = last
+	}
+	if _, ok := s.WorkspaceOf(id); !ok {
+		return State{}, nil, fmt.Errorf("restore window %d: %w", id, ErrUnknownWindow)
+	}
+	return emit(s, RestoreAction{ID: id})
+}
 
 func (m PowerMode) String() string {
 	return enumName(powerModes, m, "PowerMode")
@@ -243,6 +287,9 @@ func (KillAction) apply(s State, _ Settings) (State, []Effect, error) {
 }
 
 func (a FocusWindowAction) apply(s State, _ Settings) (State, []Effect, error) {
+	if s.Minimized(a.ID) {
+		return emit(s, RestoreAction(a))
+	}
 	next, err := s.FocusWindow(a.ID)
 	return next, nil, err
 }
@@ -378,6 +425,16 @@ func windowed(build func(WindowID) Action) func(ActionSpec, []string, string) (A
 	}
 }
 
+func optionallyWindowed(build func(WindowID) Action) func(ActionSpec, []string, string) (Action, error) {
+	one := windowed(build)
+	return func(spec ActionSpec, args []string, rest string) (Action, error) {
+		if len(args) == 0 {
+			return build(0), nil
+		}
+		return one(spec, args, rest)
+	}
+}
+
 var Actions = []ActionSpec{
 	{
 		Name: "focus", Args: "<left|right|up|down>",
@@ -406,8 +463,18 @@ var Actions = []ActionSpec{
 	},
 	{
 		Name: "focuswindow", Args: "<id>",
-		Summary: "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped.",
+		Summary: "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back.",
 		parse:   windowed(func(id WindowID) Action { return FocusWindowAction{ID: id} }),
+	},
+	{
+		Name: "minimize", Args: "[id]",
+		Summary: "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space.",
+		parse:   optionallyWindowed(func(id WindowID) Action { return MinimizeAction{ID: id} }),
+	},
+	{
+		Name: "restore", Args: "[id]",
+		Summary: "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it.",
+		parse:   optionallyWindowed(func(id WindowID) Action { return RestoreAction{ID: id} }),
 	},
 	{
 		Name: "closewindow", Args: "<id>",

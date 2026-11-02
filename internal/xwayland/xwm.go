@@ -29,6 +29,11 @@ type Listener interface {
 }
 
 const (
+	icccmNormalState xproto.Atom = 1
+	icccmIconicState xproto.Atom = 3
+)
+
+const (
 	netWMStateRemove = iota
 	netWMStateAdd
 	netWMStateToggle
@@ -44,17 +49,20 @@ type SetFullscreen struct {
 
 type Activate struct{}
 
+type Minimize struct{}
+
 type Configure struct {
 	Rect image.Rectangle
 }
 
 func (SetFullscreen) isRequest() {}
 func (Activate) isRequest()      {}
+func (Minimize) isRequest()      {}
 func (Configure) isRequest()     {}
 
 type State struct {
-	Rect                  image.Rectangle
-	Activated, Fullscreen bool
+	Rect                             image.Rectangle
+	Activated, Fullscreen, Minimized bool
 }
 
 type props struct {
@@ -206,6 +214,14 @@ func (w *Window) Apply(s State) error {
 	}
 	if s.Fullscreen != prev.Fullscreen {
 		w.setState(atomNetWMStateFullscreen, s.Fullscreen)
+	}
+	if s.Minimized != prev.Minimized {
+		w.setState(atomNetWMStateHidden, s.Minimized)
+		wmState := icccmNormalState
+		if s.Minimized {
+			wmState = icccmIconicState
+		}
+		w.wm.changeAtoms(w.id, w.wm.atoms[atomWMState], w.wm.atoms[atomWMState], []xproto.Atom{wmState, 0})
 	}
 	if s.Activated != prev.Activated {
 		w.wm.activate(w, s.Activated)
@@ -362,7 +378,7 @@ func (m *wm) mapRequested(id xproto.Window, raw rawProps) error {
 	w := m.window(id)
 	m.setProps(w, raw)
 	w.managed = true
-	m.changeAtoms(id, m.atoms[atomWMState], m.atoms[atomWMState], []xproto.Atom{1, 0})
+	m.changeAtoms(id, m.atoms[atomWMState], m.atoms[atomWMState], []xproto.Atom{icccmNormalState, 0})
 	m.frameless(id)
 	xproto.MapWindow(m.x, id)
 	return nil
@@ -500,6 +516,14 @@ func (m *wm) stateRequested(id xproto.Window, action uint32, a, b xproto.Atom) e
 		return nil
 	}
 	return m.listener.XWindowRequest(w, SetFullscreen{On: on})
+}
+
+func (m *wm) iconifyRequested(id xproto.Window, state uint32) error {
+	w, ok := m.windows[id]
+	if !ok || !w.shown || xproto.Atom(state) != icccmIconicState {
+		return nil
+	}
+	return m.listener.XWindowRequest(w, Minimize{})
 }
 
 func (m *wm) activeRequested(id xproto.Window) error {

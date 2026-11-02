@@ -224,6 +224,7 @@ type Compositor struct {
 	closing         []*closing
 	blurGen         uint64
 	jellyGen        uint64
+	genieStrips     []anim.GenieStrip
 	blurLayers      []string
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID

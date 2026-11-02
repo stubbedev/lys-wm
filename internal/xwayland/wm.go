@@ -45,6 +45,8 @@ const (
 	atomNetClientList
 	atomNetWMState
 	atomNetWMStateFullscreen
+	atomNetWMStateHidden
+	atomWMChangeState
 	atomNetWMStateModal
 	atomNetWMWindowType
 	atomNetWMWindowTypeDialog
@@ -91,6 +93,8 @@ var atomNames = [atomCount]string{
 	atomNetClientList:               "_NET_CLIENT_LIST",
 	atomNetWMState:                  "_NET_WM_STATE",
 	atomNetWMStateFullscreen:        "_NET_WM_STATE_FULLSCREEN",
+	atomNetWMStateHidden:            "_NET_WM_STATE_HIDDEN",
+	atomWMChangeState:               "WM_CHANGE_STATE",
 	atomNetWMStateModal:             "_NET_WM_STATE_MODAL",
 	atomNetWMWindowType:             "_NET_WM_WINDOW_TYPE",
 	atomNetWMWindowTypeDialog:       "_NET_WM_WINDOW_TYPE_DIALOG",
@@ -121,7 +125,7 @@ func (a atom) String() string {
 type atoms [atomCount]xproto.Atom
 
 var supported = []atom{
-	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateModal, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing,
+	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing,
 }
 
 var watched = []atom{
@@ -383,6 +387,8 @@ func (c *xconn) message(e xproto.ClientMessageEvent) {
 		c.post(func(m *wm) error { return m.stateRequested(e.Window, d[0], xproto.Atom(d[1]), xproto.Atom(d[2])) })
 	case c.atoms[atomNetActiveWindow]:
 		c.post(func(m *wm) error { return m.activeRequested(e.Window) })
+	case c.atoms[atomWMChangeState]:
+		c.post(func(m *wm) error { return m.iconifyRequested(e.Window, d[0]) })
 	case c.atoms[atomWMProtocols]:
 		if xproto.Atom(d[0]) == c.atoms[atomNetWMPing] {
 			c.post(func(m *wm) error { return m.pong(xproto.Window(d[2]), d[1]) })

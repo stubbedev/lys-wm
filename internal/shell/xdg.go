@@ -352,6 +352,7 @@ func (xs *XdgSurface) GetToplevel(obj *sxdg.XdgSurface, res *sxdg.XdgToplevel) (
 	if res.Base().Version() >= 5 {
 		caps := binary.NativeEndian.AppendUint32(nil, uint32(sxdg.XdgToplevelWmCapabilitiesFullscreen))
 		caps = binary.NativeEndian.AppendUint32(caps, uint32(sxdg.XdgToplevelWmCapabilitiesMaximize))
+		caps = binary.NativeEndian.AppendUint32(caps, uint32(sxdg.XdgToplevelWmCapabilitiesMinimize))
 		if err := res.SendWmCapabilities(caps); err != nil {
 			return nil, err
 		}

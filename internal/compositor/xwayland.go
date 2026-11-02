@@ -79,7 +79,7 @@ func (t xToplevel) state(w want) xwayland.State {
 		h := t.SizeHints()
 		r.Max = r.Min.Add(wm.Limits{Min: h.Min, Max: h.Max}.Fit(r.Size()))
 	}
-	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen}
+	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen, Minimized: w.minimized}
 }
 
 func (t xToplevel) settled(w want) bool {
@@ -194,6 +194,8 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 		return c.markUrgent(win)
 	case xwayland.SetFullscreen:
 		return c.update(c.wm.SetFullscreen(win.id, r.On))
+	case xwayland.Minimize:
+		return c.minimize(win)
 	case xwayland.Configure:
 		if !c.wm.Floats(win.id) {
 			return nil

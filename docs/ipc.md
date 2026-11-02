@@ -60,13 +60,15 @@ focused one, or `null`:
 
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
- "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"urgent":false,"unresponsive":false,"focused":true,
+ "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
  "content_type":"none","icon":{"serial":3,"name":"foot","sizes":[32,64]}}
 ```
 
 Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
+A minimized window stays on its workspace, and in the workspace's `windows`
+count, with `minimized` true and the `rect` it comes back to when floating.
 `content_type` is what the window's surface says it shows through
 `wp_content_type_v1`: `none`, `photo`, `video` or `game`.
 
@@ -117,6 +119,7 @@ shows, the focused output, windows, focus, submap, layout and locks.
 | `title` | `window`, `title` | A window changed its title |
 | `icon` | `window`, `icon` | A window set or cleared its icon |
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
+| `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |
 | `focus` | `window` (ID or `null`) | Keyboard focus moved to another window, or to none |
 | `submap` | `submap` (`""` for the default binds) | The bind submap changed |

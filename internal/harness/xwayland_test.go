@@ -101,7 +101,7 @@ func xDial(t *testing.T, h *Harness) *xclient {
 	}
 	t.Cleanup(x.Close)
 	c := &xclient{t: t, x: x, root: xproto.Setup(x).DefaultScreen(x).Root, atoms: map[string]xproto.Atom{}}
-	for _, name := range []string{"WM_CLASS", "WM_NAME", "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DIALOG", "_NET_WM_STATE", "_NET_WM_STATE_FULLSCREEN", "_NET_WM_STATE_MODAL", "WM_TRANSIENT_FOR"} {
+	for _, name := range []string{"WM_CLASS", "WM_NAME", "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DIALOG", "_NET_WM_STATE", "_NET_WM_STATE_FULLSCREEN", "_NET_WM_STATE_MODAL", "WM_TRANSIENT_FOR", "WM_CHANGE_STATE", "WM_STATE"} {
 		r, err := xproto.InternAtom(x, false, uint16(len(name)), name).Reply()
 		if err != nil {
 			t.Fatal(err)
@@ -244,6 +244,46 @@ func TestXWindowsAreManaged(t *testing.T) {
 	}
 	h.Eventually("the destroyed X window gone", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		return len(windowsOf(c)) == 1
+	})
+}
+
+func TestAnXWindowIconifiesItself(t *testing.T) {
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+	xc := xDial(t, h)
+	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
+	h.Eventually("the X window tiled", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && !ws[0].Minimized
+	})
+	changeState := xc.atoms["WM_CHANGE_STATE"]
+	const iconicState = 3
+	iconify := xproto.ClientMessageEvent{Format: 32, Window: main, Type: changeState, Data: xproto.ClientMessageDataUnionData32New([]uint32{iconicState, 0, 0, 0, 0})}
+	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureRedirect|xproto.EventMaskSubstructureNotify, string(iconify.Bytes())).Check(); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the X window minimized", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Minimized
+	})
+	wmState := func() uint32 {
+		atom := xc.atoms["WM_STATE"]
+		reply, err := xproto.GetProperty(xc.x, false, main, atom, atom, 0, 2).Reply()
+		if err != nil || len(reply.Value) < 4 {
+			t.Fatalf("WM_STATE: %v, %+v", err, reply)
+		}
+		return binary.LittleEndian.Uint32(reply.Value)
+	}
+	deadline := time.Now().Add(clientTimeout)
+	for wmState() != iconicState {
+		if time.Now().After(deadline) {
+			t.Fatalf("WM_STATE %d, want iconic", wmState())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.dispatch("restore")
+	h.Eventually("the X window back", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && !ws[0].Minimized && ws[0].Focused
 	})
 }
 

@@ -46,6 +46,10 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 			return fmt.Errorf("close unknown window %d", e.ID)
 		}
 		return w.top.close()
+	case wm.MinimizeAction:
+		return c.withWindow(e.ID, c.minimize)
+	case wm.RestoreAction:
+		return c.withWindow(e.ID, c.restore)
 	case wm.ExecAction:
 		return c.spawn(e.Command)
 	case wm.GlobalAction:
@@ -70,6 +74,14 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.hooks.Exit()
 	}
 	return fmt.Errorf("no handler for effect %T", e)
+}
+
+func (c *Compositor) withWindow(id wm.WindowID, f func(*window) error) error {
+	w := c.windowByID(id)
+	if w == nil {
+		return fmt.Errorf("unknown window %d", id)
+	}
+	return f(w)
 }
 
 func (c *Compositor) spawn(command string) error {

@@ -29,6 +29,7 @@ const (
 	FadeShadow
 	Border
 	BorderAngle
+	WindowsMinimize
 	eventCount
 )
 
@@ -46,9 +47,10 @@ const (
 	Elastic
 	Goo
 	Bud
+	Genie
 )
 
-var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph", Elastic: "elastic", Goo: "goo", Bud: "bud"}
+var styleNames = map[StyleKind]string{Popin: "popin", Slide: "slide", SlideVert: "slidevert", FadeStyle: "fade", Once: "once", Loop: "loop", Morph: "morph", Elastic: "elastic", Goo: "goo", Bud: "bud", Genie: "genie"}
 
 type Style struct {
 	Kind    StyleKind
@@ -97,23 +99,24 @@ var events = [eventCount]struct {
 	styles []StyleKind
 	style  Style
 }{
-	Global:      {name: "global", parent: Global},
-	Windows:     {name: "windows", parent: Global},
-	WindowsMove: {name: "windows_move", parent: Windows, styles: []StyleKind{Morph, Elastic}},
-	WindowsIn:   {name: "windows_in", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
-	WindowsOut:  {name: "windows_out", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
-	Fade:        {name: "fade", parent: Global},
-	FadeIn:      {name: "fade_in", parent: Fade},
-	FadeOut:     {name: "fade_out", parent: Fade},
-	Workspaces:  {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin, Goo}, style: Style{Kind: Slide}},
-	Layers:      {name: "layers", parent: Global},
-	LayersIn:    {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
-	LayersOut:   {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
-	FadeSwitch:  {name: "fade_switch", parent: Fade},
-	FadeDim:     {name: "fade_dim", parent: Fade},
-	FadeShadow:  {name: "fade_shadow", parent: Fade},
-	Border:      {name: "border", parent: Global},
-	BorderAngle: {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
+	Global:          {name: "global", parent: Global},
+	Windows:         {name: "windows", parent: Global},
+	WindowsMove:     {name: "windows_move", parent: Windows, styles: []StyleKind{Morph, Elastic}},
+	WindowsIn:       {name: "windows_in", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
+	WindowsOut:      {name: "windows_out", parent: Windows, styles: []StyleKind{Popin, Slide, Bud}, style: Style{Kind: Popin, Percent: defaultPopin}},
+	Fade:            {name: "fade", parent: Global},
+	FadeIn:          {name: "fade_in", parent: Fade},
+	FadeOut:         {name: "fade_out", parent: Fade},
+	Workspaces:      {name: "workspaces", parent: Global, styles: []StyleKind{Slide, SlideVert, FadeStyle, Popin, Goo}, style: Style{Kind: Slide}},
+	Layers:          {name: "layers", parent: Global},
+	LayersIn:        {name: "layers_in", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
+	LayersOut:       {name: "layers_out", parent: Layers, styles: []StyleKind{Slide, Popin, FadeStyle}, style: Style{Kind: Slide}},
+	FadeSwitch:      {name: "fade_switch", parent: Fade},
+	FadeDim:         {name: "fade_dim", parent: Fade},
+	FadeShadow:      {name: "fade_shadow", parent: Fade},
+	Border:          {name: "border", parent: Global},
+	BorderAngle:     {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
+	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie}, style: Style{Kind: Genie}},
 }
 
 func (e Event) String() string {

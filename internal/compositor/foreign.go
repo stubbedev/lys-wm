@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -12,6 +13,7 @@ import (
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	swft "github.com/stubbedev/lys-wm/internal/protocol/server/wlrforeigntoplevel"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wire"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -25,13 +27,14 @@ type foreignState struct {
 	title, appID          string
 	output                *output.Output
 	activated, fullscreen bool
+	minimized             bool
 	parent                *window
 }
 
 func (c *Compositor) foreignStateOf(w *window) foreignState {
 	return foreignState{
 		title: w.top.Title(), appID: w.top.AppID(), output: w.output,
-		activated: c.active == w, fullscreen: w.layer == wm.LayerFullscreen,
+		activated: c.active == w, fullscreen: !w.minimized && w.layer == wm.LayerFullscreen, minimized: w.minimized,
 		parent: c.windowOf(w.top.parent()),
 	}
 }
@@ -155,6 +158,9 @@ func wlrStates(s foreignState) []byte {
 	if s.fullscreen {
 		out = binary.LittleEndian.AppendUint32(out, uint32(swft.ZwlrForeignToplevelHandleV1StateFullscreen))
 	}
+	if s.minimized {
+		out = binary.LittleEndian.AppendUint32(out, uint32(swft.ZwlrForeignToplevelHandleV1StateMinimized))
+	}
 	return out
 }
 
@@ -209,7 +215,7 @@ func (c *Compositor) updateWlrHandle(m *wlrManager, h *wlrHandle, now foreignSta
 			}
 		}
 	}
-	if h.fresh || now.activated != prev.activated || now.fullscreen != prev.fullscreen {
+	if h.fresh || now.activated != prev.activated || now.fullscreen != prev.fullscreen || now.minimized != prev.minimized {
 		errs = append(errs, res.SendState(wlrStates(now)))
 	}
 	if res.Base().Version() >= 3 && (h.fresh || now.parent != prev.parent) {
@@ -259,7 +265,7 @@ func (r wlrHandleRequests) Activate(*swft.ZwlrForeignToplevelHandleV1, *sw.WlSea
 	if !r.live() {
 		return nil
 	}
-	return r.c.focusWindow(r.w)
+	return r.c.activate(r.w)
 }
 
 func (r wlrHandleRequests) Close(*swft.ZwlrForeignToplevelHandleV1) error {
@@ -285,10 +291,36 @@ func (r wlrHandleRequests) UnsetFullscreen(*swft.ZwlrForeignToplevelHandleV1) er
 
 func (wlrHandleRequests) SetMaximized(*swft.ZwlrForeignToplevelHandleV1) error   { return nil }
 func (wlrHandleRequests) UnsetMaximized(*swft.ZwlrForeignToplevelHandleV1) error { return nil }
-func (wlrHandleRequests) SetMinimized(*swft.ZwlrForeignToplevelHandleV1) error   { return nil }
-func (wlrHandleRequests) UnsetMinimized(*swft.ZwlrForeignToplevelHandleV1) error { return nil }
 
-func (wlrHandleRequests) SetRectangle(*swft.ZwlrForeignToplevelHandleV1, *sw.WlSurface, int32, int32, int32, int32) error {
+func (r wlrHandleRequests) SetMinimized(*swft.ZwlrForeignToplevelHandleV1) error {
+	if !r.live() {
+		return nil
+	}
+	return r.c.minimize(r.w)
+}
+
+func (r wlrHandleRequests) UnsetMinimized(*swft.ZwlrForeignToplevelHandleV1) error {
+	if !r.live() {
+		return nil
+	}
+	return r.c.restore(r.w)
+}
+
+func (r wlrHandleRequests) SetRectangle(obj *swft.ZwlrForeignToplevelHandleV1, wl *sw.WlSurface, x, y, width, height int32) error {
+	if width < 0 || height < 0 {
+		return obj.ProtocolError(swft.ZwlrForeignToplevelHandleV1ErrorInvalidRectangle, "rectangle %dx%d has a negative size", width, height)
+	}
+	if !r.live() {
+		return nil
+	}
+	s, err := surface.From(wl)
+	if err != nil {
+		return err
+	}
+	r.w.icon = iconHint{}
+	if width > 0 && height > 0 {
+		r.w.icon = iconHint{surface: s, rect: image.Rect(int(x), int(y), int(x)+int(width), int(y)+int(height))}
+	}
 	return nil
 }
 

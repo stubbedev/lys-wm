@@ -82,7 +82,7 @@ func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 	for _, w := range c.stack {
 		ws, ok := c.wm.WorkspaceOf(w.id)
 		switch {
-		case !ok || w.layer == wm.LayerFullscreen:
+		case !ok || w.layer == wm.LayerFullscreen || w.minimized:
 		case w.visible && ws == sw.to && w.tile.Overlaps(o.Logical()):
 			in = append(in, w)
 		case !w.visible && ws == sw.from && w.output == o:
@@ -136,7 +136,7 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 
 func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
 	sw, ok := c.switches[o]
-	if !ok || w.layer == wm.LayerFullscreen && !w.visible {
+	if !ok || w.minimized || w.layer == wm.LayerFullscreen && !w.visible {
 		return identity, w.visible
 	}
 	ws, ok := c.wm.WorkspaceOf(w.id)

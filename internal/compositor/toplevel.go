@@ -15,6 +15,7 @@ type want struct {
 	layer     wm.PlacementLayer
 	placed    bool
 	activated bool
+	minimized bool
 	scale     output.Scale
 }
 

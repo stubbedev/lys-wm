@@ -142,6 +142,7 @@ type Window struct {
 	Rect         Rect           `json:"rect"`
 	Floating     bool           `json:"floating"`
 	Fullscreen   bool           `json:"fullscreen"`
+	Minimized    bool           `json:"minimized"`
 	Urgent       bool           `json:"urgent"`
 	Unresponsive bool           `json:"unresponsive"`
 	Focused      bool           `json:"focused"`

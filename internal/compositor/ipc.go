@@ -43,7 +43,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		snap.Workspaces = append(snap.Workspaces, ipc.Workspace{
 			ID:      w.ID,
 			Output:  w.Output,
-			Windows: len(w.Tree.Windows()) + len(w.Floating),
+			Windows: len(w.Tree.Windows()) + len(w.Floating) + len(w.Minimized),
 			Visible: visible,
 			Focused: visible && w.Output == focusedOutput,
 		})
@@ -65,6 +65,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Rect:         ipc.RectOf(w.rect),
 			Floating:     s.Floats(w.id),
 			Fullscreen:   s.Fullscreen(w.id),
+			Minimized:    s.Minimized(w.id),
 			Urgent:       w.urgent,
 			Unresponsive: w.hung,
 			Focused:      hasFocus && w.id == focused,

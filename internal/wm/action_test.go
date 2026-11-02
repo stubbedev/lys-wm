@@ -13,6 +13,10 @@ import (
 var update = flag.Bool("update", false, "rewrite docs/actions.md")
 
 var everyAction = []Action{
+	MinimizeAction{},
+	MinimizeAction{ID: 7},
+	RestoreAction{},
+	RestoreAction{ID: 7},
 	FocusAction{Dir: Left},
 	FocusAction{Dir: Down},
 	MoveAction{Dir: Right},

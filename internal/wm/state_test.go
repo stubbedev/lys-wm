@@ -208,3 +208,102 @@ func TestAssigningAWorkspaceMovesItToAnotherOutput(t *testing.T) {
 		t.Fatalf("an unknown output: %v", err)
 	}
 }
+
+func minimizable(t *testing.T) State {
+	t.Helper()
+	must := ok(t)
+	s := must(State{}.AddOutput("A", left, left))
+	at := Autotile{}
+	s = must(s.MapWindow(1, at))
+	return must(s.MapWindow(2, at))
+}
+
+func TestMinimizingAWindowGivesItsSpaceAndFocusToTheRest(t *testing.T) {
+	must := ok(t)
+	s := must(minimizable(t).Minimize(2, image.Rect(960, 0, 1920, 1080)))
+	if got, _ := s.Focused(); got != 1 {
+		t.Errorf("focus on %d, want the other window", got)
+	}
+	if !s.Minimized(2) || s.Minimized(1) {
+		t.Errorf("minimized: 1 %v, 2 %v", s.Minimized(1), s.Minimized(2))
+	}
+	var hidden, shown Placement
+	for _, p := range s.Arrange(Spacing{}).Windows {
+		if p.ID == 2 {
+			hidden = p
+		} else {
+			shown = p
+		}
+	}
+	if hidden.Visible || !hidden.Minimized || hidden.Rect != image.Rect(960, 0, 1920, 1080) {
+		t.Errorf("minimized placement %+v", hidden)
+	}
+	if !shown.Visible || shown.Rect != left {
+		t.Errorf("the other window at %+v, want all of the output", shown)
+	}
+	w, _ := s.Workspace(1)
+	if w.empty() {
+		t.Error("a workspace holding a minimized window counts as empty")
+	}
+}
+
+func TestRestoringAWindowFocusesItOnItsWorkspace(t *testing.T) {
+	must := ok(t)
+	s := must(minimizable(t).Minimize(2, image.Rect(960, 0, 1920, 1080)))
+	s = must(s.SwitchWorkspace(2))
+	if last, found := s.LastMinimized(); found {
+		t.Errorf("workspace 2 has a last minimized window %d", last)
+	}
+	s = must(s.Restore(2, Autotile{}))
+	if got, _ := s.Focused(); got != 2 || s.Minimized(2) {
+		t.Errorf("focus %d, minimized %v", got, s.Minimized(2))
+	}
+	if id, _ := s.ActiveOn("A"); id != 1 {
+		t.Errorf("output shows workspace %d, want the window's", id)
+	}
+}
+
+func TestAMinimizedFloatingWindowComesBackWhereItWas(t *testing.T) {
+	must := ok(t)
+	rect := image.Rect(10, 20, 110, 220)
+	s := must(must(State{}.AddOutput("A", left, left)).MapFloating(1, rect))
+	s = must(s.Minimize(1, image.Rectangle{}))
+	if !s.Floats(1) {
+		t.Error("a minimized floating window stops counting as floating")
+	}
+	s = must(s.Restore(1, Autotile{}))
+	if a := s.Arrange(Spacing{}).Windows; len(a) != 1 || a[0].Rect != rect || a[0].Layer != LayerFloating || !a[0].Visible {
+		t.Errorf("restored to %+v", a)
+	}
+}
+
+func TestAMinimizedFullscreenWindowComesBackFullscreen(t *testing.T) {
+	must := ok(t)
+	s := must(minimizable(t).SetFullscreen(2, true))
+	s = must(s.Minimize(2, left))
+	if a := s.Arrange(Spacing{}).Windows; !slices.ContainsFunc(a, func(p Placement) bool { return p.ID == 1 && p.Visible }) {
+		t.Errorf("the window behind stays covered: %+v", a)
+	}
+	s = must(s.Restore(2, Autotile{}))
+	if !s.Fullscreen(2) {
+		t.Error("no longer fullscreen")
+	}
+	s = must(s.Minimize(2, left))
+	s = must(s.SetFullscreen(2, false))
+	s = must(s.Restore(2, Autotile{}))
+	if s.Fullscreen(2) {
+		t.Error("ending fullscreen while minimized did not stick")
+	}
+}
+
+func TestUnmappingAMinimizedWindowForgetsIt(t *testing.T) {
+	must := ok(t)
+	s := must(minimizable(t).Minimize(2, left))
+	s = must(s.UnmapWindow(2))
+	if _, found := s.WorkspaceOf(2); found {
+		t.Error("the window is still on a workspace")
+	}
+	if _, found := s.LastMinimized(); found {
+		t.Error("the window is still minimized")
+	}
+}

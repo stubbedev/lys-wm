@@ -131,6 +131,10 @@ func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error)
 	if w == nil {
 		return State{}, fmt.Errorf("place floating window %d: %w", id, ErrUnknownWindow)
 	}
+	if i := w.minimizedIndex(id); i >= 0 && w.Minimized[i].Layer == LayerFloating {
+		w.Minimized[i].Rect = s.limits[id].fitRect(rect, true, true)
+		return s, nil
+	}
 	i := w.floatingIndex(id)
 	if i < 0 {
 		return State{}, fmt.Errorf("wm: window %d is not floating", id)
@@ -156,7 +160,13 @@ func (s State) ResizeFloating(id WindowID, from image.Rectangle, d image.Point, 
 
 func (s State) Floats(id WindowID) bool {
 	w := s.windowWorkspace(id)
-	return w != nil && w.floatingIndex(id) >= 0
+	if w == nil {
+		return false
+	}
+	if i := w.minimizedIndex(id); i >= 0 {
+		return w.Minimized[i].Layer == LayerFloating
+	}
+	return w.floatingIndex(id) >= 0
 }
 
 func (s State) SetFullscreen(id WindowID, on bool) (State, error) {
@@ -164,6 +174,10 @@ func (s State) SetFullscreen(id WindowID, on bool) (State, error) {
 	w := s.windowWorkspace(id)
 	if w == nil {
 		return State{}, fmt.Errorf("fullscreen window %d: %w", id, ErrUnknownWindow)
+	}
+	if i := w.minimizedIndex(id); i >= 0 {
+		w.Minimized[i].setFullscreen(on)
+		return s, nil
 	}
 	switch {
 	case on:
@@ -188,7 +202,13 @@ func (s State) ToggleFullscreen() (State, error) {
 
 func (s State) Fullscreen(id WindowID) bool {
 	w := s.windowWorkspace(id)
-	return w != nil && w.Fullscreen == id
+	if w == nil {
+		return false
+	}
+	if i := w.minimizedIndex(id); i >= 0 {
+		return w.Minimized[i].Layer == LayerFullscreen
+	}
+	return w.Fullscreen == id
 }
 
 func (s State) Reinsert(id WindowID, at image.Point, auto Autotile) (State, error) {

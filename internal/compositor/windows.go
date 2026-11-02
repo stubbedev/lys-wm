@@ -42,6 +42,9 @@ type window struct {
 	wobble      *anim.Wobble
 	bud         image.Rectangle
 	jelly       render.TextureTarget
+	minimized   bool
+	icon        iconHint
+	genie       *genie
 }
 
 type decided struct {
@@ -198,8 +201,14 @@ func (c *Compositor) reconcile() error {
 		c.stack = append(c.stack, w)
 		rect := c.content(p.Rect, p.Layer)
 		moved := rect != w.rect
+		switch {
+		case p.Minimized && !w.minimized:
+			errs = append(errs, c.startMinimize(w, now))
+		case !p.Minimized && w.minimized:
+			errs = append(errs, c.startRestore(w, p.Rect, now))
+		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.layer = p.Rect, rect, p.Visible, p.Layer
+		w.tile, w.rect, w.visible, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Layer, p.Minimized
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}
@@ -254,7 +263,7 @@ func (c *Compositor) springMoves() bool {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
 	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
@@ -273,6 +282,7 @@ func sameState(a, b shell.State) bool {
 
 func (c *Compositor) settle(w *window, activated bool) error {
 	want := c.wanted(w.rect, w.layer, activated)
+	want.minimized = w.minimized
 	if w.top.settled(want) && w.scale == want.scale {
 		return nil
 	}
@@ -367,7 +377,7 @@ func (c *Compositor) refreshLimits(t toplevel) error {
 
 func (c *Compositor) redecide(t toplevel) error {
 	w := c.windowOf(t)
-	if w == nil || c.wm.Floats(w.id) != w.floated {
+	if w == nil || c.wm.Minimized(w.id) || c.wm.Floats(w.id) != w.floated {
 		return nil
 	}
 	float, size := c.floats(t)
@@ -491,6 +501,8 @@ func (c *Compositor) ToplevelRequest(t *shell.Toplevel, r shell.Request) error {
 	case shell.SetMaximized:
 		_, err := t.Configure(t.Requested())
 		return err
+	case shell.SetMinimized:
+		return c.minimize(w)
 	}
 	return nil
 }

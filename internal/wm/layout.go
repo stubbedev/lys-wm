@@ -6,10 +6,11 @@ import (
 )
 
 type Placement struct {
-	ID      WindowID
-	Rect    image.Rectangle
-	Visible bool
-	Layer   PlacementLayer
+	ID        WindowID
+	Rect      image.Rectangle
+	Visible   bool
+	Layer     PlacementLayer
+	Minimized bool
 }
 
 type TabBar struct {

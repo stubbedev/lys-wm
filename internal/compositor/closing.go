@@ -25,6 +25,7 @@ type closing struct {
 	bud      image.Rectangle
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
+	genie    *genie
 }
 
 type level struct {
@@ -35,7 +36,7 @@ type level struct {
 var windowLevel = level{window: true}
 
 func (cl *closing) done(now time.Duration) bool {
-	return cl.motion.Done(now) && cl.fade.Done(now)
+	return cl.motion.Done(now) && cl.fade.Done(now) && (cl.genie == nil || cl.genie.progress.Done(now))
 }
 
 func (c *Compositor) styled(e anim.Event, o *output.Output, goal image.Rectangle) image.Rectangle {
@@ -56,16 +57,8 @@ func (c *Compositor) styled(e anim.Event, o *output.Output, goal image.Rectangle
 }
 
 func slideOff(area, r image.Rectangle) image.Rectangle {
-	c := r.Min.Add(r.Size().Div(2))
-	gaps := [4]int{c.X - area.Min.X, area.Max.X - c.X, c.Y - area.Min.Y, area.Max.Y - c.Y}
 	moves := [4]image.Point{{area.Min.X - r.Max.X, 0}, {area.Max.X - r.Min.X, 0}, {0, area.Min.Y - r.Max.Y}, {0, area.Max.Y - r.Min.Y}}
-	i := 0
-	for j, g := range gaps {
-		if g < gaps[i] {
-			i = j
-		}
-	}
-	return r.Add(moves[i])
+	return r.Add(moves[nearestEdge(area, r)])
 }
 
 const (
@@ -235,6 +228,10 @@ func (c *Compositor) drawClosing(pass *frame, o *output.Output, at level) {
 		if cl.output != o || cl.level != at || cl.done(c.frameTime) {
 			continue
 		}
+		if cl.genie != nil {
+			c.drawGenie(pass, o, cl.genie, cl.snapshot.Texture(), 0)
+			continue
+		}
 		size := cl.snapshot.Size()
 		a := float32(min(max(cl.fade.At(c.frameTime), 0), 1))
 		if !cl.bud.Empty() {
@@ -294,7 +291,7 @@ func (c *Compositor) dropAllClosing() error {
 const morphLead = 60 * time.Millisecond
 
 func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view, from int) error {
-	if c.animations.Style(anim.WindowsMove).Kind != anim.Morph || w.motion.Done(c.frameTime) {
+	if c.animations.Style(anim.WindowsMove).Kind != anim.Morph || w.motion.Done(c.frameTime) || w.genie != nil {
 		return nil
 	}
 	area := o.Logical()
@@ -304,27 +301,9 @@ func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view,
 	if a == b || a.Empty() || b.Empty() {
 		return nil
 	}
-	if w.jelly == nil || w.jelly.Size() != a.Size() {
-		if err := c.dropJelly(w); err != nil {
-			return err
-		}
-		tt, err := c.renderer.NewTextureTarget(a.Size())
-		if err != nil {
-			return err
-		}
-		w.jelly = tt
-	}
-	f := frame{ops: pass.ops[from:]}
-	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: a.Size()}})
-	if err != nil {
+	if err := c.renderJelly(pass, w, a, from); err != nil {
 		return err
 	}
-	p.Clear(render.Color{})
-	f.replayFrom(p, a.Min)
-	if err := p.End(); err != nil {
-		return err
-	}
-	pass.ops = pass.ops[:from]
 	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2
 	size := w.jelly.Size()
 	c.jellyGen++

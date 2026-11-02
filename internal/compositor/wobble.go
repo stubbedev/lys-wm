@@ -47,27 +47,9 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 	if tile.Empty() {
 		return nil
 	}
-	if w.jelly == nil || w.jelly.Size() != tile.Size() {
-		if err := c.dropJelly(w); err != nil {
-			return err
-		}
-		tt, err := c.renderer.NewTextureTarget(tile.Size())
-		if err != nil {
-			return err
-		}
-		w.jelly = tt
-	}
-	f := frame{ops: pass.ops[from:]}
-	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: tile.Size()}})
-	if err != nil {
+	if err := c.renderJelly(pass, w, tile, from); err != nil {
 		return err
 	}
-	p.Clear(render.Color{})
-	f.replayFrom(p, tile.Min)
-	if err := p.End(); err != nil {
-		return err
-	}
-	pass.ops = pass.ops[:from]
 	cols, rows := w.wobble.Grid()
 	scale := o.Scale().Float()
 	node := func(i, j int) (float64, float64) {
@@ -90,6 +72,31 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 			pass.ops = append(pass.ops, drawOp{tex: w.jelly.Texture(), src: src, dst: dst, alpha: 1, version: c.jellyGen})
 		}
 	}
+	return nil
+}
+
+func (c *Compositor) renderJelly(pass *frame, w *window, area image.Rectangle, from int) error {
+	if w.jelly == nil || w.jelly.Size() != area.Size() {
+		if err := c.dropJelly(w); err != nil {
+			return err
+		}
+		tt, err := c.renderer.NewTextureTarget(area.Size())
+		if err != nil {
+			return err
+		}
+		w.jelly = tt
+	}
+	f := frame{ops: pass.ops[from:]}
+	p, err := c.renderer.Begin(w.jelly, render.Region{{Max: area.Size()}})
+	if err != nil {
+		return err
+	}
+	p.Clear(render.Color{})
+	f.replayFrom(p, area.Min)
+	if err := p.End(); err != nil {
+		return err
+	}
+	pass.ops = pass.ops[:from]
 	return nil
 }
 
@@ -118,7 +125,7 @@ func (c *Compositor) settleWobbles() error {
 		if w.wobble != nil && !dragged && w.wobble.Resting() {
 			w.wobble = nil
 		}
-		if w.jelly != nil && w.wobble == nil && w.motion.Done(c.frameTime) {
+		if w.jelly != nil && w.wobble == nil && w.genie == nil && w.motion.Done(c.frameTime) {
 			errs = append(errs, c.dropJelly(w))
 		}
 	}

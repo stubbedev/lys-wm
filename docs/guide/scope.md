@@ -7,7 +7,7 @@ page is what it does and what it will not do.
 
 - **Tiling like hy3**: a tree of horizontal and vertical splits and tab groups,
   autotile by available width, directional focus and move, numbered workspaces
-  per output, floating windows, window rules, submaps.
+  per output, floating windows, minimizing, window rules, submaps.
 - **Drawing**: client surfaces, borders and tab bars. On request, rounded
   corners, gaps, gradient borders, shadows, blur, opacity, dimming and
   animations; [Config](../config) has them, and they are all off by default.

@@ -357,8 +357,8 @@ func TestDefaultConfigureAndMap(t *testing.T) {
 	if len(w.topE.configures) != 1 || w.topE.configures[0].Size != (image.Point{}) || len(w.xsE.serials) != 1 {
 		t.Fatalf("configures %v serials %v, want one default 0x0 configure", w.topE.configures, w.xsE.serials)
 	}
-	if len(w.topE.caps) != 8 {
-		t.Fatalf("wm_capabilities %v, want fullscreen and maximize", w.topE.caps)
+	if len(w.topE.caps) != 12 {
+		t.Fatalf("wm_capabilities %v, want fullscreen, maximize and minimize", w.topE.caps)
 	}
 	must(t, w.xs.AckConfigure(w.lastSerial()), w.xs.SetWindowGeometry(1, 2, 30, 40), w.surf.Attach(c.buffer(40, 50), 0, 0), w.surf.Commit())
 	c.roundtrip()

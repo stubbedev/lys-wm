@@ -27,6 +27,7 @@ func (c *Compositor) Frame(b backend.Output) error {
 		return err
 	}
 	c.finishSwitches(o, c.frameTime)
+	c.settleGenies(c.frameTime)
 	if err := c.settleWobbles(); err != nil {
 		return err
 	}
@@ -228,7 +229,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	if a := w.fade.At(c.frameTime) * v.alpha; a < 1 {
 		pass.fade(from, float32(max(a, 0)))
 	}
-	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from)); err != nil {
+	if err := errors.Join(c.drawWobble(pass, o, w, from), c.drawMorph(pass, o, w, v, from), c.drawWindowGenie(pass, o, w, from)); err != nil {
 		c.report(fmt.Errorf("compositor: deform window %d: %w", w.id, err))
 	}
 	return shown

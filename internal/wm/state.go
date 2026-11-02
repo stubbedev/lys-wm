@@ -28,6 +28,7 @@ type Workspace struct {
 	Output     string
 	Tree       Tree
 	Floating   []Floating
+	Minimized  []Minimized
 	Fullscreen WindowID
 	floatFocus bool
 	home       string
@@ -38,12 +39,16 @@ func (w *Workspace) floatingIndex(id WindowID) int {
 	return slices.IndexFunc(w.Floating, func(f Floating) bool { return f.ID == id })
 }
 
+func (w *Workspace) minimizedIndex(id WindowID) int {
+	return slices.IndexFunc(w.Minimized, func(m Minimized) bool { return m.ID == id })
+}
+
 func (w *Workspace) contains(id WindowID) bool {
-	return w.floatingIndex(id) >= 0 || w.Tree.Contains(id)
+	return w.floatingIndex(id) >= 0 || w.minimizedIndex(id) >= 0 || w.Tree.Contains(id)
 }
 
 func (w *Workspace) empty() bool {
-	return w.Tree.Empty() && len(w.Floating) == 0
+	return w.Tree.Empty() && len(w.Floating) == 0 && len(w.Minimized) == 0
 }
 
 func (w *Workspace) focused() (WindowID, bool) {
@@ -71,6 +76,10 @@ func (w *Workspace) focus(id WindowID) error {
 }
 
 func (w *Workspace) remove(id WindowID) error {
+	if i := w.minimizedIndex(id); i >= 0 {
+		w.Minimized = slices.Delete(w.Minimized, i, i+1)
+		return nil
+	}
 	focused, _ := w.focused()
 	if i := w.floatingIndex(id); i >= 0 {
 		w.Floating = slices.Delete(w.Floating, i, i+1)
@@ -131,6 +140,7 @@ func (s State) clone() State {
 	for i, w := range s.workspaces {
 		w.history = slices.Clone(w.history)
 		w.Floating = slices.Clone(w.Floating)
+		w.Minimized = slices.Clone(w.Minimized)
 		c.workspaces[i] = w
 	}
 	return c
@@ -561,6 +571,7 @@ func (s State) Arrange(sp Spacing) Arrangement {
 			for _, f := range w.Floating {
 				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Layer: LayerFloating})
 			}
+			all.Windows = appendMinimized(all.Windows, w.Minimized)
 			continue
 		}
 		shown := o.Active == w.ID
@@ -584,6 +595,7 @@ func (s State) Arrange(sp Spacing) Arrangement {
 		if covered {
 			all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Layer: LayerFullscreen})
 		}
+		all.Windows = appendMinimized(all.Windows, w.Minimized)
 	}
 	return all
 }
