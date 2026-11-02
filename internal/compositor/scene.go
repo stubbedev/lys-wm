@@ -39,6 +39,7 @@ func (c *Compositor) frame(o *output.Output) error {
 	}
 	c.finishSwitches(o, c.frameTime)
 	c.settleGenies(c.frameTime)
+	c.settlePreview(c.frameTime)
 	if err := c.settleWobbles(); err != nil {
 		return err
 	}
@@ -189,6 +190,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 			if err := c.drawTabBars(pass, o); err != nil {
 				return shown, err
 			}
+			c.drawDragPreview(pass, o)
 		}
 	}
 	c.drawGooSwitch(pass, o)

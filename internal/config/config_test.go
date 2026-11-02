@@ -130,6 +130,15 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n")); err != nil || c.Animations.Reduced() {
 		t.Errorf("reduced motion is on unasked: %v", err)
 	}
+	if c, err := Parse("t.yaml", []byte("drag_preview:\n  enabled: false\n  opacity: 0.5\n  blur: true\n  snap_distance: 8\n")); err != nil || c.Decor.DragPreview != (compositor.DragPreview{Opacity: 0.5, Blur: true, SnapDistance: 8}) {
+		t.Errorf("drag_preview: %+v, %v", c.Decor.DragPreview, err)
+	}
+	if c, err := Parse("t.yaml", nil); err != nil || !c.Decor.DragPreview.Enabled {
+		t.Errorf("the drag preview is off by default: %+v, %v", c.Decor.DragPreview, err)
+	}
+	if _, err := Parse("t.yaml", []byte("drag_preview:\n  snap_distance: 0\n")); err == nil || !strings.Contains(err.Error(), "drag_preview.snap_distance") {
+		t.Errorf("snap_distance 0: %v", err)
+	}
 	if cfg.WM.Gaps != (wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 12, Right: 8, Bottom: 12, Left: 8}}) {
 		t.Errorf("gaps %+v", cfg.WM.Gaps)
 	}
@@ -225,7 +234,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"animations:\n  curves:\n    a: {spring: {stiffness: 1}}\n":             "t.yaml:3: animations.curves.a.spring: anim: spring stiffness 1, damping 0",
 		"animations:\n  curves:\n    linear: {bezier: [0, 0, 1, 1]}\n":          "t.yaml:3: animations.curves.linear: is a built-in curve",
 		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n":   "t.yaml:3: animations.curves.a.tension: unknown key",
-		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom)",
+		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap)",
 		"animations:\n  events:\n    windows: {curve: bouncy}\n":                `t.yaml:3: animations.events.windows.curve: "bouncy" is not a curve (known: ease,`,
 		"animations:\n  events:\n    windows_in: {style: popin 120%}\n":         "t.yaml:3: animations.events.windows_in.style: anim: popin takes a percentage from 0% to 100%",
 		"animations:\n  events:\n    windows_in: {style: wobble}\n":             `t.yaml:3: animations.events.windows_in.style: anim: unknown style "wobble"`,

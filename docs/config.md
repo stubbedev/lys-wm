@@ -313,6 +313,42 @@ through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
 the place of these for the windows it matches. A translucent window shows
 what is below it, so it is never scanned out directly.
 
+## drag_preview
+
+```yaml
+drag_preview:
+  enabled: true
+  opacity: 0.25
+  blur: false
+  snap_distance: 16
+```
+
+While a window is dragged with `movewindow`, a translucent rounded rectangle with a
+border in `borders.active` shows where it will land if dropped now, above the tiled
+windows and below the floating ones. For a tiled window that is its place in the
+tree, what `movewindow` does on release, and nothing while that is where it already
+is. A floating window lands under the pointer unless the pointer is near an edge of
+the usable area, the output less its bars: then it snaps, and the preview shows where.
+
+| Pointer within `snap_distance` of | Window lands on |
+| --- | --- |
+| The left or right edge | That half |
+| The bottom edge | The bottom half |
+| The top edge | The whole usable area |
+| A corner | That quarter |
+
+A window with size limits keeps them, and gaps apply as they do to tiled windows.
+The rectangle moves on the [`snap` event](#animations) and fades on `fade_snap`.
+
+| Key | Default |
+| --- | --- |
+| `enabled` | `true`. Off, a dragged window neither shows a preview nor snaps |
+| `opacity` | 0.25: of the fill; the border is drawn at full strength |
+| `blur` | `false`: blur what is behind the rectangle with `decoration.blur`'s `size`, `passes` and look |
+| `snap_distance` | 16: logical pixels |
+
+It costs nothing outside a drag.
+
 ## gaps
 
 ```yaml
@@ -390,6 +426,8 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |
 | `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` | cross-fade |
 | `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` | cross-fade |
+| `snap` | `windows` | The [drag preview](#drag_preview) moving to the next place a window would land. It runs on `spring` unless given a curve or a duration | | still |
+| `fade_snap` | `fade` | The drag preview appearing and going | | fade |
 | `zoom` | `global` | The `zoom` action changing an output's magnification. It runs on `spring` unless given a curve or a duration, in equal ratios, so doubling takes the same motion at any level | | still |
 
 `zoom` magnifies an output around the pointer. The pointer stays where it is on

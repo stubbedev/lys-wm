@@ -273,7 +273,7 @@ func (c *Compositor) springMoves() bool {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
+	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
 }
@@ -469,6 +469,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	}
 	if c.interaction != nil && c.interaction.w == w {
 		c.interaction = nil
+		c.hidePreview(c.clock())
 	}
 	return errors.Join(closeErr, c.update(c.wm.UnmapWindow(w.id)))
 }

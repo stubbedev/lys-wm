@@ -123,6 +123,7 @@ type rawConfig struct {
 	Borders         rawBorders            `yaml:"borders"`
 	Gaps            rawGaps               `yaml:"gaps"`
 	Decoration      rawDecoration         `yaml:"decoration"`
+	DragPreview     rawDragPreview        `yaml:"drag_preview"`
 	Animations      rawAnimations         `yaml:"animations"`
 	Tabs            rawTabs               `yaml:"tabs"`
 	Autotile        rawAutotile           `yaml:"autotile"`
@@ -240,6 +241,13 @@ type rawDecoration struct {
 	DimStrength       *At[float64] `yaml:"dim_strength"`
 	Shadow            rawShadow    `yaml:"shadow"`
 	Blur              rawBlur      `yaml:"blur"`
+}
+
+type rawDragPreview struct {
+	Enabled      *bool        `yaml:"enabled"`
+	Opacity      *At[float64] `yaml:"opacity"`
+	Blur         *bool        `yaml:"blur"`
+	SnapDistance *At[int]     `yaml:"snap_distance"`
 }
 
 type rawBlur struct {
@@ -616,6 +624,19 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 		}
 	}
 	return table
+}
+
+func (p *parser) dragPreview(r rawDragPreview, def compositor.DragPreview) compositor.DragPreview {
+	out := def
+	if r.Enabled != nil {
+		out.Enabled = *r.Enabled
+	}
+	if r.Blur != nil {
+		out.Blur = *r.Blur
+	}
+	out.Opacity = p.opacity(r.Opacity, "drag_preview.opacity", def.Opacity)
+	out.SnapDistance = p.positive(r.SnapDistance, "drag_preview.snap_distance", def.SnapDistance)
+	return out
 }
 
 func (p *parser) opacity(a *At[float64], key string, fallback float32) float32 {
@@ -1187,6 +1208,7 @@ func Parse(file string, data []byte) (Config, error) {
 				Inactive:    p.tabColors(raw.Tabs.Inactive, "tabs.inactive", def.Tab.Inactive),
 				Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
 			},
+			DragPreview: p.dragPreview(raw.DragPreview, def.DragPreview),
 		},
 		WM:              compositor.DefaultSettings(),
 		Xwayland:        raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,

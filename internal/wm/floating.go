@@ -278,3 +278,52 @@ func (s State) ResizeFocused(dx, dy int) (State, error) {
 	}
 	return s, nil
 }
+
+func SnapRect(area image.Rectangle, at image.Point, distance int, gaps Gaps) (image.Rectangle, bool) {
+	left, right := at.X-area.Min.X < distance, area.Max.X-at.X <= distance
+	top, bottom := at.Y-area.Min.Y < distance, area.Max.Y-at.Y <= distance
+	if !left && !right && !top && !bottom || !at.In(area) {
+		return image.Rectangle{}, false
+	}
+	r := gaps.Outer.shrink(area)
+	whole := r
+	midX, midY := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
+	lead, trail := gaps.Inner/2, gaps.Inner-gaps.Inner/2
+	switch {
+	case left:
+		r.Max.X = midX - lead
+	case right:
+		r.Min.X = midX + trail
+	}
+	switch {
+	case top && (left || right):
+		r.Max.Y = midY - lead
+	case bottom:
+		r.Min.Y = midY + trail
+	}
+	if r.Empty() {
+		return whole, true
+	}
+	return r, true
+}
+
+func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, distance int, gaps Gaps) (image.Rectangle, bool) {
+	r, ok := SnapRect(area, at, distance, gaps)
+	if !ok {
+		return image.Rectangle{}, false
+	}
+	return s.limits[id].floored().fitRect(r, true, true), true
+}
+
+func (s State) DropTarget(id WindowID, at image.Point, auto Autotile, sp Spacing) (image.Rectangle, error) {
+	dropped, err := s.Reinsert(id, at, auto)
+	if err != nil {
+		return image.Rectangle{}, err
+	}
+	for _, p := range dropped.Arrange(sp).Windows {
+		if p.ID == id {
+			return p.Rect, nil
+		}
+	}
+	return image.Rectangle{}, fmt.Errorf("drop window %d: %w", id, ErrUnknownWindow)
+}

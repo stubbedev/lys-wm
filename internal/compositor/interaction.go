@@ -42,6 +42,10 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 
 func (c *Compositor) dragMoved() error {
 	it := c.interaction
+	return errors.Join(c.dragTo(it), c.trackDrop(it))
+}
+
+func (c *Compositor) dragTo(it *interaction) error {
 	at := c.cursor.pixel()
 	total, step := at.Sub(it.start), at.Sub(it.last)
 	it.last = at
@@ -80,10 +84,14 @@ func (c *Compositor) dragMoved() error {
 func (c *Compositor) endDrag() error {
 	it := c.interaction
 	c.interaction = nil
+	c.hidePreview(c.clock())
+	if err := c.endDrop(it); err != nil {
+		return fmt.Errorf("compositor: snap window %d: %w", it.w.id, err)
+	}
 	if it.mode == wm.DragMove && it.w.layer == wm.LayerTiled && it.w.tile != (image.Rectangle{}) {
 		if err := c.update(c.wm.Reinsert(it.w.id, c.cursor.pixel(), c.settings.Autotile)); err != nil {
 			return fmt.Errorf("compositor: drop window %d: %w", it.w.id, err)
 		}
 	}
-	return errors.Join(c.refreshPointer(), c.seat.PointerFrame())
+	return errors.Join(c.refreshPointer(), c.seat.PointerFrame(), c.scheduleAll())
 }

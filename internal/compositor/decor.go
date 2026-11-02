@@ -97,6 +97,7 @@ type Decor struct {
 	Blur                         Blur
 	ActiveBorder, InactiveBorder Border
 	Tab                          TabStyle
+	DragPreview                  DragPreview
 }
 
 var (
@@ -126,6 +127,7 @@ func PlainDecor() Decor {
 			Inactive: TabColors{Background: surface0, Text: textFg},
 			Urgent:   TabColors{Background: red, Text: crust},
 		},
+		DragPreview: DragPreview{Enabled: true, Opacity: 0.25, SnapDistance: 16},
 	}
 }
 

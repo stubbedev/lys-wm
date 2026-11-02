@@ -53,6 +53,7 @@ func (c *Compositor) minimize(w *window) error {
 		}
 		if c.interaction != nil && c.interaction.w == x {
 			c.interaction = nil
+			c.hidePreview(c.clock())
 		}
 	}
 	var dismissed error

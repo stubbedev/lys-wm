@@ -175,3 +175,64 @@ func TestFloatingWindowsKeepTheirLimits(t *testing.T) {
 		t.Fatal("an unmapped window's limits were kept")
 	}
 }
+
+func TestSnapRectsFromEdgesAndCorners(t *testing.T) {
+	area := image.Rect(100, 50, 1100, 650)
+	gaps := Gaps{Inner: 10, Outer: Insets{Top: 20, Right: 20, Bottom: 20, Left: 20}}
+	cases := []struct {
+		at   image.Point
+		want image.Rectangle
+	}{
+		{image.Pt(105, 300), image.Rect(120, 70, 595, 630)},
+		{image.Pt(1095, 300), image.Rect(605, 70, 1080, 630)},
+		{image.Pt(600, 55), image.Rect(120, 70, 1080, 630)},
+		{image.Pt(600, 645), image.Rect(120, 355, 1080, 630)},
+		{image.Pt(105, 55), image.Rect(120, 70, 595, 345)},
+		{image.Pt(1095, 55), image.Rect(605, 70, 1080, 345)},
+		{image.Pt(105, 645), image.Rect(120, 355, 595, 630)},
+		{image.Pt(1095, 645), image.Rect(605, 355, 1080, 630)},
+	}
+	for _, c := range cases {
+		if got, snapped := SnapRect(area, c.at, 16, gaps); !snapped || got != c.want {
+			t.Errorf("at %v: %v (%v), want %v", c.at, got, snapped, c.want)
+		}
+	}
+	for _, at := range []image.Point{image.Pt(600, 300), image.Pt(116, 66), image.Pt(50, 300), image.Pt(600, 700)} {
+		if got, snapped := SnapRect(area, at, 16, gaps); snapped {
+			t.Errorf("at %v snaps to %v", at, got)
+		}
+	}
+}
+
+func TestASnapTargetKeepsTheWindowsLimits(t *testing.T) {
+	s := ok(t)(State{}.AddOutput("DP-1", image.Rect(0, 0, 1000, 500), image.Rect(0, 0, 1000, 500)))
+	s = ok(t)(s.MapFloating(1, image.Rect(10, 10, 110, 110)))
+	s = ok(t)(s.SetLimits(1, Limits{Max: image.Pt(200, 200)}))
+	got, snapped := s.SnapTarget(1, image.Rect(0, 0, 1000, 500), image.Pt(2, 250), 16, Gaps{})
+	if !snapped || got != image.Rect(0, 0, 200, 200) {
+		t.Errorf("a window of at most 200x200 snaps to %v (%v)", got, snapped)
+	}
+}
+
+func TestADropTargetIsWhereReinsertPutsTheWindow(t *testing.T) {
+	s := ok(t)(State{}.AddOutput("DP-1", image.Rect(0, 0, 1000, 500), image.Rect(0, 0, 1000, 500)))
+	s = ok(t)(s.MapWindow(1, Autotile{}))
+	s = ok(t)(s.MapWindow(2, Autotile{}))
+	at := image.Pt(900, 400)
+	got, err := s.DropTarget(1, at, Autotile{}, Spacing{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := s.Reinsert(1, at, Autotile{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range dropped.Arrange(Spacing{}).Windows {
+		if p.ID == 1 && p.Rect != got {
+			t.Errorf("target %v, the drop lands on %v", got, p.Rect)
+		}
+	}
+	if _, err := s.DropTarget(9, at, Autotile{}, Spacing{}); err == nil {
+		t.Error("a target for an unknown window")
+	}
+}

@@ -33,6 +33,8 @@ const (
 	BorderAngle
 	WindowsMinimize
 	Zoom
+	Snap
+	FadeSnap
 	eventCount
 )
 
@@ -131,6 +133,8 @@ var events = [eventCount]struct {
 	BorderAngle:     {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
 	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie, FadeStyle}, style: Style{Kind: Genie}, reduced: crossFades},
 	Zoom:            {name: "zoom", parent: Global, shape: Smooth},
+	Snap:            {name: "snap", parent: Windows, shape: Smooth},
+	FadeSnap:        {name: "fade_snap", parent: Fade, reduced: fades},
 }
 
 func (e Event) String() string {

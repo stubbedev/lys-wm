@@ -170,6 +170,7 @@ type Compositor struct {
 	windows         []*window
 	stack           []*window
 	interaction     *interaction
+	preview         *dragPreview
 	wm              wm.State
 	settings        wm.Settings
 	rules           []wm.Rule
