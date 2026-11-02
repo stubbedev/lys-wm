@@ -107,6 +107,9 @@ func TestFollowerHoldsItsPinnedValues(t *testing.T) {
 		}
 		for i, want := range c.want {
 			x, v := f.at(pinnedFollowerTimes[i])
+			if p := f.position(pinnedFollowerTimes[i]); p != want[0] {
+				t.Errorf("%v from %v at %v: position %x, want %x", c.params, c.state, pinnedFollowerTimes[i], p, want[0])
+			}
 			if x != want[0] || v != want[1] {
 				t.Errorf("%v from %v at %v = (%x, %x), want %x", c.params, c.state, pinnedFollowerTimes[i], x, v, want)
 			}

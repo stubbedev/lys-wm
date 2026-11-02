@@ -137,8 +137,7 @@ func (s Spring) At(elapsed time.Duration) float64 {
 	if elapsed <= 0 {
 		return 0
 	}
-	x, _ := motion.SpringStep(s.omega, s.zeta, -1, 0, elapsed.Seconds())
-	return 1 + x
+	return 1 + motion.SpringPosition(s.omega, s.zeta, -1, 0, elapsed.Seconds())
 }
 
 func (s Spring) Duration() time.Duration { return s.settle }

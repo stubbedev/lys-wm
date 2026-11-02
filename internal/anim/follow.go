@@ -112,6 +112,17 @@ func (m *Motion) Jump(to float64) {
 	m.tween.Jump(to)
 }
 
+func (f follower) position(now time.Duration) float64 {
+	t := now - f.start
+	if t >= f.settle {
+		return f.target
+	}
+	if t <= 0 {
+		return f.target + f.u0
+	}
+	return f.target + motion.SpringPosition(f.s.omega, f.s.zeta, f.u0, f.v0, t.Seconds())
+}
+
 type RectMotion struct {
 	tween   Tween[image.Rectangle]
 	springs *[4]follower
@@ -139,9 +150,9 @@ func (m RectMotion) At(now time.Duration) image.Rectangle {
 	if m.springs == nil {
 		return m.tween.At(now)
 	}
-	p, _ := m.state(now)
-	x0, y0 := int(math.Round(p[0])), int(math.Round(p[1]))
-	return image.Rect(x0, y0, max(x0, int(math.Round(p[2]))), max(y0, int(math.Round(p[3]))))
+	f := m.springs
+	x0, y0 := int(math.Round(f[0].position(now))), int(math.Round(f[1].position(now)))
+	return image.Rect(x0, y0, max(x0, int(math.Round(f[2].position(now)))), max(y0, int(math.Round(f[3].position(now)))))
 }
 
 func (m RectMotion) Velocity(now time.Duration) [4]float64 {
