@@ -104,9 +104,9 @@ func (f *frame) drawSurface(s *surface.Surface, space *colorspace.Description, t
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m, space: space})
 }
 
-func (f *frame) remap(from int, src, dst image.Rectangle) {
-	if src.Empty() {
-		return
+func mapRect(r, src, dst image.Rectangle) image.Rectangle {
+	if r.Empty() {
+		return r
 	}
 	axis := func(v, s0, sn, d0, dn int) int {
 		return d0 + int(math.Round(float64(v-s0)*float64(dn)/float64(sn)))
@@ -114,12 +114,24 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	at := func(p image.Point) image.Point {
 		return image.Pt(axis(p.X, src.Min.X, src.Dx(), dst.Min.X, dst.Dx()), axis(p.Y, src.Min.Y, src.Dy(), dst.Min.Y, dst.Dy()))
 	}
-	rect := func(r image.Rectangle) image.Rectangle {
-		if r.Empty() {
-			return r
-		}
-		return image.Rectangle{Min: at(r.Min), Max: at(r.Max)}
+	return image.Rectangle{Min: at(r.Min), Max: at(r.Max)}
+}
+
+func (f *frame) stretch(from int, src, dst image.Rectangle) {
+	if src.Empty() {
+		return
 	}
+	for i := range f.ops[from:] {
+		op := &f.ops[from+i]
+		op.dst = mapRect(op.dst, src, dst)
+	}
+}
+
+func (f *frame) remap(from int, src, dst image.Rectangle) {
+	if src.Empty() {
+		return
+	}
+	rect := func(r image.Rectangle) image.Rectangle { return mapRect(r, src, dst) }
 	sx, sy := float32(dst.Dx())/float32(src.Dx()), float32(dst.Dy())/float32(src.Dy())
 	point := func(v [2]float32) [2]float32 {
 		return [2]float32{float32(dst.Min.X) + float32((v[0]-float32(src.Min.X))*sx), float32(dst.Min.Y) + float32((v[1]-float32(src.Min.Y))*sy)}

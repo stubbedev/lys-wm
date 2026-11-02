@@ -72,6 +72,7 @@ type Config struct {
 	Tearing         bool
 	Hooks           Hooks
 	InheritTimeout  time.Duration
+	HoldBound       time.Duration
 	Animations      anim.Table
 	BlurLayers      []string
 	Gestures        Gestures
@@ -118,6 +119,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Font:           font,
 		Icons:          icontheme.New("", nil),
 		InheritTimeout: DefaultInheritTimeout,
+		HoldBound:      DefaultHoldBound,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
 	}
@@ -171,6 +173,13 @@ type Compositor struct {
 	stack           []*window
 	interaction     *interaction
 	preview         *dragPreview
+	txn             *transaction
+	holdTimer       *loop.Timer
+	holdBound       time.Duration
+	holds           HoldStats
+	awaited         []*window
+	layoutDirty     bool
+	lagging         bool
 	wm              wm.State
 	settings        wm.Settings
 	rules           []wm.Rule
@@ -278,6 +287,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if !(cfg.Gestures.Distance > 0) {
 		return binds.Map{}, fmt.Errorf("compositor: gesture distance %v is not positive", cfg.Gestures.Distance)
 	}
+	if cfg.HoldBound <= 0 {
+		return binds.Map{}, fmt.Errorf("compositor: layout hold bound %v is not positive", cfg.HoldBound)
+	}
 	if cfg.InheritTimeout <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
 	}
@@ -304,7 +316,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.colorManagement = cfg.ColorManagement
-	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
+	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
 	c.rulesGen++
@@ -361,6 +373,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.repeat.timer, err = l.AddTimer(c.repeatFired); err != nil {
+		return err
+	}
+	if c.holdTimer, err = l.AddTimer(c.holdExpired); err != nil {
 		return err
 	}
 	if c.layout, err = output.New(display); err != nil {
@@ -521,7 +536,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
+	errs := []error{c.landInFlight(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
 	for _, sc := range c.scenes {
 		errs = append(errs, sc.dropImage())
 	}
@@ -548,6 +563,10 @@ func (c *Compositor) Close() error {
 	if c.repeat.timer != nil {
 		errs = append(errs, c.repeat.timer.Remove())
 		c.repeat.timer = nil
+	}
+	if c.holdTimer != nil {
+		errs = append(errs, c.holdTimer.Remove())
+		c.holdTimer = nil
 	}
 	return errors.Join(errs...)
 }

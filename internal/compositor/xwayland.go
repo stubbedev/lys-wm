@@ -90,6 +90,33 @@ func (t xToplevel) apply(w want) error {
 	return t.Apply(t.state(w))
 }
 
+func (t xToplevel) resizes(w want) bool {
+	size := t.state(w).Rect.Size()
+	return size != t.Rect().Size() && size != t.Surface().Size()
+}
+
+func (t xToplevel) answer() func(*surface.Update) bool {
+	size := t.Applied().Rect.Size()
+	return func(u *surface.Update) bool {
+		b := u.Buffer()
+		return b != nil && b.Size() == size
+	}
+}
+
+func (xToplevel) synced() bool {
+	return true
+}
+
+func (t xToplevel) stale() bool {
+	size := t.Applied().Rect.Size()
+	return size != (image.Point{}) && t.Surface().Size() != size
+}
+
+func (t xToplevel) shownSize() image.Point {
+	at := t.Rect().Min
+	return t.c.fromX(image.Rectangle{Min: at, Max: at.Add(t.Surface().Size())}).Size()
+}
+
 func (c *Compositor) ScaleXwayland(clients func(*server.Client) bool) error {
 	c.xwaylandClients = clients
 	return errors.Join(c.layout.Physical(clients), c.reconcile())

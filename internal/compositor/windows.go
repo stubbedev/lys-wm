@@ -19,6 +19,8 @@ import (
 type window struct {
 	id           wm.WindowID
 	top          toplevel
+	goal         image.Rectangle
+	stalled      bool
 	tile         image.Rectangle
 	rect         image.Rectangle
 	visible      bool
@@ -197,15 +199,57 @@ func (c *Compositor) reconcile() error {
 			return c.update(c.wm.FocusWindow(m.id))
 		}
 	}
-	var errs []error
+	c.layoutDirty, c.lagging = false, false
 	now := c.clock()
 	a := c.wm.Arrange(c.spacing())
+	var errs []error
+	if c.txn != nil && !sameArrangement(a, c.txn.goal) {
+		errs = append(errs, c.land(false))
+	}
+	held := c.txn != nil
+	awaited, err := c.sendGoal(a)
+	errs = append(errs, err)
+	switch {
+	case held:
+	case len(awaited) > 0 && c.holdable():
+		errs = append(errs, c.begin(a, awaited))
+	default:
+		errs = append(errs, c.install(a, now))
+	}
+	var target *window
+	if hasFocus {
+		target = c.windowByID(focused)
+	}
+	if target != c.active {
+		c.active = target
+		if target != nil {
+			if target.urgent {
+				c.stateChanged()
+			}
+			c.layerFocus, target.urgent = nil, false
+			errs = append(errs, target.top.ping())
+		}
+	}
+	c.refreshLooks(now)
+	return errors.Join(append(errs, c.publish())...)
+}
+
+func (c *Compositor) publish() error {
+	return errors.Join(c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())
+}
+
+func errUnknownWindow(id wm.WindowID) error {
+	return fmt.Errorf("compositor: the window manager placed unknown window %d", id)
+}
+
+func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
+	var errs []error
 	c.tabBars = a.TabBars
 	c.stack = c.stack[:0]
 	for _, p := range a.Windows {
 		w := c.windowByID(p.ID)
 		if w == nil {
-			return fmt.Errorf("compositor: the window manager placed unknown window %d", p.ID)
+			continue
 		}
 		c.stack = append(c.stack, w)
 		rect := c.content(p.Rect, p.Layer)
@@ -224,25 +268,9 @@ func (c *Compositor) reconcile() error {
 		if moved && w.visible {
 			errs = append(errs, c.reconstrain(w))
 		}
-		errs = append(errs, c.settle(w, hasFocus && focused == w.id))
 	}
 	c.trackSwitches(now)
-	var target *window
-	if hasFocus {
-		target = c.windowByID(focused)
-	}
-	if target != c.active {
-		c.active = target
-		if target != nil {
-			if target.urgent {
-				c.stateChanged()
-			}
-			c.layerFocus, target.urgent = nil, false
-			errs = append(errs, target.top.ping())
-		}
-	}
-	c.refreshLooks(now)
-	return errors.Join(append(errs, c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())...)
+	return errors.Join(errs...)
 }
 
 func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
@@ -289,14 +317,12 @@ func sameState(a, b shell.State) bool {
 	return a.Size == b.Size && a.Bounds == b.Bounds && slices.Equal(a.States, b.States)
 }
 
-func (c *Compositor) settle(w *window, activated bool) error {
-	want := c.wanted(w.rect, w.layer, activated)
-	want.minimized = w.minimized
-	if w.top.settled(want) && w.scale == want.scale {
+func (c *Compositor) settle(w *window, goal want) error {
+	if w.top.settled(goal) && w.scale == goal.scale {
 		return nil
 	}
-	w.scale = want.scale
-	return w.top.apply(want)
+	w.scale = goal.scale
+	return w.top.apply(goal)
 }
 
 func (c *Compositor) floats(t toplevel) (bool, image.Point) {
@@ -464,6 +490,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	closeErr := c.startClosing(w, c.clock())
 	closeErr = errors.Join(closeErr, c.dropJelly(w))
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
+	c.stack = slices.DeleteFunc(c.stack, func(x *window) bool { return x == w })
 	if c.active == w {
 		c.active = nil
 	}

@@ -73,6 +73,10 @@ func pixel(b *soft.Buffer, x, y int) [3]byte {
 	return [3]byte{b.Pix[i+2], b.Pix[i+1], b.Pix[i]}
 }
 
+func landed(_ *headless.Backend, c *compositor.Compositor) bool {
+	return !c.Holding()
+}
+
 func showing(x, y int, want [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
 	return func(b *headless.Backend, _ *compositor.Compositor) bool {
 		outputs := b.Outputs()

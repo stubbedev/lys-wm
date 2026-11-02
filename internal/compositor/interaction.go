@@ -27,6 +27,9 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 	if !ok {
 		return ErrNotFromMouseBind
 	}
+	if err := c.landInFlight(); err != nil {
+		return err
+	}
 	_, _, w := c.surfaceAt(c.cursor)
 	if w == nil || w.layer == wm.LayerFullscreen {
 		return nil
@@ -52,9 +55,9 @@ func (c *Compositor) dragTo(it *interaction) error {
 	floating := it.w.layer == wm.LayerFloating
 	switch {
 	case floating && it.mode == wm.DragMove:
-		return c.update(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
+		return c.dragged(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
 	case floating:
-		return c.update(c.wm.ResizeFloating(it.w.id, it.rect, total, it.right, it.bottom))
+		return c.dragged(c.wm.ResizeFloating(it.w.id, it.rect, total, it.right, it.bottom))
 	case it.mode == wm.DragResize:
 		s := c.wm
 		var err error
@@ -76,14 +79,34 @@ func (c *Compositor) dragTo(it *interaction) error {
 				return err
 			}
 		}
-		return c.update(s, nil)
+		return c.dragged(s, nil)
 	}
+	return c.scheduleAll()
+}
+
+func (c *Compositor) dragged(s wm.State, err error) error {
+	if err != nil {
+		return err
+	}
+	c.wm = s
+	c.stateChanged()
+	c.layoutDirty = true
 	return c.scheduleAll()
 }
 
 func (c *Compositor) endDrag() error {
 	it := c.interaction
+	if c.layoutDirty {
+		if err := c.reconcile(); err != nil {
+			return fmt.Errorf("compositor: end the drag of window %d: %w", it.w.id, err)
+		}
+	}
 	c.interaction = nil
+	if c.lagging {
+		if err := c.reconcile(); err != nil {
+			return fmt.Errorf("compositor: end the drag of window %d: %w", it.w.id, err)
+		}
+	}
 	c.hidePreview(c.clock())
 	if err := c.endDrop(it); err != nil {
 		return fmt.Errorf("compositor: snap window %d: %w", it.w.id, err)

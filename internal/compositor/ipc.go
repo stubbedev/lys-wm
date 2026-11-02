@@ -73,7 +73,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			PID:          w.top.pid(),
 			Workspace:    id,
 			Output:       ws.Output,
-			Rect:         ipc.RectOf(w.rect),
+			Rect:         ipc.RectOf(w.goal),
 			Floating:     s.Floats(w.id),
 			Fullscreen:   s.Fullscreen(w.id),
 			Minimized:    s.Minimized(w.id),

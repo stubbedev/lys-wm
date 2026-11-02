@@ -177,6 +177,7 @@ func TestActivationMarksWindowsUrgent(t *testing.T) {
 	}
 	b.c.Bind(bAct)
 	b.seen(t, "b focused", func() bool { return slices.Contains(b.in.Log, "kb_enter b") })
+	h.Eventually("a's bound over, with b under the pointer", landed)
 
 	urgent := func(name string) func(*headless.Backend, *compositor.Compositor) bool {
 		return func(_ *headless.Backend, c *compositor.Compositor) bool {

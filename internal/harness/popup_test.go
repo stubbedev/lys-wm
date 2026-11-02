@@ -90,6 +90,7 @@ func TestGrabsFromClientsWithoutInputAreRefused(t *testing.T) {
 	frontSeat, _ := front.Seat()
 	w := front.Window("front", quadrants)
 	front.DispatchUntil("the front window to map", w.Mapped)
+	h.Eventually("the background window's bound over, with the front window under the pointer", landed)
 	refused := background.Popup(hidden, menuAt(image.Pt(10, 10), image.Pt(20, 20)), &testclient.Grab{Seat: seat, Serial: 12345}, testclient.Fill(0x80, 0x80, 0x80))
 	background.DispatchUntil("the background popup dismissed", func() bool { return refused.Dismissed })
 	focused := front.Popup(w, menuAt(image.Pt(10, 10), image.Pt(20, 20)), &testclient.Grab{Seat: frontSeat, Serial: 0}, testclient.Fill(0x80, 0x80, 0x80))

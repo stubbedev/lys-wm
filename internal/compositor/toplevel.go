@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/shell"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -34,6 +35,11 @@ type toplevel interface {
 	scaled() bool
 	settled(w want) bool
 	apply(w want) error
+	resizes(w want) bool
+	answer() func(*surface.Update) bool
+	synced() bool
+	stale() bool
+	shownSize() image.Point
 	close() error
 	ping() error
 }
@@ -103,6 +109,31 @@ func (t xdgToplevel) apply(w want) error {
 	}
 	_, err := t.Configure(xdgState(w))
 	return err
+}
+
+func (t xdgToplevel) resizes(w want) bool {
+	st, was := xdgState(w), t.Requested()
+	flips := st.Has(sxdg.XdgToplevelStateFullscreen) != was.Has(sxdg.XdgToplevelStateFullscreen)
+	return flips || (st.Size != was.Size && st.Size != t.Geometry().Size())
+}
+
+func (t xdgToplevel) answer() func(*surface.Update) bool {
+	serial := t.LatestSerial()
+	return func(u *surface.Update) bool {
+		return t.Acked(serial) && u.Buffer() != nil
+	}
+}
+
+func (xdgToplevel) synced() bool {
+	return true
+}
+
+func (t xdgToplevel) stale() bool {
+	return t.Requested().Size != t.Current().Size
+}
+
+func (t xdgToplevel) shownSize() image.Point {
+	return t.Geometry().Size()
 }
 
 func (t xdgToplevel) close() error {

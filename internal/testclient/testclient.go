@@ -293,7 +293,18 @@ type Window struct {
 	drawn        int
 	stopped      bool
 	Translucent  bool
+	Answer       Answer
+	Configures   int
 }
+
+type Answer uint8
+
+const (
+	AnswerByDrawing Answer = iota
+	AnswerNever
+	AnswerAckOnly
+	AnswerKeepingTheBuffer
+)
 
 func (w *Window) Stop() {
 	w.stopped = true
@@ -513,6 +524,15 @@ func (e fractionalEvents) PreferredScale(_ *cfs.WpFractionalScaleV1, scale uint3
 type xdgSurfaceEvents struct{ w *Window }
 
 func (e xdgSurfaceEvents) Configure(xs *cxdg.XdgSurface, serial uint32) error {
+	e.w.Configures++
+	switch e.w.Answer {
+	case AnswerNever:
+		return nil
+	case AnswerAckOnly:
+		return xs.AckConfigure(serial)
+	case AnswerKeepingTheBuffer:
+		return errors.Join(xs.AckConfigure(serial), e.w.Surface.Commit())
+	}
 	if err := xs.AckConfigure(serial); err != nil {
 		return err
 	}

@@ -147,6 +147,7 @@ func (c *Compositor) snapshot(w *window) (render.TextureTarget, error) {
 	}
 	var f frame
 	c.drawClippedTree(&f, o, w.top.Surface(), c.windowOrigin(w), nil, c.windowMask(o, w), c.opacity(w))
+	c.stretchStale(&f, o, 0, w)
 	if !slices.ContainsFunc(f.ops, func(op drawOp) bool { return op.surface != nil }) {
 		return nil, nil
 	}

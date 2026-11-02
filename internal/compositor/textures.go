@@ -59,6 +59,12 @@ type syncRenderer interface {
 
 func (c *Compositor) Committed(s *surface.Surface) error {
 	c.cursorCommitted(s)
+	if c.lagging {
+		c.lagging, c.layoutDirty = false, true
+		if err := c.scheduleAll(); err != nil {
+			return err
+		}
+	}
 	_, drawable := c.textures[s]
 	if s.Attached() {
 		if err := c.attach(s); err != nil {

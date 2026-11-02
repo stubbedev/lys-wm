@@ -166,14 +166,79 @@ and plugging it back returns them and shows the one it was showing.
 `internal/anim` (#223) is pure like `wm`: bézier easings, springs solved in
 closed form, tweens that sample a curve at a monotonic time and retarget from
 the value they show, and the event table the config resolves through parent
-events. The compositor keeps a tween per window over its tile, sets it in
-`reconcile`, and samples it once per frame at the frame's start time
+events. The compositor keeps a tween per window over its tile, sets it when
+a layout change lands, and samples it once per frame at the frame's start time
 (`Config.Clock`, so tests drive time themselves). A window's draw ops are
 recorded at its goal geometry and then mapped onto the tile the animation
 shows, so its surfaces, border and popups move as one and the op diff damages
 exactly what moved. After drawing, an output schedules its next frame for as
 long as an animation overlaps it, whether or not the frame changed anything,
 so an animation slower than a pixel per frame still reaches its end.
+
+### Layout changes land together
+
+A layout change that gives windows a new size is a transaction. `reconcile` splits
+in two: the configures go out at once, and the placements (`tile`, `rect`, `layer`,
+the stack, the tab bars, and the animations they start) are installed only when
+the change lands. Until then everything keeps the old presentation, and because
+drawing, hit testing and popup placement all read those placements, what is shown
+and what takes input stay one state. Keyboard focus and `activated` do not wait.
+
+A window is waited for when it is visible, not minimized, on an output, and its new
+size differs both from what it was last asked for and from what it has already drawn.
+No such window, no transaction: the change is installed in the same call, so a
+focus change, a floating move, a workspace switch to windows at their sizes, or a
+lone window nothing happens to, pays one comparison per placement. No hook is
+installed, no timer armed, and a frame costs two loads, so an idle desktop stays
+asleep.
+
+While it is held, a commit that answers the configure is parked by a
+`surface.Barrier`, a hold at the end of the update's gates: it reaches the barrier only
+once it is at the head of the surface's queue and its explicit-sync fence, FIFO and
+commit-timing gates are open, so a member is ready when its pixels are, not when it
+asked. The commit's frame callback stays parked too, so a client does not draw on
+ahead. An answer is the ack of the last configure on xdg-shell, with a buffer
+attached; a client that commits while the configure is unacked just goes on showing
+its old size. A null attach is not an answer and unmaps at once. Subsurfaces in sync
+mode are parked with their parent, as the protocol has them; a desynchronized one
+updates inside the old frame, which is what it asked for. When the last member is
+ready, or at the bound, the placements are installed and every barrier released in
+one pass of the loop, so the next frame on every output shows all of it, and the
+animations start at that moment. A spring or tween in flight runs on during the hold
+and retargets from what it shows, with its velocity.
+
+The bound is 100 ms (`DefaultHoldBound`). It is not a config key: longer feels like a
+laggy keypress, and shorter only makes slow clients draw the fallback below sooner.
+A client that misses it is marked stalled and nobody waits for it again until it has
+caught up, so a frozen client costs one bound, once, not one per change. Anything that
+changes the arrangement during a hold (a window opening, closing or unmapping, a
+client dying, a workspace switch, an output going away) lands the old change at
+once and starts over, so holds do not queue and a key press never waits behind
+another one. So a window that closes during a hold does not hold anyone: its
+snapshot starts fading at once, since nothing about it needs an answer.
+
+While a client's content does not match its frame, it is scaled to the frame. During
+an animation that is the existing remap of the window's ops, new buffer onto the tile
+in between: no offscreen pass, nothing to fill or clip, and the border and content
+stay one shape. A stalled client past the bound gets the same treatment from its old
+buffer: its surface ops alone are stretched onto its new frame (`frame.stretch`), the
+mask staying where the frame is, so there is no hole of wallpaper and no old buffer
+over a neighbour, at the cost of soft text in a window that is not responding anyway.
+It works on every renderer because it only changes where ops are drawn, and costs
+one comparison per drawn window. A crossfade from a snapshot looks a little better at
+large size changes and costs a texture and a second pass per window, per frame; a clip
+shows holes. This is only for a client that has not answered: one that acked and drew
+a different size (a terminal rounding to its cell grid, say) said what it wants and is
+drawn at its own size. Hit testing stays at the client's real geometry.
+
+A drag coalesces. A pointer motion only updates `wm` state and marks the layout dirty;
+the next frame reconciles it, one configure per frame however fast the mouse, and
+never while a change is in flight, so a client draws what the pointer did last.
+A drag holds for at most 17 ms (`dragHoldBound`). A client that misses that is not waited
+for again until the drag ends, and gets a new size only after it answered the last,
+so a slow client lags at its own pace, stretched, while the frame keeps up with the
+pointer at the refresh rate and its socket does not fill with configures. A drag
+lands what is in flight when it starts, since it measures from what is placed.
 
 A client commit runs a frame only on the outputs whose last frame drew a member
 of its surface tree, unless the commit may reach another: its tree's bounds, the

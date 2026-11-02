@@ -31,6 +31,11 @@ func (c *Compositor) Frame(b backend.Output) error {
 
 func (c *Compositor) frame(o *output.Output) error {
 	b := o.Backend()
+	if c.layoutDirty && c.txn == nil {
+		if err := c.recovered(c.reconcile()); err != nil {
+			return err
+		}
+	}
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
@@ -245,11 +250,13 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 		under := [1]image.Rectangle{deviceRect(o, w.rect)}
 		c.drawBlur(pass, o, glassDraw{surface: top, shape: under[:], extent: under[0], mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
 	}
+	tree := len(pass.ops)
 	if c.honoursBlurRegions(w) {
 		shown = c.drawBlurredTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w), look)
 	} else {
 		shown = c.drawClippedTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w))
 	}
+	c.stretchStale(pass, o, tree, w)
 	if c.decor.Dim.Inactive {
 		pass.fillMasked(deviceRect(o, w.rect), c.shownDim(w), mask)
 	}
