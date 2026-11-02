@@ -218,13 +218,15 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 		start, goal = at, at
 	}
 	cl := &closing{snapshot: tt, frost: fr, output: w.output, level: windowLevel, motion: anim.NewTween(start, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
-	end := c.styled(anim.WindowsOut, w.output, goal)
-	if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
-		if n, ok := c.neighbour(w, w.tile); ok {
-			cl.bud, end = n, budRect(n, w.tile)
+	if curve := c.animations.Curve(anim.WindowsOut); curve != anim.Instant {
+		end := c.styled(anim.WindowsOut, w.output, goal)
+		if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
+			if n, ok := c.neighbour(w, w.tile); ok {
+				cl.bud, end = n, budRect(n, w.tile)
+			}
 		}
+		cl.motion.Set(end, now, curve)
 	}
-	cl.motion.Set(end, now, c.animations.Curve(anim.WindowsOut))
 	cl.fade.Set(0, now, c.animations.Curve(anim.FadeOut))
 	c.closing = append(c.closing, cl)
 	return c.scheduleAll()

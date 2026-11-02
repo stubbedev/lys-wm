@@ -436,9 +436,10 @@ longer travel, stretch, bounce or follow the pointer: what the table below marks
 `curve` and `style` it was given. A window still fades in and out, so state changes
 stay readable; specular light rests at the top left. It applies to every event,
 including any added later, and a reload applies it. `lys-wmctl reducedmotion` and
-the `reducedmotion` IPC event report it; lys-shell follows that and publishes it to
-apps as `reduced-motion` in the portal's `org.freedesktop.appearance` namespace, so
-in a lys-wm session this one key sets it for the desktop.
+the `reducedmotion` IPC event report it. In a lys-wm session this key owns the
+setting for the desktop: lys-shell follows it, ignoring its own
+`animations.reduced-motion` and warning that it does, and publishes it to apps as
+`reduced-motion` in the portal's `org.freedesktop.appearance` namespace.
 
 `curves` names curves for the events to use. A curve is either a cubic
 `bezier: [x1, y1, x2, y2]`, as in CSS `cubic-bezier()`, whose x coordinates lie
