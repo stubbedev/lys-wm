@@ -106,19 +106,25 @@ type overviewThumb struct {
 	version  uint64
 	dirty    bool
 	next     time.Duration
+	touched  time.Duration
 	rough    bool
 }
 
 const (
 	thumbShare   = 4
 	thumbMaxWait = 500 * time.Millisecond
+	thumbQuiet   = 250 * time.Millisecond
 )
+
+func (t *overviewThumb) calm(settled bool, now time.Duration) bool {
+	return settled && now-t.touched >= thumbQuiet
+}
 
 func (t *overviewThumb) due(size image.Point, settled bool, now time.Duration) bool {
 	if t.target == nil || t.target.Size() != size {
 		return true
 	}
-	return (t.dirty || settled && t.rough) && now >= t.next
+	return (t.dirty || t.rough && t.calm(settled, now)) && now >= t.next
 }
 
 func (c *Compositor) overviewHolds() bool {
@@ -600,8 +606,8 @@ func (c *Compositor) overviewCommitted(root *surface.Surface) {
 			wallpaper = true
 		}
 		for _, t := range v.spaces {
-			if !t.dirty && (wallpaper || slices.ContainsFunc(t.members, func(m thumbMember) bool { return m.w.top.Surface() == root })) {
-				t.dirty = true
+			if wallpaper || slices.ContainsFunc(t.members, func(m thumbMember) bool { return m.w.top.Surface() == root }) {
+				t.dirty, t.touched = true, c.clock()
 			}
 		}
 	}
@@ -748,4 +754,18 @@ func (c *Compositor) ClosingAt(now time.Duration) image.Point {
 	}
 	r := c.closing[0].motion.At(now)
 	return r.Min.Add(r.Size().Div(2))
+}
+
+func (c *Compositor) OverviewThumbsRough() bool {
+	if c.overview == nil {
+		return false
+	}
+	for _, v := range c.overview.views {
+		for _, t := range v.spaces {
+			if t.dirty || t.rough {
+				return true
+			}
+		}
+	}
+	return false
 }

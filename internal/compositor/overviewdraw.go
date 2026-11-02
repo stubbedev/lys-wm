@@ -199,7 +199,7 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 		}
 		if !redrawn && t.due(deviceRect(o, t.rect).Size(), settled, c.frameTime) {
 			redrawn = true
-			if err := c.refreshThumb(o, v, t, settled); err != nil {
+			if err := c.refreshThumb(o, v, t, t.calm(settled, c.frameTime)); err != nil {
 				return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
 			}
 		}
@@ -275,7 +275,7 @@ func (c *Compositor) thumbFilter(o *output.Output, v *overviewView, size image.P
 	return nil
 }
 
-func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb, settled bool) error {
+func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb, filtered bool) error {
 	started := c.clock()
 	size := deviceRect(o, t.rect).Size()
 	if t.target == nil || t.target.Size() != size {
@@ -304,7 +304,7 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 	}
 	t.surfaces = shown
 	draw, chain := t.target, []render.TextureTarget(nil)
-	if settled {
+	if filtered {
 		if err := c.thumbFilter(o, v, size); err != nil {
 			return err
 		}
@@ -341,7 +341,7 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 		}
 	}
 	c.jellyGen++
-	t.version, t.dirty, t.rough = c.jellyGen, false, !settled
+	t.version, t.dirty, t.rough = c.jellyGen, false, !filtered
 	t.next = c.frameTime + min(thumbShare*(c.clock()-started), thumbMaxWait)
 	c.thumbRedraws++
 	return nil

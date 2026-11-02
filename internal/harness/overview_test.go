@@ -564,7 +564,9 @@ func TestThumbnailsRedrawOnlyWhenTheirWindowsDamage(t *testing.T) {
 		})
 		return n
 	}
-	h.Eventually("both thumbnails drawn, one a frame", func(_ *headless.Backend, comp *compositor.Compositor) bool { return comp.OverviewThumbRedraws() == 2 })
+	h.Eventually("both thumbnails drawn and filtered, one a frame", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsRough()
+	})
 	first := count()
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 		for range 5 {
@@ -1021,19 +1023,15 @@ func TestAThumbnailOfFineLinesIsGrey(t *testing.T) {
 		w.Stop()
 		h.Rendered(0)
 		h.dispatch("overview show")
-		h.Rendered(0)
 		inner := planOf(h, 0).Strip[0].Inset(8)
-		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		h.Eventually("a filtered thumbnail once it rests", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			px := snapshot(b.Outputs()[0])
 			lo, hi := byte(0xff), byte(0)
 			for y := inner.Min.Y; y < inner.Max.Y; y++ {
 				v := pixel(px, centre(inner).X, y)[0]
 				lo, hi = min(lo, v), max(hi, v)
 			}
-			if hi-lo > 8 {
-				t.Errorf("rows of the thumbnail run from %#x to %#x: moire", lo, hi)
-			}
-			return nil
+			return hi-lo <= 8
 		})
 	})
 }

@@ -42,8 +42,9 @@ just docker pace                  # headless on the host's GPU, from a container
 pacing number. `just hardware` runs them first and stops when they fail.
 
 `headless` renders on a real GPU through its render node and leaves the display
-alone, but its clock is a timer: vsync is simulated, and it latches frames half
-a refresh before each tick. Only `-backend drm` has real present times; it takes
+alone, but its clock is a timer: vsync is simulated, and it latches frames as `drm`
+does, half a refresh before each tick until a frame earns more, up to the whole
+refresh. Only `-backend drm` has real present times; it takes
 the display and needs a seat, so it refuses to run with `WAYLAND_DISPLAY`,
 `DISPLAY` or a graphical `XDG_SESSION_TYPE` set. The report says which clock it
 used.
