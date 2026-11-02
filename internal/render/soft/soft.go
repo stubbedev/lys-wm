@@ -247,6 +247,21 @@ func coverage(m render.Mask, x, y int) float32 {
 	return m.Coverage(float32(x)+0.5, float32(y)+0.5)
 }
 
+func solidSpan(m render.Mask, y int) (from, to int) {
+	k := m.Keep
+	if k.Rect.Empty() || !m.Cut.Rect.Empty() || !m.Merge.Empty() || m.Falloff != (render.Falloff{}) {
+		return 0, 0
+	}
+	r := int(math.Ceil(float64(k.Radius))) + 1
+	switch {
+	case y <= k.Rect.Min.Y || y >= k.Rect.Max.Y-1:
+		return 0, 0
+	case y < k.Rect.Min.Y+r || y >= k.Rect.Max.Y-r:
+		return k.Rect.Min.X + r, k.Rect.Max.X - r
+	}
+	return k.Rect.Min.X + 1, k.Rect.Max.X - 1
+}
+
 func toByte(f float32) uint32 {
 	return uint32(math.Round(float64(f) * 255))
 }
@@ -546,6 +561,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			out := p.buf.Pix[y*p.buf.Stride:]
 			row := p.rows[y-dst.Min.Y]
+			from, to := solidSpan(m, y)
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				col := p.cols[x-dst.Min.X]
 				sx, sy := col, row
@@ -554,7 +570,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 				}
 				px := tex.pix[sy*tex.stride+sx*4:]
 				a := full
-				if masked {
+				if masked && (x < from || x >= to) {
 					a = toByte(alpha * coverage(m, x, y))
 				}
 				switch a {
