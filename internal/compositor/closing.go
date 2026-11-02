@@ -26,6 +26,7 @@ type closing struct {
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 	genie    *genie
+	frost    *frost
 }
 
 type level struct {
@@ -183,7 +184,7 @@ func (c *Compositor) keepSnapshot(s *surface.Surface) error {
 		if err != nil || tt == nil {
 			return err
 		}
-		e.snapshot = tt
+		e.snapshot, e.frost = tt, c.layerFrost(e)
 		return nil
 	}
 	w := c.windowWithSurface(s)
@@ -194,7 +195,7 @@ func (c *Compositor) keepSnapshot(s *surface.Surface) error {
 	if err != nil || tt == nil {
 		return err
 	}
-	w.snapshot = tt
+	w.snapshot, w.frost = tt, c.windowFrost(w)
 	return nil
 }
 
@@ -202,15 +203,16 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 	if !c.closeAnimated() {
 		return nil
 	}
-	tt := w.snapshot
+	tt, fr := w.snapshot, w.frost
 	if tt == nil {
 		var err error
 		if tt, err = c.snapshot(w); err != nil || tt == nil {
 			return err
 		}
+		fr = c.windowFrost(w)
 	}
-	w.snapshot = nil
-	cl := &closing{snapshot: tt, output: w.output, level: windowLevel, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	w.snapshot, w.frost = nil, nil
+	cl := &closing{snapshot: tt, frost: fr, output: w.output, level: windowLevel, motion: anim.NewTween(w.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	end := c.styled(anim.WindowsOut, w.output, w.tile)
 	if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
 		if n, ok := c.neighbour(w, w.tile); ok {
@@ -238,7 +240,10 @@ func (c *Compositor) drawClosing(pass *frame, o *output.Output, at level) {
 			now := cl.motion.At(c.frameTime)
 			c.drawBud(pass, o, cl.bud, now, travelled(cl.motion.Source(), now, cl.motion.Target()))
 		}
-		pass.DrawTexture(cl.snapshot.Texture(), render.FRect{W: float64(size.X), H: float64(size.Y)}, deviceRect(o, cl.motion.At(c.frameTime)), render.Normal, a)
+		box := deviceRect(o, cl.motion.At(c.frameTime))
+		rims := c.drawFrost(pass, o, cl, box, a)
+		pass.DrawTexture(cl.snapshot.Texture(), render.FRect{W: float64(size.X), H: float64(size.Y)}, box, render.Normal, a)
+		c.drawFrostRims(pass, o, cl, rims, box, a)
 	}
 }
 

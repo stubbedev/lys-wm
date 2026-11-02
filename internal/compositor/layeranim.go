@@ -92,9 +92,13 @@ func (c *Compositor) layerClosing(l *layer, now time.Duration) error {
 			return err
 		}
 	}
-	l.snapshot = nil
+	fr := l.frost
+	if fr == nil {
+		fr = c.layerFrost(l)
+	}
+	l.snapshot, l.frost = nil, nil
 	end, alpha := c.layerStyled(anim.LayersOut, l)
-	cl := &closing{snapshot: tt, output: l.output, level: level{layer: l.surface.Current().Layer}, motion: anim.NewTween(l.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	cl := &closing{snapshot: tt, frost: fr, output: l.output, level: level{layer: l.surface.Current().Layer}, motion: anim.NewTween(l.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	cl.motion.Set(end, now, curve)
 	cl.fade.Set(alpha, now, curve)
 	c.closing = append(c.closing, cl)

@@ -38,6 +38,7 @@ type window struct {
 	borderFade  anim.Tween[float64]
 	borderAngle anim.Tween[float64]
 	snapshot    render.TextureTarget
+	frost       *frost
 	decided     decided
 	wobble      *anim.Wobble
 	bud         image.Rectangle

@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -207,4 +208,87 @@ func (c *Compositor) rimsMoved() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+type frost struct {
+	surface *surface.Surface
+	shape   []image.Rectangle
+	extent  image.Rectangle
+	box     image.Rectangle
+	mask    render.Mask
+	alpha   float32
+	look    wm.Look
+	mica    bool
+}
+
+func (c *Compositor) windowFrost(w *window) *frost {
+	o := w.output
+	if o == nil {
+		return nil
+	}
+	top := w.top.Surface()
+	f := &frost{surface: top, extent: deviceRect(o, w.rect), box: deviceRect(o, w.tile), mask: c.windowMask(o, w), alpha: c.alpha.Alpha(top), look: c.lookOf(w), mica: c.micaOn(w)}
+	if (c.blurred(w) || f.mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.opacity(w)) {
+		f.shape = append(f.shape, f.extent)
+	}
+	if c.honoursBlurRegions(w) {
+		f.shape = c.appendTreeRegions(f.shape, o, top, c.windowOrigin(w))
+	}
+	if len(f.shape) == 0 {
+		return nil
+	}
+	return f
+}
+
+func (c *Compositor) layerFrost(l *layer) *frost {
+	s := l.surface.Surface()
+	box := deviceRect(l.output, l.bounds())
+	f := &frost{surface: s, extent: box, box: box, alpha: c.alpha.Alpha(s), look: c.decor.Blur.Look}
+	if c.blursLayer(l.surface) && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
+		f.shape = append(f.shape, box)
+	}
+	f.shape = c.appendTreeRegions(f.shape, l.output, s, flat(l.bounds().Min))
+	if len(f.shape) == 0 {
+		return nil
+	}
+	return f
+}
+
+func (c *Compositor) appendTreeRegions(rects []image.Rectangle, o *output.Output, s *surface.Surface, org origin) []image.Rectangle {
+	for member := range s.Stack() {
+		if member == s {
+			rects = c.appendBlurRegion(rects, o, s, org)
+			continue
+		}
+		if sub := member.Subsurface(); sub != nil {
+			rects = c.appendTreeRegions(rects, o, member, org.child(sub.Position()))
+		}
+	}
+	return rects
+}
+
+func (c *Compositor) drawFrost(pass *frame, o *output.Output, cl *closing, at image.Rectangle, a float32) int {
+	f := cl.frost
+	mark := len(pass.rims)
+	if f == nil {
+		return mark
+	}
+	from := len(pass.ops)
+	c.drawBlur(pass, o, glassDraw{surface: f.surface, shape: f.shape, extent: f.extent, mask: f.mask, alpha: f.alpha, look: f.look, mica: f.mica})
+	pass.remap(from, f.box, at)
+	pass.fade(from, a)
+	return mark
+}
+
+func (c *Compositor) drawFrostRims(pass *frame, o *output.Output, cl *closing, mark int, at image.Rectangle, a float32) {
+	if cl.frost == nil || mark == len(pass.rims) {
+		return
+	}
+	from := len(pass.ops)
+	if err := c.drawRims(pass, o, mark); err != nil {
+		c.report(fmt.Errorf("compositor: the rim of a closing window: %w", err))
+		return
+	}
+	pass.remap(from, cl.frost.box, at)
+	pass.fade(from, a)
 }

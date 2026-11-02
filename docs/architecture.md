@@ -400,8 +400,13 @@ size and passes match `decoration.blur`'s it is `xray`'s chain, or else one of
 its own, so one per output either way. The chain is opaque, so a mica op at full
 alpha culls the windows below it like any opaque op.
 
-The offscreen frames behind closing snapshots and window captures draw no
-blur: they have nothing behind them to blur.
+A closing window's or layer's snapshot keeps the shape, mask and look it had
+(`frost`) and draws it through the same `drawBlur` under the snapshot. Like a
+window's opening animation, the frost samples the backdrop at the window's place
+and is scaled with the snapshot, so a closing window redraws no chain unless
+what is behind it changes. A minimize's genie cuts the snapshot into strips and
+keeps no frost. The offscreen frames behind snapshots and window captures draw
+no blur: they have nothing behind them to blur.
 
 A screen shader is the last of these: an output's ops replay into a retained
 image with the scene's damage, and one pass draws the whole output from it through

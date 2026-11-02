@@ -303,7 +303,8 @@ Mica is for a window whose client leaves its background translucent; an opaque
 client hides it, as it hides any blur. A window's popups blur as usual, since
 they float over the window itself.
 
-A surface
+A window that closes keeps its frost during its exit animation, with the blur
+and look it had when it closed, scaled and faded with the snapshot. A surface
 hidden behind an opaque window costs nothing: its blur is not redrawn, and frees
 its memory until it shows again.
 

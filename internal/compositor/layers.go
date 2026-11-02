@@ -24,6 +24,7 @@ type layer struct {
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 	snapshot render.TextureTarget
+	frost    *frost
 }
 
 func (e *layer) bounds() image.Rectangle {
