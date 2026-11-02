@@ -456,7 +456,12 @@ func (g *gen) receive(m *message) {
 	case child != nil && child.iface != nil && g.hasHandler(child.iface):
 		t := g.typeRef(child.iface)
 		g.printf("\t\t_, err := %s(obj.object.Peer(), %sID, obj.object.Version(), func(%s *%s) (%sHandler, error) {\n", g.qualify(child.iface.proto, "Create"+child.iface.goName), child.goName, child.goName, t, t)
-		g.printf("\t\t\treturn %s\n\t\t})\n\t\treturn err\n", invoke)
+		g.printf("\t\t\treturn %s\n\t\t})\n", invoke)
+		if m.destructor {
+			g.printf("\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\treturn obj.object.Peer().Remove(obj.object.ID())\n")
+		} else {
+			g.printf("\t\treturn err\n")
+		}
 	case child != nil && child.iface != nil:
 		fail := "return err"
 		if len(fds) > 0 {

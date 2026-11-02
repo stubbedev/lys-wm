@@ -380,7 +380,7 @@ func resolve(protocols []*protocol) error {
 			for _, m := range append(append([]*message(nil), i.requests...), i.events...) {
 				for _, a := range m.args {
 					a.goName = argName(a.name, imports)
-					if err := idx.resolveArg(a, i, m); err != nil {
+					if err := idx.resolveArg(a, i); err != nil {
 						errs = append(errs, fmt.Errorf("%s: %s.%s: %w", p.file, i.name, m.name, err))
 					}
 				}
@@ -393,16 +393,13 @@ func resolve(protocols []*protocol) error {
 	return checkImportCycles(protocols)
 }
 
-func (idx index) resolveArg(a *arg, owner *iface, m *message) error {
+func (idx index) resolveArg(a *arg, owner *iface) error {
 	if a.ifaceRef != "" {
 		target, ok := idx.interfaces[a.ifaceRef]
 		if !ok {
 			return fmt.Errorf("arg %s names unknown interface %s", a.name, a.ifaceRef)
 		}
 		a.iface = target
-	}
-	if a.typ == wire.ArgNewID && m.destructor {
-		return fmt.Errorf("destructor creates object %s", a.name)
 	}
 	if a.enumRef == "" {
 		return nil

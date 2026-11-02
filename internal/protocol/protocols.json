@@ -258,6 +258,11 @@
       "path": "staging/color-representation/color-representation-v1.xml"
     },
     {
+      "package": "colormanagement",
+      "source": "wayland-protocols",
+      "path": "staging/color-management/color-management-v1.xml"
+    },
+    {
       "package": "fifo",
       "source": "wayland-protocols",
       "path": "staging/fifo/fifo-v1.xml"
