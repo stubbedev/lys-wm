@@ -20,6 +20,7 @@ type (
 	RoundRect      = lgpu.RoundRect
 	Falloff        = lgpu.Falloff
 	Goo            = lgpu.Goo
+	Glass          = lgpu.Glass
 	ColorTransform = lgpu.ColorTransform
 )
 
@@ -238,6 +239,13 @@ func CheckDraw(texture image.Point, src FRect, transform Transform, alpha float3
 	return nil
 }
 
+func CheckGlass(texture image.Point, src FRect, alpha float32, m Mask, g Glass) error {
+	if err := g.Check(m); err != nil {
+		return err
+	}
+	return CheckDraw(texture, src, Normal, alpha, m)
+}
+
 type Region []image.Rectangle
 
 func (g Region) ClipInto(dst *region.Set, bounds image.Rectangle) {
@@ -358,5 +366,6 @@ type Pass interface {
 	FillGoo(r image.Rectangle, c Color, g Goo)
 	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
 	DrawScreenShader(s ScreenShader, t Texture, dst image.Rectangle, seconds float32)
+	DrawGlass(t Texture, src FRect, dst image.Rectangle, alpha float32, m Mask, g Glass)
 	End() error
 }

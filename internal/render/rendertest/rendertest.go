@@ -203,6 +203,19 @@ func offscreen(t *testing.T, r render.Renderer, target render.ReadTarget, rtx Te
 	}
 }
 
+const GlassTolerance = 3
+
+func GlassScene(tx render.Texture) func(render.Pass) {
+	src := render.FRect{W: float64(Size.X), H: float64(Size.Y)}
+	all := image.Rectangle{Max: Size}
+	return func(p render.Pass) {
+		p.Clear(render.Color{})
+		p.DrawGlass(tx, src, all, 1, render.Mask{}, render.Glass{Saturation: 1.6, Brightness: 0.8, Contrast: 1.3})
+		p.DrawGlass(tx, src, image.Rect(4, 4, 44, 28), 0.75, render.Mask{Keep: render.RoundRect{Rect: image.Rect(6, 5, 40, 26), Radius: 7}}, render.Glass{Saturation: 1, Brightness: 1, Contrast: 1, Bezel: 8, Amount: 6})
+		p.DrawGlass(tx, src, image.Rect(30, 20, 60, 44), 1, render.Mask{}, render.Glass{Saturation: 0.4, Brightness: 1.1, Contrast: 0.9, Bezel: 5, Amount: 3})
+	}
+}
+
 const KawaseTolerance = 3
 
 func kawase(t *testing.T, r render.Renderer, rtt render.TextureTarget, s *soft.Renderer, stt render.TextureTarget) {
@@ -308,6 +321,7 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 	Compare(t, buf, target, GradientTolerance)
 
 	offscreen(t, r, target, rtx, s, buf, stx)
+	glass(t, r, target, s, buf)
 
 	cleared := render.Region{image.Rect(3, 4, 21, 15)}
 	clear := func(p render.Pass) {
@@ -317,6 +331,32 @@ func Parity(t *testing.T, r render.Renderer, target render.ReadTarget) {
 	Paint(t, r, target, cleared, clear)
 	Paint(t, s, buf, cleared, clear)
 	Compare(t, buf, target, 1)
+}
+
+func glass(t *testing.T, r render.Renderer, target render.ReadTarget, s *soft.Renderer, buf *soft.Buffer) {
+	t.Helper()
+	full := render.Region{image.Rectangle{Max: Size}}
+	backdrop := func(rd render.Renderer) render.TextureTarget {
+		tt, err := rd.NewTextureTarget(Size)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := tt.Destroy(); err != nil {
+				t.Error(err)
+			}
+		})
+		Paint(t, rd, tt, full, func(p render.Pass) {
+			p.Clear(render.Color{R: 0x10, G: 0x20, B: 0x30, A: 0xff})
+			p.FillRect(image.Rect(0, 0, Size.X/2, Size.Y/2), render.Color{R: 0xe0, G: 0x40, B: 0x10, A: 0xff}, render.Mask{})
+			p.FillRect(image.Rect(Size.X/2, Size.Y/2, Size.X, Size.Y), render.Color{R: 0x30, G: 0xa0, B: 0x80, A: 0xff}, render.Mask{})
+			p.FillRect(image.Rect(10, 8, 38, 28), render.Color{R: 0x20, G: 0x10, B: 0x30, A: 0x80}, render.Mask{})
+		})
+		return tt
+	}
+	Paint(t, r, target, full, GlassScene(backdrop(r).Texture()))
+	Paint(t, s, buf, full, GlassScene(backdrop(s).Texture()))
+	Compare(t, buf, target, GlassTolerance)
 }
 
 func PaintMarked(t *testing.T, r render.Renderer, target render.Target) {

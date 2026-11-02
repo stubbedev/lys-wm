@@ -565,6 +565,78 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	}
 }
 
+func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle, alpha float32, m render.Mask, g render.Glass) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: DrawGlass outside a pass"))
+		return
+	case !ok || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
+		return
+	case tex.pix == nil:
+		p.fail(errors.New("soft: texture used after Destroy"))
+		return
+	case tex.owned(p):
+		p.fail(errors.New("soft: DrawGlass of the pass's own target"))
+		return
+	case dst.Empty():
+		return
+	}
+	if err := render.CheckGlass(tex.size, src, alpha, m, g); err != nil {
+		p.fail(err)
+		return
+	}
+	if alpha == 0 {
+		return
+	}
+	m = g.Mask(m, dst)
+	if p.floatPath(tex) {
+		p.glassFloat(tex, src, dst, alpha, m, g)
+		return
+	}
+	plan := g.RefractPlan(m.Keep)
+	bends := g.Refracts()
+	w, h := float32(tex.size.X), float32(tex.size.Y)
+	kx, ky := float32(src.W)/float32(dst.Dx()), float32(src.H)/float32(dst.Dy())
+	b := func(f float32) byte { return byte(min(max(f+0.5, 0), 255)) }
+	direct := kx == 1 && ky == 1 && src.X == math.Trunc(src.X) && src.Y == math.Trunc(src.Y)
+	ix, iy := int(src.X)-dst.Min.X, int(src.Y)-dst.Min.Y
+	for _, d := range p.damage.Rects() {
+		clip := dst.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				a := toByte(alpha * coverage(m, x, y))
+				if a == 0 {
+					continue
+				}
+				var dx, dy int32
+				bent := false
+				if bends {
+					dx, dy, bent = plan.At(x, y)
+				}
+				var c [4]float32
+				if direct && !bent {
+					at := tex.pix[(y+iy)*tex.stride+(x+ix)*4:]
+					c = g.Adjust([4]float32{float32(at[2]), float32(at[1]), float32(at[0]), float32(at[3])})
+				} else {
+					sx := float32(src.X) + float32((float32(x-dst.Min.X)+0.5)*kx) + float32(float32(dx)/256*kx)
+					sy := float32(src.Y) + float32((float32(y-dst.Min.Y)+0.5)*ky) + float32(float32(dy)/256*ky)
+					s := lgpu.Bilinear(tex.pix, tex.stride, tex.size.X, tex.size.Y, sx/w, sy/h)
+					c = g.Adjust([4]float32{s[2], s[1], s[0], s[3]})
+				}
+				px := row[x*4 : x*4+4]
+				if a == 0xff {
+					over(px, b(c[2]), b(c[1]), b(c[0]), b(c[3]))
+					continue
+				}
+				over(px, scale(b(c[2]), a), scale(b(c[1]), a), scale(b(c[0]), a), scale(b(c[3]), a))
+			}
+		}
+	}
+}
+
 func sampleMap(out []int, n int, a render.Axis, src render.FRect, size image.Point) []int {
 	origin, extent, limit := src.X, src.W, size.X
 	if a.Source == 1 {

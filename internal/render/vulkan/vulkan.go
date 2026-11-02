@@ -565,6 +565,22 @@ func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst ima
 	p.p.DrawFragmentShader(sh.s, tex.t, dst, [4]float32{seconds, float32(dst.Dx()), float32(dst.Dy())})
 }
 
+func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle, alpha float32, m render.Mask, g render.Glass) {
+	tex, ok := t.(*texture)
+	switch {
+	case !ok || tex.r != p.r:
+		p.fail(fmt.Errorf("vulkan: a texture of another renderer (%T)", t))
+		return
+	case p.err != nil:
+		return
+	}
+	if err := render.CheckGlass(tex.Size(), src, alpha, m, g); err != nil {
+		p.fail(err)
+		return
+	}
+	p.p.DrawGlass(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, alpha, m, g)
+}
+
 func (p *pass) fail(err error) {
 	if p.err == nil {
 		p.err = err

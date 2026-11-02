@@ -177,6 +177,34 @@ func (p *pass) drawFloat(tex *texture, dst image.Rectangle, alpha float32, m ren
 	}
 }
 
+func (p *pass) glassFloat(tex *texture, src render.FRect, dst image.Rectangle, alpha float32, m render.Mask, g render.Glass) {
+	plan := g.RefractPlan(m.Keep)
+	bends := g.Refracts()
+	w, h := float32(tex.size.X), float32(tex.size.Y)
+	kx, ky := float32(src.W)/float32(dst.Dx()), float32(src.H)/float32(dst.Dy())
+	for _, d := range p.damage.Rects() {
+		clip := dst.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				k := alpha * coverage(m, x, y)
+				if k <= 0 {
+					continue
+				}
+				sx := float32(src.X) + float32((float32(x-dst.Min.X)+0.5)*kx)
+				sy := float32(src.Y) + float32((float32(y-dst.Min.Y)+0.5)*ky)
+				if bends {
+					if dx, dy, ok := plan.At(x, y); ok {
+						sx += float32(float32(dx) / 256 * kx)
+						sy += float32(float32(dy) / 256 * ky)
+					}
+				}
+				c := scaled(g.Adjust(scaled(tex.bilinear(sx/w, sy/h), 255)), float32(1.0/255))
+				p.put(x, y, scaled(p.through(c), k))
+			}
+		}
+	}
+}
+
 func (t *texture) bilinear(u, v float32) [4]float32 {
 	fx := float64(float32(u*float32(t.size.X))) - 0.5
 	fy := float64(float32(v*float32(t.size.Y))) - 0.5

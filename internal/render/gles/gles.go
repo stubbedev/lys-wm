@@ -43,6 +43,12 @@ uniform float smoothing;
 	textureMain = `uniform float alpha;
 varying vec2 v_texcoord;
 void main() { gl_FragColor = %s * (alpha * ` + coverage + `); }`
+	glassMain = `uniform sampler2D tex;
+uniform float alpha;
+uniform vec4 adjust;
+uniform vec4 bend;
+varying vec2 v_texcoord;
+void main() { gl_FragColor = %s * (alpha * ` + coverage + `); }`
 )
 
 var (
@@ -51,10 +57,12 @@ var (
 	rgbaShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 	rgbxShader     = maskHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "vec4(texture2D(tex, v_texcoord).rgb, 1.0)")
 	gradientShader = maskHeader + "uniform sampler2D tex;\nuniform vec4 line;\nuniform float stops;\nuniform float alpha;\nvoid main() { gl_FragColor = texture2D(tex, gradientUV(gl_FragCoord.xy, line, stops)) * (alpha * " + coverage + "); }"
+	glassShader    = "#define SAMPLE texture2D\n" + maskHeader + lgpu.GlassGLSL + fmt.Sprintf(glassMain, "(glassAdjust(glassBackdrop(tex, v_texcoord, gl_FragCoord.xy, bend.yz, keep, radii.x, bend.x, adjust.w), adjust.xyz))")
 	kawaseShader   = "#define SAMPLE texture2D\n" + maskHeader + "uniform sampler2D tex;\nuniform vec2 taps;\nuniform float up;\nvarying vec2 v_texcoord;\nvoid main() { gl_FragColor = up > 0.5 ? kawaseUp(tex, v_texcoord, taps) : kawaseDown(tex, v_texcoord, taps); }"
 	gooShader      = maskHeader + "uniform vec4 color;\nvoid main() { gl_FragColor = color * gooCoverage(gl_FragCoord.xy, keep, merge, radii.xyz); }"
 	externalShader = "#extension GL_OES_EGL_image_external : require\n" + maskHeader + "uniform samplerExternalOES tex;\n" + fmt.Sprintf(textureMain, "texture2D(tex, v_texcoord)")
 
+	glassColorShader    = "#define SAMPLE texture2D\n" + colorHeader + lgpu.GlassGLSL + fmt.Sprintf(glassMain, "colorApply(glassAdjust(glassBackdrop(tex, v_texcoord, gl_FragCoord.xy, bend.yz, keep, radii.x, bend.x, adjust.w), adjust.xyz))")
 	colorHeader         = maskHeader + "uniform vec4 cp[" + strconv.Itoa(lgpu.ColorUniforms) + "];\n#define CP cp\n" + lgpu.ColorGLSL
 	rgbaColorShader     = colorHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "colorApply(texture2D(tex, v_texcoord))")
 	rgbxColorShader     = colorHeader + "uniform sampler2D tex;\n" + fmt.Sprintf(textureMain, "colorApply(vec4(texture2D(tex, v_texcoord).rgb, 1.0))")
@@ -75,6 +83,7 @@ type program struct {
 	taps, up, merge    int32
 	smoothing          int32
 	time, resolution   int32
+	adjust, bend       int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -93,6 +102,7 @@ type Renderer struct {
 	solid        program
 	gradient     program
 	kawase       program
+	glass        program
 	goo          program
 	rgba         program
 	rgbx         program
@@ -139,8 +149,10 @@ type shader struct {
 	lazy      bool
 }
 
-func (r *Renderer) programs() [11]shader {
-	return [11]shader{
+func (r *Renderer) programs() [13]shader {
+	return [13]shader{
+		{prog: &r.glass, fragment: glassShader, lazy: true},
+		{prog: &r.colored.glass, fragment: glassColorShader, lazy: true},
 		{prog: &r.colored.rgba, fragment: rgbaColorShader, lazy: true},
 		{prog: &r.colored.rgbx, fragment: rgbxColorShader, lazy: true},
 		{prog: &r.colored.gradient, fragment: gradientColorShader, lazy: true},
@@ -205,6 +217,8 @@ func (r *Renderer) link(p shader) error {
 		up:        r.gl.GetUniformLocation(id, "up"),
 		merge:     r.gl.GetUniformLocation(id, "merge"),
 		smoothing: r.gl.GetUniformLocation(id, "smoothing"),
+		adjust:    r.gl.GetUniformLocation(id, "adjust"),
+		bend:      r.gl.GetUniformLocation(id, "bend"),
 		alphaSet:  -1,
 	}
 	if p.lazy {
@@ -1057,7 +1071,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 }
 
 type coloredPrograms struct {
-	rgba, rgbx, gradient, external program
+	rgba, rgbx, gradient, external, glass program
 }
 
 func (p *pass) SetColor(t *render.ColorTransform) {
@@ -1095,6 +1109,70 @@ func (p *pass) setTransform(prog *program) {
 	for i, v := range u {
 		p.owner.gl.Uniform4f(prog.cp[i], v[0], v[1], v[2], v[3])
 	}
+}
+
+func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle, alpha float32, m render.Mask, g render.Glass) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("gles: DrawGlass outside a pass"))
+		return
+	case !ok || tex.r != p.owner || tex.target != gpu.Texture2D:
+		p.fail(fmt.Errorf("gles: %T is not this renderer's RGB texture", t))
+		return
+	case tex.id == 0:
+		p.fail(errors.New("gles: texture used after Destroy"))
+		return
+	case tex.drawn == p.fb:
+		p.fail(errors.New("gles: DrawGlass of the pass's own target"))
+		return
+	case dst.Empty():
+		return
+	}
+	if err := render.CheckGlass(tex.size, src, alpha, m, g); err != nil {
+		p.fail(err)
+		return
+	}
+	if alpha == 0 {
+		return
+	}
+	s := shader{prog: &p.owner.glass, fragment: glassShader, lazy: true}
+	if p.color != nil {
+		s = shader{prog: &p.owner.colored.glass, fragment: glassColorShader, lazy: true}
+	}
+	if s.prog.id == 0 {
+		if err := p.owner.link(s); err != nil {
+			p.fail(fmt.Errorf("gles: the glass shader: %w", err))
+			return
+		}
+	}
+	prog := s.prog
+	gl := p.owner.gl
+	p.use(prog)
+	p.setTransform(prog)
+	p.setMask(prog, g.Mask(m, dst))
+	if prog.alphaSet != alpha {
+		prog.alphaSet = alpha
+		gl.Uniform1f(prog.alpha, alpha)
+	}
+	var invBezel, amount float32
+	if g.Refracts() {
+		invBezel, amount = 1/g.Bezel, g.Amount
+	}
+	gl.Uniform4f(prog.adjust, g.Saturation, g.Brightness, g.Contrast, amount)
+	gl.Uniform4f(prog.bend, invBezel, float32(src.W)/float32(dst.Dx())/float32(tex.size.X), float32(src.H)/float32(dst.Dy())/float32(tex.size.Y), 0)
+	gl.BindTexture(tex.target, tex.id)
+	if tex.filter != gpu.Linear {
+		tex.filter = gpu.Linear
+		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
+		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
+	}
+	verts := &p.owner.verts
+	for i, corner := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
+		verts[i*4+2] = float32((src.X + float64(corner[0]*src.W)) / float64(tex.size.X))
+		verts[i*4+3] = float32((src.Y + float64(corner[1]*src.H)) / float64(tex.size.Y))
+	}
+	p.draw(dst)
 }
 
 func flip(f float64, reversed bool) float64 {
