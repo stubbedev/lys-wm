@@ -378,6 +378,51 @@ since a function can only call those above it. Capture replays the scene's ops a
 it always did, so it never passes through the shader, and a locked session
 bypasses it.
 
+## HDR
+
+HDR is per output and off by default; off, no pass ever calls `SetColor`, no
+shader variant is compiled, no target is float, and the display list carries a
+nil pointer per op, which `replayFrom` compares once. The SDR shaders' SPIR-V is
+byte for byte what it was, and the SDR goldens are unchanged.
+
+Colour maths is `colorspace`: pure functions from a `Description` (the protocol's
+image description) and a `Target` to an `lgpu.ColorTransform`, which every
+renderer evaluates: `gpu.ColorGLSL` in GLES and Vulkan, its Go mirror `Apply` in
+software, on CPU for fills and in the shader for textures and gradients.
+`rendertest.ColorParity` holds them to each other.
+
+A frame on an HDR output draws twice. The scene draws into a working target kept
+per output, in half floats: linear BT.2020, 1 at the output's SDR white, damage
+only. Then one draw encodes the repaint through PQ into the 10-bit swapchain. So
+SDR content is decoded as gamma 2.2 on sRGB primaries and tagged content by its
+description, each draw anchoring its reference white at 1 and mapping black to
+black. A source brighter than the panel compresses into the peak on its largest
+channel above 3/4 of it, so hue holds and everything below is untouched; colours
+outside the destination primaries clip. Passes into SDR targets, an SDR output
+showing HDR content and every capture, run the same transforms to gamma 2.2 with
+1 as the peak; blending stays in gamma there, as it always was.
+
+Blur, shadows, rounded corners and snapshots follow the pass they are in: on an
+HDR output their targets are working targets, so Kawase averages light and
+coverage multiplies light. A working target's texture says so (`Working`), so a
+capture's transform takes it to SDR like anything else. `blur.go` only asks
+`newSceneTarget` for its chain and rebuilds it when the output's encoding changes.
+
+KMS: `Commit` tests the modeset with `Colorspace` BT2020_RGB, `max bpc` 10 and
+`HDR_OUTPUT_METADATA` built from the EDID's CTA-861 HDR Static Metadata block
+and base block primaries, and any refusal leaves the output SDR with a report. A
+session that never used HDR touches none of these unless the previous session
+left them set. The cursor plane, gamma LUT and CTM act after the encode and would
+act on PQ, so on an HDR output the cursor draws in the frame, gamma clients get
+`failed`, and the colour matrix moves into the encode.
+
+A working target starts transparent and `colorApply` turns non-finite values into
+nothing, because a NaN blends through every later draw over a target that is
+never fully repainted.
+
+Nothing here has run on an HDR display. Connector programming is tested against
+fake KMS and the pixel paths on lavapipe and llvmpipe.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach
@@ -530,6 +575,8 @@ Everything lives under `internal/` except the commands.
 | `committiming` | `wp_commit_timing_manager_v1`: an update waits until the next refresh of an output showing it would not present it before its target time (#117) |
 | `gammacontrol` | `zwlr_gamma_control_manager_v1`: one client per output sets its gamma ramps, which the drm backend tests and writes to the CRTC's `GAMMA_LUT`; the identity returns when the client lets go (#123) |
 | `colorrep` | `wp_color_representation_manager_v1`: a client states a YCbCr surface's coefficients (BT.601, BT.709, BT.2020), range and chroma siting; the compositor imports its dmabufs with the matching EGL hints instead of guessing BT.709 from 720 lines up and BT.601 below. Only premultiplied alpha is advertised, and coefficients or siting on an RGB buffer are a pixel_format error at commit (#189) |
+| `colorspace` | Transfer functions, primaries, ICC profiles and the transform between any two encodings; pure |
+| `colormanager` | `wp_color_manager_v1`, version 3: parametric and matrix-shaper ICC descriptions, surface tags latched with their content update, output descriptions and preferred-description feedback. Perceptual intent only |
 | `ctmcontrol` | `hyprland_ctm_control_manager_v1`: the first manager bound sets outputs' 3×3 colour transform matrices on commit, as hyprsunset does, written as S31.32 to the CRTC's `CTM`, which sits before `GAMMA_LUT` so both apply; later managers get `blocked`, and every output it changed returns to the identity when it goes. An output whose CRTC has no `CTM` keeps its colours and the request is reported (#176) |
 | `alphamodifier` | `wp_alpha_modifier_v1`: clients fade a surface by an opacity factor the compositor applies when it draws it |
 | `backgroundeffect` | `ext_background_effect_v1`: clients name the region of a surface to blur behind, latched with its content update; the compositor draws it through the same blur as `decoration.blur` |

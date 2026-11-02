@@ -24,6 +24,7 @@ type blurCache struct {
 	chain   []render.TextureTarget
 	version uint64
 	used    bool
+	to      colorOut
 }
 
 func (b *blurCache) destroy() error {
@@ -138,8 +139,8 @@ func (c *Compositor) blurReach(o *output.Output) int {
 	return int(math.Ceil(float64(c.blurOffset(o)) * float64(int(1)<<(c.decor.Blur.Passes+1))))
 }
 
-func blurChanged(sc *scene, cache *blurCache, area image.Rectangle, below []drawOp) bool {
-	if cache.area != area || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
+func blurChanged(sc *scene, cache *blurCache, area image.Rectangle, below []drawOp, to colorOut) bool {
+	if cache.area != area || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
 		return true
 	}
 	return slices.ContainsFunc(below, func(op drawOp) bool {
@@ -203,8 +204,9 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, s *surface.Surface,
 		}
 	}
 	sc.blurs.below = below
-	if blurChanged(sc, b, area, below) {
-		if err := c.renderBlur(b, area, below, c.blurOffset(o)); err != nil {
+	to := c.sceneOut(o)
+	if blurChanged(sc, b, area, below, to) {
+		if err := c.renderBlur(o, b, area, below, c.blurOffset(o), to); err != nil {
 			return err
 		}
 	}
@@ -220,7 +222,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, s *surface.Surface,
 	return nil
 }
 
-func (c *Compositor) renderBlur(b *blurCache, area image.Rectangle, below []drawOp, offset float32) error {
+func (c *Compositor) renderBlur(o *output.Output, b *blurCache, area image.Rectangle, below []drawOp, offset float32, to colorOut) error {
 	sizes := []image.Point{area.Size()}
 	for range c.decor.Blur.Passes {
 		last := sizes[len(sizes)-1]
@@ -229,12 +231,12 @@ func (c *Compositor) renderBlur(b *blurCache, area image.Rectangle, below []draw
 	for i := len(sizes) - 2; i >= 0; i-- {
 		sizes = append(sizes, sizes[i])
 	}
-	if b.area.Size() != area.Size() || len(b.chain) != len(sizes) {
+	if b.area.Size() != area.Size() || len(b.chain) != len(sizes) || b.to != to {
 		if err := b.destroy(); err != nil {
 			return err
 		}
 		for _, s := range sizes {
-			t, err := c.renderer.NewTextureTarget(s)
+			t, err := c.newSceneTarget(o, s)
 			if err != nil {
 				return errors.Join(err, b.destroy())
 			}
@@ -247,7 +249,7 @@ func (c *Compositor) renderBlur(b *blurCache, area image.Rectangle, below []draw
 		return err
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, area.Min)
+	f.replayFrom(p, area.Min, to)
 	if err := p.End(); err != nil {
 		return err
 	}
@@ -263,6 +265,6 @@ func (c *Compositor) renderBlur(b *blurCache, area image.Rectangle, below []draw
 		}
 	}
 	c.blurGen++
-	b.area, b.below, b.version = area, slices.Clone(below), c.blurGen
+	b.area, b.below, b.version, b.to = area, slices.Clone(below), c.blurGen, to
 	return nil
 }

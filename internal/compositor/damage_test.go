@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
 )
@@ -135,5 +136,46 @@ func TestCullingDropsOpsHiddenBehindOpaqueOnes(t *testing.T) {
 	f.cull(&covered)
 	if want := []drawOp{bg, bar, half}; !slices.Equal(f.ops, want) {
 		t.Fatalf("a partial cover culled %+v", f.ops)
+	}
+}
+
+type nopPass struct {
+	render.Pass
+	sets int
+}
+
+func (p *nopPass) SetColor(*render.ColorTransform) { p.sets++ }
+
+func (*nopPass) FillRect(image.Rectangle, render.Color, render.Mask) {}
+
+func benchFrame() *frame {
+	f := &frame{}
+	for range 100 {
+		f.FillRect(image.Rect(0, 0, 10, 10), render.Color{R: 1, A: 0xff})
+	}
+	return f
+}
+
+func TestAnSDRReplayNeverSetsAColor(t *testing.T) {
+	p := &nopPass{}
+	benchFrame().replay(p, colorOut{plans: &colorspace.Plans{}})
+	if p.sets != 0 {
+		t.Fatalf("%d SetColor calls on an SDR pass", p.sets)
+	}
+	to := colorOut{plans: &colorspace.Plans{}}
+	f := benchFrame()
+	allocs := testing.AllocsPerRun(100, func() { f.replay(p, to) })
+	if allocs > 0 {
+		t.Fatalf("an SDR replay allocates %v times", allocs)
+	}
+}
+
+func BenchmarkSDRReplayOf100Ops(b *testing.B) {
+	p := &nopPass{}
+	to := colorOut{plans: &colorspace.Plans{}}
+	f := benchFrame()
+	b.ReportAllocs()
+	for b.Loop() {
+		f.replay(p, to)
 	}
 }

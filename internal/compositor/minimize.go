@@ -223,7 +223,7 @@ func (c *Compositor) drawWindowGenie(pass *frame, o *output.Output, w *window, f
 	if tile.Empty() {
 		return nil
 	}
-	if err := c.renderJelly(pass, w, tile, from); err != nil {
+	if err := c.renderJelly(pass, o, w, tile, from); err != nil {
 		return err
 	}
 	c.jellyGen++

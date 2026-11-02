@@ -20,7 +20,9 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backgroundeffect"
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/colormanager"
 	"github.com/stubbedev/lys-wm/internal/colorrep"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/committiming"
 	"github.com/stubbedev/lys-wm/internal/contenttype"
 	"github.com/stubbedev/lys-wm/internal/ctmcontrol"
@@ -55,22 +57,23 @@ import (
 var Background = render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
 
 type Config struct {
-	Seat           seat.Config
-	Cursor         CursorConfig
-	WM             wm.Settings
-	Binds          []binds.Bind
-	Report         func(error)
-	Decor          Decor
-	Font           *gtext.Typeface
-	Icons          *icontheme.Theme
-	Rules          []wm.Rule
-	Outputs        OutputRules
-	Tearing        bool
-	Hooks          Hooks
-	InheritTimeout time.Duration
-	Animations     anim.Table
-	BlurLayers     []string
-	Clock          func() time.Duration
+	Seat            seat.Config
+	Cursor          CursorConfig
+	WM              wm.Settings
+	Binds           []binds.Bind
+	Report          func(error)
+	Decor           Decor
+	Font            *gtext.Typeface
+	Icons           *icontheme.Theme
+	Rules           []wm.Rule
+	Outputs         OutputRules
+	ColorManagement bool
+	Tearing         bool
+	Hooks           Hooks
+	InheritTimeout  time.Duration
+	Animations      anim.Table
+	BlurLayers      []string
+	Clock           func() time.Duration
 }
 
 type Hooks struct {
@@ -128,6 +131,11 @@ type Compositor struct {
 	uploadRects     []image.Rectangle
 	imported        map[*dmabuf.Buffer]importedTexture
 	colorrep        *colorrep.Manager
+	colorManager    *colormanager.Manager
+	colorManagement bool
+	plans           colorspace.Plans
+	hdr             map[backend.Output]*hdrColor
+	ctms            map[backend.Output]backend.Matrix
 	captureTargets  map[*dmabuf.Buffer]render.ReadTarget
 	dmabuf          *dmabuf.Manager
 	importer        dmabufRenderer
@@ -274,6 +282,7 @@ func validate(cfg Config) (binds.Map, error) {
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
+	c.colorManagement = cfg.ColorManagement
 	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.rulesGen++
@@ -354,6 +363,10 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.colorrep, err = colorrep.New(display); err != nil {
+		return err
+	}
+	c.hdr, c.ctms = map[backend.Output]*hdrColor{}, map[backend.Output]backend.Matrix{}
+	if err := c.syncColorManagement(); err != nil {
 		return err
 	}
 	if c.outputConfig, err = outputmanagement.New(display, c, c.report); err != nil {
@@ -440,7 +453,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

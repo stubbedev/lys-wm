@@ -9,19 +9,23 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/outputmanagement"
 )
 
 type OutputRule struct {
-	Name        string
-	Description string
-	Mode        ModePolicy
-	Position    *image.Point
-	Scale       output.Scale
-	Depth       backend.BitDepth
-	Disabled    bool
-	Shader      string
+	Name          string
+	Description   string
+	Mode          ModePolicy
+	Position      *image.Point
+	Scale         output.Scale
+	Depth         backend.BitDepth
+	Disabled      bool
+	Shader        string
+	HDR           bool
+	SDRBrightness float64
+	HDRPeak       float64
 }
 
 const refreshToleranceMHz = 1000
@@ -154,24 +158,50 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 		if err != nil {
 			return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
 		}
-		next.Mode, next.Depth = m, rule.Depth
+		next.Mode, next.Depth, next.HDR = m, rule.Depth, backend.HDRMetadata{}
 	}
-	if next == current {
-		return false, nil
-	}
-	err := b.Commit(next)
-	if errors.Is(err, backend.ErrDepthUnsupported) {
-		c.report(fmt.Errorf("compositor: output %s shows 8-bit frames instead: %w", b.Name(), err))
-		next.Depth = backend.Depth8
-		if next == current {
-			return false, nil
+	var color *colorspace.Output
+	if next.Enabled() && rule.HDR {
+		co, meta, err := c.hdrAsked(b, rule)
+		if err != nil {
+			c.report(fmt.Errorf("compositor: output %s stays SDR: %w", b.Name(), err))
+		} else {
+			color, next.Depth, next.HDR = &co, backend.Depth10, meta
+			if rule.Shader != "" {
+				c.report(fmt.Errorf("compositor: output %s: screen shader %s stays off while it is in HDR: shaders work on SDR code values", b.Name(), rule.Shader))
+			}
 		}
-		err = b.Commit(next)
 	}
-	if err != nil {
-		return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
+	changed := next != current
+	if changed {
+		err := b.Commit(next)
+		if color != nil && (errors.Is(err, backend.ErrHDRUnsupported) || errors.Is(err, backend.ErrDepthUnsupported)) {
+			c.report(fmt.Errorf("compositor: output %s stays SDR: %w", b.Name(), err))
+			color, next.Depth, next.HDR = nil, rule.Depth, backend.HDRMetadata{}
+			changed = next != current
+			err = nil
+			if changed {
+				err = b.Commit(next)
+			}
+		}
+		if errors.Is(err, backend.ErrDepthUnsupported) {
+			c.report(fmt.Errorf("compositor: output %s shows 8-bit frames instead: %w", b.Name(), err))
+			next.Depth = backend.Depth8
+			changed = next != current
+			err = nil
+			if changed {
+				err = b.Commit(next)
+			}
+		}
+		if err != nil {
+			return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
+		}
 	}
-	return true, nil
+	if !next.Enabled() {
+		delete(c.hdr, b)
+		return changed, nil
+	}
+	return changed, c.setOutputColor(b, color)
 }
 
 func (c *Compositor) relayout() error {
@@ -285,10 +315,13 @@ func (c *Compositor) disable(o *output.Output) error {
 	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())
 	delete(c.usable, o)
 	if sc, ok := c.scenes[o]; ok {
-		errs = append(errs, sc.blurs.drop())
-		errs = append(errs, sc.dropImage())
+		errs = append(errs, sc.blurs.drop(), sc.dropImage(), sc.dropWorking())
 	}
 	delete(c.scenes, o)
+	delete(c.hdr, b)
+	if c.colorManager != nil {
+		c.colorManager.OutputRemoved(o)
+	}
 	delete(c.dropped, o)
 	delete(c.switches, o)
 	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.dropClosingOn(o), c.power.Removed(o), c.gamma.Removed(o))

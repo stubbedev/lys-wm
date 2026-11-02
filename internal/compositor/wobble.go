@@ -47,7 +47,7 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 	if tile.Empty() {
 		return nil
 	}
-	if err := c.renderJelly(pass, w, tile, from); err != nil {
+	if err := c.renderJelly(pass, o, w, tile, from); err != nil {
 		return err
 	}
 	cols, rows := w.wobble.Grid()
@@ -75,12 +75,12 @@ func (c *Compositor) drawWobble(pass *frame, o *output.Output, w *window, from i
 	return nil
 }
 
-func (c *Compositor) renderJelly(pass *frame, w *window, area image.Rectangle, from int) error {
+func (c *Compositor) renderJelly(pass *frame, o *output.Output, w *window, area image.Rectangle, from int) error {
 	if w.jelly == nil || w.jelly.Size() != area.Size() {
 		if err := c.dropJelly(w); err != nil {
 			return err
 		}
-		tt, err := c.renderer.NewTextureTarget(area.Size())
+		tt, err := c.newSceneTarget(o, area.Size())
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func (c *Compositor) renderJelly(pass *frame, w *window, area image.Rectangle, f
 		return err
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, area.Min)
+	f.replayFrom(p, area.Min, c.sceneOut(o))
 	if err := p.End(); err != nil {
 		return err
 	}

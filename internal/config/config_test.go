@@ -340,3 +340,28 @@ func TestOutputShadersResolveAgainstTheConfig(t *testing.T) {
 		t.Errorf("an empty shader: %v", err)
 	}
 }
+
+func TestHDRKeysReachTheOutputRules(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("color_management: true\noutputs:\n  - match: DP-1\n    hdr: true\n    sdr_brightness: 250\n    hdr_peak: 600\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ColorManagement {
+		t.Error("color_management was dropped")
+	}
+	if r := cfg.Outputs.Named[0]; !r.HDR || r.SDRBrightness != 250 || r.HDRPeak != 600 {
+		t.Errorf("rule %+v", r)
+	}
+	plain, err := Parse("t.yaml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ColorManagement || plain.Outputs.Fallback.HDR {
+		t.Errorf("colour is on by default: %+v", plain)
+	}
+	for _, bad := range []string{"sdr_brightness: 0", "sdr_brightness: 20000", "hdr_peak: -1"} {
+		if _, err := Parse("t.yaml", []byte("outputs:\n  - match: DP-1\n    "+bad+"\n")); err == nil {
+			t.Errorf("%s was accepted", bad)
+		}
+	}
+}

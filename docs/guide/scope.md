@@ -20,10 +20,13 @@ page is what it does and what it will not do.
   warps and constraints.
 - **Hardware**: DRM/KMS through logind, libinput, NVIDIA (explicit sync) and
   Mesa, fractional scaling, and several GPUs.
+- **HDR**, per output and off by default: PQ and BT.2020 to the display,
+  `wp_color_manager_v1` for clients, tone mapping both ways. [Config](../config#hdr)
+  has the keys and [Architecture](../architecture#hdr) the design.
 
 ## What it will not do
 
-Plugins, a scripting language in the config, VR, HDR.
+Plugins, a scripting language in the config, VR.
 
 ## Pure Go
 

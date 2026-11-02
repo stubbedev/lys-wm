@@ -134,14 +134,8 @@ func (c *Compositor) render(o *output.Output) error {
 	if err != nil {
 		return err
 	}
-	repaint := render.Region(sc.repaintFor(f, bounds).Rects())
-	p, err := f.Renderer.Begin(f.Target, repaint)
+	repaint, err := c.paintFrame(o, sc, f, bounds)
 	if err != nil {
-		o.Backend().AbortFrame()
-		return err
-	}
-	sc.cur.replay(p)
-	if err := p.End(); err != nil {
 		o.Backend().AbortFrame()
 		return err
 	}
@@ -319,7 +313,7 @@ func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surf
 				c.report(fmt.Errorf("compositor: blur behind a surface's region: %w", err))
 			}
 		}
-		pass.drawSurface(s, tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s)*alpha, c.opaque(s), m)
+		pass.drawSurface(s, c.surfaceSpace(s), tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s)*alpha, c.opaque(s), m)
 		shown = append(shown, s)
 	}
 	return shown
@@ -346,11 +340,17 @@ func (c *Compositor) updateEntered(o *output.Output) error {
 		}
 		e.outputs = append(e.outputs, o)
 		errs = append(errs, s.Enter(o.Resources(s.Client())), s.SetPreferredScale(uint32(maxScale(e.outputs))))
+		if c.colorManager != nil {
+			errs = append(errs, c.colorManager.PreferredChanged(s))
+		}
 	}
 	for _, e := range c.entered {
 		if slices.Contains(e.outputs, o) && !slices.Contains(shown, e.s) {
 			e.outputs = slices.DeleteFunc(e.outputs, func(x *output.Output) bool { return x == o })
 			errs = append(errs, e.s.Leave(o.Resources(e.s.Client())), e.s.SetPreferredScale(uint32(maxScale(e.outputs))))
+			if c.colorManager != nil {
+				errs = append(errs, c.colorManager.PreferredChanged(e.s))
+			}
 		}
 	}
 	return errors.Join(errs...)

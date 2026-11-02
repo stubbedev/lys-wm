@@ -60,7 +60,7 @@ func (c *Compositor) shaderOf(o *output.Output) *screenShader {
 }
 
 func (c *Compositor) shading(o *output.Output) *screenShader {
-	if c.shell.Locked() {
+	if c.shell.Locked() || c.hdr[o.Backend()] != nil {
 		return nil
 	}
 	if s := c.shaderOf(o); s != nil && s.err == nil {
@@ -129,7 +129,7 @@ func (c *Compositor) sceneImage(sc *scene, bounds image.Rectangle) error {
 	if err != nil {
 		return err
 	}
-	sc.cur.replay(p)
+	sc.cur.replay(p, colorOut{plans: &c.plans})
 	return p.End()
 }
 

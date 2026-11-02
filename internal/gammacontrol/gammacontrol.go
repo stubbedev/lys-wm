@@ -24,6 +24,7 @@ var Interface = swgc.ZwlrGammaControlManagerV1Interface
 
 type Outputs interface {
 	Owner(res *sw.WlOutput) *output.Output
+	GammaBlocked(o *output.Output) bool
 }
 
 type Manager struct {
@@ -69,7 +70,7 @@ func (r requests) GetGammaControl(_ *swgc.ZwlrGammaControlManagerV1, res *swgc.Z
 		return k, res.SendFailed()
 	}
 	g, ok := o.Backend().(backend.Gamma)
-	if _, taken := r.m.controls[o]; !ok || taken || g.GammaSize() == 0 {
+	if _, taken := r.m.controls[o]; !ok || taken || g.GammaSize() == 0 || r.m.outputs.GammaBlocked(o) {
 		return k, res.SendFailed()
 	}
 	k.out, k.gamma = o, g

@@ -56,6 +56,19 @@
         kernelModules = ["vkms"];
         outputs = ["Virtual-1" "Virtual-2"];
       };
+      vm-hdr-refused = vm {
+        name = "lys-wm-hdr-refused";
+        devices = ["virtio-gpu-pci"];
+        lysWMConfig = ''
+          outputs:
+            - match: "*"
+              hdr: true
+        '';
+        outputs = ["Virtual-1"];
+        extraTest = _: ''
+          machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'output Virtual-1 stays SDR'")
+        '';
+      };
       vm-screencast = screencast "wlr";
       vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};

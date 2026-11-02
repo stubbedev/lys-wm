@@ -127,6 +127,9 @@ type cursorImage struct {
 }
 
 func (c *Compositor) addCursorPlane(o *output.Output) {
+	if c.hdr[o.Backend()] != nil {
+		return
+	}
 	plane, err := o.Backend().CursorPlane()
 	switch {
 	case err == nil:
@@ -202,7 +205,7 @@ func (c *Compositor) surfacePixels() (*cursorPixels, bool) {
 	}
 	op := c.cursorOps.ops[0]
 	full := render.FRect{W: float64(cp.size.X), H: float64(cp.size.Y)}
-	if op.surface != cur.Surface || op.transform != render.Normal || op.alpha != 1 || op.src != full || op.dst.Size() != cp.size {
+	if op.surface != cur.Surface || op.space != nil || op.transform != render.Normal || op.alpha != 1 || op.src != full || op.dst.Size() != cp.size {
 		return nil, false
 	}
 	return cp, true
@@ -228,7 +231,7 @@ func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, box image.Rectan
 		return err
 	}
 	p.Clear(render.Color{})
-	c.cursorOps.replayFrom(p, origin)
+	c.cursorOps.replayFrom(p, origin, colorOut{plans: &c.plans})
 	if err := p.End(); err != nil {
 		return err
 	}
@@ -257,7 +260,7 @@ func (c *Compositor) readCursor(r render.AsyncReader, hw *hwCursor, o *output.Ou
 		return errors.Join(err, target.Destroy())
 	}
 	p.Clear(render.Color{})
-	c.cursorOps.replayFrom(p, box.Min)
+	c.cursorOps.replayFrom(p, box.Min, colorOut{plans: &c.plans})
 	if err := p.End(); err != nil {
 		return errors.Join(err, target.Destroy())
 	}

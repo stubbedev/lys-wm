@@ -124,6 +124,7 @@ type Output struct {
 	Powered     bool           `json:"powered"`
 	Shader      string         `json:"shader,omitempty"`
 	ShaderError string         `json:"shader_error,omitempty"`
+	HDR         bool           `json:"hdr,omitempty"`
 }
 
 type Workspace struct {

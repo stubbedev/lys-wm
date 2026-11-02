@@ -150,18 +150,18 @@ func (c *Compositor) snapshot(w *window) (render.TextureTarget, error) {
 		return nil, nil
 	}
 	c.drawBorder(&f, o, w)
-	tt, err := c.renderOffscreen(&f, deviceRect(o, w.tile))
+	tt, err := c.renderOffscreen(o, &f, deviceRect(o, w.tile))
 	if err != nil {
 		return nil, fmt.Errorf("compositor: snapshot window %d: %w", w.id, err)
 	}
 	return tt, nil
 }
 
-func (c *Compositor) renderOffscreen(f *frame, area image.Rectangle) (render.TextureTarget, error) {
+func (c *Compositor) renderOffscreen(o *output.Output, f *frame, area image.Rectangle) (render.TextureTarget, error) {
 	if area.Empty() {
 		return nil, nil
 	}
-	tt, err := c.renderer.NewTextureTarget(area.Size())
+	tt, err := c.newSceneTarget(o, area.Size())
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (c *Compositor) renderOffscreen(f *frame, area image.Rectangle) (render.Tex
 		return nil, errors.Join(err, tt.Destroy())
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, area.Min)
+	f.replayFrom(p, area.Min, c.sceneOut(o))
 	if err := p.End(); err != nil {
 		return nil, errors.Join(err, tt.Destroy())
 	}
@@ -301,7 +301,7 @@ func (c *Compositor) drawMorph(pass *frame, o *output.Output, w *window, v view,
 	if a == b || a.Empty() || b.Empty() {
 		return nil
 	}
-	if err := c.renderJelly(pass, w, a, from); err != nil {
+	if err := c.renderJelly(pass, o, w, a, from); err != nil {
 		return err
 	}
 	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2

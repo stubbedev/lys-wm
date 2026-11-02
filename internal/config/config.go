@@ -111,24 +111,25 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 }
 
 type rawConfig struct {
-	Outputs    []At[rawOutput]       `yaml:"outputs"`
-	Input      rawInput              `yaml:"input"`
-	Palette    map[string]At[string] `yaml:"palette"`
-	Borders    rawBorders            `yaml:"borders"`
-	Gaps       rawGaps               `yaml:"gaps"`
-	Decoration rawDecoration         `yaml:"decoration"`
-	Animations rawAnimations         `yaml:"animations"`
-	Tabs       rawTabs               `yaml:"tabs"`
-	Autotile   rawAutotile           `yaml:"autotile"`
-	Binds      []rawBind             `yaml:"binds"`
-	Submaps    map[string][]rawBind  `yaml:"submaps"`
-	Rules      []At[rawRule]         `yaml:"rules"`
-	Env        map[string]At[string] `yaml:"env"`
-	Autostart  []At[string]          `yaml:"autostart"`
-	Xwayland   rawXwayland           `yaml:"xwayland"`
-	GPU        *At[string]           `yaml:"gpu"`
-	Tearing    bool                  `yaml:"tearing"`
-	LidSuspend *bool                 `yaml:"lid_suspend"`
+	ColorManagement bool                  `yaml:"color_management"`
+	Outputs         []At[rawOutput]       `yaml:"outputs"`
+	Input           rawInput              `yaml:"input"`
+	Palette         map[string]At[string] `yaml:"palette"`
+	Borders         rawBorders            `yaml:"borders"`
+	Gaps            rawGaps               `yaml:"gaps"`
+	Decoration      rawDecoration         `yaml:"decoration"`
+	Animations      rawAnimations         `yaml:"animations"`
+	Tabs            rawTabs               `yaml:"tabs"`
+	Autotile        rawAutotile           `yaml:"autotile"`
+	Binds           []rawBind             `yaml:"binds"`
+	Submaps         map[string][]rawBind  `yaml:"submaps"`
+	Rules           []At[rawRule]         `yaml:"rules"`
+	Env             map[string]At[string] `yaml:"env"`
+	Autostart       []At[string]          `yaml:"autostart"`
+	Xwayland        rawXwayland           `yaml:"xwayland"`
+	GPU             *At[string]           `yaml:"gpu"`
+	Tearing         bool                  `yaml:"tearing"`
+	LidSuspend      *bool                 `yaml:"lid_suspend"`
 }
 
 type rawXwayland struct {
@@ -137,13 +138,16 @@ type rawXwayland struct {
 }
 
 type rawOutput struct {
-	Match    At[string]   `yaml:"match"`
-	Mode     *At[string]  `yaml:"mode"`
-	Position *At[string]  `yaml:"position"`
-	Scale    *At[float64] `yaml:"scale"`
-	BitDepth *At[int]     `yaml:"bitdepth"`
-	Disabled bool         `yaml:"disabled"`
-	Shader   *At[string]  `yaml:"shader"`
+	Match         At[string]   `yaml:"match"`
+	Mode          *At[string]  `yaml:"mode"`
+	Position      *At[string]  `yaml:"position"`
+	Scale         *At[float64] `yaml:"scale"`
+	BitDepth      *At[int]     `yaml:"bitdepth"`
+	Disabled      bool         `yaml:"disabled"`
+	HDR           bool         `yaml:"hdr"`
+	SDRBrightness *At[float64] `yaml:"sdr_brightness"`
+	HDRPeak       *At[float64] `yaml:"hdr_peak"`
+	Shader        *At[string]  `yaml:"shader"`
 }
 
 type rawInput struct {
@@ -335,27 +339,28 @@ type Bind struct {
 }
 
 type Config struct {
-	File        string
-	Keyboard    xkb.Names
-	RepeatRate  int32
-	RepeatDelay int32
-	Input       session.InputConfig
-	Outputs     compositor.OutputRules
-	Decor       compositor.Decor
-	Font        string
-	IconTheme   string
-	WM          wm.Settings
-	Binds       []Bind
-	Rules       []wm.Rule
-	Env         [][2]string
-	Autostart   []string
-	Xwayland    bool
-	ZeroScaling bool
-	GPU         string
-	Tearing     bool
-	LidSuspend  bool
-	Animations  anim.Table
-	BlurLayers  []string
+	File            string
+	Keyboard        xkb.Names
+	RepeatRate      int32
+	RepeatDelay     int32
+	Input           session.InputConfig
+	Outputs         compositor.OutputRules
+	ColorManagement bool
+	Decor           compositor.Decor
+	Font            string
+	IconTheme       string
+	WM              wm.Settings
+	Binds           []Bind
+	Rules           []wm.Rule
+	Env             [][2]string
+	Autostart       []string
+	Xwayland        bool
+	ZeroScaling     bool
+	GPU             string
+	Tearing         bool
+	LidSuspend      bool
+	Animations      anim.Table
+	BlurLayers      []string
 }
 
 var mocha = map[string]render.Color{
@@ -663,7 +668,11 @@ func (p *parser) mode(a *At[string], key string) compositor.ModePolicy {
 	return compositor.ExactMode{Size: dims, RefreshMHz: int32(math.Round(hz * 1000))}
 }
 
-const outputFallback = "*"
+const (
+	outputFallback = "*"
+	minLuminance   = 1
+	maxLuminance   = 10000
+)
 
 func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 	key := fmt.Sprintf("outputs[%d]", i)
@@ -707,6 +716,13 @@ func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 	}
 	if r.Shader != nil {
 		rule.Shader = p.shaderPath(*r.Shader, key+".shader")
+	}
+	rule.HDR = r.HDR
+	if v := p.between(r.SDRBrightness, key+".sdr_brightness", minLuminance, maxLuminance, false); v != nil {
+		rule.SDRBrightness = *v
+	}
+	if v := p.between(r.HDRPeak, key+".hdr_peak", minLuminance, maxLuminance, false); v != nil {
+		rule.HDRPeak = *v
 	}
 	return rule
 }
@@ -940,11 +956,12 @@ func Parse(file string, data []byte) (Config, error) {
 				Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
 			},
 		},
-		WM:          compositor.DefaultSettings(),
-		Xwayland:    raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,
-		ZeroScaling: raw.Xwayland.ZeroScaling == nil || *raw.Xwayland.ZeroScaling,
-		Tearing:     raw.Tearing,
-		LidSuspend:  raw.LidSuspend == nil || *raw.LidSuspend,
+		WM:              compositor.DefaultSettings(),
+		Xwayland:        raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,
+		ZeroScaling:     raw.Xwayland.ZeroScaling == nil || *raw.Xwayland.ZeroScaling,
+		Tearing:         raw.Tearing,
+		ColorManagement: raw.ColorManagement,
+		LidSuspend:      raw.LidSuspend == nil || *raw.LidSuspend,
 	}
 	if raw.Tabs.Font != nil {
 		cfg.Font = raw.Tabs.Font.V
@@ -1045,6 +1062,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
+	cfg.ColorManagement = c.ColorManagement
 	cfg.Animations, cfg.BlurLayers = c.Animations, c.BlurLayers
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil

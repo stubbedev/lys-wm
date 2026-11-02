@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	ccm "github.com/stubbedev/lys-wm/internal/protocol/client/colormanagement"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -100,6 +101,34 @@ func testFullscreenDMABUFsScanOutDirectly(t *testing.T, start gpuStarter) {
 	if n := scanouts(h); n != before {
 		t.Fatalf("a window sharing the output scanned out %d frames", n-before)
 	}
+}
+
+func TestAnHDROutputScansOutOnlyWhatMatchesItsSignal(t *testing.T) {
+	onEachDMABUFRenderer(t, testAnHDROutputScansOutOnlyWhatMatchesItsSignal)
+}
+
+func testAnHDROutputScansOutOnlyWhatMatchesItsSignal(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(cfg *compositor.Config) {
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+	})
+	before := scanouts(s.h)
+	b := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0xff, 0))
+	if err := errors.Join(s.w.Surface.Attach(b.WL, 0, 0), s.w.Surface.DamageBuffer(0, 0, 160, 100), s.w.Surface.Commit(), s.c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, s.h)
+	if n := scanouts(s.h); n != before {
+		t.Fatalf("an SDR dmabuf scanned out %d frames on an HDR output", n-before)
+	}
+	m := bindColorManager(t, s.c)
+	cs, err := m.GetSurface(s.w.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cs.SetImageDescription(hdr10Description(t, s.c, m, 1000), ccm.WpColorManagerV1RenderIntentPerceptual); err != nil {
+		t.Fatal(err)
+	}
+	s.show(t, "a dmabuf tagged with what the output carries", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0, 0xff)))
 }
 
 func TestAFullscreenDMABUFScansOutOverAWallpaperAndABar(t *testing.T) {

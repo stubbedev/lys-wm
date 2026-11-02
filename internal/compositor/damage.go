@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -28,6 +29,7 @@ type drawOp struct {
 	gradient  render.Gradient
 	goo       render.Goo
 	version   uint64
+	space     *colorspace.Description
 }
 
 func (op drawOp) covers() bool {
@@ -92,8 +94,8 @@ func (f *frame) fillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, goo: g})
 }
 
-func (f *frame) drawSurface(s *surface.Surface, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
-	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m})
+func (f *frame) drawSurface(s *surface.Surface, space *colorspace.Description, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
+	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m, space: space})
 }
 
 func (f *frame) remap(from int, src, dst image.Rectangle) {
@@ -155,12 +157,26 @@ func (f *frame) cull(covered *region.Set) {
 	f.ops, f.cursorFrom = f.ops[:n], f.cursorFrom-kept
 }
 
-func (f *frame) replay(p render.Pass) {
-	f.replayFrom(p, image.Point{})
+func (f *frame) replay(p render.Pass, to colorOut) {
+	f.replayFrom(p, image.Point{}, to)
 }
 
-func (f *frame) replayFrom(p render.Pass, origin image.Point) {
-	for _, op := range f.ops {
+func (f *frame) replayFrom(p render.Pass, origin image.Point, to colorOut) {
+	var transform *render.ColorTransform
+	var last *colorspace.Description
+	settled := false
+	active := to.to != nil || to.working != nil
+	for i := range f.ops {
+		op := f.ops[i]
+		if active || op.space != last {
+			if src := to.source(&op); !settled || src != last {
+				settled, last = true, src
+				if t := to.plan(src); t != transform {
+					p.SetColor(t)
+					transform = t
+				}
+			}
+		}
 		m := shiftMask(op.mask, origin)
 		if g := op.goo; !g.A.Rect.Empty() {
 			g.A.Rect, g.B.Rect = g.A.Rect.Sub(origin), g.B.Rect.Sub(origin)
@@ -181,6 +197,9 @@ func (f *frame) replayFrom(p render.Pass, origin image.Point) {
 			continue
 		}
 		p.DrawTexture(op.tex, op.src, op.dst.Sub(origin), op.transform, op.alpha, m)
+	}
+	if transform != nil {
+		p.SetColor(nil)
 	}
 }
 
@@ -207,6 +226,7 @@ type scene struct {
 	blurs     blurCaches
 	shader    *screenShader
 	image     render.TextureTarget
+	working   render.TextureTarget
 }
 
 func newScene() *scene {

@@ -23,6 +23,7 @@ var Interface = shc.HyprlandCtmControlManagerV1Interface
 
 type Outputs interface {
 	Owner(res *sw.WlOutput) *output.Output
+	ApplyColorMatrix(o *output.Output, m backend.Matrix) error
 }
 
 type Manager struct {
@@ -113,12 +114,7 @@ func (k *control) apply(o *output.Output, m backend.Matrix) {
 	} else {
 		k.applied[o] = true
 	}
-	ct, ok := o.Backend().(backend.ColorTransform)
-	if !ok || !ct.HasColorTransform() {
-		k.m.report(fmt.Errorf("ctmcontrol: %s has no colour transform", o.Backend().Name()))
-		return
-	}
-	if err := ct.SetColorTransform(m); err != nil {
+	if err := k.m.outputs.ApplyColorMatrix(o, m); err != nil {
 		k.m.report(fmt.Errorf("ctmcontrol: %w", err))
 	}
 }
@@ -132,11 +128,7 @@ func (k *control) release() error {
 	k.m.owner = nil
 	var errs []error
 	for o := range k.applied {
-		ct, ok := o.Backend().(backend.ColorTransform)
-		if !ok || !ct.HasColorTransform() {
-			continue
-		}
-		errs = append(errs, ct.SetColorTransform(backend.Identity))
+		errs = append(errs, k.m.outputs.ApplyColorMatrix(o, backend.Identity))
 	}
 	return errors.Join(errs...)
 }

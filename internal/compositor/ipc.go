@@ -39,6 +39,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Powered:     b.State().Lit(),
 			Shader:      shader,
 			ShaderError: shaderError,
+			HDR:         b.State().HDR.Active,
 		})
 	}
 	for _, w := range s.Workspaces() {

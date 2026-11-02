@@ -620,3 +620,9 @@ func (l *Log) Note(format string, args ...any) error {
 	*l = append(*l, fmt.Sprintf(format, args...))
 	return nil
 }
+
+// HasGlobal reports whether the compositor offered iface at connect.
+func (c *Client) HasGlobal(iface string) bool {
+	_, ok := c.globals.byName[iface]
+	return ok
+}

@@ -112,7 +112,7 @@ func TestPartialRepaintsMatchAFullRepaint(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			(&frame{ops: full}).replay(p)
+			(&frame{ops: full}).replay(p, colorOut{})
 			if err := p.End(); err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +135,7 @@ func TestPartialRepaintsMatchAFullRepaint(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				sc.cur.replay(p)
+				sc.cur.replay(p, colorOut{})
 				if err := p.End(); err != nil {
 					t.Fatal(err)
 				}

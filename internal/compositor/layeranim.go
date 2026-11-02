@@ -72,7 +72,7 @@ func (c *Compositor) layerSnapshot(l *layer) (render.TextureTarget, error) {
 	if len(f.ops) == 0 {
 		return nil, nil
 	}
-	tt, err := c.renderOffscreen(&f, deviceRect(l.output, l.bounds()))
+	tt, err := c.renderOffscreen(l.output, &f, deviceRect(l.output, l.bounds()))
 	if err != nil {
 		return nil, fmt.Errorf("compositor: snapshot the %q layer surface: %w", l.surface.Namespace(), err)
 	}

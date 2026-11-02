@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/fourcc"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -35,6 +36,9 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 		return false, nil
 	}
 	op, alone := fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
+	if alone && !colorspace.Passthrough(op.space, c.scanoutTarget(o)) {
+		op, alone = drawOp{}, false
+	}
 	if err := c.fill(o, op.surface, out); err != nil || !alone || sc.cur.cursorFrom != len(sc.cur.ops) {
 		return false, err
 	}
@@ -59,6 +63,13 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	}
 	held.outputs++
 	return true, nil
+}
+
+func (c *Compositor) scanoutTarget(o *output.Output) *colorspace.Target {
+	if hc := c.hdr[o.Backend()]; hc != nil {
+		return hc.signal
+	}
+	return colorspace.SDRTarget
 }
 
 func fills(ops []drawOp, bounds image.Rectangle) (drawOp, bool) {

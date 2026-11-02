@@ -35,11 +35,53 @@ mode and scale 1. Only one rule can use `"*"`.
 | `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
 | `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
+| `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes. Default `false` |
+| `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
+| `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
 | `disabled` | `true` turns the output off |
 | `shader` | A fragment shader for the output's final image: see [Screen shaders](./shaders). A shader that does not compile leaves the output unshaded and says why. Reloading the config reads the file again |
 
 A mode the output does not have is reported, and the output keeps its current
 mode.
+
+### HDR
+
+```yaml
+outputs:
+  - match: DP-1
+    hdr: true
+    sdr_brightness: 250
+```
+
+An output with `hdr: true` carries PQ and BT.2020 at 10 bits, with the panel's
+primaries and luminance from its EDID as static metadata, and overrides
+`bitdepth`. Everything SDR shows at `sdr_brightness`, HDR clients at their own
+levels anchored to it, and light above the panel's peak compresses into it.
+An output stays SDR, and the log says why, when the backend is not DRM or
+headless, the connector lacks `HDR_OUTPUT_METADATA` or `Colorspace`, the EDID lists
+no ST 2084 or no BT.2020 RGB, the renderer has no float targets, or the kernel
+refuses the modeset.
+
+On an HDR output the cursor draws in the frame, so moving it repaints; a screen
+shader stays off, reported in the log, as shaders take SDR code values; only a
+fullscreen buffer tagged PQ and BT.2020 that fits the panel and shares the
+reference white scans out directly; `zwlr_gamma_control_manager_v1` refuses it,
+as gamma ramps act on code values; and a colour matrix applies in linear light.
+Screenshots and screen sharing get SDR on every output: HDR content tone-mapped,
+and SDR content with its own pixels, except what blurs over HDR light.
+
+Clients see `wp_color_manager_v1` when any output has `hdr: true`, or with
+`color_management: true` at the top of the file, which also gives SDR outputs
+tone mapping for HDR clients. Without either nothing is offered and nothing is
+converted.
+
+Translucency, shadows and blur composite in linear light on an HDR output, which
+is physically right but looks lighter than the same config on SDR.
+
+The software renderer keeps 8 bits a channel of a client's 10-bit buffers and
+evaluates transforms per pixel in Go: it is for tests. ICC profiles work when
+they are matrix-shaper with one tone curve that is parametric or fits a gamma or
+sRGB within 1/255; others fail with `unsupported`, as the protocol has it.
 
 Display tools such as wlr-randr, kanshi, wdisplays and nwg-displays change
 outputs while lys-wm runs, through wlr-output-management. Their changes take the

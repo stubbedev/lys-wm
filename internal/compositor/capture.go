@@ -242,7 +242,8 @@ func (c *Compositor) runCapture(k *capture) error {
 func (c *Compositor) outputDraw(o *output.Output, region image.Rectangle, cursor bool) func(render.Pass) error {
 	return func(p render.Pass) error {
 		last := c.sceneOf(o).prev
-		(&frame{ops: last.ops[:last.cursorFrom]}).replayFrom(p, region.Min)
+		to := c.captureOut(o)
+		(&frame{ops: last.ops[:last.cursorFrom]}).replayFrom(p, region.Min, to)
 		if !cursor {
 			return nil
 		}
@@ -252,7 +253,7 @@ func (c *Compositor) outputDraw(o *output.Output, region image.Rectangle, cursor
 				return err
 			}
 		}
-		ops.replayFrom(p, region.Min)
+		ops.replayFrom(p, region.Min, to)
 		return nil
 	}
 }
@@ -274,7 +275,7 @@ func (c *Compositor) windowDraw(w *window, cursor bool) func(render.Pass) error 
 				return err
 			}
 		}
-		f.replayFrom(p, c.windowRegion(w).Min)
+		f.replayFrom(p, c.windowRegion(w).Min, c.captureOut(w.output))
 		return nil
 	}
 }
@@ -293,7 +294,7 @@ func (c *Compositor) pointerDraw(o *output.Output) func(render.Pass) error {
 		if _, err := c.drawCursor(&f, o, nil); err != nil {
 			return err
 		}
-		f.replayFrom(p, f.bounds().Min)
+		f.replayFrom(p, f.bounds().Min, c.captureOut(o))
 		return nil
 	}
 }
