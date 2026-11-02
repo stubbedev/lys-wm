@@ -198,7 +198,7 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 		for e := range c.layersAt(o, []shell.Layer{lv}) {
 			from := len(pass.ops)
 			rims := len(pass.rims)
-			look := c.decor.Blur.Look
+			look := &c.decor.Blur.Look
 			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
 				under := [1]image.Rectangle{deviceRect(o, e.bounds())}
 				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: under[:], extent: under[0], alpha: c.alpha.Alpha(e.surface.Surface()), look: look})

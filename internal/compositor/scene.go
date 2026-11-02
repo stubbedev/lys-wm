@@ -184,7 +184,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	}
 	shown = c.drawLayers(pass, o, overlay, shown)
 	for _, e := range c.layers {
-		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e.surface)})
+		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e.surface), look: &c.decor.Blur.Look})
 	}
 	shown, err := c.drawInputPopups(pass, o, shown)
 	if err != nil {
@@ -211,9 +211,8 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
 	top := w.top.Surface()
-	look := c.lookOf(w)
+	look, mica := &w.decided.look, w.decided.mica
 	rims := len(pass.rims)
-	mica := c.micaOn(w)
 	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
 		under := [1]image.Rectangle{deviceRect(o, w.rect)}
 		c.drawBlur(pass, o, glassDraw{surface: top, shape: under[:], extent: under[0], mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
@@ -244,7 +243,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 
 func (c *Compositor) drawWindowPopups(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
 	from := len(pass.ops)
-	shown = c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w) || c.micaOn(w), look: c.lookOf(w)})
+	shown = c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w) || w.decided.mica, look: &w.decided.look})
 	v, _ := c.workspaceView(o, w)
 	if at := v.rect(w.motion.At(c.frameTime), o.Logical()); at.Min != w.tile.Min {
 		goal := deviceRect(o, w.tile)
@@ -260,7 +259,7 @@ func deviceRect(o *output.Output, r image.Rectangle) image.Rectangle {
 type popupBlur struct {
 	regions bool
 	whole   bool
-	look    wm.Look
+	look    *wm.Look
 }
 
 func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPopup, shown []*surface.Surface, blur popupBlur) []*surface.Surface {
@@ -301,7 +300,7 @@ func (c *Compositor) drawClippedTree(pass *frame, o *output.Output, s *surface.S
 	return c.drawSurfaces(pass, o, s, org, shown, treeStyle{mask: m, alpha: alpha})
 }
 
-func (c *Compositor) drawBlurredTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, m render.Mask, alpha float32, look wm.Look) []*surface.Surface {
+func (c *Compositor) drawBlurredTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, m render.Mask, alpha float32, look *wm.Look) []*surface.Surface {
 	return c.drawSurfaces(pass, o, s, org, shown, treeStyle{mask: m, alpha: alpha, regions: true, look: look})
 }
 
@@ -309,7 +308,7 @@ type treeStyle struct {
 	mask    render.Mask
 	alpha   float32
 	regions bool
-	look    wm.Look
+	look    *wm.Look
 }
 
 func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, st treeStyle) []*surface.Surface {

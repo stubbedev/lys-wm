@@ -17,19 +17,24 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-func (c *Compositor) lookOf(w *window) wm.Look {
-	return c.decision(w).Look.Over(c.decor.Blur.Look)
+func (c *Compositor) lookOf(w *window) *wm.Look {
+	c.decision(w)
+	return &w.decided.look
 }
 
 func (c *Compositor) micaOn(w *window) bool {
-	d := c.decision(w)
+	c.decision(w)
+	return w.decided.mica
+}
+
+func micaOf(d *wm.Decision, on bool) bool {
 	if d.Blur != nil && !*d.Blur {
 		return false
 	}
 	if d.Mica != nil {
 		return *d.Mica
 	}
-	return c.decor.Blur.Mica.Enabled
+	return on
 }
 
 func (c *Compositor) glassOf(o *output.Output, l wm.Look) (render.Glass, unique.Handle[render.Glass]) {
@@ -147,8 +152,9 @@ func rimLine(box image.Rectangle, step int) (from, to [2]float32) {
 	s, co := gomath.Sincos(float64(step) * 2 * math.Pi / rimSteps)
 	cx, cy := float64(box.Min.X+box.Max.X)/2, float64(box.Min.Y+box.Max.Y)/2
 	reach := gomath.Hypot(float64(box.Dx()), float64(box.Dy())) / 2
-	dx, dy := float64(co*reach), float64(s*reach)
-	return [2]float32{float32(cx + dx), float32(cy + dy)}, [2]float32{float32(cx - dx), float32(cy - dy)}
+	dx, dy := float32(co*reach), float32(s*reach)
+	x, y := float32(cx), float32(cy)
+	return [2]float32{x + dx, y + dy}, [2]float32{x - dx, y - dy}
 }
 
 func (c *Compositor) drawRims(pass *frame, o *output.Output, mark int) error {
@@ -227,7 +233,7 @@ func (c *Compositor) windowFrost(w *window) *frost {
 		return nil
 	}
 	top := w.top.Surface()
-	f := &frost{surface: top, extent: deviceRect(o, w.rect), box: deviceRect(o, w.tile), mask: c.windowMask(o, w), alpha: c.alpha.Alpha(top), look: c.lookOf(w), mica: c.micaOn(w)}
+	f := &frost{surface: top, extent: deviceRect(o, w.rect), box: deviceRect(o, w.tile), mask: c.windowMask(o, w), alpha: c.alpha.Alpha(top), look: *c.lookOf(w), mica: c.micaOn(w)}
 	if (c.blurred(w) || f.mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.opacity(w)) {
 		f.shape = append(f.shape, f.extent)
 	}
@@ -274,7 +280,7 @@ func (c *Compositor) drawFrost(pass *frame, o *output.Output, cl *closing, at im
 		return mark
 	}
 	from := len(pass.ops)
-	c.drawBlur(pass, o, glassDraw{surface: f.surface, shape: f.shape, extent: f.extent, mask: f.mask, alpha: f.alpha, look: f.look, mica: f.mica})
+	c.drawBlur(pass, o, glassDraw{surface: f.surface, shape: f.shape, extent: f.extent, mask: f.mask, alpha: f.alpha, look: &f.look, mica: f.mica})
 	pass.remap(from, f.box, at)
 	pass.fade(from, a)
 	return mark

@@ -204,7 +204,7 @@ func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectang
 	})
 }
 
-func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look wm.Look) {
+func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look *wm.Look) {
 	if c.effects.BlurRegion(s).Empty() {
 		return
 	}
@@ -240,7 +240,7 @@ type glassDraw struct {
 	extent  image.Rectangle
 	mask    render.Mask
 	alpha   float32
-	look    wm.Look
+	look    *wm.Look
 	mica    bool
 }
 
@@ -283,13 +283,14 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	spec := c.blurSpec(o)
 	plain := spec
+	look := *g.look
 	if g.mica {
 		spec = c.micaSpec(o)
 		if t := c.decor.Blur.Mica.Tint; t.A > 0 {
-			g.look.Tint = t
+			look.Tint = t
 		}
 	}
-	glass, handle := c.glassOf(o, g.look)
+	glass, handle := c.glassOf(o, look)
 	reach := spec.reach()
 	if glass.Refracts() {
 		reach += int(math.Ceil(float64(glass.Amount)))
@@ -319,7 +320,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	if glass.Refracts() && m.Keep.Rect.Empty() {
 		m.Keep.Rect = under
 	}
-	tint := scaleColor(render.Color(g.look.Tint), g.alpha)
+	tint := scaleColor(render.Color(look.Tint), g.alpha)
 	for _, r := range g.shape {
 		r = r.Intersect(area)
 		if r.Empty() {
@@ -333,8 +334,8 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 		if tint.A > 0 {
 			pass.fillMasked(r, tint, m)
 		}
-		if g.look.Grain > 0 {
-			if err := c.drawGrain(pass, o, r, g.extent.Min, m, g.alpha, g.look.Grain); err != nil {
+		if look.Grain > 0 {
+			if err := c.drawGrain(pass, o, r, g.extent.Min, m, g.alpha, look.Grain); err != nil {
 				c.report(fmt.Errorf("compositor: grain over a blur: %w", err))
 			}
 		}

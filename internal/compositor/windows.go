@@ -52,15 +52,18 @@ type decided struct {
 	appID, title string
 	rules        uint64
 	d            wm.Decision
+	look         wm.Look
+	mica         bool
 }
 
-func (c *Compositor) decision(w *window) wm.Decision {
+func (c *Compositor) decision(w *window) *wm.Decision {
 	appID, title := w.top.AppID(), w.top.Title()
 	k := &w.decided
 	if k.rules != c.rulesGen || k.appID != appID || k.title != title {
 		*k = decided{appID: appID, title: title, rules: c.rulesGen, d: wm.Decide(c.rules, appID, title)}
+		k.look, k.mica = k.d.Look.Over(c.decor.Blur.Look), micaOf(&k.d, c.decor.Blur.Mica.Enabled)
 	}
-	return k.d
+	return &k.d
 }
 
 func (c *Compositor) windowOrigin(w *window) origin {
