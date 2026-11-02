@@ -180,12 +180,12 @@ var (
 	EaseIn    = Bezier{motion.NewCubicBezier(0.42, 0, 1, 1)}
 	EaseOut   = Bezier{motion.NewCubicBezier(0, 0, 0.58, 1)}
 	EaseInOut = Bezier{motion.NewCubicBezier(0.42, 0, 0.58, 1)}
-	Smooth    = mustSpring(170, 26, 1)
-	Wobbly    = mustSpring(200, 10, 1)
+	Smooth    = mustSpring(170, 26)
+	Wobbly    = mustSpring(200, 10)
 )
 
-func mustSpring(stiffness, damping, mass float64) Spring {
-	s, err := NewSpring(stiffness, damping, mass)
+func mustSpring(stiffness, damping float64) Spring {
+	s, err := NewSpring(stiffness, damping, 1)
 	if err != nil {
 		panic(err)
 	}

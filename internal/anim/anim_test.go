@@ -310,7 +310,7 @@ func TestReducedMotionReachesEveryEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bouncy := mustSpring(300, 6, 1)
+	bouncy := mustSpring(300, 6)
 	d := 200 * time.Millisecond
 	for _, shape := range []Shape{overshoot, bouncy} {
 		settings := map[Event]Setting{}
