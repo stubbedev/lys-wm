@@ -122,3 +122,36 @@ func TestLayersCloseWithTheirOutput(t *testing.T) {
 	})
 	c.DispatchUntil("the bar closed", func() bool { return bar.Closed })
 }
+
+func TestALayerDroppingItsKeyboardGivesItBack(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	_, in := c.Seat()
+	w := c.Window("win", quadrants)
+	in.Name(w.Surface, "win")
+	c.DispatchUntil("the window to map", w.Mapped)
+	r := &inputRig{t: t, h: h, c: c, in: in, w: w}
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+
+	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityOnDemand), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	in.Name(bar.Surface, "bar")
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	r.moveOn(0, 10, 5)
+	r.expect("leave win", "enter bar 10,5", "frame")
+	r.click()
+	r.expect("kb_leave win", "kb_enter bar", "button 272 1", "frame", "button 272 0", "frame")
+
+	setInteractivity := func(i cwlr.ZwlrLayerSurfaceV1KeyboardInteractivity) {
+		t.Helper()
+		if err := errors.Join(bar.Layer.SetKeyboardInteractivity(i), bar.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setInteractivity(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)
+	r.expect("kb_leave bar", "kb_enter win")
+
+	setInteractivity(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityOnDemand)
+	c.Sync()
+	r.h.tap(30)
+	r.expect("key 30 1", "key 30 0")
+}

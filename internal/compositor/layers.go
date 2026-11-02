@@ -115,6 +115,9 @@ func (c *Compositor) layersChanged(o *output.Output) error {
 }
 
 func (c *Compositor) LayerCommitted(l *shell.LayerSurface) error {
+	if c.layerFocus == l && l.Current().Interactivity == swlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone {
+		c.layerFocus = nil
+	}
 	e := c.layerOf(l)
 	if e == nil {
 		o := c.layerOutput(l)
