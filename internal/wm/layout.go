@@ -9,14 +9,17 @@ type Placement struct {
 	ID        WindowID
 	Rect      image.Rectangle
 	Visible   bool
+	Laid      bool
 	Layer     PlacementLayer
 	Minimized bool
 }
 
 type TabBar struct {
-	Rect   image.Rectangle
-	Tabs   []WindowID
-	Active int
+	Rect      image.Rectangle
+	Tabs      []WindowID
+	Active    int
+	Workspace WorkspaceID
+	Shown     bool
 }
 
 type Arrangement struct {

@@ -581,19 +581,23 @@ func (s State) Arrange(sp Spacing) Arrangement {
 			if p.ID == w.Fullscreen {
 				continue
 			}
-			p.Visible = p.Visible && shown && !covered
+			p.Laid = p.Visible && !covered
+			p.Visible = p.Laid && shown
 			all.Windows = append(all.Windows, p)
 		}
-		if shown && !covered {
-			all.TabBars = append(all.TabBars, a.TabBars...)
+		if !covered {
+			for _, bar := range a.TabBars {
+				bar.Workspace, bar.Shown = w.ID, shown
+				all.TabBars = append(all.TabBars, bar)
+			}
 		}
 		for _, f := range w.Floating {
 			if f.ID != w.Fullscreen {
-				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Visible: shown && !covered, Layer: LayerFloating})
+				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Visible: shown && !covered, Laid: !covered, Layer: LayerFloating})
 			}
 		}
 		if covered {
-			all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Layer: LayerFullscreen})
+			all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Laid: true, Layer: LayerFullscreen})
 		}
 		all.Windows = appendMinimized(all.Windows, w.Minimized)
 	}
