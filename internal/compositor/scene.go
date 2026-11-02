@@ -90,6 +90,9 @@ func (c *Compositor) sceneOf(o *output.Output) *scene {
 func (c *Compositor) render(o *output.Output) error {
 	c.frameTime = c.clock()
 	sc := c.sceneOf(o)
+	if err := c.settleZoom(sc); err != nil {
+		return err
+	}
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	shading := c.shading(o)
 	if err := sc.useShader(shading); err != nil {
@@ -130,11 +133,20 @@ func (c *Compositor) render(o *output.Output) error {
 	if err := sc.blurs.dropUnused(); err != nil {
 		c.report(fmt.Errorf("compositor: drop the blurs unused on %s: %w", o.Backend().Name(), err))
 	}
-	if sc.diff(bounds).Empty() && (shading == nil || !shading.animated) {
+	viewMoved := false
+	if z := sc.zoom; z != nil {
+		c.zoomFollows(o, z)
+		view := zoomView(bounds.Max, z.focus, z.factor(c.frameTime))
+		viewMoved, z.shown = view != z.shown, view
+	}
+	if sc.diff(bounds).Empty() && !viewMoved && (shading == nil || !shading.animated) {
 		return c.lockBlanked(o)
 	}
 	if shading != nil {
 		return c.renderShaded(o, sc, shading, bounds)
+	}
+	if sc.zoom != nil {
+		return c.renderZoomed(o, sc, bounds)
 	}
 	if direct, err := c.scanout(o, sc, bounds); err != nil || direct {
 		if err != nil {

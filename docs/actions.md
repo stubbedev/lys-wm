@@ -25,3 +25,4 @@ Every keybind and `lys-wmctl dispatch` takes one of these. This file is generate
 | `resizeactive` | `<dx> <dy>` | Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one. |
 | `movewindow` |  | Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. |
 | `resizewindow` |  | Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. |
+| `zoom` | `<in\|out\|reset\|set> [factor]` | Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16. |

@@ -46,6 +46,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Shader:      shader,
 			ShaderError: shaderError,
 			HDR:         b.State().HDR.Active,
+			Zoom:        c.ipcZoom(o),
 		})
 	}
 	for _, w := range s.Workspaces() {
@@ -84,6 +85,13 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		})
 	}
 	return snap
+}
+
+func (c *Compositor) ipcZoom(o *output.Output) float64 {
+	if z := c.zoomTarget(o); z != 1 {
+		return z
+	}
+	return 0
 }
 
 func (c *Compositor) shaderReport(o *output.Output) (path, problem string) {

@@ -22,6 +22,11 @@ binds:
   - {chord: SUPER + mouse:273, action: resizewindow}
   - {chord: SUPER + mouse_down, action: workspace e+1}
   - {chord: SUPER + mouse_up, action: workspace e-1}
+  - {chord: SUPER + CTRL + mouse_up, action: zoom in 1.1}
+  - {chord: SUPER + CTRL + mouse_down, action: zoom out 1.1}
+  - {chord: SUPER + equal, action: zoom in}
+  - {chord: SUPER + minus, action: zoom out}
+  - {chord: SUPER + BackSpace, action: zoom reset}
   - {chord: SUPER + H, action: focus left}
   - {chord: SUPER + SHIFT + H, action: move left}
   - {chord: SUPER + Left, action: focus left}

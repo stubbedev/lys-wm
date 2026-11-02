@@ -33,6 +33,22 @@ const (
 
 var powerModes = []string{PowerOn: "on", PowerOff: "off", PowerToggle: "toggle"}
 
+type ZoomMode uint8
+
+const (
+	ZoomIn ZoomMode = iota + 1
+	ZoomOut
+	ZoomReset
+	ZoomSet
+)
+
+var zoomModes = []string{ZoomIn: "in", ZoomOut: "out", ZoomReset: "reset", ZoomSet: "set"}
+
+const (
+	MaxZoom         = 16.0
+	DefaultZoomStep = 1.5
+)
+
 func (CloseWindowAction) isEffect() {}
 func (ExecAction) isEffect()        {}
 func (SubmapAction) isEffect()      {}
@@ -43,6 +59,7 @@ func (GlobalAction) isEffect()      {}
 func (DPMSAction) isEffect()        {}
 func (MinimizeAction) isEffect()    {}
 func (RestoreAction) isEffect()     {}
+func (ZoomAction) isEffect()        {}
 
 func emit(s State, e Effect) (State, []Effect, error) {
 	return s, []Effect{e}, nil
@@ -112,6 +129,10 @@ type (
 	}
 	MinimizeAction struct{ ID WindowID }
 	RestoreAction  struct{ ID WindowID }
+	ZoomAction     struct {
+		Mode   ZoomMode
+		Factor float64
+	}
 )
 
 func optionalWindow(name string, id WindowID) string {
@@ -167,6 +188,59 @@ func (a DPMSAction) String() string {
 
 func (a DPMSAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
+}
+
+func (a ZoomAction) String() string {
+	if a.Mode == ZoomReset || (a.Mode != ZoomSet && a.Factor == DefaultZoomStep) {
+		return "zoom " + zoomModes[a.Mode]
+	}
+	return "zoom " + zoomModes[a.Mode] + " " + strconv.FormatFloat(a.Factor, 'g', -1, 64)
+}
+
+func (a ZoomAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (a ZoomAction) Next(current float64) float64 {
+	next := 1.0
+	switch a.Mode {
+	case ZoomIn:
+		next = current * a.Factor
+	case ZoomOut:
+		next = current / a.Factor
+	case ZoomSet:
+		next = a.Factor
+	}
+	return min(max(next, 1), MaxZoom)
+}
+
+func parseZoom(spec ActionSpec, args []string, _ string) (Action, error) {
+	if len(args) == 0 || len(args) > 2 {
+		return nil, badArgs(spec, "takes a mode and at most one factor, not %d arguments", len(args))
+	}
+	var mode ZoomMode
+	for m, name := range zoomModes {
+		if name != "" && name == args[0] {
+			mode = ZoomMode(m)
+		}
+	}
+	switch {
+	case mode == 0:
+		return nil, badArgs(spec, "unknown mode %q", args[0])
+	case mode == ZoomReset && len(args) == 2:
+		return nil, badArgs(spec, "reset takes no factor, not %q", args[1])
+	case mode == ZoomReset:
+		return ZoomAction{Mode: mode}, nil
+	case mode == ZoomSet && len(args) == 1:
+		return nil, badArgs(spec, "set needs a factor")
+	case len(args) == 1:
+		return ZoomAction{Mode: mode, Factor: DefaultZoomStep}, nil
+	}
+	factor, err := strconv.ParseFloat(args[1], 64)
+	if err != nil || !(factor >= 1 && factor <= MaxZoom) {
+		return nil, badArgs(spec, "%q is not a factor from 1 to %g", args[1], MaxZoom)
+	}
+	return ZoomAction{Mode: mode, Factor: factor}, nil
 }
 
 func (a GlobalAction) String() string { return "global " + a.AppID + ":" + a.ID }
@@ -597,6 +671,11 @@ var Actions = []ActionSpec{
 		Name:    "resizewindow",
 		Summary: "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios.",
 		parse:   bare(DragAction{Mode: DragResize}),
+	},
+	{
+		Name: "zoom", Args: "<in|out|reset|set> [factor]",
+		Summary: "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16.",
+		parse:   parseZoom,
 	},
 }
 

@@ -40,7 +40,10 @@ func (c *Compositor) cursorImage(name string, px int) (xcursor.Image, error) {
 }
 
 func (c *Compositor) cursorTexture(name string, scale output.Scale) (*cursorTexture, error) {
-	px := scale.ToDevice(c.cursors.Size)
+	return c.cursorTextureAt(name, scale.ToDevice(c.cursors.Size))
+}
+
+func (c *Compositor) cursorTextureAt(name string, px int) (*cursorTexture, error) {
 	key := cursorKey{name, px}
 	if ct, ok := c.pointers[key]; ok {
 		return ct, nil
@@ -144,8 +147,8 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if c.shading(o) != nil {
-		return false, hw.plane.HideCursor()
+	if c.shading(o) != nil || c.zoomed(o) {
+		return false, hw.hide()
 	}
 	ops := &c.cursorOps
 	ops.ops = ops.ops[:0]
@@ -154,12 +157,12 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 		return false, err
 	}
 	if len(ops.ops) == 0 {
-		return true, hw.plane.HideCursor()
+		return true, hw.hide()
 	}
 	box, tip := ops.bounds(), c.cursorTip(o)
 	want := cursorImage{gen: c.cursorGen, scale: o.Scale(), hotspot: tip.Sub(box.Min), size: box.Size()}
 	if limit := hw.plane.CursorSize(); want.size.X > limit.X || want.size.Y > limit.Y {
-		return false, hw.plane.HideCursor()
+		return false, hw.hide()
 	}
 	if !hw.holds || hw.loaded != want {
 		if err := c.loadCursor(hw, o, box, want.hotspot); err != nil {
@@ -303,6 +306,11 @@ func (r *cursorRead) end(keepTarget bool) error {
 		return err
 	}
 	return errors.Join(err, r.target.Destroy())
+}
+
+func (hw *hwCursor) hide() error {
+	hw.holds = false
+	return hw.plane.HideCursor()
 }
 
 func (hw *hwCursor) release() error {

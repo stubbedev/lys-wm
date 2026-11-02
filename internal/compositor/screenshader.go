@@ -109,7 +109,7 @@ func (sc *scene) dropImage() error {
 	return err
 }
 
-func (c *Compositor) sceneImage(sc *scene, bounds image.Rectangle) error {
+func (c *Compositor) sceneImage(o *output.Output, sc *scene, bounds image.Rectangle) error {
 	if sc.image == nil || sc.image.Size() != bounds.Size() {
 		if err := sc.dropImage(); err != nil {
 			return err
@@ -121,6 +121,9 @@ func (c *Compositor) sceneImage(sc *scene, bounds image.Rectangle) error {
 		sc.image = t
 		sc.invalidate()
 		sc.diff(bounds)
+	}
+	if sc.zoom != nil {
+		return c.zoomedImage(o, sc, bounds)
 	}
 	if sc.damage.Empty() {
 		return nil
@@ -139,7 +142,7 @@ func (c *Compositor) renderShaded(o *output.Output, sc *scene, s *screenShader, 
 			return err
 		}
 	}
-	if err := c.sceneImage(sc, bounds); err != nil {
+	if err := c.sceneImage(o, sc, bounds); err != nil {
 		return err
 	}
 	f, err := o.Backend().BeginFrame()

@@ -237,6 +237,7 @@ type scene struct {
 	shader    *screenShader
 	image     render.TextureTarget
 	working   render.TextureTarget
+	zoom      *outputZoom
 }
 
 func newScene() *scene {

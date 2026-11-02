@@ -390,6 +390,20 @@ lists styles, `style`. Each key an event leaves out comes from its parent;
 | `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |
 | `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` | cross-fade |
 | `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` | cross-fade |
+| `zoom` | `global` | The `zoom` action changing an output's magnification. It runs on `spring` unless given a curve or a duration, in equal ratios, so doubling takes the same motion at any level | | still |
+
+`zoom` magnifies an output around the pointer. The pointer stays where it is on
+the screen and the picture moves under it, so the pointer reaches every part of
+the output and what it points at is what clients are told. Clients, the layout and
+input are untouched, and touches land on what is shown under the finger. Each
+output zooms on its own, from `zoom in`, `zoom out`, `zoom reset` and `zoom set` (see
+[actions](./actions.md)) on the output under the pointer, up to 16 times. While an
+output is zoomed it draws the cursor in the frame, magnified with the rest, in step
+with the picture instead of on a cursor plane, and does not scan out directly; both
+come back when it returns to 1, at which point it costs nothing. Screenshots and screen
+sharing show the output unzoomed, so zooming to read something does not change what
+others see or what a recording holds. `lys-wmctl outputs` reports the level as `zoom`
+while it is not 1.
 
 Animations run on each output's frame clock: every frame shows the animation
 at the time it starts drawing, and an output stops drawing once its

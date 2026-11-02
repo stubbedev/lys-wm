@@ -32,6 +32,7 @@ const (
 	Border
 	BorderAngle
 	WindowsMinimize
+	Zoom
 	eventCount
 )
 
@@ -109,6 +110,7 @@ var events = [eventCount]struct {
 	styles  []StyleKind
 	style   Style
 	reduced reduction
+	shape   Shape
 }{
 	Global:          {name: "global", parent: Global, reduced: fades},
 	Windows:         {name: "windows", parent: Global},
@@ -128,6 +130,7 @@ var events = [eventCount]struct {
 	Border:          {name: "border", parent: Global, reduced: fades},
 	BorderAngle:     {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
 	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie, FadeStyle}, style: Style{Kind: Genie}, reduced: crossFades},
+	Zoom:            {name: "zoom", parent: Global, shape: Smooth},
 }
 
 func (e Event) String() string {
@@ -238,6 +241,9 @@ func resolve(enabled, reduced bool, settings map[Event]Setting) (Table, map[Even
 			r.explicit = false
 		}
 		s := settings[e]
+		if d := events[e].shape; d != nil && s.Duration == nil {
+			r.shape = d
+		}
 		if s.Enabled != nil {
 			r.enabled = *s.Enabled
 		}

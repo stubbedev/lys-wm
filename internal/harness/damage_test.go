@@ -33,7 +33,7 @@ func presentCount(h *Harness) uint64 {
 	return n
 }
 
-func settle(t *testing.T, h *Harness) {
+func settle(t testing.TB, h *Harness) {
 	t.Helper()
 	presents := presentCount(h)
 	for deadline := time.Now().Add(clientTimeout); ; {

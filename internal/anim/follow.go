@@ -67,6 +67,46 @@ func (f follower) at(now time.Duration) (x, v float64) {
 	return f.target + u, v
 }
 
+type Motion struct {
+	tween  Tween[float64]
+	spring *follower
+}
+
+func NewMotion(at float64) Motion {
+	return Motion{tween: NewTween(at, Lerp)}
+}
+
+func (m Motion) state(now time.Duration) (x, v float64) {
+	if m.spring == nil {
+		return m.tween.At(now), 0
+	}
+	return m.spring.at(now)
+}
+
+func (m Motion) At(now time.Duration) float64 {
+	x, _ := m.state(now)
+	return x
+}
+
+func (m Motion) Done(now time.Duration) bool {
+	if m.spring == nil {
+		return m.tween.Done(now)
+	}
+	return now-m.spring.start >= m.spring.settle
+}
+
+func (m *Motion) Set(to float64, now time.Duration, c Curve) {
+	at, v := m.state(now)
+	m.tween.Jump(at)
+	m.spring = nil
+	if s, ok := c.(Spring); ok {
+		f := newFollower(s, at, v, to, now)
+		m.spring = &f
+		return
+	}
+	m.tween.Set(to, now, c)
+}
+
 type RectMotion struct {
 	tween   Tween[image.Rectangle]
 	springs *[4]follower

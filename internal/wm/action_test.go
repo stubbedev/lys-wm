@@ -34,6 +34,11 @@ var everyAction = []Action{
 	ReloadAction{},
 	ExitAction{},
 	DPMSAction{Mode: PowerOff},
+	ZoomAction{Mode: ZoomIn, Factor: 1.25},
+	ZoomAction{Mode: ZoomOut, Factor: 2},
+	ZoomAction{Mode: ZoomReset},
+	ZoomAction{Mode: ZoomIn, Factor: DefaultZoomStep},
+	ZoomAction{Mode: ZoomSet, Factor: 3.5},
 	DPMSAction{Mode: PowerToggle, Output: "DP-1"},
 	ExecAction{Command: "foot -e sh -c 'echo hi'"},
 	GlobalAction{AppID: "discord", ID: "push-to-talk"},
@@ -266,7 +271,7 @@ func TestEnumArgumentsParseByName(t *testing.T) {
 			t.Errorf("%q parsed to %v (%v), want %v", tc.in, got, err, tc.want)
 		}
 	}
-	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms "} {
+	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms ", "zoom", "zoom sideways", "zoom set", "zoom set 0.5", "zoom set 17", "zoom in NaN", "zoom reset 2", "zoom in 2 3"} {
 		if a, err := ParseAction(in); !errors.Is(err, ErrBadAction) {
 			t.Errorf("%q parsed to %v, %v; want a bad action", in, a, err)
 		}

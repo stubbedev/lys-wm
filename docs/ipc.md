@@ -50,7 +50,7 @@ Requests must arrive within 5 seconds and be under 64 KiB.
 `powered` is false while `dpms off` or an idle daemon has the output off.
 An output with a [screen shader](./shaders) also has `shader`, its path, and,
 when it stays off, `shader_error`, which says why. An output carrying an HDR
-signal has `hdr: true`, so a config that asked for it can see that it got it.
+signal has `hdr: true`, so a config that asked for it can see that it got it. A zoomed output has `zoom`, the factor it is going to; at 1 the field is left out.
 
 `workspaces`: a list of open workspaces, in ID order:
 

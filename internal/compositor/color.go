@@ -90,17 +90,8 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 		sc.cur.replay(p, colorOut{plans: &c.plans})
 		return repaint, p.End()
 	}
-	if sc.working == nil || sc.working.Size() != bounds.Size() {
-		if err := sc.dropWorking(); err != nil {
-			return nil, err
-		}
-		t, err := c.renderer.NewWorkingTarget(bounds.Size())
-		if err != nil {
-			return nil, err
-		}
-		sc.working = t
-		sc.damage.Reset()
-		sc.damage.Add(bounds)
+	if err := c.ensureWorking(o, sc, bounds); err != nil {
+		return nil, err
 	}
 	repaint := render.Region(sc.repaintFor(f, bounds).Rects())
 	p, err := f.Renderer.Begin(sc.working, render.Region(sc.damage.Rects()))
@@ -118,6 +109,23 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 	p.SetColor(c.plans.Of(hc.working.Description(), hc.signal))
 	p.DrawTexture(sc.working.Texture(), render.FRect{W: float64(size.X), H: float64(size.Y)}, bounds, render.Normal, 1, render.Mask{})
 	return repaint, p.End()
+}
+
+func (c *Compositor) ensureWorking(o *output.Output, sc *scene, bounds image.Rectangle) error {
+	if sc.working != nil && sc.working.Size() == bounds.Size() {
+		return nil
+	}
+	if err := sc.dropWorking(); err != nil {
+		return err
+	}
+	t, err := c.newSceneTarget(o, bounds.Size())
+	if err != nil {
+		return err
+	}
+	sc.working = t
+	sc.damage.Reset()
+	sc.damage.Add(bounds)
+	return nil
 }
 
 func (sc *scene) dropWorking() error {

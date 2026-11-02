@@ -237,7 +237,7 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		if !ok {
 			return nil
 		}
-		p := c.inArea(area, e.X, e.Y)
+		p := c.touchPoint(c.inArea(area, e.X, e.Y))
 		s, local, _ := c.surfaceAt(p)
 		if c.outsideGrab(s) {
 			return c.shell.DismissGrab()
@@ -252,7 +252,7 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 		if !ok {
 			return nil
 		}
-		t.at = c.inArea(t.area, e.X, e.Y)
+		t.at = c.touchPoint(c.inArea(t.area, e.X, e.Y))
 		c.touches[e.ID] = t
 		if c.touchDrag(e.ID) {
 			return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
