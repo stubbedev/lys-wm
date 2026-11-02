@@ -684,6 +684,13 @@ XML file to a package. `go run ./internal/scanner -fetch` refreshes the
 vendored XML from it; `go generate ./internal/scanner` regenerates both
 sides, and a test fails when the committed tree is stale.
 
+These XML files are not shared with lys-lib's `wlr`, though 30 of them are
+the same bytes. lys-wm's are the newest of each protocol at a pinned source and
+`-fetch` reproduces them, because the server has to advertise those versions;
+`wlr`'s are the client API lys-ui and lys-shell build against, and change when
+a client needs them to. Sharing would make every server protocol bump a lys-lib
+bump and a client API change first.
+
 Each interface becomes a type wrapping `wire.Object`. Incoming messages
 (requests on the server, events on the client) go to a per-interface
 `Handler` with one typed method each, the object first; object arguments
