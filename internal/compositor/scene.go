@@ -266,6 +266,9 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	from := len(pass.ops)
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
+	if !wholeBorder {
+		mask = c.drawnMask(o, w)
+	}
 	top := w.top.Surface()
 	look, mica := &w.decided.look, w.decided.mica
 	rims := len(pass.rims)
@@ -287,7 +290,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 		c.report(fmt.Errorf("compositor: the rim of window %d: %w", w.id, err))
 	}
 	if !wholeBorder {
-		c.drawBorder(pass, o, w)
+		c.drawOutlined(pass, o, w)
 	}
 	if at != w.tile {
 		pass.remap(from, deviceRect(o, w.tile), deviceRect(o, at))

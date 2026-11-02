@@ -645,8 +645,8 @@ client's drag and drop.
 
 | Key | Default |
 | --- | --- |
-| `height` | 22 |
-| `padding` | 6, between the tab strip and the windows |
+| `height` | 24 |
+| `padding` | 0, between the tab strip and the windows. At 0 the strip and the window read as one rounded shape, with one border and shadow around both; above it the strip rounds on its own |
 | `text_height` | 11 |
 | `text_padding` | 8 |
 | `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |

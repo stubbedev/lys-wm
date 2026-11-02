@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/gomath"
@@ -150,7 +151,7 @@ func DefaultDecor() Decor {
 	}
 	d.Blur = Blur{Size: 6, Passes: 2, Look: wm.Look{SaturationShift: 0.3}}
 	d.Tab = TabStyle{
-		Height: 22, Padding: 6, TextHeight: 11, TextPadding: 8,
+		Height: 24, Padding: 0, TextHeight: 11, TextPadding: 8,
 		Active:   TabColors{Background: lookAccent, Text: crust},
 		Inactive: TabColors{Background: surface0, Text: textFg},
 		Urgent:   TabColors{Background: red, Text: crust},
@@ -309,12 +310,36 @@ func (c *Compositor) outerRadius(o *output.Output, w *window) float32 {
 	return c.decorRadius(o)
 }
 
+func (c *Compositor) tabsJoin() bool {
+	return c.decor.Rounding > 0 && c.decor.Tab.Padding == 0
+}
+
+func (c *Compositor) stripAbove(w *window) (image.Rectangle, bool) {
+	if !c.tabsJoin() || w.layer != wm.LayerTiled {
+		return image.Rectangle{}, false
+	}
+	for i := range c.tabBars {
+		if bar := &c.tabBars[i]; bar.Shown && bar.Rect.Max.Y == w.tile.Min.Y && slices.Contains(bar.Tabs, w.id) {
+			return bar.Rect, true
+		}
+	}
+	return image.Rectangle{}, false
+}
+
+func (c *Compositor) outline(o *output.Output, w *window) image.Rectangle {
+	tile := deviceRect(o, w.tile)
+	if strip, ok := c.stripAbove(w); ok {
+		tile.Min.Y = deviceRect(o, strip).Min.Y
+	}
+	return tile
+}
+
 func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
 	sh := c.decor.Shadow
 	if !sh.Enabled || w.layer == wm.LayerFullscreen {
 		return
 	}
-	tile := deviceRect(o, w.tile)
+	tile := c.outline(o, w)
 	size := image.Pt(int(math.Round(float64(tile.Dx())*sh.Scale)), int(math.Round(float64(tile.Dy())*sh.Scale)))
 	corner := tile.Min.Add(tile.Size().Sub(size).Div(2)).Add(image.Pt(o.Scale().ToDevice(sh.Offset.X), o.Scale().ToDevice(sh.Offset.Y)))
 	base := image.Rectangle{Min: corner, Max: corner.Add(size)}
@@ -342,6 +367,21 @@ func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
 		return render.Mask{}
 	}
 	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.decor.Rounding)}}
+}
+
+func (c *Compositor) drawnMask(o *output.Output, w *window) render.Mask {
+	m := c.windowMask(o, w)
+	if _, joined := c.stripAbove(w); joined {
+		m.Keep.Rect.Min.Y = c.outline(o, w).Min.Y
+	}
+	return m
+}
+
+func (c *Compositor) drawOutlined(pass *frame, o *output.Output, w *window) {
+	outer := c.outline(o, w)
+	inner := deviceRect(o, w.rect)
+	inner.Min.Y = min(inner.Min.Y, outer.Min.Y+o.Scale().ToDevice(c.decor.BorderWidth))
+	c.drawBorderIn(pass, o, w, outer, inner)
 }
 
 func ringStrips(outer, inner image.Rectangle, cut float32) [4]image.Rectangle {
@@ -465,6 +505,18 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 		}
 		from := len(pass.ops)
 		strip := image.Rect(bar.Rect.Min.X, bar.Rect.Min.Y, bar.Rect.Max.X, bar.Rect.Min.Y+min(c.decor.Tab.Height, bar.Rect.Dy()))
+		var corners render.Mask
+		if c.decor.Rounding > 0 {
+			if c.tabsJoin() {
+				border := c.decor.BorderWidth
+				strip.Min.X, strip.Min.Y, strip.Max.X = strip.Min.X+border, strip.Min.Y+border, strip.Max.X-border
+				clip := deviceRect(o, strip)
+				clip.Max.Y += o.Scale().ToDevice(c.decor.Rounding)
+				corners.Keep = render.RoundRect{Rect: clip, Radius: deviceLength(o, c.decor.Rounding)}
+			} else {
+				corners.Keep = render.RoundRect{Rect: deviceRect(o, strip), Radius: deviceLength(o, c.decor.Rounding)}
+			}
+		}
 		n := len(bar.Tabs)
 		for tab, id := range bar.Tabs {
 			x0 := strip.Min.X + strip.Dx()*tab/n
@@ -483,7 +535,12 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 				return err
 			}
 			size := tex.Size()
-			pass.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, dst, render.Normal, 1)
+			src := render.FRect{W: float64(size.X), H: float64(size.Y)}
+			if corners != (render.Mask{}) && (tab == 0 || tab == n-1) {
+				pass.drawMasked(tex, src, dst, corners)
+				continue
+			}
+			pass.DrawTexture(tex, src, dst, render.Normal, 1)
 		}
 		if moved != bar.Rect {
 			pass.remap(from, deviceRect(o, bar.Rect), deviceRect(o, moved))

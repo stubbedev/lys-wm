@@ -89,6 +89,10 @@ func (f *frame) DrawTexture(t render.Texture, src render.FRect, dst image.Rectan
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha})
 }
 
+func (f *frame) drawMasked(t render.Texture, src render.FRect, dst image.Rectangle, m render.Mask) {
+	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: render.Normal, alpha: 1, mask: m})
+}
+
 func (f *frame) fillMasked(r image.Rectangle, c render.Color, m render.Mask) {
 	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, opaque: c.A == 0xff, mask: m})
 }

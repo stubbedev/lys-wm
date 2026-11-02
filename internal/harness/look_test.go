@@ -104,3 +104,38 @@ func TestBlurIsOfferedOnlyWhereItIsCheapUnlessAsked(t *testing.T) {
 		h.Eventually("the region blurs once the config asks", frostedAt(75, 45))
 	})
 }
+
+func TestATabStripAndItsWindowAreOneRoundedShape(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, defaultLook, tall)
+		c := testclient.Connect(t, h.Socket())
+		white := [3]byte{0xff, 0xff, 0xff}
+		first := c.Window("first", testclient.Fill(0xff, 0xff, 0xff))
+		c.DispatchUntil("the window to map", first.Mapped)
+		h.dispatch("makegroup tab")
+		second := c.Window("second", testclient.Fill(0xff, 0xff, 0xff))
+		c.DispatchUntil("the second to map", second.Mapped)
+		decor := compositor.DefaultDecor()
+		gap, border := compositor.DefaultSettings().Gaps.Outer.Left, decor.BorderWidth
+		belowStrip := gap + decor.Tab.Height + decor.Tab.Padding
+		size := tall.Size
+		c.DispatchUntil("the window below its strip", func() bool {
+			return second.Logical == image.Pt(size.X-2*(gap+border), size.Y-2*(gap+border)-decor.Tab.Height)
+		})
+		pump(c, 2*time.Second)
+		second.Stop()
+		first.Stop()
+		bg := func(shot [3]byte) bool { return shot != white }
+		h.Eventually("the square top of the window joining the strip", showing(gap+border, belowStrip+1, white))
+		h.Eventually("the top right too", showing(size.X-gap-border-1, belowStrip+1, white))
+		h.Eventually("a rounded bottom corner", func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return bg(pixel(snapshot(b.Outputs()[0]), gap+border, size.Y-gap-border-1))
+		})
+		tab := decor.Tab.Inactive.Background
+		inside := [3]byte{tab.R, tab.G, tab.B}
+		h.Eventually("the strip's left end", showing(gap+border+2, gap+decor.Tab.Height/2, inside))
+		h.Eventually("the strip's corner rounded away", func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return pixel(snapshot(b.Outputs()[0]), gap+border, gap+border) != inside
+		})
+	})
+}
