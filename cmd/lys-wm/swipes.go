@@ -27,13 +27,18 @@ func applySwipeLine(p *headless.Pointer, line string) error {
 	case "end":
 		return p.GestureEnd(backend.Swipe, false)
 	case "swipe":
-		dx, err := strconv.ParseFloat(arg, 64)
+		x, y, _ := strings.Cut(arg, " ")
+		dx, err := strconv.ParseFloat(x, 64)
 		if err != nil {
-			return fmt.Errorf("swipe %q: %w", arg, err)
+			return fmt.Errorf("swipe %q: dx: %w", arg, err)
 		}
-		return p.Swipe(dx, 0)
+		dy, err := strconv.ParseFloat(y, 64)
+		if err != nil {
+			return fmt.Errorf("swipe %q: dy: %w", arg, err)
+		}
+		return p.Swipe(dx, dy)
 	}
-	return fmt.Errorf("unknown swipe line %q (known: begin, swipe <dx>, end)", line)
+	return fmt.Errorf("unknown swipe line %q (known: begin, swipe <dx> <dy>, end)", line)
 }
 
 func readSwipes(l *loop.Loop, b backend.Backend, stdin *os.File) error {
@@ -59,9 +64,9 @@ func readSwipes(l *loop.Loop, b backend.Backend, stdin *os.File) error {
 			if end < 0 {
 				return nil
 			}
-			line := string(partial[:end])
-			partial = partial[end+1:]
-			if err := applySwipeLine(h.Pointer(), line); err != nil {
+			err := applySwipeLine(h.Pointer(), string(partial[:end]))
+			partial = append(partial[:0], partial[end+1:]...)
+			if err != nil {
 				return err
 			}
 		}

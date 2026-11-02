@@ -83,7 +83,7 @@ func TestStepsAreSummarizedPerRun(t *testing.T) {
 }
 
 func TestTheGateNamesWhatIsLate(t *testing.T) {
-	r := report{Steps: []stepReport{{Name: "smooth"}, {Name: "rough", Summary: frametrace.Summary{LatePercent: 12}}}}
+	r := report{Steps: []stepReport{{Name: "smooth"}, {Name: "rough", Summary: frametrace.Summary{LatePercent: 12}}, {Name: "reported", Ungated: true, Summary: frametrace.Summary{LatePercent: 90}}}}
 	if err := r.gate(-1); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestTheGateNamesWhatIsLate(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := r.gate(5)
-	if err == nil || !strings.Contains(err.Error(), "rough") || strings.Contains(err.Error(), "smooth") {
+	if err == nil || !strings.Contains(err.Error(), "rough") || strings.Contains(err.Error(), "smooth") || strings.Contains(err.Error(), "reported") {
 		t.Fatalf("gate = %v", err)
 	}
 }
@@ -116,7 +116,7 @@ func TestMeasuringASoftwareRendererEndToEnd(t *testing.T) {
 		t.Fatalf("the software renderer passed for a GPU: %v", refused)
 	}
 	var text strings.Builder
-	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "swipe", "glass-still"}, maxLatePercent: -1, allowSoftware: true, jsonPath: jsonPath}
+	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "swipe", "glass-still", "overview-scrub-10"}, maxLatePercent: -1, allowSoftware: true, jsonPath: jsonPath}
 	if err := measure(o, &text, os.Getenv); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestMeasuringASoftwareRendererEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.RealGPU || len(r.Steps) != 7 {
+	if r.RealGPU || len(r.Steps) != 11 {
 		t.Fatalf("report = %+v", r)
 	}
 	if s := r.Steps[0].Summary; r.Steps[0].Name != "window-open" || s.Presented == 0 || s.CPU.Samples == 0 {

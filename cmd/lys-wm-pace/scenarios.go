@@ -38,7 +38,10 @@ animations:
     windows_minimize: {curve: glide, duration: 450}
 rules:
   - {title: ^glass$, float: true, size: 1000x600, opacity: 0.6}
+  - {title: ^pile$, float: true, size: 1000x700}
 `
+
+const pileTitle = "pile"
 
 const (
 	eased       = 400 * time.Millisecond
@@ -69,12 +72,14 @@ type scenario struct {
 	setup     func(*session)
 	steps     []step
 	once      bool
+	ungated   bool
 	fakeInput bool
 }
 
 type mark struct {
 	step       string
 	continuous bool
+	ungated    bool
 	from, to   time.Duration
 }
 
@@ -153,11 +158,11 @@ func (s *session) clear() {
 	s.settle()
 }
 
-func (s *session) play(st *step) {
+func (s *session) play(st *step, ungated bool) {
 	from := s.now()
 	st.act(s)
 	s.pump(st.measure)
-	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, from: from, to: s.now()})
+	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, ungated: ungated, from: from, to: s.now()})
 	s.pump(settleGap)
 	if st.after != nil {
 		s.settle()
@@ -175,7 +180,7 @@ func (s *session) run(sc *scenario, rounds int) {
 	}
 	for range rounds {
 		for i := range sc.steps {
-			s.play(&sc.steps[i])
+			s.play(&sc.steps[i], sc.ungated)
 		}
 	}
 	s.clear()
@@ -187,10 +192,10 @@ func (s *session) swipe(line string) {
 	}
 }
 
-func fingers(dx float64) func(*session) {
+func fingers(dx, dy float64) func(*session) {
 	return func(s *session) {
 		s.swipe("begin")
-		line := "swipe " + strconv.FormatFloat(dx, 'f', 1, 64)
+		line := "swipe " + strconv.FormatFloat(dx, 'f', 1, 64) + " " + strconv.FormatFloat(dy, 'f', 1, 64)
 		onTicks(swipeEvents, swipeEvery, s.now, time.Sleep, func() { s.swipe(line) })
 		s.client.Sync()
 	}
@@ -221,6 +226,60 @@ func showsWindow(title string) func(*session) {
 		if w.Title != title {
 			panic(fatal{fmt.Errorf("the swipe left window %q active, want %q", w.Title, title)})
 		}
+	}
+}
+
+func overviewIs(open bool) func(*session) {
+	return func(s *session) {
+		data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindOverview})
+		if err != nil {
+			panic(fatal{fmt.Errorf("ask whether the overview is open: %w", err)})
+		}
+		var got bool
+		if err := json.Unmarshal(data, &got); err != nil {
+			panic(fatal{fmt.Errorf("read whether the overview is open from %s: %w", data, err)})
+		}
+		if got != open {
+			panic(fatal{fmt.Errorf("the overview is open: %v, want %v", got, open)})
+		}
+	}
+}
+
+func pile(n int) func(*session) {
+	return func(s *session) {
+		for i := range n {
+			shade := byte(0x20 + i*5)
+			s.still(pileTitle, shade, 0x60, 0xa0-shade/2)
+		}
+	}
+}
+
+func overviewByAction(n int) scenario {
+	name := "overview-" + strconv.Itoa(n)
+	return scenario{
+		name:    name,
+		ungated: true,
+		setup:   pile(n),
+		steps: []step{
+			{name: name + "-open", measure: sprung, act: dispatches("overview show"), after: overviewIs(true)},
+			{name: name + "-close", measure: sprung, act: dispatches("overview hide"), after: overviewIs(false)},
+		},
+	}
+}
+
+func overviewByFingers(n int) scenario {
+	name := "overview-scrub-" + strconv.Itoa(n)
+	return scenario{
+		name:      name,
+		ungated:   true,
+		fakeInput: true,
+		setup:     pile(n),
+		steps: []step{
+			{name: name + "-follow-open", continuous: true, act: fingers(0, -swipeStep)},
+			{name: name + "-release-open", measure: sprung, act: lifted, after: overviewIs(true)},
+			{name: name + "-follow-close", continuous: true, act: fingers(0, swipeStep)},
+			{name: name + "-release-close", measure: sprung, act: lifted, after: overviewIs(false)},
+		},
 	}
 }
 
@@ -288,9 +347,9 @@ var scenarios = []scenario{
 		fakeInput: true,
 		setup:     twoWorkspaces,
 		steps: []step{
-			{name: "swipe-follow-there", measure: 0, continuous: true, act: fingers(-swipeStep)},
+			{name: "swipe-follow-there", measure: 0, continuous: true, act: fingers(-swipeStep, 0)},
 			{name: "swipe-release-there", measure: sprung, act: lifted, after: showsWindow("second")},
-			{name: "swipe-follow-back", measure: 0, continuous: true, act: fingers(swipeStep)},
+			{name: "swipe-follow-back", measure: 0, continuous: true, act: fingers(swipeStep, 0)},
 			{name: "swipe-release-back", measure: sprung, act: lifted, after: showsWindow("first too")},
 		},
 	},
@@ -338,6 +397,10 @@ var scenarios = []scenario{
 			{name: "glass-slide-back", measure: eased, act: dispatches("workspace 1")},
 		},
 	},
+	overviewByAction(10),
+	overviewByFingers(10),
+	overviewByAction(30),
+	overviewByFingers(30),
 }
 
 func scenarioNames() []string {

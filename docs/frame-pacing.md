@@ -23,7 +23,8 @@ The steps cover opening and closing a window, moving one on a spring and
 interrupting that, switching workspaces, a three-finger swipe following the
 fingers and its release, the genie, and glass: over a client redrawing every
 frame, over nothing moving (which must draw nothing), and sliding with a
-workspace. Swipes come from the headless backend's fake touchpad, through
+workspace, and the overview with 10 and 30 overlapping floating windows, by action
+and scrubbed by three fingers. Swipes come from the headless backend's fake touchpad, through
 `lys-wm -headless-swipes`; `-backend drm` has no fingers to fake, and says it did
 not measure them.
 
@@ -52,7 +53,10 @@ numbers say nothing about a GPU. `-allow-software` accepts it for relative
 numbers and hot spots, and the report then says so on its second line and sets
 `real_gpu: false`. `-cpu-profile <file>` adds a Go CPU profile of lys-wm.
 `-max-late-percent <n>` fails when any step presents more than that share of its
-frames late; `just hardware` uses it.
+frames late; `just hardware` uses it. The overview's steps are reported but not
+gated: they have not run on a real GPU yet, and one late frame is several percent
+of a scrub, where the first frame of every open also builds the blur and the
+thumbnails.
 
 ## The trace
 

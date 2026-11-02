@@ -401,7 +401,7 @@ func run(args []string) (err error) {
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
 	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")
-	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> and end, for lys-wm-pace")
+	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy> and end, for lys-wm-pace")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

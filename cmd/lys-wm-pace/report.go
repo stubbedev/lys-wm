@@ -15,6 +15,7 @@ import (
 type stepReport struct {
 	Name       string               `json:"name"`
 	Continuous bool                 `json:"continuous"`
+	Ungated    bool                 `json:"ungated"`
 	Summary    frametrace.Summary   `json:"summary"`
 	Runs       [][]frametrace.Frame `json:"runs"`
 }
@@ -32,7 +33,7 @@ func buildReport(h frametrace.Header, rounds int, marks []mark, frames []frametr
 	for _, m := range marks {
 		if _, ok := index[m.step]; !ok {
 			index[m.step] = len(r.Steps)
-			r.Steps = append(r.Steps, stepReport{Name: m.step, Continuous: m.continuous})
+			r.Steps = append(r.Steps, stepReport{Name: m.step, Continuous: m.continuous, Ungated: m.ungated})
 		}
 		st := &r.Steps[index[m.step]]
 		st.Runs = append(st.Runs, framesIn(frames, m))
@@ -109,7 +110,7 @@ func (r *report) gate(maxLatePercent float64) error {
 	}
 	var over []string
 	for i := range r.Steps {
-		if s := &r.Steps[i].Summary; s.LatePercent > maxLatePercent {
+		if s := &r.Steps[i].Summary; !r.Steps[i].Ungated && s.LatePercent > maxLatePercent {
 			over = append(over, fmt.Sprintf("%s %.1f%%", r.Steps[i].Name, s.LatePercent))
 		}
 	}
