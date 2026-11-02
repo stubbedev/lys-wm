@@ -10,6 +10,7 @@ SOURCES = {"monitor": 1, "window": 2}
 CURSOR_MODES = {"hidden": 1, "embedded": 2}
 BACKGROUND = bytes([0x2E, 0x1E, 0x1E])
 CURSOR_REACH = 64
+FRAMES_WHILE_THE_PICKER_CLOSES = 30
 COLOR_TOLERANCE = 3
 
 
@@ -84,7 +85,7 @@ def read_frames(path):
 def capture(args):
     remote, node = start_cast(args.source, args.cursor)
     result = subprocess.run(
-        ["pw-frames", str(remote), str(node), str(args.frames), args.path],
+        ["pw-frames", str(remote), str(node), str(FRAMES_WHILE_THE_PICKER_CLOSES), str(args.frames), args.path],
         timeout=120,
         pass_fds=(remote,),
         capture_output=True,

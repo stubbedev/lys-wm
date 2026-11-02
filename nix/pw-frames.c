@@ -14,6 +14,7 @@ struct capture {
 	struct spa_video_info_raw format;
 	FILE *out;
 	int wanted;
+	int skip;
 	int written;
 	int status;
 };
@@ -61,7 +62,9 @@ static void on_process(void *data) {
 	struct spa_data *d = &buf->datas[0];
 	uint32_t width = c->format.size.width, height = c->format.size.height;
 	int corrupted = h != NULL && (h->flags & SPA_META_HEADER_FLAG_CORRUPTED);
-	if (!corrupted && d->data != NULL && d->chunk->size > 0) {
+	if (!corrupted && d->data != NULL && d->chunk->size > 0 && c->skip > 0) {
+		c->skip--;
+	} else if (!corrupted && d->data != NULL && d->chunk->size > 0) {
 		int32_t stride = d->chunk->stride > 0 ? d->chunk->stride : (int32_t)width * 4;
 		if ((uint64_t)stride * (height - 1) + width * 4 > d->maxsize) {
 			pw_stream_queue_buffer(c->stream, b);
@@ -98,13 +101,13 @@ static const struct pw_stream_events events = {
 };
 
 int main(int argc, char *argv[]) {
-	if (argc != 5) {
-		fprintf(stderr, "usage: pw-frames FD NODE FRAMES OUT\n");
+	if (argc != 6) {
+		fprintf(stderr, "usage: pw-frames FD NODE SKIP FRAMES OUT\n");
 		return 2;
 	}
 	pw_init(&argc, &argv);
-	struct capture c = {.wanted = atoi(argv[3])};
-	if ((c.out = fopen(argv[4], "wb")) == NULL) {
+	struct capture c = {.skip = atoi(argv[3]), .wanted = atoi(argv[4])};
+	if ((c.out = fopen(argv[5], "wb")) == NULL) {
 		perror("pw-frames: open the output");
 		return 1;
 	}
