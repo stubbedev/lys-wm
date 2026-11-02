@@ -37,7 +37,7 @@ func (c *Compositor) dropTarget(it *interaction) (image.Rectangle, bool, error) 
 		if o == nil || at == it.start {
 			return image.Rectangle{}, false, nil
 		}
-		r, ok := c.wm.SnapTarget(it.w.id, c.usable[o].Add(o.Position()), at, c.decor.DragPreview.SnapDistance, c.settings.Gaps)
+		r, ok := c.wm.SnapTarget(it.w.id, c.usable[o].Add(o.Position()), at, c.decor.DragPreview.SnapDistance, c.settings.Gaps, c.sharedEdges(o))
 		return r, ok, nil
 	case wm.LayerTiled:
 		if it.w.tile.Empty() {
@@ -47,6 +47,23 @@ func (c *Compositor) dropTarget(it *interaction) (image.Rectangle, bool, error) 
 		return r, err == nil && r != it.w.tile, err
 	}
 	return image.Rectangle{}, false, nil
+}
+
+func (c *Compositor) sharedEdges(o *output.Output) wm.SharedEdges {
+	r := o.Logical()
+	var shared wm.SharedEdges
+	for _, other := range c.outputs {
+		n := other.Logical()
+		if other == o {
+			continue
+		}
+		overlapsY, overlapsX := n.Min.Y < r.Max.Y && r.Min.Y < n.Max.Y, n.Min.X < r.Max.X && r.Min.X < n.Max.X
+		shared.Left = shared.Left || (n.Max.X == r.Min.X && overlapsY)
+		shared.Right = shared.Right || (n.Min.X == r.Max.X && overlapsY)
+		shared.Top = shared.Top || (n.Max.Y == r.Min.Y && overlapsX)
+		shared.Bottom = shared.Bottom || (n.Min.Y == r.Max.Y && overlapsX)
+	}
+	return shared
 }
 
 func (c *Compositor) trackDrop(it *interaction) error {

@@ -329,6 +329,7 @@ windows and below the floating ones. For a tiled window that is its place in the
 tree, what `movewindow` does on release, and nothing while that is where it already
 is. A floating window lands under the pointer unless the pointer is near an edge of
 the usable area, the output less its bars: then it snaps, and the preview shows where.
+An edge shared with another output does not snap, so a window can cross it.
 
 | Pointer within `snap_distance` of | Window lands on |
 | --- | --- |

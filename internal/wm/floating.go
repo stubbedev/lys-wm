@@ -279,9 +279,13 @@ func (s State) ResizeFocused(dx, dy int) (State, error) {
 	return s, nil
 }
 
-func SnapRect(area image.Rectangle, at image.Point, distance int, gaps Gaps) (image.Rectangle, bool) {
-	left, right := at.X-area.Min.X < distance, area.Max.X-at.X <= distance
-	top, bottom := at.Y-area.Min.Y < distance, area.Max.Y-at.Y <= distance
+type SharedEdges struct {
+	Left, Right, Top, Bottom bool
+}
+
+func SnapRect(area image.Rectangle, at image.Point, distance int, gaps Gaps, shared SharedEdges) (image.Rectangle, bool) {
+	left, right := !shared.Left && at.X-area.Min.X < distance, !shared.Right && area.Max.X-at.X <= distance
+	top, bottom := !shared.Top && at.Y-area.Min.Y < distance, !shared.Bottom && area.Max.Y-at.Y <= distance
 	if !left && !right && !top && !bottom || !at.In(area) {
 		return image.Rectangle{}, false
 	}
@@ -307,8 +311,8 @@ func SnapRect(area image.Rectangle, at image.Point, distance int, gaps Gaps) (im
 	return r, true
 }
 
-func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, distance int, gaps Gaps) (image.Rectangle, bool) {
-	r, ok := SnapRect(area, at, distance, gaps)
+func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, distance int, gaps Gaps, shared SharedEdges) (image.Rectangle, bool) {
+	r, ok := SnapRect(area, at, distance, gaps, shared)
 	if !ok {
 		return image.Rectangle{}, false
 	}

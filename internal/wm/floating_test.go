@@ -193,14 +193,24 @@ func TestSnapRectsFromEdgesAndCorners(t *testing.T) {
 		{image.Pt(1095, 645), image.Rect(605, 355, 1080, 630)},
 	}
 	for _, c := range cases {
-		if got, snapped := SnapRect(area, c.at, 16, gaps); !snapped || got != c.want {
+		if got, snapped := SnapRect(area, c.at, 16, gaps, SharedEdges{}); !snapped || got != c.want {
 			t.Errorf("at %v: %v (%v), want %v", c.at, got, snapped, c.want)
 		}
 	}
 	for _, at := range []image.Point{image.Pt(600, 300), image.Pt(116, 66), image.Pt(50, 300), image.Pt(600, 700)} {
-		if got, snapped := SnapRect(area, at, 16, gaps); snapped {
+		if got, snapped := SnapRect(area, at, 16, gaps, SharedEdges{}); snapped {
 			t.Errorf("at %v snaps to %v", at, got)
 		}
+	}
+}
+
+func TestAnEdgeSharedWithAnotherOutputDoesNotSnap(t *testing.T) {
+	area := image.Rect(0, 0, 1000, 600)
+	if got, snapped := SnapRect(area, image.Pt(995, 300), 16, Gaps{}, SharedEdges{Right: true}); snapped {
+		t.Errorf("the shared right edge snaps to %v", got)
+	}
+	if got, snapped := SnapRect(area, image.Pt(995, 5), 16, Gaps{}, SharedEdges{Right: true}); !snapped || got != area {
+		t.Errorf("the top of a shared edge: %v (%v), want the top edge's whole area", got, snapped)
 	}
 }
 
@@ -208,7 +218,7 @@ func TestASnapTargetKeepsTheWindowsLimits(t *testing.T) {
 	s := ok(t)(State{}.AddOutput("DP-1", image.Rect(0, 0, 1000, 500), image.Rect(0, 0, 1000, 500)))
 	s = ok(t)(s.MapFloating(1, image.Rect(10, 10, 110, 110)))
 	s = ok(t)(s.SetLimits(1, Limits{Max: image.Pt(200, 200)}))
-	got, snapped := s.SnapTarget(1, image.Rect(0, 0, 1000, 500), image.Pt(2, 250), 16, Gaps{})
+	got, snapped := s.SnapTarget(1, image.Rect(0, 0, 1000, 500), image.Pt(2, 250), 16, Gaps{}, SharedEdges{})
 	if !snapped || got != image.Rect(0, 0, 200, 200) {
 		t.Errorf("a window of at most 200x200 snaps to %v (%v)", got, snapped)
 	}
