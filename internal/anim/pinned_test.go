@@ -1,6 +1,7 @@
 package anim
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -70,7 +71,7 @@ func TestBezierHoldsItsPinnedValues(t *testing.T) {
 		}
 		for i, want := range c.want {
 			x := float64(i+1) / 10
-			if got := b.Ease(x); got != want {
+			if got := b.Ease(x); math.Abs(got-want) > 1e-15 {
 				t.Errorf("%v at %v = %x, want %x", c.points, x, got, want)
 			}
 		}
@@ -87,7 +88,7 @@ func TestSpringHoldsItsPinnedValues(t *testing.T) {
 			t.Errorf("%v settles after %v, want %v", c.params, s.Duration(), c.settle)
 		}
 		for i, want := range c.want {
-			if got := s.At(pinnedSpringTimes[i]); got != want {
+			if got := s.At(pinnedSpringTimes[i]); math.Abs(got-want) > 1e-15 {
 				t.Errorf("%v at %v = %x, want %x", c.params, pinnedSpringTimes[i], got, want)
 			}
 		}

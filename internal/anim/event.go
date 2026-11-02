@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/stubbedev/lys-lib/motion"
 )
 
 type Event uint8
@@ -155,11 +157,11 @@ type resolved struct {
 }
 
 var (
-	Linear    = Bezier{0, 0, 1, 1}
-	Ease      = Bezier{0.25, 0.1, 0.25, 1}
-	EaseIn    = Bezier{0.42, 0, 1, 1}
-	EaseOut   = Bezier{0, 0, 0.58, 1}
-	EaseInOut = Bezier{0.42, 0, 0.58, 1}
+	Linear    = Bezier{motion.NewCubicBezier(0, 0, 1, 1)}
+	Ease      = Bezier{motion.NewCubicBezier(0.25, 0.1, 0.25, 1)}
+	EaseIn    = Bezier{motion.NewCubicBezier(0.42, 0, 1, 1)}
+	EaseOut   = Bezier{motion.NewCubicBezier(0, 0, 0.58, 1)}
+	EaseInOut = Bezier{motion.NewCubicBezier(0.42, 0, 0.58, 1)}
 	Smooth    = mustSpring(170, 26, 1)
 	Wobbly    = mustSpring(200, 10, 1)
 )

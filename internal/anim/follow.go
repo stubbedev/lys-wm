@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/motion"
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
@@ -24,35 +25,6 @@ func newFollower(s Spring, at, velocity, target float64, now time.Duration) foll
 	return f
 }
 
-func (f follower) roots() (r1, r2 float64) {
-	w, z := f.s.omega, f.s.zeta
-	r := float64(w * math.Sqrt(float64(z*z)-1))
-	return float64(-z*w) + r, float64(-z*w) - r
-}
-
-func (f follower) offset(t float64) (u, v float64) {
-	w, z := f.s.omega, f.s.zeta
-	switch {
-	case z < 1:
-		wd := w * math.Sqrt(1-float64(z*z))
-		a, b := f.u0, (f.v0+float64(z*w*f.u0))/wd
-		e := gomath.Exp(-z * w * t)
-		c, s := gomath.Cos(wd*t), gomath.Sin(wd*t)
-		u = e * (float64(a*c) + float64(b*s))
-		v = e * (float64((float64(b*wd)-float64(z*w*a))*c) - float64((float64(a*wd)+float64(z*w*b))*s))
-		return u, v
-	case z == 1:
-		a, b := f.u0, f.v0+float64(w*f.u0)
-		e := gomath.Exp(-w * t)
-		return (a + float64(b*t)) * e, (b - float64(w*(a+float64(b*t)))) * e
-	}
-	r1, r2 := f.roots()
-	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
-	c2 := f.u0 - c1
-	e1, e2 := gomath.Exp(r1*t), gomath.Exp(r2*t)
-	return float64(c1*e1) + float64(c2*e2), float64(r1*c1*e1) + float64(r2*c2*e2)
-}
-
 func (f follower) envelope(t float64) float64 {
 	w, z := f.s.omega, f.s.zeta
 	switch {
@@ -62,7 +34,7 @@ func (f follower) envelope(t float64) float64 {
 	case z == 1:
 		return (math.Abs(f.u0) + float64(math.Abs(f.v0+float64(w*f.u0))*t)) * gomath.Exp(-w*t)
 	}
-	r1, r2 := f.roots()
+	r1, r2 := motion.OverdampedRoots(w, z)
 	c1 := (f.v0 - float64(r2*f.u0)) / (r1 - r2)
 	return (math.Abs(c1) + math.Abs(f.u0-c1)) * gomath.Exp(r1*t)
 }
@@ -91,7 +63,7 @@ func (f follower) at(now time.Duration) (x, v float64) {
 	if t <= 0 {
 		return f.target + f.u0, f.v0
 	}
-	u, v := f.offset(t.Seconds())
+	u, v := motion.SpringStep(f.s.omega, f.s.zeta, f.u0, f.v0, t.Seconds())
 	return f.target + u, v
 }
 

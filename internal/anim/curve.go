@@ -1,6 +1,6 @@
 // Package anim is the animation engine: easing curves, springs, tweens that
 // sample them at a monotonic time, and the per-event table the config builds.
-// It imports only the standard library.
+// It imports only the standard library and the solvers in lys-lib/motion.
 package anim
 
 import (
@@ -9,6 +9,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/motion"
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
@@ -30,7 +31,7 @@ type Shape interface {
 }
 
 type Bezier struct {
-	x1, y1, x2, y2 float64
+	curve motion.CubicBezier
 }
 
 func NewBezier(x1, y1, x2, y2 float64) (Bezier, error) {
@@ -42,62 +43,11 @@ func NewBezier(x1, y1, x2, y2 float64) (Bezier, error) {
 	if x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1 {
 		return Bezier{}, fmt.Errorf("anim: bézier x coordinates %v and %v must lie in [0, 1]", x1, x2)
 	}
-	return Bezier{x1, y1, x2, y2}, nil
-}
-
-func cubic(a, b, t float64) float64 {
-	u := 1 - t
-	return float64(3*u*u*t*a) + float64(3*u*t*t*b) + float64(t*t*t)
-}
-
-func cubicSlope(a, b, t float64) float64 {
-	u := 1 - t
-	return float64(3*u*u*a) + float64(6*u*t*(b-a)) + float64(3*t*t*(1-b))
-}
-
-const solveEpsilon = 1e-9
-
-func (b Bezier) param(x float64) float64 {
-	t := x
-	for range 8 {
-		d := cubic(b.x1, b.x2, t) - x
-		if math.Abs(d) < solveEpsilon {
-			return t
-		}
-		s := cubicSlope(b.x1, b.x2, t)
-		if math.Abs(s) < 1e-6 {
-			break
-		}
-		t -= d / s
-		if t < 0 || t > 1 {
-			break
-		}
-	}
-	lo, hi := 0.0, 1.0
-	t = x
-	for range 64 {
-		v := cubic(b.x1, b.x2, t)
-		if math.Abs(v-x) < solveEpsilon {
-			return t
-		}
-		if v < x {
-			lo = t
-		} else {
-			hi = t
-		}
-		t = (lo + hi) / 2
-	}
-	return t
+	return Bezier{motion.NewCubicBezier(x1, y1, x2, y2)}, nil
 }
 
 func (b Bezier) Ease(x float64) float64 {
-	switch {
-	case x <= 0:
-		return 0
-	case x >= 1:
-		return 1
-	}
-	return cubic(b.y1, b.y2, b.param(x))
+	return b.curve.Ease(x)
 }
 
 func (b Bezier) Timed(d time.Duration, _ bool) (Curve, error) {
@@ -154,20 +104,6 @@ func (s Spring) Timed(_ time.Duration, explicit bool) (Curve, error) {
 	return s, nil
 }
 
-func (s Spring) offset(t float64) float64 {
-	w, z := s.omega, s.zeta
-	switch {
-	case z < 1:
-		wd := w * math.Sqrt(1-float64(z*z))
-		return -gomath.Exp(-z*w*t) * (gomath.Cos(wd*t) + float64(z*w/wd*gomath.Sin(wd*t)))
-	case z == 1:
-		return -(1 + float64(w*t)) * gomath.Exp(-w*t)
-	}
-	r := float64(w * math.Sqrt(float64(z*z)-1))
-	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
-	return (float64(r2*gomath.Exp(r1*t)) - float64(r1*gomath.Exp(r2*t))) / (r1 - r2)
-}
-
 func (s Spring) envelope(t float64) float64 {
 	w, z := s.omega, s.zeta
 	switch {
@@ -177,8 +113,7 @@ func (s Spring) envelope(t float64) float64 {
 	case z == 1:
 		return (1 + float64(w*t)) * gomath.Exp(-w*t)
 	}
-	r := float64(w * math.Sqrt(float64(z*z)-1))
-	r1, r2 := float64(-z*w)+r, float64(-z*w)-r
+	r1, r2 := motion.OverdampedRoots(w, z)
 	return (math.Abs(r2) + math.Abs(r1)) / (r1 - r2) * gomath.Exp(r1*t)
 }
 
@@ -202,7 +137,8 @@ func (s Spring) At(elapsed time.Duration) float64 {
 	if elapsed <= 0 {
 		return 0
 	}
-	return 1 + s.offset(elapsed.Seconds())
+	x, _ := motion.SpringStep(s.omega, s.zeta, -1, 0, elapsed.Seconds())
+	return 1 + x
 }
 
 func (s Spring) Duration() time.Duration { return s.settle }
