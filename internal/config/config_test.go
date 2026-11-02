@@ -599,6 +599,12 @@ func TestAnEmptyConfigGetsTheDefaultLook(t *testing.T) {
 	if soft.Animations.Curve(anim.WindowsMove) == anim.Instant {
 		t.Error("the software renderer's windows do not animate")
 	}
+	if !cfg.Overview.Blur || soft.Overview.Blur || cfg.Slower[render.CPUDriver].Overview.Blur {
+		t.Errorf("overview blur: GPU %v, software %v, CPU driver %v", cfg.Overview.Blur, soft.Overview.Blur, cfg.Slower[render.CPUDriver].Overview.Blur)
+	}
+	if soft.Overview.Dim != cfg.Overview.Dim {
+		t.Errorf("a slower renderer's overview dims %v, want %v", soft.Overview.Dim, cfg.Overview.Dim)
+	}
 	driver := cfg.Slower[render.CPUDriver]
 	if driver.Decor.Rounding != def.Rounding || !driver.Decor.Shadow.Enabled || !driver.Decor.Blur.Withhold || driver.Animations.Curve(anim.Workspaces) == anim.Instant {
 		t.Errorf("a CPU driver's look: %+v", driver)
@@ -644,6 +650,15 @@ animations:
 	}
 	if s := on.Slower[render.Software].Decor; !s.Shadow.Enabled || !s.Blur.Enabled || s.Blur.Withhold {
 		t.Errorf("the software renderer overrides what was asked for: %+v", s)
+	}
+	blurred, err := Parse("t.yaml", []byte("overview: {blur: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for speed, e := range blurred.Slower {
+		if !e.Overview.Blur {
+			t.Errorf("speed %d overrides overview.blur: true", speed)
+		}
 	}
 	layers, err := Parse("t.yaml", []byte("decoration:\n  blur: {layers: [waybar]}\n"))
 	if err != nil {

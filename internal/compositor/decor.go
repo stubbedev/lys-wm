@@ -159,16 +159,18 @@ func DefaultDecor() Decor {
 }
 
 type Look struct {
-	Decor  Decor
-	Motion map[anim.Event]anim.Setting
+	Decor    Decor
+	Motion   map[anim.Event]anim.Setting
+	Overview OverviewStyle
 }
 
 func DefaultLook(s render.Speed) Look {
-	l := Look{Decor: DefaultDecor(), Motion: anim.DefaultMotion()}
+	l := Look{Decor: DefaultDecor(), Motion: anim.DefaultMotion(), Overview: DefaultOverviewStyle()}
 	if s == render.GPU {
 		return l
 	}
 	l.Decor.Blur.Withhold = true
+	l.Overview.Blur = false
 	if s == render.CPUDriver {
 		return l
 	}

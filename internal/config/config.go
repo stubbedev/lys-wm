@@ -567,8 +567,7 @@ func (p *parser) curve(name string, at At[rawCurve]) anim.Shape {
 	return nil
 }
 
-func (p *parser) overview(r rawOverview) compositor.OverviewStyle {
-	style := compositor.DefaultOverviewStyle()
+func (p *parser) overview(r rawOverview, style compositor.OverviewStyle) compositor.OverviewStyle {
 	if r.Blur != nil {
 		style.Blur = *r.Blur
 	}
@@ -1289,10 +1288,10 @@ func Parse(file string, data []byte) (Config, error) {
 	again := &parser{file: file, palette: p.palette}
 	for _, speed := range compositor.SlowerSpeeds {
 		slower := compositor.DefaultLook(speed)
-		cfg.Slower[speed] = compositor.Effects{Decor: again.decor(raw, slower.Decor), Animations: again.animations(raw.Animations, slower.Motion)}
+		cfg.Slower[speed] = compositor.Effects{Decor: again.decor(raw, slower.Decor), Animations: again.animations(raw.Animations, slower.Motion), Overview: again.overview(raw.Overview, slower.Overview)}
 	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
-	cfg.Overview = p.overview(raw.Overview)
+	cfg.Overview = p.overview(raw.Overview, look.Overview)
 	for _, l := range raw.Decoration.Blur.Layers {
 		cfg.BlurLayers = append(cfg.BlurLayers, l.V)
 	}

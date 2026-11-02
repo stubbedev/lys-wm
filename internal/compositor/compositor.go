@@ -103,6 +103,7 @@ const DefaultCursorSize = 24
 type Effects struct {
 	Decor      Decor
 	Animations anim.Table
+	Overview   OverviewStyle
 }
 
 var SlowerSpeeds = [...]render.Speed{render.CPUDriver, render.Software}
@@ -143,7 +144,7 @@ func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 	cfg.Slower = map[render.Speed]Effects{}
 	for _, s := range SlowerSpeeds {
 		l := DefaultLook(s)
-		cfg.Slower[s] = Effects{Decor: l.Decor, Animations: anim.MustResolve(l.Motion)}
+		cfg.Slower[s] = Effects{Decor: l.Decor, Animations: anim.MustResolve(l.Motion), Overview: l.Overview}
 	}
 	return cfg
 }
@@ -340,7 +341,7 @@ func validate(cfg Config) (binds.Map, error) {
 
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	if e, slower := cfg.Slower[c.renderer.Speed()]; slower {
-		cfg.Decor, cfg.Animations = e.Decor, e.Animations
+		cfg.Decor, cfg.Animations, cfg.Overview = e.Decor, e.Animations, e.Overview
 	}
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m

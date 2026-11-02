@@ -60,11 +60,11 @@ lys-wm starts, since an effect that is cheap on a GPU can eat a CPU:
 | Renderer | Default look |
 | --- | --- |
 | GLES or Vulkan on a GPU | Everything, and blur for clients that ask for it |
-| GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | Everything but blur. Blur costs these 10 to 40 ms per redraw. `ext_background_effect_v1` is not offered as able to blur, so clients such as lys-shell show their opaque style |
+| GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | Everything but blur, the overview's included. Blur costs these 10 to 40 ms per redraw. `ext_background_effect_v1` is not offered as able to blur, so clients such as lys-shell show their opaque style |
 | lys-wm's software renderer (`-renderer soft`) | Also no shadow and no animated workspace switch: a 1080p frame takes 68 ms with shadows and 14 ms without, and a slide draws two workspaces. Windows and layer surfaces still animate |
 
 Setting `decoration.blur.enabled` or `decoration.blur.layers`, either way, puts
-blur back in your hands on any renderer, as does `decoration.shadow.enabled` for
+blur back in your hands on any renderer, `overview.blur` the overview's, as does `decoration.shadow.enabled` for
 shadows. `animations.events.workspaces` does the same for a workspace switch.
 
 ## outputs
@@ -609,7 +609,7 @@ built-in config, and three fingers up scrub it open, [down closed](#gestures).
 
 | Key | Default |
 | --- | --- |
-| `blur` | `true`: the layers below the windows blur over the mica chain (`decoration.blur.mica`'s size and passes), which redraws only when they change. Independent of `decoration.blur.enabled` |
+| `blur` | `true` on a GPU, `false` on a [slower renderer](#the-default-look): the layers below the windows blur over the mica chain (`decoration.blur.mica`'s size and passes), which redraws only when they change. Independent of `decoration.blur.enabled` |
 | `dim` | `0.35`: how far those layers darken, from 0 to 1 |
 
 Everything on the workspace takes part: tiled, floating and fullscreen windows,
