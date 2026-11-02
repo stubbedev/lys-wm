@@ -117,7 +117,7 @@ func TestPartialRepaintsMatchAFullRepaint(t *testing.T) {
 				t.Fatal(err)
 			}
 			sc.cur.ops = append([]drawOp(nil), full...)
-			sc.cur.cull(&sc.covered)
+			sc.cur.clip(&sc.covered)
 			if !sc.diff(bounds).Empty() {
 				var target *modelBuffer
 				for _, b := range buffers {

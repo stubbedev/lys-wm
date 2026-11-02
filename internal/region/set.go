@@ -53,3 +53,22 @@ func (s *Set) CopyFrom(o *Set) {
 func (s *Set) Clip(bounds image.Rectangle) {
 	s.rects = appendClipped(s.rects[:0], s.rects, bounds)
 }
+
+func (s *Set) AppendUncovered(r image.Rectangle, out []image.Rectangle) []image.Rectangle {
+	if r.Empty() {
+		return out
+	}
+	start := len(out)
+	out = append(out, r)
+	for _, c := range s.rects {
+		s.scratch = s.scratch[:0]
+		for _, p := range out[start:] {
+			s.scratch = minus(p, c, s.scratch)
+		}
+		out = append(out[:start], s.scratch...)
+		if len(out) == start {
+			return out
+		}
+	}
+	return out
+}

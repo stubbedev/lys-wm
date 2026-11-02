@@ -350,12 +350,18 @@ func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
 		falloff = render.Falloff{Range: deviceLength(o, sh.Range), Power: float32(sh.Power)}
 		reach = int(math.Ceil(float64(falloff.Range)))
 	}
-	color := c.shownShadow(w)
-	pass.fillMasked(base.Inset(-reach), color.Premultiply(), render.Mask{
+	color := c.shownShadow(w).Premultiply()
+	mask := render.Mask{
 		Keep:    render.RoundRect{Rect: base, Radius: radius},
 		Cut:     render.RoundRect{Rect: tile, Radius: radius},
 		Falloff: falloff,
-	})
+	}
+	outer := base.Inset(-reach)
+	for _, strip := range ringStrips(outer, tile.Intersect(outer), radius) {
+		if !strip.Empty() {
+			pass.fillMasked(strip, color, mask)
+		}
+	}
 }
 
 func (c *Compositor) rounded(w *window) bool {

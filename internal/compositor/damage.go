@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/colorspace"
+	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -33,6 +34,69 @@ type drawOp struct {
 	space     *colorspace.Description
 	glass     unique.Handle[render.Glass]
 	pending   int32
+	whole     image.Rectangle
+}
+
+const (
+	clipMinPixels   = 128 * 128
+	clipMaxPieces   = 24
+	clipPiecePixels = 16384
+)
+
+func (op drawOp) clippable() bool {
+	if op.dst.Dx()*op.dst.Dy() < clipMinPixels || !op.goo.A.Rect.Empty() {
+		return false
+	}
+	if op.glass != (unique.Handle[render.Glass]{}) && op.glass.Value().Refracts() {
+		return false
+	}
+	return op.fill || op.transform == render.Normal
+}
+
+func (op drawOp) piece(p image.Rectangle) drawOp {
+	if !op.fill {
+		x, w := subSpan(op.src.X, op.src.W, p.Min.X-op.dst.Min.X, p.Dx(), op.dst.Dx())
+		y, h := subSpan(op.src.Y, op.src.H, p.Min.Y-op.dst.Min.Y, p.Dy(), op.dst.Dy())
+		op.src = render.FRect{X: x, Y: y, W: w, H: h}
+	}
+	if op.whole.Empty() {
+		op.whole = op.dst
+	}
+	op.dst = p
+	return op
+}
+
+func subSpan(from, extent float64, at, n, whole int) (start, length float64) {
+	k := extent / float64(whole)
+	start = from + float64(float64(at)*k)
+	end := from + extent
+	if at+n < whole {
+		end = from + float64(float64(at+n)*k)
+	}
+	length = end - start
+	for start+length > end {
+		length = math.Nextafter(length, 0)
+	}
+	return start, length
+}
+
+func (op drawOp) mapped() image.Rectangle {
+	if op.whole.Empty() {
+		return op.dst
+	}
+	return op.whole
+}
+
+func worthClipping(pieces []image.Rectangle, whole image.Rectangle) bool {
+	if len(pieces) == 0 || len(pieces) > clipMaxPieces {
+		return false
+	}
+	left := 0
+	for _, p := range pieces {
+		left += p.Dx() * p.Dy()
+	}
+	saved := whole.Dx()*whole.Dy() - left
+	return 4*saved >= whole.Dx()*whole.Dy() && saved >= clipPiecePixels*len(pieces)
 }
 
 func (op drawOp) covers() bool {
@@ -79,6 +143,9 @@ type frame struct {
 	blurs      []pendingBlur
 	below      []drawOp
 	rims       []rim
+	clipBack   []drawOp
+	clipOut    []drawOp
+	clipPieces []image.Rectangle
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
@@ -191,6 +258,40 @@ func (f *frame) cull(covered *region.Set) {
 	f.ops, f.cursorFrom = f.ops[:n], f.cursorFrom-kept
 }
 
+func (f *frame) clip(covered *region.Set) {
+	covered.Reset()
+	scene, tail := f.ops[:f.cursorFrom], f.ops[f.cursorFrom:]
+	back := f.clipBack[:0]
+	for i := len(scene) - 1; i >= 0; i-- {
+		op := &scene[i]
+		if covered.Covers(op.dst) {
+			continue
+		}
+		split := false
+		if op.clippable() && !covered.Empty() {
+			f.clipPieces = covered.AppendUncovered(op.dst, f.clipPieces[:0])
+			if worthClipping(f.clipPieces, op.dst) {
+				split = true
+				for _, p := range f.clipPieces {
+					back = append(back, op.piece(p))
+				}
+			}
+		}
+		if !split {
+			back = append(back, *op)
+		}
+		op.solid(covered.Add)
+	}
+	f.clipBack = back
+	out := f.clipOut[:0]
+	for i := len(back) - 1; i >= 0; i-- {
+		out = append(out, back[i])
+	}
+	f.cursorFrom = len(out)
+	out = append(out, tail...)
+	f.clipOut, f.ops = f.ops[:0], out
+}
+
 func (f *frame) replay(p render.Pass, to colorOut) {
 	f.replayFrom(p, image.Point{}, to)
 }
@@ -288,11 +389,12 @@ func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {
 	if op.size.X <= 0 || op.size.Y <= 0 {
 		return
 	}
-	w, h := op.dst.Dx(), op.dst.Dy()
+	whole := op.mapped()
+	w, h := whole.Dx(), whole.Dy()
 	for _, r := range d.Rects() {
 		sc.damage.Add(image.Rect(
-			op.dst.Min.X+r.Min.X*w/op.size.X, op.dst.Min.Y+r.Min.Y*h/op.size.Y,
-			op.dst.Min.X+(r.Max.X*w+op.size.X-1)/op.size.X, op.dst.Min.Y+(r.Max.Y*h+op.size.Y-1)/op.size.Y,
+			whole.Min.X+r.Min.X*w/op.size.X, whole.Min.Y+r.Min.Y*h/op.size.Y,
+			whole.Min.X+(r.Max.X*w+op.size.X-1)/op.size.X, whole.Min.Y+(r.Max.Y*h+op.size.Y-1)/op.size.Y,
 		).Intersect(op.dst))
 	}
 }
@@ -375,4 +477,12 @@ func (sc *scene) invalidate() {
 
 func (sc *scene) forget(s *surface.Surface) {
 	delete(sc.content, s)
+}
+
+func (c *Compositor) FrameCost(o *output.Output) (draws, pixels int) {
+	for _, op := range c.sceneOf(o).prev.ops {
+		draws++
+		pixels += op.dst.Dx() * op.dst.Dy()
+	}
+	return draws, pixels
 }
