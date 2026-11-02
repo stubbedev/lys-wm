@@ -752,6 +752,7 @@ type GPU interface {
 	render.Renderer
 	ImportTarget(b gpu.DMABUF) (render.ReadTarget, error)
 	ImportTexture(b gpu.DMABUF) (render.Texture, error)
+	RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier, error)
 	NativeFences() bool
 	SyncFile() (int, error)
 	Finish() error
@@ -782,7 +783,11 @@ func DMABUFTextures(t *testing.T, g GPU, node string) {
 		t.Fatal(err)
 	}
 	defer dev.Close()
-	bo, err := dev.Allocate(image.Pt(8, 8), fourcc.ARGB8888, nil, gpu.UseRendering)
+	modifiers, err := g.RenderableModifiers(fourcc.ARGB8888)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo, err := dev.Allocate(image.Pt(8, 8), fourcc.ARGB8888, modifiers, gpu.UseRendering)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,6 +836,8 @@ func DMABUFTextures(t *testing.T, g GPU, node string) {
 	}
 }
 
+const nv12ChromaOffset = 64 << 10
+
 func sampleNV12(t *testing.T, g GPU, node string, color *render.ColorTransform, y, cb, cr byte, yuv gpu.YUVEncoding) [4]byte {
 	t.Helper()
 	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
@@ -847,27 +854,26 @@ func sampleNV12(t *testing.T, g GPU, node string, color *render.ColorTransform, 
 		t.Fatal(err)
 	}
 	defer dev.Close()
-	carrier, err := dev.Allocate(image.Pt(4, 24), fourcc.XRGB8888, nil, gpu.UseLinear)
+	carrier, err := dev.Allocate(image.Pt(256, 1024), fourcc.XRGB8888, nil, gpu.UseLinear)
 	if err != nil {
 		t.Fatalf("%s cannot allocate the linear buffer that carries the NV12 planes: %v", dev.Backend(), err)
 	}
 	defer check(t, carrier.Close)
 	plane := carrier.Planes[0]
 	stride := int(plane.Stride)
-	m, err := unix.Mmap(plane.FD, int64(plane.Offset), 24*stride, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	m, err := unix.Mmap(plane.FD, int64(plane.Offset), nv12ChromaOffset+8*stride, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	if err != nil {
 		t.Fatalf("map the NV12 carrier: %v", err)
 	}
-	for row := range 24 {
+	for row := range 16 {
 		for col := range 16 {
-			switch {
-			case row < 16:
-				m[row*stride+col] = y
-			case col%2 == 0:
-				m[row*stride+col] = cb
-			default:
-				m[row*stride+col] = cr
-			}
+			m[row*stride+col] = y
+		}
+	}
+	for row := range 8 {
+		for col := 0; col < 16; col += 2 {
+			m[nv12ChromaOffset+row*stride+col] = cb
+			m[nv12ChromaOffset+row*stride+col+1] = cr
 		}
 	}
 	if err := unix.Munmap(m); err != nil {
@@ -877,7 +883,7 @@ func sampleNV12(t *testing.T, g GPU, node string, color *render.ColorTransform, 
 		Size:     image.Pt(16, 16),
 		Format:   fourcc.NV12,
 		Modifier: fourcc.Linear,
-		Planes:   []gpu.Plane{plane, {FD: plane.FD, Offset: plane.Offset + 16*plane.Stride, Stride: plane.Stride}},
+		Planes:   []gpu.Plane{plane, {FD: plane.FD, Offset: plane.Offset + nv12ChromaOffset, Stride: plane.Stride}},
 		YUV:      yuv,
 	}
 	tex, err := g.ImportTexture(d)
