@@ -33,13 +33,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-${{ hashFiles('go.sum') }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Gates (formatting, vet, lint, test, build, govulncheck)
         run: nix develop -c just gates
       - name: Nix package and NixOS module
@@ -52,35 +48,35 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VMs with one GPU, two GPUs, a configured primary, a display-only card, the cursor plane and zero-scaled X windows
         run: nix build -L .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests
 
   clients:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VMs with everyday clients and screen sharing
         run: nix build -L .#checks.x86_64-linux.vm-apps .#checks.x86_64-linux.vm-screencast
 
   lys-shell:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VM sharing the screen through lys-shell's portal
         run: nix build -L .#checks.x86_64-linux.vm-screencast-lys-shell
 
