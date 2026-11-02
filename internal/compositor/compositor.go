@@ -265,6 +265,8 @@ type Compositor struct {
 	overviewStyle   OverviewStyle
 	thumbRedraws    uint64
 	switches        map[*output.Output]*workspaceSwitch
+	drawnSwitch     *workspaceSwitch
+	gooFrom, gooTo  []*window
 	gestures        Gestures
 	gesture         gestureInput
 	shownWorkspace  map[string]wm.WorkspaceID

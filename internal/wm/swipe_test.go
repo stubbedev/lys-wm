@@ -139,3 +139,13 @@ func TestArrangeLaysOutAWorkspaceThatIsNotShown(t *testing.T) {
 		}
 	}
 }
+
+func TestArrangeSaysWhichWorkspaceEachWindowIsOn(t *testing.T) {
+	s := swipeState(t, 1, 2)
+	for _, p := range s.Arrange(Spacing{}).Windows {
+		want, ok := s.WorkspaceOf(p.ID)
+		if !ok || p.Workspace != want {
+			t.Errorf("window %d placed on workspace %d, want %d", p.ID, p.Workspace, want)
+		}
+	}
+}

@@ -573,6 +573,7 @@ const (
 func (s State) Arrange(sp Spacing) Arrangement {
 	var all Arrangement
 	for _, w := range s.workspaces {
+		from := len(all.Windows)
 		o := s.output(w.Output)
 		if o == nil {
 			for _, id := range w.Tree.Windows() {
@@ -582,9 +583,11 @@ func (s State) Arrange(sp Spacing) Arrangement {
 				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Layer: LayerFloating})
 			}
 			all.Windows = appendMinimized(all.Windows, w.Minimized)
+			all.inWorkspace(from, w.ID)
 			continue
 		}
 		placeWorkspace(&all, &w, o, o.Active == w.ID, sp)
+		all.inWorkspace(from, w.ID)
 	}
 	return all
 }

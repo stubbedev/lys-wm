@@ -25,6 +25,7 @@ type window struct {
 	rect         image.Rectangle
 	visible      bool
 	laid         bool
+	workspace    wm.WorkspaceID
 	layer        wm.PlacementLayer
 	output       *output.Output
 	urgent       bool
@@ -262,7 +263,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			errs = append(errs, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Laid, p.Layer, p.Minimized
+		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}

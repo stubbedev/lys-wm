@@ -539,4 +539,11 @@ func TestAHiddenTabIsNotDrawnWhileSwiping(t *testing.T) {
 	r.begin()
 	r.swipe(-80, 0)
 	r.h.Eventually("only the focused tab peeking in", both(showing(40, 30, swipeRed), showing(120, 30, swipeGreen)))
+	r.h.Eventually("the tab bar moved with its workspace", showing(40, 5, swipeRed))
+	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if got := pixel(snapshot(b.Outputs()[0]), 120, 5); got == swipeRed || got == swipeGreen {
+			t.Errorf("no tab bar over the incoming workspace, showing %v", got)
+		}
+		return nil
+	})
 }

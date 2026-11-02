@@ -18,6 +18,8 @@ type workspaceSwitch struct {
 	forward  bool
 	style    anim.Style
 	pos      anim.Progress
+	incoming view
+	outgoing view
 }
 
 type view struct {
@@ -77,14 +79,25 @@ func (sw *workspaceSwitch) view(area image.Rectangle, incoming bool, now time.Du
 	return view{scale: 1, alpha: 1 - p}
 }
 
-func (sw *workspaceSwitch) viewOf(ws wm.WorkspaceID, area image.Rectangle, now time.Duration) (view, bool) {
+func (sw *workspaceSwitch) prepare(area image.Rectangle, now time.Duration) {
+	sw.incoming, sw.outgoing = sw.view(area, true, now), sw.view(area, false, now)
+}
+
+func (sw *workspaceSwitch) viewOf(ws wm.WorkspaceID) (view, bool) {
 	switch ws {
 	case sw.to:
-		return sw.view(area, true, now), true
+		return sw.incoming, true
 	case sw.from:
-		return sw.view(area, false, now), true
+		return sw.outgoing, true
 	}
 	return identity, false
+}
+
+func (c *Compositor) prepareSwitch(o *output.Output) {
+	c.drawnSwitch = c.switches[o]
+	if c.drawnSwitch != nil {
+		c.drawnSwitch.prepare(o.Logical(), c.frameTime)
+	}
 }
 
 func (sw *workspaceSwitch) restOn(ws wm.WorkspaceID) float64 {
@@ -109,17 +122,17 @@ func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 	if strength <= 0 {
 		return
 	}
-	var out, in []*window
+	out, in := c.gooFrom[:0], c.gooTo[:0]
 	for _, w := range c.stack {
-		ws, ok := c.wm.WorkspaceOf(w.id)
 		switch {
-		case !ok || !w.laid || w.layer == wm.LayerFullscreen || w.minimized:
-		case ws == sw.to && w.tile.Overlaps(o.Logical()):
+		case !w.laid || w.layer == wm.LayerFullscreen || w.minimized:
+		case w.workspace == sw.to && w.tile.Overlaps(o.Logical()):
 			in = append(in, w)
-		case ws == sw.from && w.output == o:
+		case w.workspace == sw.from && w.output == o:
 			out = append(out, w)
 		}
 	}
+	c.gooFrom, c.gooTo = out, in
 	if len(in) == 0 {
 		return
 	}
@@ -175,15 +188,11 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 }
 
 func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
-	sw, ok := c.switches[o]
-	if !ok || !w.laid || (!w.visible && w.output != o) {
+	sw := c.drawnSwitch
+	if sw == nil || !w.laid || (!w.visible && w.output != o) {
 		return identity, w.visible
 	}
-	ws, ok := c.wm.WorkspaceOf(w.id)
-	if !ok {
-		return identity, w.visible
-	}
-	if v, ok := sw.viewOf(ws, o.Logical(), c.frameTime); ok {
+	if v, ok := sw.viewOf(w.workspace); ok {
 		return v, true
 	}
 	return identity, w.visible

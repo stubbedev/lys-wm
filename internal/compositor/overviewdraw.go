@@ -114,16 +114,15 @@ func (c *Compositor) drawOverviewBackdrop(pass *frame, o *output.Output, in floa
 
 func (c *Compositor) drawOverviewEntries(pass *frame, o *output.Output, v *overviewView, p float64, shown []*surface.Surface) []*surface.Surface {
 	sw := c.switches[o]
-	area := o.Logical()
 	if sw != nil && len(v.leaving) > 0 {
-		out, _ := sw.viewOf(v.left, area, c.frameTime)
+		out, _ := sw.viewOf(v.left)
 		for _, e := range v.leaving {
 			shown = c.drawOverviewEntry(pass, o, e, p, out, shown)
 		}
 	}
 	view := identity
 	if sw != nil {
-		view, _ = sw.viewOf(v.workspace, area, c.frameTime)
+		view, _ = sw.viewOf(v.workspace)
 	}
 	for _, e := range v.order {
 		if pr := c.overview.press; pr != nil && pr.dragging && pr.item == e.item {

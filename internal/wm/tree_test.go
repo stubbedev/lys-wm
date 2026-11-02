@@ -321,3 +321,20 @@ func TestRemovingAChildKeepsItsSiblingsPositive(t *testing.T) {
 		t.Fatalf("ratios sum to %g, want 2", sum)
 	}
 }
+
+func BenchmarkTreeContains(b *testing.B) {
+	tree := Tree{}
+	for id := WindowID(1); id <= 16; id++ {
+		next, err := tree.Insert(id, SplitH)
+		if err != nil {
+			b.Fatal(err)
+		}
+		tree = next
+	}
+	b.ReportAllocs()
+	for range b.N {
+		if !tree.Contains(16) {
+			b.Fatal("lost the window")
+		}
+	}
+}

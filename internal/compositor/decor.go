@@ -400,29 +400,29 @@ func (c *Compositor) tabColors(id wm.WindowID, active bool) TabColors {
 	return c.decor.Tab.Inactive
 }
 
-func (c *Compositor) tabBarView(o *output.Output, bar wm.TabBar) (view, bool) {
-	sw, ok := c.switches[o]
-	if !ok {
-		return identity, bar.Shown
-	}
-	if v, ok := sw.viewOf(bar.Workspace, o.Logical(), c.frameTime); ok {
-		return v, true
+func (c *Compositor) tabBarView(bar *wm.TabBar) (view, bool) {
+	if sw := c.drawnSwitch; sw != nil {
+		if v, ok := sw.viewOf(bar.Workspace); ok {
+			return v, true
+		}
 	}
 	return identity, bar.Shown
 }
 
 func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
-	for _, bar := range c.tabBars {
-		v, drawn := c.tabBarView(o, bar)
-		rect := v.rect(bar.Rect, o.Logical())
-		if !drawn || !rect.Overlaps(o.Logical()) {
+	for i := range c.tabBars {
+		bar := &c.tabBars[i]
+		v, drawn := c.tabBarView(bar)
+		moved := v.rect(bar.Rect, o.Logical())
+		if !drawn || !bar.Rect.Overlaps(o.Logical()) || !moved.Overlaps(o.Logical()) {
 			continue
 		}
-		strip := image.Rect(rect.Min.X, rect.Min.Y, rect.Max.X, rect.Min.Y+min(c.decor.Tab.Height, rect.Dy()))
+		from := len(pass.ops)
+		strip := image.Rect(bar.Rect.Min.X, bar.Rect.Min.Y, bar.Rect.Max.X, bar.Rect.Min.Y+min(c.decor.Tab.Height, bar.Rect.Dy()))
 		n := len(bar.Tabs)
-		for i, id := range bar.Tabs {
-			x0 := strip.Min.X + strip.Dx()*i/n
-			x1 := strip.Min.X + strip.Dx()*(i+1)/n
+		for tab, id := range bar.Tabs {
+			x0 := strip.Min.X + strip.Dx()*tab/n
+			x1 := strip.Min.X + strip.Dx()*(tab+1)/n
 			dst := o.Scale().Rect(image.Rect(x0, strip.Min.Y, x1, strip.Max.Y).Sub(o.Position()))
 			if dst.Empty() {
 				continue
@@ -432,12 +432,18 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 			if w := c.windowByID(id); w != nil {
 				title, icon = w.top.Title(), w.top.Icon()
 			}
-			tex, err := c.label(o, labelKey{text: title, icon: icon, theme: c.icons, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, i == bar.Active)})
+			tex, err := c.label(o, labelKey{text: title, icon: icon, theme: c.icons, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, tab == bar.Active)})
 			if err != nil {
 				return err
 			}
 			size := tex.Size()
-			pass.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, dst, render.Normal, float32(max(v.alpha, 0)))
+			pass.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, dst, render.Normal, 1)
+		}
+		if moved != bar.Rect {
+			pass.remap(from, deviceRect(o, bar.Rect), deviceRect(o, moved))
+		}
+		if v.alpha < 1 {
+			pass.fade(from, float32(max(v.alpha, 0)))
 		}
 	}
 	return nil

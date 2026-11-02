@@ -157,7 +157,21 @@ func (t Tree) Windows() []WindowID {
 }
 
 func (t Tree) Contains(id WindowID) bool {
-	return slices.Contains(t.Windows(), id)
+	return t.root != nil && nodeContains(t.root, id)
+}
+
+func nodeContains(n Node, id WindowID) bool {
+	switch n := n.(type) {
+	case Window:
+		return n.ID == id
+	case *Group:
+		for _, c := range n.Children {
+			if nodeContains(c.Node, id) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (t Tree) path(id WindowID) ([]*Group, []int, bool) {

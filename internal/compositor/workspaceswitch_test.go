@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 func TestWorkspaceSwitchStylesHalfway(t *testing.T) {
@@ -38,5 +39,22 @@ func TestWorkspaceSwitchStylesHalfway(t *testing.T) {
 	}
 	if got := (view{scale: 0.5, alpha: 1}).rect(image.Rect(0, 0, 1000, 600), area); got != image.Rect(250, 150, 750, 450) {
 		t.Errorf("a half-scale view puts the area at %v", got)
+	}
+}
+
+func BenchmarkWorkspaceSwitchFrame(b *testing.B) {
+	area := image.Rect(0, 0, 1920, 1080)
+	sw := &workspaceSwitch{from: 1, to: 2, forward: true, style: anim.Style{Kind: anim.Slide}, pos: anim.NewProgress(0)}
+	sw.pos.Set(1, 0, anim.Smooth)
+	b.ReportAllocs()
+	var sink view
+	for range b.N {
+		sw.prepare(area, 100*time.Millisecond)
+		for w := range 16 {
+			sink, _ = sw.viewOf(wm.WorkspaceID(w%2 + 1))
+		}
+	}
+	if sink.scale != 1 {
+		b.Fatal(sink)
 	}
 }

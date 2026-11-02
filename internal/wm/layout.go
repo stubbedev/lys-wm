@@ -12,6 +12,7 @@ type Placement struct {
 	Laid      bool
 	Layer     PlacementLayer
 	Minimized bool
+	Workspace WorkspaceID
 }
 
 type TabBar struct {
@@ -156,4 +157,10 @@ func (t Tree) Arrange(area image.Rectangle, sp Spacing) Arrangement {
 		place(t.root, sp.Gaps.Outer.shrink(area), true)
 	}
 	return a
+}
+
+func (a *Arrangement) inWorkspace(from int, id WorkspaceID) {
+	for i := from; i < len(a.Windows); i++ {
+		a.Windows[i].Workspace = id
+	}
 }
