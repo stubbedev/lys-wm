@@ -309,8 +309,9 @@ type GestureBegin struct {
 }
 
 type SwipeUpdate struct {
-	Time   time.Duration
-	DX, DY float64
+	Time                 time.Duration
+	DX, DY               float64
+	UnaccelDX, UnaccelDY float64
 }
 
 type PinchUpdate struct {

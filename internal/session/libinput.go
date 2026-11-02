@@ -64,79 +64,81 @@ const (
 var switchKinds = map[int32]backend.SwitchKind{switchLid: backend.SwitchLid, switchTabletMode: backend.SwitchTabletMode}
 
 type libinputFuncs struct {
-	args           [1]uintptr
-	createContext  func(iface unsafe.Pointer, userData uintptr) uintptr
-	unref          func(li uintptr) uintptr
-	addDevice      func(li uintptr, path string) uintptr
-	removeDevice   func(dev uintptr)
-	getFD          func(li uintptr) int32
-	dispatch       func(li uintptr) int32
-	getEvent       func(li uintptr) uintptr
-	eventType      func(ev uintptr) int32
-	eventDevice    func(ev uintptr) uintptr
-	destroyEvent   func(ev uintptr)
-	suspend        func(li uintptr)
-	resume         func(li uintptr) int32
-	deviceName     func(dev uintptr) string
-	ledUpdate      func(dev uintptr, leds int32)
-	deviceHasCap   func(dev uintptr, capability int32) int32
-	deviceRef      func(dev uintptr) uintptr
-	deviceUnref    func(dev uintptr) uintptr
-	keyboardEvent  func(ev uintptr) uintptr
-	keyTime        func(kev uintptr) uint64
-	key            func(kev uintptr) uint32
-	keyState       func(kev uintptr) int32
-	pointerEvent   func(ev uintptr) uintptr
-	pointerTime    func(pev uintptr) uint64
-	dx, dy         func(pev uintptr) float64
-	dxRaw, dyRaw   func(pev uintptr) float64
-	absX, absY     func(pev uintptr, size uint32) float64
-	button         func(pev uintptr) uint32
-	buttonState    func(pev uintptr) int32
-	hasAxis        func(pev uintptr, axis int32) int32
-	scrollValue    func(pev uintptr, axis int32) float64
-	scrollV120     func(pev uintptr, axis int32) float64
-	touchEvent     func(ev uintptr) uintptr
-	touchTime      func(tev uintptr) uint64
-	touchSlot      func(tev uintptr) int32
-	touchX, touchY func(tev uintptr, size uint32) float64
-	gestureEvent   func(ev uintptr) uintptr
-	gestureTime    func(gev uintptr) uint64
-	fingers        func(gev uintptr) int32
-	cancelled      func(gev uintptr) int32
-	gestureDX      func(gev uintptr) float64
-	gestureDY      func(gev uintptr) float64
-	gestureScale   func(gev uintptr) float64
-	gestureAngle   func(gev uintptr) float64
-	switchEvent    func(ev uintptr) uintptr
-	switchTime     func(sev uintptr) uint64
-	switchKind     func(sev uintptr) int32
-	switchState    func(sev uintptr) int32
-	tapFingers     func(dev uintptr) int32
-	tap            func(dev uintptr, enable int32) int32
-	tapDefault     func(dev uintptr) int32
-	dragLock       func(dev uintptr, enable int32) int32
-	dragDefault    func(dev uintptr) int32
-	hasNatural     func(dev uintptr) int32
-	natural        func(dev uintptr, enable int32) int32
-	naturalDefault func(dev uintptr) int32
-	hasDWT         func(dev uintptr) int32
-	dwt            func(dev uintptr, enable int32) int32
-	dwtDefault     func(dev uintptr) int32
-	hasMiddle      func(dev uintptr) int32
-	middle         func(dev uintptr, enable int32) int32
-	middleDefault  func(dev uintptr) int32
-	clickMethods   func(dev uintptr) ClickMethod
-	clickMethod    func(dev uintptr, method ClickMethod) int32
-	clickDefault   func(dev uintptr) ClickMethod
-	scrollMethods  func(dev uintptr) ScrollMethod
-	scrollMethod   func(dev uintptr, method ScrollMethod) int32
-	scrollDefault  func(dev uintptr) ScrollMethod
-	hasAccel       func(dev uintptr) int32
-	accelProfile   func(dev uintptr, profile AccelProfile) int32
-	profileDefault func(dev uintptr) AccelProfile
-	accelSpeed     func(dev uintptr, speed float64) int32
-	speedDefault   func(dev uintptr) float64
+	args             [1]uintptr
+	createContext    func(iface unsafe.Pointer, userData uintptr) uintptr
+	unref            func(li uintptr) uintptr
+	addDevice        func(li uintptr, path string) uintptr
+	removeDevice     func(dev uintptr)
+	getFD            func(li uintptr) int32
+	dispatch         func(li uintptr) int32
+	getEvent         func(li uintptr) uintptr
+	eventType        func(ev uintptr) int32
+	eventDevice      func(ev uintptr) uintptr
+	destroyEvent     func(ev uintptr)
+	suspend          func(li uintptr)
+	resume           func(li uintptr) int32
+	deviceName       func(dev uintptr) string
+	ledUpdate        func(dev uintptr, leds int32)
+	deviceHasCap     func(dev uintptr, capability int32) int32
+	deviceRef        func(dev uintptr) uintptr
+	deviceUnref      func(dev uintptr) uintptr
+	keyboardEvent    func(ev uintptr) uintptr
+	keyTime          func(kev uintptr) uint64
+	key              func(kev uintptr) uint32
+	keyState         func(kev uintptr) int32
+	pointerEvent     func(ev uintptr) uintptr
+	pointerTime      func(pev uintptr) uint64
+	dx, dy           func(pev uintptr) float64
+	dxRaw, dyRaw     func(pev uintptr) float64
+	absX, absY       func(pev uintptr, size uint32) float64
+	button           func(pev uintptr) uint32
+	buttonState      func(pev uintptr) int32
+	hasAxis          func(pev uintptr, axis int32) int32
+	scrollValue      func(pev uintptr, axis int32) float64
+	scrollV120       func(pev uintptr, axis int32) float64
+	touchEvent       func(ev uintptr) uintptr
+	touchTime        func(tev uintptr) uint64
+	touchSlot        func(tev uintptr) int32
+	touchX, touchY   func(tev uintptr, size uint32) float64
+	gestureEvent     func(ev uintptr) uintptr
+	gestureTime      func(gev uintptr) uint64
+	fingers          func(gev uintptr) int32
+	cancelled        func(gev uintptr) int32
+	gestureDX        func(gev uintptr) float64
+	gestureDY        func(gev uintptr) float64
+	gestureUnaccelDX func(gev uintptr) float64
+	gestureUnaccelDY func(gev uintptr) float64
+	gestureScale     func(gev uintptr) float64
+	gestureAngle     func(gev uintptr) float64
+	switchEvent      func(ev uintptr) uintptr
+	switchTime       func(sev uintptr) uint64
+	switchKind       func(sev uintptr) int32
+	switchState      func(sev uintptr) int32
+	tapFingers       func(dev uintptr) int32
+	tap              func(dev uintptr, enable int32) int32
+	tapDefault       func(dev uintptr) int32
+	dragLock         func(dev uintptr, enable int32) int32
+	dragDefault      func(dev uintptr) int32
+	hasNatural       func(dev uintptr) int32
+	natural          func(dev uintptr, enable int32) int32
+	naturalDefault   func(dev uintptr) int32
+	hasDWT           func(dev uintptr) int32
+	dwt              func(dev uintptr, enable int32) int32
+	dwtDefault       func(dev uintptr) int32
+	hasMiddle        func(dev uintptr) int32
+	middle           func(dev uintptr, enable int32) int32
+	middleDefault    func(dev uintptr) int32
+	clickMethods     func(dev uintptr) ClickMethod
+	clickMethod      func(dev uintptr, method ClickMethod) int32
+	clickDefault     func(dev uintptr) ClickMethod
+	scrollMethods    func(dev uintptr) ScrollMethod
+	scrollMethod     func(dev uintptr, method ScrollMethod) int32
+	scrollDefault    func(dev uintptr) ScrollMethod
+	hasAccel         func(dev uintptr) int32
+	accelProfile     func(dev uintptr, profile AccelProfile) int32
+	profileDefault   func(dev uintptr) AccelProfile
+	accelSpeed       func(dev uintptr, speed float64) int32
+	speedDefault     func(dev uintptr) float64
 }
 
 type Opener interface {
@@ -347,6 +349,8 @@ func (in *Libinput) bind(path string) error {
 		{&f.cancelled, "libinput_event_gesture_get_cancelled"},
 		{&f.gestureDX, "libinput_event_gesture_get_dx"},
 		{&f.gestureDY, "libinput_event_gesture_get_dy"},
+		{&f.gestureUnaccelDX, "libinput_event_gesture_get_dx_unaccelerated"},
+		{&f.gestureUnaccelDY, "libinput_event_gesture_get_dy_unaccelerated"},
 		{&f.gestureScale, "libinput_event_gesture_get_scale"},
 		{&f.gestureAngle, "libinput_event_gesture_get_angle_delta"},
 		{&f.switchEvent, "libinput_event_get_switch_event"},
@@ -605,7 +609,7 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 		return append(out, backend.GestureBegin{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Fingers: uint32(max(f.fingers(g), 0))})
 	case evSwipeUpdate:
 		g := f.gestureEvent(ev)
-		return append(out, backend.SwipeUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g)})
+		return append(out, backend.SwipeUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), UnaccelDX: f.gestureUnaccelDX(g), UnaccelDY: f.gestureUnaccelDY(g)})
 	case evPinchUpdate:
 		g := f.gestureEvent(ev)
 		return append(out, backend.PinchUpdate{Time: usec(f.gestureTime(g)), DX: f.gestureDX(g), DY: f.gestureDY(g), Scale: f.gestureScale(g), Rotation: f.gestureAngle(g)})

@@ -700,7 +700,11 @@ func (p *Pointer) GestureBegin(g backend.Gesture, fingers uint32) error {
 }
 
 func (p *Pointer) Swipe(dx, dy float64) error {
-	return p.backend.emit(p, backend.SwipeUpdate{Time: now(), DX: dx, DY: dy})
+	return p.backend.emit(p, backend.SwipeUpdate{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
+}
+
+func (p *Pointer) SwipeAt(at time.Duration, dx, dy float64) error {
+	return p.backend.emit(p, backend.SwipeUpdate{Time: at, DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
 }
 
 func (p *Pointer) Pinch(dx, dy, scale, rotation float64) error {
@@ -709,6 +713,10 @@ func (p *Pointer) Pinch(dx, dy, scale, rotation float64) error {
 
 func (p *Pointer) GestureEnd(g backend.Gesture, cancelled bool) error {
 	return p.backend.emit(p, backend.GestureEnd{Time: now(), Gesture: g, Cancelled: cancelled})
+}
+
+func (p *Pointer) GestureEndAt(at time.Duration, g backend.Gesture, cancelled bool) error {
+	return p.backend.emit(p, backend.GestureEnd{Time: at, Gesture: g, Cancelled: cancelled})
 }
 
 type Switches struct{ device }

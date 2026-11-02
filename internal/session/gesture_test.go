@@ -14,6 +14,7 @@ type fakeGesture struct {
 	fingers   int32
 	cancelled int32
 	dx, dy    float64
+	ux, uy    float64
 	scale     float64
 	angle     float64
 }
@@ -21,7 +22,7 @@ type fakeGesture struct {
 func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	events := []fakeGesture{
 		{typ: evSwipeBegin, usec: 1000, fingers: 3},
-		{typ: evSwipeUpdate, usec: 2000, dx: 4.5, dy: -1},
+		{typ: evSwipeUpdate, usec: 2000, dx: 4.5, dy: -1, ux: 3, uy: -0.5},
 		{typ: evSwipeEnd, usec: 3000},
 		{typ: evPinchBegin, usec: 4000, fingers: 2},
 		{typ: evPinchUpdate, usec: 5000, dx: 1, dy: 2, scale: 1.25, angle: -10},
@@ -31,15 +32,17 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	}
 	at := func(i uintptr) fakeGesture { return events[i-1] }
 	in := &Libinput{fn: libinputFuncs{
-		eventType:    func(ev uintptr) int32 { return at(ev).typ },
-		gestureEvent: func(ev uintptr) uintptr { return ev },
-		gestureTime:  func(g uintptr) uint64 { return at(g).usec },
-		fingers:      func(g uintptr) int32 { return at(g).fingers },
-		cancelled:    func(g uintptr) int32 { return at(g).cancelled },
-		gestureDX:    func(g uintptr) float64 { return at(g).dx },
-		gestureDY:    func(g uintptr) float64 { return at(g).dy },
-		gestureScale: func(g uintptr) float64 { return at(g).scale },
-		gestureAngle: func(g uintptr) float64 { return at(g).angle },
+		eventType:        func(ev uintptr) int32 { return at(ev).typ },
+		gestureEvent:     func(ev uintptr) uintptr { return ev },
+		gestureTime:      func(g uintptr) uint64 { return at(g).usec },
+		fingers:          func(g uintptr) int32 { return at(g).fingers },
+		cancelled:        func(g uintptr) int32 { return at(g).cancelled },
+		gestureDX:        func(g uintptr) float64 { return at(g).dx },
+		gestureDY:        func(g uintptr) float64 { return at(g).dy },
+		gestureUnaccelDX: func(g uintptr) float64 { return at(g).ux },
+		gestureUnaccelDY: func(g uintptr) float64 { return at(g).uy },
+		gestureScale:     func(g uintptr) float64 { return at(g).scale },
+		gestureAngle:     func(g uintptr) float64 { return at(g).angle },
 	}}
 	var got []backend.Event
 	for i := range events {
@@ -48,7 +51,7 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	want := []backend.Event{
 		backend.GestureBegin{Time: ms(1), Gesture: backend.Swipe, Fingers: 3},
-		backend.SwipeUpdate{Time: ms(2), DX: 4.5, DY: -1},
+		backend.SwipeUpdate{Time: ms(2), DX: 4.5, DY: -1, UnaccelDX: 3, UnaccelDY: -0.5},
 		backend.GestureEnd{Time: ms(3), Gesture: backend.Swipe},
 		backend.GestureBegin{Time: ms(4), Gesture: backend.Pinch, Fingers: 2},
 		backend.PinchUpdate{Time: ms(5), DX: 1, DY: 2, Scale: 1.25, Rotation: -10},
