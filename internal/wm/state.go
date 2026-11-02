@@ -512,6 +512,16 @@ func (s State) MoveToWorkspace(id WorkspaceID, at Autotile) (State, error) {
 	if !ok {
 		return s, nil
 	}
+	return s.MoveWindowToWorkspace(win, id, at)
+}
+
+func (s State) MoveWindowToWorkspace(win WindowID, id WorkspaceID, at Autotile) (State, error) {
+	if id < 1 {
+		return State{}, fmt.Errorf("move window %d to workspace %d: %w", win, id, ErrInvalidWorkspace)
+	}
+	if s.windowWorkspace(win) == nil {
+		return State{}, fmt.Errorf("move window %d to workspace %d: %w", win, id, ErrUnknownWindow)
+	}
 	s = s.clone()
 	from := s.windowWorkspace(win)
 	if from.ID == id {
@@ -574,32 +584,35 @@ func (s State) Arrange(sp Spacing) Arrangement {
 			all.Windows = appendMinimized(all.Windows, w.Minimized)
 			continue
 		}
-		shown := o.Active == w.ID
-		covered := w.Fullscreen != 0
-		a := w.Tree.Arrange(o.Area, sp)
-		for _, p := range a.Windows {
-			if p.ID == w.Fullscreen {
-				continue
-			}
-			p.Laid = p.Visible && !covered
-			p.Visible = p.Laid && shown
-			all.Windows = append(all.Windows, p)
-		}
-		if !covered {
-			for _, bar := range a.TabBars {
-				bar.Workspace, bar.Shown = w.ID, shown
-				all.TabBars = append(all.TabBars, bar)
-			}
-		}
-		for _, f := range w.Floating {
-			if f.ID != w.Fullscreen {
-				all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Visible: shown && !covered, Laid: !covered, Layer: LayerFloating})
-			}
-		}
-		if covered {
-			all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Laid: true, Layer: LayerFullscreen})
-		}
-		all.Windows = appendMinimized(all.Windows, w.Minimized)
+		placeWorkspace(&all, &w, o, o.Active == w.ID, sp)
 	}
 	return all
+}
+
+func placeWorkspace(all *Arrangement, w *Workspace, o *Output, shown bool, sp Spacing) {
+	covered := w.Fullscreen != 0
+	a := w.Tree.Arrange(o.Area, sp)
+	for _, p := range a.Windows {
+		if p.ID == w.Fullscreen {
+			continue
+		}
+		p.Laid = p.Visible && !covered
+		p.Visible = p.Laid && shown
+		all.Windows = append(all.Windows, p)
+	}
+	if !covered {
+		for _, bar := range a.TabBars {
+			bar.Workspace, bar.Shown = w.ID, shown
+			all.TabBars = append(all.TabBars, bar)
+		}
+	}
+	for _, f := range w.Floating {
+		if f.ID != w.Fullscreen {
+			all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Visible: shown && !covered, Laid: !covered, Layer: LayerFloating})
+		}
+	}
+	if covered {
+		all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Laid: true, Layer: LayerFullscreen})
+	}
+	all.Windows = appendMinimized(all.Windows, w.Minimized)
 }

@@ -49,6 +49,20 @@ const (
 	DefaultZoomStep = 1.5
 )
 
+type OverviewMode uint8
+
+const (
+	OverviewToggle OverviewMode = iota + 1
+	OverviewShow
+	OverviewHide
+)
+
+var overviewModes = []string{OverviewToggle: "toggle", OverviewShow: "show", OverviewHide: "hide"}
+
+func (m OverviewMode) String() string {
+	return enumName(overviewModes, m, "OverviewMode")
+}
+
 func (CloseWindowAction) isEffect() {}
 func (ExecAction) isEffect()        {}
 func (SubmapAction) isEffect()      {}
@@ -60,6 +74,8 @@ func (DPMSAction) isEffect()        {}
 func (MinimizeAction) isEffect()    {}
 func (RestoreAction) isEffect()     {}
 func (ZoomAction) isEffect()        {}
+
+func (OverviewAction) isEffect() {}
 
 func emit(s State, e Effect) (State, []Effect, error) {
 	return s, []Effect{e}, nil
@@ -133,6 +149,8 @@ type (
 		Mode   ZoomMode
 		Factor float64
 	}
+
+	OverviewAction struct{ Mode OverviewMode }
 )
 
 func optionalWindow(name string, id WindowID) string {
@@ -140,6 +158,12 @@ func optionalWindow(name string, id WindowID) string {
 		return name
 	}
 	return name + " " + strconv.FormatUint(uint64(id), 10)
+}
+
+func (a OverviewAction) String() string { return "overview " + a.Mode.String() }
+
+func (a OverviewAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
 }
 
 func (a MinimizeAction) String() string { return optionalWindow("minimize", a.ID) }
@@ -549,6 +573,23 @@ var Actions = []ActionSpec{
 		Name: "restore", Args: "[id]",
 		Summary: "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it.",
 		parse:   optionallyWindowed(func(id WindowID) Action { return RestoreAction{ID: id} }),
+	},
+	{
+		Name: "overview", Args: "[toggle|show|hide]",
+		Summary: "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			if len(args) > 1 {
+				return nil, badArgs(spec, "takes toggle, show or hide, or nothing")
+			}
+			if len(args) == 0 {
+				return OverviewAction{Mode: OverviewToggle}, nil
+			}
+			mode, ok := parseEnum[OverviewMode](overviewModes, args[0])
+			if !ok {
+				return nil, badArgs(spec, "%q is not toggle, show or hide", args[0])
+			}
+			return OverviewAction{Mode: mode}, nil
+		},
 	},
 	{
 		Name: "closewindow", Args: "<id>",

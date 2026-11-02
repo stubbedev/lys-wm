@@ -12,6 +12,7 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back. |
 | `minimize` | `[id]` | Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space. |
 | `restore` | `[id]` | Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it. |
+| `overview` | `[toggle\|show\|hide]` | Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle. |
 | `closewindow` | `<id>` | Ask the window with this IPC ID to close. |
 | `dpms` | `<on\|off\|toggle> [output]` | Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on. |
 | `reload` |  | Read the config file again; a bad file keeps the running config and reports the error. |
