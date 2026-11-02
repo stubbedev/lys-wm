@@ -1830,8 +1830,8 @@ func TestTheLatchFollowsMeasuredRenderTimeAndBacksOffAfterAMiss(t *testing.T) {
 	if err := o.timeFrame(o.lastFlip + interval); err != nil {
 		t.Fatal(err)
 	}
-	if got := half(); got != interval/2 {
-		t.Fatalf("after a missed vblank the latch is %v before the vblank, want back at half a refresh", got)
+	if got := half(); got != interval {
+		t.Fatalf("after a missed vblank the latch is %v before the vblank, want the whole refresh", got)
 	}
 }
 

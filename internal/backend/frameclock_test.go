@@ -163,17 +163,23 @@ func TestRenderBudget(t *testing.T) {
 		t.Fatalf("the budget over renders up to 3 ms is %v, want the slowest plus the margin", got)
 	}
 	for range 32 {
+		b.Sample(10 * time.Millisecond)
+	}
+	if got := b.Budget(interval); got != 11500*time.Microsecond {
+		t.Fatalf("renders of 10 ms, over half the 16 ms refresh, gave a budget of %v, want the slowest plus the margin so they still make it", got)
+	}
+	for range 32 {
 		b.Sample(20 * time.Millisecond)
 	}
-	if got := b.Budget(interval); got != interval/2 {
-		t.Fatalf("renders slower than half the refresh gave a budget of %v, want it capped at half", got)
+	if got := b.Budget(interval); got != interval {
+		t.Fatalf("renders slower than the refresh gave a budget of %v, want the whole refresh", got)
 	}
 	for range 32 {
 		b.Sample(time.Millisecond)
 	}
 	b.Missed()
-	if got := b.Budget(interval); got != interval/2 {
-		t.Fatalf("right after a miss the budget is %v, want half the refresh", got)
+	if got := b.Budget(interval); got != interval {
+		t.Fatalf("right after a miss the budget is %v, want the whole refresh", got)
 	}
 	for range 32 {
 		b.Sample(time.Millisecond)

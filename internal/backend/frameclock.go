@@ -101,13 +101,15 @@ func (b *RenderBudget) Missed() {
 }
 
 func (b *RenderBudget) Budget(interval time.Duration) time.Duration {
-	ceiling := interval / 2
-	if b.held > 0 || b.n < renderSamples {
-		return ceiling
+	if b.held > 0 {
+		return interval
+	}
+	if b.n < renderSamples {
+		return interval / 2
 	}
 	var slowest time.Duration
 	for _, s := range b.samples {
 		slowest = max(slowest, s)
 	}
-	return min(slowest+renderMargin, ceiling)
+	return min(slowest+renderMargin, interval)
 }
