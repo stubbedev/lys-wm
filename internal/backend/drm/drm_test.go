@@ -45,6 +45,9 @@ const (
 	propGammaSize
 	propCTM
 	propEDID
+	propHDRMeta
+	propColorspaceID
+	propMaxBPCID
 	inFormatsBlob = 500
 	edidBlob      = 501
 	litModeBlob   = 502
@@ -71,6 +74,10 @@ type fakeDevice struct {
 	unplugged         bool
 	gone              bool
 	badEDID           bool
+	hdrConnector      bool
+	noBT2020Enum      bool
+	sinkEDID          []byte
+	staleHDRBlob      uint64
 	refuseCursor      bool
 	cursorPlaneFB     uint64
 	refuseGamma       bool
@@ -219,20 +226,35 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 			routed = uint64(f.splash.crtc)
 		}
 		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC, Value: routed}}
-		if f.badEDID {
+		if f.badEDID || f.sinkEDID != nil {
 			props["EDID"] = kdrm.Property{ID: propEDID, Value: edidBlob}
+		}
+		if f.hdrConnector {
+			props[propHDRMetadata] = kdrm.Property{ID: propHDRMeta, Value: f.staleHDRBlob}
+			props[propColorspace] = kdrm.Property{ID: propColorspaceID}
+			props[propMaxBPC] = kdrm.Property{ID: propMaxBPCID, Value: 12}
 		}
 		return props, nil
 	}
 	return nil, fmt.Errorf("unknown object type %#x", kind)
 }
 
-func (f *fakeDevice) PropertyInfo(uint32) (kdrm.PropertyInfo, error) {
+func (f *fakeDevice) PropertyInfo(id uint32) (kdrm.PropertyInfo, error) {
+	if id == propColorspaceID {
+		enums := map[string]uint64{"Default": 0, "opRGB": 7}
+		if !f.noBT2020Enum {
+			enums[colorspaceHDR] = 9
+		}
+		return kdrm.PropertyInfo{Name: propColorspace, Enums: enums}, nil
+	}
 	return kdrm.PropertyInfo{Name: "type", Enums: map[string]uint64{"Overlay": 0, "Primary": 1, "Cursor": 2}}, nil
 }
 
 func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 	if id == edidBlob {
+		if f.sinkEDID != nil {
+			return f.sinkEDID, nil
+		}
 		return []byte("not an EDID"), nil
 	}
 	if id == litModeBlob && f.splash != nil {

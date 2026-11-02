@@ -577,6 +577,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 		Wait: o.latchWait,
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
+	o.colorErr = errNoEDID
 	if blob, ok := props["EDID"]; ok && blob.Value != 0 {
 		data, err := b.dev.Blob(uint32(blob.Value)) //nolint:gosec // property blob IDs are 32-bit
 		if err != nil {
@@ -587,7 +588,9 @@ func (b *Backend) add(c kdrm.Connector) error {
 		} else {
 			o.identity = info
 		}
+		o.colorEDID, o.colorErr = edid.ParseHDR(data)
 	}
+	o.signal.programmed = props[propHDRMetadata].Value != 0 || props[propColorspace].Value != 0
 	cr.output, p.taken = o, true
 	if cp := b.free(cursorPlane, cr); cp != nil {
 		cp.taken = true
@@ -603,7 +606,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 		return errors.Join(err, o.release())
 	}
 	i := max(slices.IndexFunc(c.Modes, kdrm.Mode.Preferred), 0)
-	if err := o.setMode(c.Modes[i], backend.Depth8); err != nil {
+	if err := o.setMode(c.Modes[i], backend.Depth8, backend.HDRMetadata{}); err != nil {
 		return errors.Join(err, o.release())
 	}
 	inherited, err := b.inherits(o, routed)
@@ -778,6 +781,9 @@ type Output struct {
 	lastFlip      time.Duration
 	presented     uint64
 	color         colorBlobs
+	signal        signal
+	colorEDID     edid.HDR
+	colorErr      error
 	torn          bool
 	planesFailing bool
 }
@@ -821,17 +827,21 @@ func (o *Output) State() backend.OutputState {
 	case o.off:
 		power = backend.PoweredOff
 	}
-	return backend.OutputState{Power: power, Mode: modeOf(o.mode), Depth: o.depth}
+	return backend.OutputState{Power: power, Mode: modeOf(o.mode), Depth: o.depth, HDR: o.signal.meta}
 }
 
-func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
+func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadata) error {
 	layouts := o.primary.layouts(d)
 	if len(layouts) == 0 {
 		return fmt.Errorf("drm: the primary plane of %s scans out none of %v that the renderer can draw: %w", o.Name(), deepFormats, backend.ErrDepthUnsupported)
 	}
-	blob, err := o.b.dev.CreateBlob(m.Bytes())
+	next, err := o.newSignal(hdr)
 	if err != nil {
 		return err
+	}
+	blob, err := o.b.dev.CreateBlob(m.Bytes())
+	if err != nil {
+		return errors.Join(err, o.dropSignal(next))
 	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
 	refused := make([]error, 0, len(layouts))
@@ -842,7 +852,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
 			continue
 		}
 		if d != backend.Depth8 && !o.b.paused {
-			if err := o.testMode(m, blob, buffers[0]); err != nil {
+			if err := o.testMode(m, blob, buffers[0], next); err != nil {
 				refused = append(refused, fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
 				continue
 			}
@@ -850,9 +860,12 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth) error {
 		if len(refused) > 0 {
 			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refused...)))
 		}
-		return o.adoptMode(m, d, blob, buffers)
+		return o.adoptMode(m, d, blob, buffers, next)
 	}
-	refused = append(refused, o.b.dev.DestroyBlob(blob))
+	refused = append(refused, o.b.dev.DestroyBlob(blob), o.dropSignal(next))
+	if hdr.Active {
+		return fmt.Errorf("drm: %s takes no HDR signal on any of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrHDRUnsupported, errors.Join(refused...))
+	}
 	if d == backend.Depth8 {
 		return fmt.Errorf("drm: %s keeps its current frames: %w", o.Name(), errors.Join(refused...))
 	}
@@ -879,17 +892,18 @@ func (o *Output) free(buffers []*scanout) error {
 	return errors.Join(errs...)
 }
 
-func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout) error {
-	mode, modeBlob, kms := o.mode, o.modeBlob, o.kms
-	defer func() { o.mode, o.modeBlob, o.kms = mode, modeBlob, kms }()
-	o.mode, o.modeBlob, o.kms = m, blob, kmsModeset
+func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout, next signal) error {
+	mode, modeBlob, kms, sig := o.mode, o.modeBlob, o.kms, o.signal
+	defer func() { o.mode, o.modeBlob, o.kms, o.signal = mode, modeBlob, kms, sig }()
+	o.mode, o.modeBlob, o.kms, o.signal = m, blob, kmsModeset, next
 	o.frame(s, -1)
 	return o.test(kdrm.AtomicAllowModeset)
 }
 
-func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout) error {
+func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout, next signal) error {
 	clear(o.tested)
-	err := o.freeBuffers()
+	err := errors.Join(o.freeBuffers(), o.releaseSignal())
+	o.signal = next
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 	}
@@ -905,10 +919,10 @@ func (o *Output) Commit(s backend.OutputState) error {
 	if i < 0 {
 		return fmt.Errorf("drm: %s has no mode %+v", o.Name(), s.Mode)
 	}
-	if o.enabled && o.conn.Modes[i] == o.mode && s.Depth == o.depth {
+	if o.enabled && o.conn.Modes[i] == o.mode && s.Depth == o.depth && s.HDR == o.signal.meta {
 		return o.setPower(s.Lit())
 	}
-	if err := o.setMode(o.conn.Modes[i], s.Depth); err != nil {
+	if err := o.setMode(o.conn.Modes[i], s.Depth, s.HDR); err != nil {
 		return err
 	}
 	o.off = !s.Lit()
@@ -1208,6 +1222,7 @@ func (o *Output) frame(s *scanout, fence int) {
 		o.connector.set(r, "CRTC_ID", uint64(o.crtc.id))
 		o.crtc.set(r, "MODE_ID", uint64(o.modeBlob))
 		o.crtc.set(r, "ACTIVE", 1)
+		o.addSignal(r)
 		fallthrough
 	default:
 		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
@@ -1418,7 +1433,7 @@ func (o *Output) leaveOnScreen() error {
 }
 
 func (o *Output) release() error {
-	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.dropRenderFence())
+	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0

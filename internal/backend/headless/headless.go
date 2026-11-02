@@ -23,6 +23,7 @@ import (
 
 type Backend struct {
 	shallow    bool
+	sdrOnly    bool
 	loop       *loop.Loop
 	renderer   render.Renderer
 	closeGPU   func() error
@@ -357,12 +358,41 @@ func (o *Output) State() backend.OutputState {
 	return o.state
 }
 
+type noWorkingSpace struct {
+	render.Renderer
+}
+
+func (noWorkingSpace) NewWorkingTarget(image.Point) (render.TextureTarget, error) {
+	return nil, errors.New("headless: this renderer has no float targets")
+}
+
+func (b *Backend) RefuseWorkingSpace() {
+	b.renderer = noWorkingSpace{b.renderer}
+}
+
+func (b *Backend) RefuseHDR() {
+	b.sdrOnly = true
+}
+
+func (o *Output) HDRCapabilities() (edid.HDR, error) {
+	if o.backend.sdrOnly {
+		return edid.HDR{}, fmt.Errorf("headless: %s: %w", o.name, backend.ErrHDRUnsupported)
+	}
+	return edid.HDR{
+		Red: edid.Chromaticity{X: 0.68, Y: 0.32}, Green: edid.Chromaticity{X: 0.265, Y: 0.69}, Blue: edid.Chromaticity{X: 0.15, Y: 0.06}, White: edid.Chromaticity{X: 0.3127, Y: 0.329},
+		ST2084: true, BT2020: true, StaticMetadata: true, MaxLuminance: 1000, MaxAverageLuminance: 400, MinLuminance: 0.005,
+	}, nil
+}
+
 func (o *Output) Commit(s backend.OutputState) error {
 	if o.removed {
 		return fmt.Errorf("headless: commit to removed output %s", o.name)
 	}
 	if s.Enabled() && s.Depth == backend.Depth10 && o.backend.shallow {
 		return fmt.Errorf("headless: %s: %w", o.name, backend.ErrDepthUnsupported)
+	}
+	if s.HDR.Active && o.backend.sdrOnly {
+		return fmt.Errorf("headless: %s: %w", o.name, backend.ErrHDRUnsupported)
 	}
 	if s.Enabled() {
 		if err := s.Mode.Valid(); err != nil {

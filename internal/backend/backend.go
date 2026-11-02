@@ -75,10 +75,20 @@ const (
 	Depth10
 )
 
+type HDRMetadata struct {
+	Active                  bool
+	Red, Green, Blue, White edid.Chromaticity
+	MaxLuminance            float64
+	MinLuminance            float64
+	MaxCLL                  float64
+	MaxFALL                 float64
+}
+
 type OutputState struct {
 	Power Power
 	Mode  Mode
 	Depth BitDepth
+	HDR   HDRMetadata
 }
 
 func (s OutputState) Enabled() bool {
@@ -108,6 +118,8 @@ const EmptyFramesPerRefresh = 2
 var ErrNoCursorPlanes = errors.New("backend: this backend draws the cursor in the frame")
 
 var ErrDepthUnsupported = errors.New("backend: the output cannot show frames at this bit depth")
+
+var ErrHDRUnsupported = errors.New("backend: the output cannot carry an HDR signal")
 
 var (
 	ErrDeviceLost = errors.New("backend: the device is gone")
@@ -168,6 +180,10 @@ var Identity = Matrix{1, 0, 0, 0, 1, 0, 0, 0, 1}
 type ColorTransform interface {
 	HasColorTransform() bool
 	SetColorTransform(m Matrix) error
+}
+
+type HDRDisplay interface {
+	HDRCapabilities() (edid.HDR, error)
 }
 
 type Inheriting interface {
