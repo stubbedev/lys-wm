@@ -88,6 +88,8 @@ func (r *Renderer) Close() error {
 	return nil
 }
 
+func (r *Renderer) Speed() render.Speed { return render.DriverSpeed(r.d.Name()) }
+
 func (r *Renderer) Formats() []render.Format {
 	out := make([]render.Format, len(formats))
 	for i, f := range formats {

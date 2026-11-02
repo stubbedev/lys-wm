@@ -109,6 +109,8 @@ var formats = []render.Format{
 	render.ARGB2101010, render.XRGB2101010, render.ABGR2101010, render.XBGR2101010,
 }
 
+func (r *Renderer) Speed() render.Speed { return render.Software }
+
 func (r *Renderer) Formats() []render.Format {
 	return formats
 }

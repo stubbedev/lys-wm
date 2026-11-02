@@ -270,6 +270,8 @@ var (
 	allFormats      = append(slices.Clone(eightBitFormats), render.ARGB2101010, render.XRGB2101010, render.ABGR2101010, render.XBGR2101010)
 )
 
+func (r *Renderer) Speed() render.Speed { return render.DriverSpeed(r.name) }
+
 func (r *Renderer) Formats() []render.Format {
 	if r.es3 {
 		return allFormats

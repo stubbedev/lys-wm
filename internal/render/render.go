@@ -338,6 +338,7 @@ func SoftwareDevice(name string) bool {
 }
 
 type Renderer interface {
+	Speed() Speed
 	Formats() []Format
 	NewTexture(format Format, size image.Point, stride int, data []byte) (Texture, error)
 	NewTarget(size image.Point) (ReadTarget, error)
@@ -345,6 +346,21 @@ type Renderer interface {
 	NewScreenShader(p *shader.Program) (ScreenShader, error)
 	NewWorkingTarget(size image.Point) (TextureTarget, error)
 	Begin(target Target, damage Region) (Pass, error)
+}
+
+type Speed uint8
+
+const (
+	GPU Speed = iota
+	CPUDriver
+	Software
+)
+
+func DriverSpeed(name string) Speed {
+	if SoftwareDevice(name) {
+		return CPUDriver
+	}
+	return GPU
 }
 
 type Gradient struct {
