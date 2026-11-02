@@ -351,6 +351,21 @@ the chain is redrawn only when they change, and then the blur op's version
 changes, so the op diff repaints the whole window: damage below a blurred
 window grows to the window by the blur's reach.
 
+Every blur is one `drawBlur`, whatever asked for it: a shape in device pixels,
+drawn as one op per rectangle, sampling one chain. `decoration.blur` asks for
+a window's or a listed layer's rectangle, or a popup's window geometry. A
+client's `ext_background_effect_v1` region asks at the surface it belongs to,
+as the surface tree is drawn, so a subsurface's blur sees its parent, and it
+replaces that surface's whole-surface blur. Chains belong to the output's scene,
+keyed by surface (one shared per output under `xray`); a frame that draws no
+blur for a surface frees its chain, so an effect that is off holds nothing and
+costs one map lookup per surface. A shape that grows past its chain's area takes
+the whole surface's, so a client animating its region reallocates at most once
+and redraws no chain while nothing behind it changes.
+
+The offscreen frames behind closing snapshots and window captures draw no
+blur: they have nothing behind them to blur.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach
@@ -505,6 +520,7 @@ Everything lives under `internal/` except the commands.
 | `colorrep` | `wp_color_representation_manager_v1`: a client states a YCbCr surface's coefficients (BT.601, BT.709, BT.2020), range and chroma siting; the compositor imports its dmabufs with the matching EGL hints instead of guessing BT.709 from 720 lines up and BT.601 below. Only premultiplied alpha is advertised, and coefficients or siting on an RGB buffer are a pixel_format error at commit (#189) |
 | `ctmcontrol` | `hyprland_ctm_control_manager_v1`: the first manager bound sets outputs' 3×3 colour transform matrices on commit, as hyprsunset does, written as S31.32 to the CRTC's `CTM`, which sits before `GAMMA_LUT` so both apply; later managers get `blocked`, and every output it changed returns to the identity when it goes. An output whose CRTC has no `CTM` keeps its colours and the request is reported (#176) |
 | `alphamodifier` | `wp_alpha_modifier_v1`: clients fade a surface by an opacity factor the compositor applies when it draws it |
+| `backgroundeffect` | `ext_background_effect_v1`: clients name the region of a surface to blur behind, latched with its content update; the compositor draws it through the same blur as `decoration.blur` |
 | `dmabuf` | `zwp_linux_dmabuf_v1`: GPU buffers shared as dmabuf planes, checked against what the renderer imports, and the feedback that names the formats, modifiers and device |
 | `syncobj` | `wp_linux_drm_syncobj_manager_v1`: explicit synchronization through DRM timeline syncobjs |
 | `idle` | `ext_idle_notifier_v1` and `zwp_idle_inhibit_manager_v1`: idle timers that input resets, and inhibitors that hold them off while their surface is on screen |

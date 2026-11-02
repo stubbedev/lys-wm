@@ -171,8 +171,9 @@ decoration:
 The shadow is cut out under the window, so a translucent window does not show
 its own shadow through itself.
 
-`decoration.blur` blurs what lies behind translucent windows, and behind the
-layer surfaces whose namespace it lists:
+`decoration.blur` blurs what lies behind translucent windows, the
+translucent layer surfaces whose namespace it lists, and the translucent
+popups of both:
 
 ```yaml
 decoration:
@@ -185,16 +186,30 @@ decoration:
 
 | Key | Default |
 | --- | --- |
-| `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha |
+| `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha, and its popups |
 | `size` | 8: the distance between the blur's taps, in logical pixels |
 | `passes` | 1: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
-| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves |
-| `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows and top layer surfaces, never the windows below them; every window then shares one blur per output, which windows moving underneath never redraw |
+| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups |
+| `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
 
 A window rule's `blur: true` or `blur: false` overrides `enabled` for the
-windows it matches. The blur follows the window's rounded corners. It is
-redrawn only when what lies behind the window, within the blur's reach,
-changes, and then the whole window is repainted.
+windows it matches and their popups. The blur follows the window's rounded
+corners. A popup is blurred across its window geometry, so not behind the
+shadow margin its client draws, rounded by `decoration.rounding`. A blur is
+redrawn only when what lies behind it, within the blur's reach, changes, and
+then the blurred area is repainted.
+
+Clients ask for blur themselves through `ext_background_effect_v1`, which
+name the exact region of a surface to blur: a toplevel, a popup, a layer
+surface, a subsurface or an input method's popup. The region is honoured
+whether or not `enabled` is set, with this section's `size`, `passes` and
+`xray`, and it follows the window's rounded corners. Where a surface has one,
+it replaces the whole-surface blur `enabled` or `layers` would draw. A window
+rule's `blur: false` turns regions off for that window and its popups, and
+nothing else does, so a client always sees the blur capability offered.
+Cursors, drag icons and session-lock surfaces ignore regions. The blur fades
+with a surface's alpha-modifier, not with a window's `opacity`, which leaves the
+blur behind a translucent window at full strength.
 
 Opacity multiplies what the client draws, including the alpha it asks for
 through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
@@ -347,7 +362,7 @@ rules:
 a rule needs at least one. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
 `decoration.dim_strength`, as for a dialog that should hold the attention.
-`blur: true` or `blur: false` turns `decoration.blur` on or off for the window.
+`blur: true` or `blur: false` turns `decoration.blur` on or off for the window and its popups; `blur: false` also ignores the blur regions they ask for through `ext_background_effect_v1`.
 `opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
 `decoration`'s. `tearing: true` or
 `tearing: false` overrides what the window asks for through

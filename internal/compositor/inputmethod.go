@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/inputmethod"
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
@@ -62,7 +63,7 @@ func (c *Compositor) drawInputPopups(pass *frame, o *output.Output, shown []*sur
 	for _, p := range c.inputPopups() {
 		errs = append(errs, p.popup.Placed(p.cursor.Sub(p.at.Min)))
 		if p.at.Overlaps(o.Logical()) {
-			shown = c.drawTree(pass, o, p.popup.Surface, flat(p.at.Min), shown)
+			shown = c.drawBlurredTree(pass, o, p.popup.Surface, flat(p.at.Min), shown, render.Mask{}, 1)
 		}
 	}
 	return shown, errors.Join(errs...)

@@ -204,6 +204,7 @@ type scene struct {
 	drawn     bool
 	stale     bool
 	last      backend.Presentation
+	blurs     blurCaches
 }
 
 func newScene() *scene {

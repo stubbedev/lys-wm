@@ -283,13 +283,12 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.blanked, o)
 	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())
 	delete(c.usable, o)
+	if sc, ok := c.scenes[o]; ok {
+		errs = append(errs, sc.blurs.drop())
+	}
 	delete(c.scenes, o)
 	delete(c.dropped, o)
 	delete(c.switches, o)
-	if b, ok := c.xray[o]; ok {
-		errs = append(errs, b.destroy())
-		delete(c.xray, o)
-	}
 	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.dropClosingOn(o), c.power.Removed(o), c.gamma.Removed(o))
 	c.ctm.Removed(o)
 	for _, e := range c.entered {

@@ -292,6 +292,7 @@ type Window struct {
 	buffers      []*buffer
 	drawn        int
 	stopped      bool
+	Translucent  bool
 }
 
 func (w *Window) Stop() {
@@ -552,7 +553,11 @@ func (w *Window) configured() error {
 	}
 	if size != w.Size || w.buffers == nil {
 		w.Size = size
-		w.buffers = w.c.buffers(size, cw.WlShmFormatXrgb8888, 2)
+		format := cw.WlShmFormatXrgb8888
+		if w.Translucent {
+			format = cw.WlShmFormatArgb8888
+		}
+		w.buffers = w.c.buffers(size, format, 2)
 	}
 	return w.draw()
 }

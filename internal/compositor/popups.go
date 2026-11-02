@@ -19,6 +19,10 @@ func (p placedPopup) bounds() image.Rectangle {
 	return image.Rectangle{Min: p.origin, Max: p.origin.Add(p.popup.Surface().Size())}
 }
 
+func (p placedPopup) geometry() image.Rectangle {
+	return p.popup.Geometry().Add(p.origin)
+}
+
 func (c *Compositor) popups(w *window) []placedPopup {
 	if !w.visible {
 		return nil

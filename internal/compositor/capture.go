@@ -268,7 +268,7 @@ func (c *Compositor) windowDraw(w *window, cursor bool) func(render.Pass) error 
 		}
 		var f frame
 		c.drawTree(&f, w.output, w.top.Surface(), c.windowOrigin(w), nil)
-		c.drawPopups(&f, w.output, c.popups(w), nil)
+		c.drawPopups(&f, w.output, c.popups(w), nil, popupBlur{})
 		if cursor {
 			if _, err := c.drawCursor(&f, w.output, nil); err != nil {
 				return err

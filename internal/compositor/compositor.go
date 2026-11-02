@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/backgroundeffect"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/colorrep"
 	"github.com/stubbedev/lys-wm/internal/committiming"
@@ -135,6 +136,7 @@ type Compositor struct {
 	ctm             *ctmcontrol.Manager
 	outputConfig    *outputmanagement.Manager
 	alpha           *alphamodifier.Manager
+	effects         *backgroundeffect.Manager
 	fifo            *fifo.Manager
 	timing          *committiming.Manager
 	tearingHints    *tearingcontrol.Manager
@@ -223,7 +225,6 @@ type Compositor struct {
 	blurGen         uint64
 	jellyGen        uint64
 	blurLayers      []string
-	xray            map[*output.Output]*blurCache
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID
 }
@@ -293,7 +294,6 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		labels:         map[*output.Output]map[labelKey]*label{},
 		stops:          map[stopsKey]render.Texture{},
 		switches:       map[*output.Output]*workspaceSwitch{},
-		xray:           map[*output.Output]*blurCache{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},
@@ -357,6 +357,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.alpha, err = alphamodifier.New(display); err != nil {
+		return err
+	}
+	if c.effects, err = backgroundeffect.New(display); err != nil {
 		return err
 	}
 	if err := c.addPacing(l, display); err != nil {

@@ -24,7 +24,6 @@ type layer struct {
 	motion   anim.Tween[image.Rectangle]
 	fade     anim.Tween[float64]
 	snapshot render.TextureTarget
-	blur     *blurCache
 }
 
 func (e *layer) bounds() image.Rectangle {
@@ -162,9 +161,6 @@ func (c *Compositor) LayerDestroyed(l *shell.LayerSurface) error {
 	if e.snapshot != nil {
 		err = errors.Join(err, e.snapshot.Destroy())
 	}
-	if e.blur != nil {
-		err = errors.Join(err, e.blur.destroy())
-	}
 	c.layers = slices.DeleteFunc(c.layers, func(x *layer) bool { return x == e })
 	return errors.Join(err, c.layersChanged(e.output))
 }
@@ -192,16 +188,21 @@ func (c *Compositor) layersAt(o *output.Output, levels []shell.Layer) iter.Seq[*
 	}
 }
 
+func (c *Compositor) blursLayer(l *shell.LayerSurface) bool {
+	return slices.Contains(c.blurLayers, l.Namespace())
+}
+
 func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.Layer, shown []*surface.Surface) []*surface.Surface {
 	for _, lv := range levels {
 		for e := range c.layersAt(o, []shell.Layer{lv}) {
 			from := len(pass.ops)
-			if slices.Contains(c.blurLayers, e.surface.Namespace()) {
-				if err := c.drawBlur(pass, o, &e.blur, deviceRect(o, e.bounds()), render.Mask{}); err != nil {
+			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
+				under := [1]image.Rectangle{deviceRect(o, e.bounds())}
+				if err := c.drawBlur(pass, o, e.surface.Surface(), under[:], under[0], render.Mask{}, c.alpha.Alpha(e.surface.Surface())); err != nil {
 					c.report(fmt.Errorf("compositor: blur behind the %q layer surface: %w", e.surface.Namespace(), err))
 				}
 			}
-			shown = c.drawTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown)
+			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1)
 			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {
 				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at))
 			}
