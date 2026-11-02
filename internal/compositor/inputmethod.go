@@ -63,7 +63,9 @@ func (c *Compositor) drawInputPopups(pass *frame, o *output.Output, shown []*sur
 	for _, p := range c.inputPopups() {
 		errs = append(errs, p.popup.Placed(p.cursor.Sub(p.at.Min)))
 		if p.at.Overlaps(o.Logical()) {
-			shown = c.drawBlurredTree(pass, o, p.popup.Surface, flat(p.at.Min), shown, render.Mask{}, 1)
+			rims := len(pass.rims)
+			shown = c.drawBlurredTree(pass, o, p.popup.Surface, flat(p.at.Min), shown, render.Mask{}, 1, c.decor.Blur.Look)
+			errs = append(errs, c.drawRims(pass, o, rims))
 		}
 	}
 	return shown, errors.Join(errs...)

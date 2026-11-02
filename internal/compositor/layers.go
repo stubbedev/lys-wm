@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"iter"
 	"slices"
@@ -195,11 +196,16 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 	for _, lv := range levels {
 		for e := range c.layersAt(o, []shell.Layer{lv}) {
 			from := len(pass.ops)
+			rims := len(pass.rims)
+			look := c.decor.Blur.Look
 			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
 				under := [1]image.Rectangle{deviceRect(o, e.bounds())}
-				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: under[:], extent: under[0], alpha: c.alpha.Alpha(e.surface.Surface())})
+				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: under[:], extent: under[0], alpha: c.alpha.Alpha(e.surface.Surface()), look: look})
 			}
-			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1)
+			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1, look)
+			if err := c.drawRims(pass, o, rims); err != nil {
+				c.report(fmt.Errorf("compositor: the rim of the %q layer surface: %w", e.surface.Namespace(), err))
+			}
 			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {
 				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at))
 			}

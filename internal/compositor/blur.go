@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type Blur struct {
@@ -17,7 +19,20 @@ type Blur struct {
 	Size    int
 	Passes  int
 	XRay    bool
+	Look    wm.Look
+	Mica    Mica
 }
+
+type Mica struct {
+	Enabled      bool
+	Size, Passes int
+	Tint         color.RGBA
+}
+
+const (
+	micaSize   = 16
+	micaPasses = 4
+)
 
 type chainSpec struct {
 	offset float32
@@ -63,6 +78,7 @@ func (b *blurCache) areaFor(needed, extent image.Rectangle) image.Rectangle {
 type blurCaches struct {
 	bySurface map[*surface.Surface]*blurCache
 	xray      *blurCache
+	mica      *blurCache
 	shape     []image.Rectangle
 }
 
@@ -85,6 +101,13 @@ func (bc *blurCaches) shared() *blurCache {
 	return bc.xray
 }
 
+func (bc *blurCaches) micaChain() *blurCache {
+	if bc.mica == nil {
+		bc.mica = &blurCache{}
+	}
+	return bc.mica
+}
+
 func (bc *blurCaches) dropUnused() error {
 	var errs []error
 	for s, b := range bc.bySurface {
@@ -101,6 +124,13 @@ func (bc *blurCaches) dropUnused() error {
 	if bc.xray != nil {
 		bc.xray.used = false
 	}
+	if bc.mica != nil && !bc.mica.used {
+		errs = append(errs, bc.mica.destroy())
+		bc.mica = nil
+	}
+	if bc.mica != nil {
+		bc.mica.used = false
+	}
 	return errors.Join(errs...)
 }
 
@@ -113,6 +143,10 @@ func (bc *blurCaches) drop() error {
 	if bc.xray != nil {
 		errs = append(errs, bc.xray.destroy())
 		bc.xray = nil
+	}
+	if bc.mica != nil {
+		errs = append(errs, bc.mica.destroy())
+		bc.mica = nil
 	}
 	return errors.Join(errs...)
 }
@@ -149,6 +183,17 @@ func (c *Compositor) blurSpec(o *output.Output) chainSpec {
 	return chainSpec{offset: deviceLength(o, c.decor.Blur.Size), passes: c.decor.Blur.Passes}
 }
 
+func (c *Compositor) micaSpec(o *output.Output) chainSpec {
+	m := c.decor.Blur.Mica
+	if m.Size == 0 {
+		m.Size = micaSize
+	}
+	if m.Passes == 0 {
+		m.Passes = micaPasses
+	}
+	return chainSpec{offset: deviceLength(o, m.Size), passes: m.Passes}
+}
+
 func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectangle, below []drawOp, to colorOut) bool {
 	if cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
 		return true
@@ -159,13 +204,13 @@ func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectang
 	})
 }
 
-func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask) {
+func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look wm.Look) {
 	if c.effects.BlurRegion(s).Empty() {
 		return
 	}
 	sc := c.sceneOf(o)
 	sc.blurs.shape = c.appendBlurRegion(sc.blurs.shape[:0], o, s, org)
-	c.drawBlur(pass, o, glassDraw{surface: s, shape: sc.blurs.shape, extent: org.device(o, s.Size()), mask: m, alpha: c.alpha.Alpha(s)})
+	c.drawBlur(pass, o, glassDraw{surface: s, shape: sc.blurs.shape, extent: org.device(o, s.Size()), mask: m, alpha: c.alpha.Alpha(s), look: look})
 }
 
 func (c *Compositor) appendBlurRegion(rects []image.Rectangle, o *output.Output, s *surface.Surface, org origin) []image.Rectangle {
@@ -195,6 +240,8 @@ type glassDraw struct {
 	extent  image.Rectangle
 	mask    render.Mask
 	alpha   float32
+	look    wm.Look
+	mica    bool
 }
 
 type pendingBlur struct {
@@ -235,7 +282,18 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	}
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	spec := c.blurSpec(o)
+	plain := spec
+	if g.mica {
+		spec = c.micaSpec(o)
+		if t := c.decor.Blur.Mica.Tint; t.A > 0 {
+			g.look.Tint = t
+		}
+	}
+	glass, handle := c.glassOf(o, g.look)
 	reach := spec.reach()
+	if glass.Refracts() {
+		reach += int(math.Ceil(float64(glass.Amount)))
+	}
 	area := under.Inset(-reach).Intersect(bounds)
 	if area.Empty() || !under.Overlaps(area) {
 		return
@@ -243,15 +301,25 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	ops := pass.ops
 	sc := c.sceneOf(o)
 	var b *blurCache
-	shared := pass.background >= 0 && c.decor.Blur.XRay
-	if shared {
+	shared := pass.background >= 0 && (g.mica || c.decor.Blur.XRay)
+	switch {
+	case shared && spec != plain:
+		b = sc.blurs.micaChain()
+	case shared:
 		b = sc.blurs.shared()
-		area, ops = bounds, pass.ops[:pass.background]
-	} else {
+	default:
 		b = sc.blurs.of(g.surface)
 		area = b.areaFor(area, g.extent.Inset(-reach).Intersect(bounds))
 	}
+	if shared {
+		area, ops = bounds, pass.ops[:pass.background]
+	}
 	pending := pass.pend(b, spec, area, ops, shared)
+	m := g.mask
+	if glass.Refracts() && m.Keep.Rect.Empty() {
+		m.Keep.Rect = under
+	}
+	tint := scaleColor(render.Color(g.look.Tint), g.alpha)
 	for _, r := range g.shape {
 		r = r.Intersect(area)
 		if r.Empty() {
@@ -260,9 +328,18 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 		src := r.Sub(area.Min)
 		pass.ops = append(pass.ops, drawOp{
 			src: render.FRect{X: float64(src.Min.X), Y: float64(src.Min.Y), W: float64(src.Dx()), H: float64(src.Dy())}, dst: r,
-			alpha: g.alpha, mask: g.mask, pending: pending,
+			alpha: g.alpha, mask: m, glass: handle, pending: pending, opaque: g.mica && g.alpha == 1,
 		})
+		if tint.A > 0 {
+			pass.fillMasked(r, tint, m)
+		}
+		if g.look.Grain > 0 {
+			if err := c.drawGrain(pass, o, r, g.extent.Min, m, g.alpha, g.look.Grain); err != nil {
+				c.report(fmt.Errorf("compositor: grain over a blur: %w", err))
+			}
+		}
 	}
+	pass.addRim(g, m, under, o)
 }
 
 func (c *Compositor) resolveBlurs(o *output.Output, f *frame, from int) {

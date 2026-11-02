@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"slices"
+	"unique"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/colorspace"
@@ -30,6 +31,7 @@ type drawOp struct {
 	goo       render.Goo
 	version   uint64
 	space     *colorspace.Description
+	glass     unique.Handle[render.Glass]
 	pending   int32
 }
 
@@ -75,6 +77,7 @@ type frame struct {
 	background int
 	blurs      []pendingBlur
 	below      []drawOp
+	rims       []rim
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
@@ -199,6 +202,10 @@ func (f *frame) replayFrom(p render.Pass, origin image.Point, to colorOut) {
 			p.FillRect(op.dst.Sub(origin), op.color, m)
 			continue
 		}
+		if op.glass != (unique.Handle[render.Glass]{}) {
+			p.DrawGlass(op.tex, op.src, op.dst.Sub(origin), op.alpha, m, op.glass.Value())
+			continue
+		}
 		p.DrawTexture(op.tex, op.src, op.dst.Sub(origin), op.transform, op.alpha, m)
 	}
 	if transform != nil {
@@ -318,7 +325,7 @@ func (sc *scene) draws(t render.Texture) bool {
 
 func (sc *scene) begin() *frame {
 	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background = sc.cur.ops[:0], 0, -1
-	sc.cur.blurs, sc.cur.below = sc.cur.blurs[:0], sc.cur.below[:0]
+	sc.cur.blurs, sc.cur.below, sc.cur.rims = sc.cur.blurs[:0], sc.cur.below[:0], sc.cur.rims[:0]
 	return &sc.cur
 }
 

@@ -1,0 +1,210 @@
+package compositor
+
+import (
+	"errors"
+	"fmt"
+	"image"
+	"math"
+	"unique"
+
+	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
+	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/wm"
+)
+
+func (c *Compositor) lookOf(w *window) wm.Look {
+	return c.decision(w).Look.Over(c.decor.Blur.Look)
+}
+
+func (c *Compositor) micaOn(w *window) bool {
+	d := c.decision(w)
+	if d.Blur != nil && !*d.Blur {
+		return false
+	}
+	if d.Mica != nil {
+		return *d.Mica
+	}
+	return c.decor.Blur.Mica.Enabled
+}
+
+func (c *Compositor) glassOf(o *output.Output, l wm.Look) (render.Glass, unique.Handle[render.Glass]) {
+	bends := l.Refraction.Bezel > 0 && l.Refraction.Amount > 0
+	if l.SaturationShift == 0 && l.BrightnessShift == 0 && l.ContrastShift == 0 && !bends {
+		return render.Glass{}, unique.Handle[render.Glass]{}
+	}
+	g := render.Glass{Saturation: 1 + l.SaturationShift, Brightness: 1 + l.BrightnessShift, Contrast: 1 + l.ContrastShift}
+	if bends {
+		g.Bezel, g.Amount = deviceLength(o, l.Refraction.Bezel), deviceLength(o, l.Refraction.Amount)
+	}
+	return g, unique.Make(g)
+}
+
+type grainTile struct {
+	tex  render.Texture
+	size image.Point
+}
+
+func (c *Compositor) grainFor(need image.Point) (grainTile, error) {
+	if c.grain.tex != nil && need.In(image.Rectangle{Max: c.grain.size.Add(image.Pt(1, 1))}) {
+		return c.grain, nil
+	}
+	size := image.Pt(max(need.X, c.grain.size.X), max(need.Y, c.grain.size.Y))
+	tex, err := c.renderer.NewTexture(render.ARGB8888, size, size.X*4, gtext.GrainTile(size.X, size.Y))
+	if err != nil {
+		return grainTile{}, fmt.Errorf("the %v noise tile: %w", size, err)
+	}
+	err = c.dropGrain()
+	c.grain = grainTile{tex: tex, size: size}
+	return c.grain, err
+}
+
+func (c *Compositor) dropGrain() error {
+	if c.grain.tex == nil {
+		return nil
+	}
+	err := c.destroyTexture(c.grain.tex)
+	c.grain = grainTile{}
+	return err
+}
+
+func (c *Compositor) drawGrain(pass *frame, o *output.Output, r image.Rectangle, origin image.Point, m render.Mask, alpha, strength float32) error {
+	tile, err := c.grainFor(o.Backend().State().Mode.Size)
+	if err != nil {
+		return err
+	}
+	at := r.Min.Sub(origin)
+	at.X = max(at.X, 0) % max(tile.size.X-r.Dx()+1, 1)
+	at.Y = max(at.Y, 0) % max(tile.size.Y-r.Dy()+1, 1)
+	a := float32(gtext.GrainStrength(float64(strength))) / 255
+	pass.ops = append(pass.ops, drawOp{
+		tex: tile.tex, src: render.FRect{X: float64(at.X), Y: float64(at.Y), W: float64(r.Dx()), H: float64(r.Dy())}, dst: r,
+		alpha: float32(alpha * a), mask: m,
+	})
+	return nil
+}
+
+const (
+	rimSteps   = 64
+	rimResting = 40
+)
+
+var rimStops = func() Border {
+	alphas := [8]uint8{0xff, 0x96, 0x32, 0, 0, 0, 0x28, 0x6e}
+	colors := make([]render.Color, len(alphas))
+	for i, a := range alphas {
+		colors[i] = render.Color{R: 0xff, G: 0xff, B: 0xff, A: a}
+	}
+	b, err := GradientBorder(colors, 0)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}()
+
+type rim struct {
+	box      render.RoundRect
+	width    int
+	strength float32
+	step     int
+	from, to [2]float32
+}
+
+func (f *frame) addRim(g glassDraw, m render.Mask, under image.Rectangle, o *output.Output) {
+	s := g.look.Specular
+	if s.Strength <= 0 || s.Width <= 0 {
+		return
+	}
+	box := m.Keep
+	if box.Rect.Empty() {
+		box = render.RoundRect{Rect: under}
+	}
+	if n := len(f.rims); n > 0 && f.rims[n-1].box == box {
+		return
+	}
+	width := int(math.Ceil(float64(deviceLength(o, s.Width))))
+	f.rims = append(f.rims, rim{box: box, width: width, strength: float32(s.Strength * g.alpha)})
+}
+
+func (c *Compositor) rimStep(tip image.Point, box image.Rectangle) int {
+	if c.animations.Curve(anim.Global) == anim.Instant {
+		return rimResting
+	}
+	centre := box.Min.Add(box.Size().Div(2))
+	d := tip.Sub(centre)
+	if d == (image.Point{}) {
+		return rimResting
+	}
+	turn := gomath.Atan2(float64(d.Y), float64(d.X)) / (2 * math.Pi)
+	return (int(math.Round(turn*rimSteps)) + rimSteps) % rimSteps
+}
+
+func rimLine(box image.Rectangle, step int) (from, to [2]float32) {
+	s, co := gomath.Sincos(float64(step) * 2 * math.Pi / rimSteps)
+	cx, cy := float64(box.Min.X+box.Max.X)/2, float64(box.Min.Y+box.Max.Y)/2
+	reach := gomath.Hypot(float64(box.Dx()), float64(box.Dy())) / 2
+	dx, dy := float64(co*reach), float64(s*reach)
+	return [2]float32{float32(cx + dx), float32(cy + dy)}, [2]float32{float32(cx - dx), float32(cy - dy)}
+}
+
+func (c *Compositor) drawRims(pass *frame, o *output.Output, mark int) error {
+	if mark == len(pass.rims) {
+		return nil
+	}
+	stops, err := c.borderStops(rimStops)
+	if err != nil {
+		return err
+	}
+	tip := c.cursorTip(o)
+	for i := mark; i < len(pass.rims); i++ {
+		r := &pass.rims[i]
+		r.step = c.rimStep(tip, r.box.Rect)
+		r.from, r.to = rimLine(r.box.Rect, r.step)
+		inner := r.box.Rect.Inset(r.width)
+		ring := render.Mask{Keep: r.box, Cut: render.RoundRect{Rect: inner, Radius: max(r.box.Radius-float32(r.width), 0)}}
+		g := render.Gradient{Stops: stops, From: r.from, To: r.to, Alpha: r.strength}
+		for _, strip := range ringStrips(r.box.Rect, inner, r.box.Radius) {
+			if !strip.Empty() {
+				pass.fillGradient(strip, g, ring)
+			}
+		}
+	}
+	return nil
+}
+
+func (f *frame) dropHiddenRims() {
+	if len(f.rims) == 0 {
+		return
+	}
+	kept := f.rims[:0]
+	for _, r := range f.rims {
+		for _, op := range f.ops {
+			if op.gradient.Stops != nil && op.gradient.From == r.from && op.gradient.To == r.to {
+				kept = append(kept, r)
+				break
+			}
+		}
+	}
+	f.rims = kept
+}
+
+func (c *Compositor) rimsMoved() error {
+	var errs []error
+	for _, o := range c.outputs {
+		sc, ok := c.scenes[o]
+		if !ok || len(sc.prev.rims) == 0 {
+			continue
+		}
+		tip := c.cursorTip(o)
+		for _, r := range sc.prev.rims {
+			if c.rimStep(tip, r.box.Rect) != r.step {
+				errs = append(errs, c.schedule(o))
+				break
+			}
+		}
+	}
+	return errors.Join(errs...)
+}

@@ -231,6 +231,7 @@ type Compositor struct {
 	frameTime       time.Duration
 	closing         []*closing
 	blurGen         uint64
+	grain           grainTile
 	jellyGen        uint64
 	genieStrips     []anim.GenieStrip
 	blurLayers      []string
@@ -469,7 +470,7 @@ func (c *Compositor) dropDecor() error {
 	for o := range c.labels {
 		errs = append(errs, c.dropLabels(o))
 	}
-	return errors.Join(append(errs, c.dropPointers(), c.dropStops())...)
+	return errors.Join(append(errs, c.dropPointers(), c.dropStops(), c.dropGrain())...)
 }
 
 func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {

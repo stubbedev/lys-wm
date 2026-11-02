@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"image"
+	"image/color"
 	"os"
 	"slices"
 	"strings"
@@ -362,6 +363,59 @@ func TestHDRKeysReachTheOutputRules(t *testing.T) {
 	for _, bad := range []string{"sdr_brightness: 0", "sdr_brightness: 20000", "hdr_peak: -1"} {
 		if _, err := Parse("t.yaml", []byte("outputs:\n  - match: DP-1\n    "+bad+"\n")); err == nil {
 			t.Errorf("%s was accepted", bad)
+		}
+	}
+}
+
+func TestDecorationBlurLookAndMicaParse(t *testing.T) {
+	src := `decoration:
+  blur:
+    enabled: true
+    tint: "#ff000080"
+    saturation: 1.5
+    brightness: 0.75
+    contrast: 1.25
+    grain: 0.1
+    refraction: {bezel: 12, amount: 6}
+    specular: {strength: 0.5, width: 2}
+    mica: {enabled: true, size: 20, passes: 3, tint: "#00ff0040"}
+rules:
+  - {app_id: foot, mica: false, blur_look: {saturation: 2, specular: {width: 3}, refraction: {}}}
+`
+	c, err := Parse("t.yaml", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := wm.Look{
+		Tint:            color.RGBA{R: 0x80, A: 0x80},
+		SaturationShift: 0.5, BrightnessShift: -0.25, ContrastShift: 0.25, Grain: 0.1,
+		Refraction: wm.Refraction{Bezel: 12, Amount: 6},
+		Specular:   wm.Specular{Strength: 0.5, Width: 2},
+	}
+	if c.Decor.Blur.Look != want {
+		t.Errorf("look %+v, want %+v", c.Decor.Blur.Look, want)
+	}
+	if m := c.Decor.Blur.Mica; m != (compositor.Mica{Enabled: true, Size: 20, Passes: 3, Tint: color.RGBA{G: 0x40, A: 0x40}}) {
+		t.Errorf("mica %+v", m)
+	}
+	d := wm.Decide(c.Rules, "foot", "")
+	if d.Mica == nil || *d.Mica {
+		t.Errorf("a rule's mica: %+v", d.Mica)
+	}
+	got := d.Look.Over(want)
+	want.SaturationShift, want.Specular, want.Refraction = 1, wm.Specular{Strength: 0.6, Width: 3}, wm.Refraction{Bezel: 16, Amount: 8}
+	if got != want {
+		t.Errorf("a rule's look over the default: %+v, want %+v", got, want)
+	}
+	for src, msg := range map[string]string{
+		"decoration:\n  blur:\n    saturation: 5\n":                       "t.yaml:3: decoration.blur.saturation: 5 is not from 0 to 4",
+		"decoration:\n  blur:\n    grain: 2\n":                            "t.yaml:3: decoration.blur.grain: 2 is not from 0 to 1",
+		"decoration:\n  blur:\n    mica: {passes: 9}\n":                   "t.yaml:3: decoration.blur.mica.passes: 9 is not from 1 to 4",
+		"decoration:\n  blur:\n    glint: 1\n":                            "unknown key",
+		"rules:\n  - {app_id: a, blur_look: {specular: {strength: 3}}}\n": "specular.strength: 3 is not from 0 to 1",
+	} {
+		if _, err := Parse("t.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), msg) {
+			t.Errorf("%q: %v, want %q", src, err, msg)
 		}
 	}
 }

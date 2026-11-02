@@ -373,6 +373,33 @@ and a shared chain is drawn once however many surfaces use it. A deforming
 window replays its ops into a target as it is drawn, and resolves its own chains
 first.
 
+The look (`wm.Look`) is built from what a renderer already has wherever it can
+be. A tint is a masked fill. Grain is lys-lib's `render.GrainTile`, the noise of
+`Canvas.PaintGrain`, drawn with `DrawTexture` at the strength's alpha, so a
+shader needs no integer hash GLSL ES 1.00 cannot express and the pixels stay
+within two levels of lys-ui's: one tile per compositor, the size of the largest
+output, built at the first use. A rim is four strips of a ring mask filled with
+a gradient, whose line turns with the pointer in 64 steps, so damage is the
+strips, and the pointer asks for a frame only when a step changes; a static rim
+needs no pointer at all. Saturation, brightness, contrast and refraction need a
+shader: `Pass.DrawGlass`, with `lgpu.GlassGLSL` the one source for GLES and
+Vulkan. The software renderer takes refraction from `render.RefractPlan.At`, which
+is lys-ui's arithmetic and the shared definition; the shaders' float form is
+tested against it, within 3 of 255 in `TestDrawGlassMatchesGo` and in `Parity`,
+which also holds the colour maths to the filter functions'. Its program and
+pipeline are built at the first draw, and the op stays a plain `DrawTexture`
+when none of the four is set.
+
+On an HDR output a chain is a working target, so the look runs on linear light:
+the colour filters clamp at SDR white, and a glass with no colour change leaves
+light above it alone. Their numbers mean what they do in SDR only roughly, since
+they were defined for encoded values.
+
+Mica is that look over a shared chain of the layers below the windows. When its
+size and passes match `decoration.blur`'s it is `xray`'s chain, or else one of
+its own, so one per output either way. The chain is opaque, so a mica op at full
+alpha culls the windows below it like any opaque op.
+
 The offscreen frames behind closing snapshots and window captures draw no
 blur: they have nothing behind them to blur.
 

@@ -114,6 +114,7 @@ func (c *Compositor) render(o *output.Output) error {
 	}
 	sc.cur.cull(&sc.covered)
 	c.resolveBlurs(o, &sc.cur, 0)
+	sc.cur.dropHiddenRims()
 	if err := sc.blurs.dropUnused(); err != nil {
 		c.report(fmt.Errorf("compositor: drop the blurs unused on %s: %w", o.Backend().Name(), err))
 	}
@@ -210,17 +211,23 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 	c.drawShadow(pass, o, w)
 	mask := c.windowMask(o, w)
 	top := w.top.Surface()
-	if c.blurred(w) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
+	look := c.lookOf(w)
+	rims := len(pass.rims)
+	mica := c.micaOn(w)
+	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
 		under := [1]image.Rectangle{deviceRect(o, w.rect)}
-		c.drawBlur(pass, o, glassDraw{surface: top, shape: under[:], extent: under[0], mask: mask, alpha: c.alpha.Alpha(top)})
+		c.drawBlur(pass, o, glassDraw{surface: top, shape: under[:], extent: under[0], mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
 	}
 	if c.honoursBlurRegions(w) {
-		shown = c.drawBlurredTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w))
+		shown = c.drawBlurredTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w), look)
 	} else {
 		shown = c.drawClippedTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w))
 	}
 	if c.decor.Dim.Inactive {
 		pass.fillMasked(deviceRect(o, w.rect), c.shownDim(w), mask)
+	}
+	if err := c.drawRims(pass, o, rims); err != nil {
+		c.report(fmt.Errorf("compositor: the rim of window %d: %w", w.id, err))
 	}
 	c.drawBorder(pass, o, w)
 	if at != w.tile {
@@ -237,7 +244,7 @@ func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown 
 
 func (c *Compositor) drawWindowPopups(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
 	from := len(pass.ops)
-	shown = c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w)})
+	shown = c.drawPopups(pass, o, c.popups(w), shown, popupBlur{regions: c.honoursBlurRegions(w), whole: c.blurred(w) || c.micaOn(w), look: c.lookOf(w)})
 	v, _ := c.workspaceView(o, w)
 	if at := v.rect(w.motion.At(c.frameTime), o.Logical()); at.Min != w.tile.Min {
 		goal := deviceRect(o, w.tile)
@@ -253,6 +260,7 @@ func deviceRect(o *output.Output, r image.Rectangle) image.Rectangle {
 type popupBlur struct {
 	regions bool
 	whole   bool
+	look    wm.Look
 }
 
 func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPopup, shown []*surface.Surface, blur popupBlur) []*surface.Surface {
@@ -261,14 +269,18 @@ func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPo
 			continue
 		}
 		s := p.popup.Surface()
+		rims := len(pass.rims)
 		if blur.whole && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
 			under := [1]image.Rectangle{deviceRect(o, p.geometry())}
-			c.drawBlur(pass, o, glassDraw{surface: s, shape: under[:], extent: under[0], mask: c.popupMask(o, under[0]), alpha: c.alpha.Alpha(s)})
+			c.drawBlur(pass, o, glassDraw{surface: s, shape: under[:], extent: under[0], mask: c.popupMask(o, under[0]), alpha: c.alpha.Alpha(s), look: blur.look})
 		}
 		if blur.regions {
-			shown = c.drawBlurredTree(pass, o, s, flat(p.origin), shown, render.Mask{}, 1)
+			shown = c.drawBlurredTree(pass, o, s, flat(p.origin), shown, render.Mask{}, 1, blur.look)
 		} else {
 			shown = c.drawTree(pass, o, s, flat(p.origin), shown)
+		}
+		if err := c.drawRims(pass, o, rims); err != nil {
+			c.report(fmt.Errorf("compositor: the rim of a popup: %w", err))
 		}
 	}
 	return shown
@@ -289,14 +301,15 @@ func (c *Compositor) drawClippedTree(pass *frame, o *output.Output, s *surface.S
 	return c.drawSurfaces(pass, o, s, org, shown, treeStyle{mask: m, alpha: alpha})
 }
 
-func (c *Compositor) drawBlurredTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, m render.Mask, alpha float32) []*surface.Surface {
-	return c.drawSurfaces(pass, o, s, org, shown, treeStyle{mask: m, alpha: alpha, regions: true})
+func (c *Compositor) drawBlurredTree(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, m render.Mask, alpha float32, look wm.Look) []*surface.Surface {
+	return c.drawSurfaces(pass, o, s, org, shown, treeStyle{mask: m, alpha: alpha, regions: true, look: look})
 }
 
 type treeStyle struct {
 	mask    render.Mask
 	alpha   float32
 	regions bool
+	look    wm.Look
 }
 
 func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surface, org origin, shown []*surface.Surface, st treeStyle) []*surface.Surface {
@@ -312,7 +325,7 @@ func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surf
 			continue
 		}
 		if st.regions {
-			c.drawBlurRegion(pass, o, s, org, st.mask)
+			c.drawBlurRegion(pass, o, s, org, st.mask, st.look)
 		}
 		pass.drawSurface(s, c.surfaceSpace(s), tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s)*st.alpha, c.opaque(s), st.mask)
 		shown = append(shown, s)

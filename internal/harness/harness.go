@@ -29,7 +29,7 @@ import (
 )
 
 type Harness struct {
-	t          *testing.T
+	t          testing.TB
 	RuntimeDir string
 	loop       *loop.Loop
 	display    *server.Display
@@ -135,7 +135,7 @@ func StartXwayland(t *testing.T, report func(error), modes ...backend.Mode) *Har
 	return start(t, setup{open: softBackend, configure: func(*compositor.Config) {}, traced: true, xwayland: report}, modes...)
 }
 
-func start(t *testing.T, s setup, modes ...backend.Mode) *Harness {
+func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	t.Helper()
 	dir := testenv.SocketDir(t)
 	h := &Harness{t: t, RuntimeDir: dir, trace: &syncBuffer{}, xlog: &syncBuffer{}, done: make(chan error, 1)}

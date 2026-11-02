@@ -254,6 +254,59 @@ Cursors, drag icons and session-lock surfaces ignore regions. The blur fades
 with a surface's alpha-modifier, not with a window's `opacity`, which leaves the
 blur behind a translucent window at full strength.
 
+The same section gives glass its look, for windows, listed layers, popups and
+client regions alike. Everything is off by default, and an effect that is off
+adds nothing to a frame: the pixels are those of a plain blur.
+
+```yaml
+decoration:
+  blur:
+    enabled: true
+    tint: "#1e1e2e40"
+    saturation: 1.4
+    brightness: 1.05
+    contrast: 1.1
+    grain: 0.04
+    refraction: {bezel: 16, amount: 8}
+    specular: {strength: 0.6, width: 1}
+    mica: {enabled: false, size: 16, passes: 4, tint: "#1e1e2ec0"}
+```
+
+| Key | Default |
+| --- | --- |
+| `tint` | none: a colour laid over the blurred backdrop, under the client |
+| `saturation` | 1: `saturate()`, 0 to 4, as CSS filters define it |
+| `brightness` | 1: `brightness()`, 0 to 4 |
+| `contrast` | 1: `contrast()`, 0 to 4 |
+| `grain` | 0: luminance noise over the backdrop, 0 to 1, the same pixels as lys-ui's `-lys-grain` at that opacity with the surface's corner as origin |
+| `refraction.bezel` | 16 when `refraction` is set: how far in from the edge the backdrop bends, in logical pixels, as lys-ui's `-lys-refract()` does; 0 turns it off |
+| `refraction.amount` | 8 when `refraction` is set: how far it looks past the edge at the rim, in logical pixels; 0 turns it off |
+| `specular.strength` | 0.6 when `specular` is set: the brightness of a sheen on the rim, 0 to 1, drawn over the client |
+| `specular.width` | 1 when `specular` is set: the rim's width in logical pixels |
+
+Saturation, brightness and contrast apply in that order to what is already
+blurred, then the tint, then the grain, so changing them costs no blur. The bezel runs along the window's
+rounded corners, or the bounding box of a client's region on a surface without
+them. The sheen is brightest on the side of the surface that faces the pointer,
+with a fainter echo opposite, and turns in steps of 5.6 degrees: a pointer move
+redraws only the rims it turned, and a move that turns none draws nothing. A
+moving window turns its sheen as well. With `animations.enabled: false`, which
+is lys-wm's reduced motion, the light rests at the top left and never moves.
+
+`mica` draws a window's translucent parts over a heavily blurred sample of the
+background and bottom layers, as `xray` does, instead of over what lies behind
+the window. `tint`, when set, replaces `decoration.blur.tint` for those windows,
+and the rest of the look applies. All mica windows on an output share one blur,
+which windows moving underneath never redraw; it is `xray`'s chain when `size`
+and `passes` match `decoration.blur`'s. `size` is 16 and `passes` 4 by default.
+Mica is for a window whose client leaves its background translucent; an opaque
+client hides it, as it hides any blur. A window's popups blur as usual, since
+they float over the window itself.
+
+A surface
+hidden behind an opaque window costs nothing: its blur is not redrawn, and frees
+its memory until it shows again.
+
 Opacity multiplies what the client draws, including the alpha it asks for
 through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
 the place of these for the windows it matches. A translucent window shows
@@ -406,7 +459,11 @@ rules:
 a rule needs at least one. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
 `decoration.dim_strength`, as for a dialog that should hold the attention.
-`blur: true` or `blur: false` turns `decoration.blur` on or off for the window and its popups; `blur: false` also ignores the blur regions they ask for through `ext_background_effect_v1`.
+`blur: true` or `blur: false` turns `decoration.blur` on or off for the window and its popups; `blur: false` also ignores the blur regions they ask for through `ext_background_effect_v1`, and turns `mica` off.
+
+`mica: true` or `mica: false` overrides `decoration.blur.mica.enabled` for the window.
+
+`blur_look` overrides the look for the window and its popups, key by key, with the same keys as `decoration.blur`: `tint`, `saturation`, `brightness`, `contrast`, `grain`, `refraction` and `specular`, as `blur_look: {saturation: 1.8, specular: {strength: 0.3}}`.
 `opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
 `decoration`'s. `tearing: true` or
 `tearing: false` overrides what the window asks for through

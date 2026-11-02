@@ -303,7 +303,7 @@ func (c *Compositor) moveCursor(at time.Duration, next point) error {
 		return nil
 	}
 	c.cursor = next
-	return errors.Join(c.pointerMoved(at), c.refreshConstraint())
+	return errors.Join(c.pointerMoved(at), c.refreshConstraint(), c.rimsMoved())
 }
 
 func (c *Compositor) pointerMoved(at time.Duration) error {

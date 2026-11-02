@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"maps"
 	"math"
@@ -63,8 +64,12 @@ var locatedType = reflect.TypeFor[interface{ located() }]()
 func fieldNames(t reflect.Type) map[string]reflect.Type {
 	fields := make(map[string]reflect.Type, t.NumField())
 	for f := range t.Fields() {
-		if name, _, _ := strings.Cut(f.Tag.Get("yaml"), ","); name != "" {
+		name, opts, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+		if name != "" {
 			fields[name] = f.Type
+		}
+		if opts == "inline" {
+			maps.Copy(fields, fieldNames(f.Type))
 		}
 	}
 	return fields
@@ -241,6 +246,35 @@ type rawBlur struct {
 	Passes  *At[int]     `yaml:"passes"`
 	Layers  []At[string] `yaml:"layers"`
 	XRay    *bool        `yaml:"xray"`
+	Mica    rawMica      `yaml:"mica"`
+	rawLook `yaml:",inline"`
+}
+
+type rawLook struct {
+	Tint       *At[string]    `yaml:"tint"`
+	Saturation *At[float64]   `yaml:"saturation"`
+	Brightness *At[float64]   `yaml:"brightness"`
+	Contrast   *At[float64]   `yaml:"contrast"`
+	Grain      *At[float64]   `yaml:"grain"`
+	Refraction *rawRefraction `yaml:"refraction"`
+	Specular   *rawSpecular   `yaml:"specular"`
+}
+
+type rawRefraction struct {
+	Bezel  *At[int] `yaml:"bezel"`
+	Amount *At[int] `yaml:"amount"`
+}
+
+type rawSpecular struct {
+	Strength *At[float64] `yaml:"strength"`
+	Width    *At[int]     `yaml:"width"`
+}
+
+type rawMica struct {
+	Enabled *bool       `yaml:"enabled"`
+	Size    *At[int]    `yaml:"size"`
+	Passes  *At[int]    `yaml:"passes"`
+	Tint    *At[string] `yaml:"tint"`
 }
 
 type rawShadow struct {
@@ -313,6 +347,8 @@ type rawRule struct {
 	Opacity   *At[float64] `yaml:"opacity"`
 	DimAround bool         `yaml:"dim_around"`
 	Blur      *bool        `yaml:"blur"`
+	BlurLook  rawLook      `yaml:"blur_look"`
+	Mica      *bool        `yaml:"mica"`
 }
 
 type Error struct {
@@ -621,6 +657,71 @@ func (p *parser) blurPasses(a *At[int], fallback int) int {
 	return v
 }
 
+const (
+	defaultBezel      = 16
+	defaultRefraction = 8
+	defaultSpecular   = 0.6
+)
+
+func (p *parser) tint(a *At[string], key string) color.RGBA {
+	if a == nil {
+		return color.RGBA{}
+	}
+	return color.RGBA(p.color(*a, key, render.Color{}).Premultiply())
+}
+
+func (p *parser) look(r rawLook, key string) wm.LookOverride {
+	factor := func(a *At[float64], name string) *float32 {
+		v := p.between(a, key+"."+name, 0, 4, false)
+		if v == nil {
+			return nil
+		}
+		s := float32(*v) - 1
+		return &s
+	}
+	strength := func(a *At[float64], name string) *float32 {
+		v := p.between(a, key+"."+name, 0, 1, false)
+		if v == nil {
+			return nil
+		}
+		s := float32(*v)
+		return &s
+	}
+	o := wm.LookOverride{
+		SaturationShift: factor(r.Saturation, "saturation"),
+		BrightnessShift: factor(r.Brightness, "brightness"),
+		ContrastShift:   factor(r.Contrast, "contrast"),
+		Grain:           strength(r.Grain, "grain"),
+	}
+	if r.Tint != nil {
+		t := p.tint(r.Tint, key+".tint")
+		o.Tint = &t
+	}
+	if r.Refraction != nil {
+		o.Refraction = &wm.Refraction{
+			Bezel:  p.nonNegative(r.Refraction.Bezel, key+".refraction.bezel", defaultBezel),
+			Amount: p.nonNegative(r.Refraction.Amount, key+".refraction.amount", defaultRefraction),
+		}
+	}
+	if r.Specular != nil {
+		s := wm.Specular{Strength: defaultSpecular, Width: p.positive(r.Specular.Width, key+".specular.width", 1)}
+		if v := strength(r.Specular.Strength, "specular.strength"); v != nil {
+			s.Strength = *v
+		}
+		o.Specular = &s
+	}
+	return o
+}
+
+func (p *parser) micaPasses(a *At[int]) int {
+	v := p.positive(a, "decoration.blur.mica.passes", 0)
+	if v > 4 {
+		p.fail(a.Line, "decoration.blur.mica.passes", "%d is not from 1 to 4", v)
+		return 0
+	}
+	return v
+}
+
 func (p *parser) gaps(r rawGaps) wm.Gaps {
 	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
 	if r.Outer == nil {
@@ -879,7 +980,8 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	default:
 		rule.Tearing = wm.TearingDeny
 	}
-	rule.DimAround, rule.Blur = r.DimAround, r.Blur
+	rule.DimAround, rule.Blur, rule.Mica = r.DimAround, r.Blur, r.Mica
+	rule.Look = p.look(r.BlurLook, key+".blur_look")
 	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
 		o := float32(*v)
 		rule.Opacity = &o
@@ -939,6 +1041,13 @@ func Parse(file string, data []byte) (Config, error) {
 				Size:    p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
 				Passes:  p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
 				XRay:    raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
+				Look:    p.look(raw.Decoration.Blur.rawLook, "decoration.blur").Over(wm.Look{}),
+				Mica: compositor.Mica{
+					Enabled: raw.Decoration.Blur.Mica.Enabled != nil && *raw.Decoration.Blur.Mica.Enabled,
+					Size:    p.positive(raw.Decoration.Blur.Mica.Size, "decoration.blur.mica.size", 0),
+					Passes:  p.micaPasses(raw.Decoration.Blur.Mica.Passes),
+					Tint:    p.tint(raw.Decoration.Blur.Mica.Tint, "decoration.blur.mica.tint"),
+				},
 			},
 			Dim: compositor.Dim{
 				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
