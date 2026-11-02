@@ -42,7 +42,7 @@ func swipeConfig(t *testing.T, now *time.Duration, style anim.Style, extra func(
 	return func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return *now }
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 0
 		cfg.Gestures.Distance = float64(tall.Size.X)
 		if extra != nil {

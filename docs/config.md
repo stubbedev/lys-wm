@@ -22,6 +22,51 @@ adding to it: each key the file leaves out takes the default this page gives,
 and a file without `binds` has no binds and without `env` none of the built-in
 config's variables.
 
+## The default look
+
+An empty file, or none, looks finished: rounded corners, gaps, a soft shadow, a
+hairline border with the focused window's in the accent colour, and spring
+animations tuned per event. Every default is on this page, and any key you set
+wins over it, on every renderer.
+
+**A config you already have changes.** Rounding, gaps, shadows, borders,
+tab strips, animations and the look of blur used to be off, zero or a Catppuccin
+colour unless set. A file that sets only some of them now gets these defaults for
+the rest. To have the old look back:
+
+```yaml
+decoration:
+  rounding: 0
+  shadow: {enabled: false}
+  blur: {size: 8, passes: 1, saturation: 1}
+gaps: {inner: 0, outer: 0}
+borders: {active: "#cba6f7", inactive: "#11111b"}
+tabs:
+  height: 15
+  padding: 5
+  text_height: 8
+  text_padding: 3
+  active: {background: "#cba6f7", text: "#11111b"}
+animations: {enabled: false}
+```
+
+`animations: {enabled: true}` no longer means bezier curves: an event you do not
+configure gets its spring, unless a parent event in your file names a curve or a
+duration. See [animations](#animations).
+
+What a key left out defaults to depends on what draws the frames, decided when
+lys-wm starts, since an effect that is cheap on a GPU can eat a CPU:
+
+| Renderer | Default look |
+| --- | --- |
+| GLES or Vulkan on a GPU | Everything, and blur for clients that ask for it |
+| GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | Everything but blur. Blur costs these 10 to 40 ms per redraw. `ext_background_effect_v1` is not offered as able to blur, so clients such as lys-shell show their opaque style |
+| lys-wm's software renderer (`-renderer soft`) | Also no shadow and no animated workspace switch: a 1080p frame takes 68 ms with shadows and 14 ms without, and a slide draws two workspaces. Windows and layer surfaces still animate |
+
+Setting `decoration.blur.enabled` or `decoration.blur.layers`, either way, puts
+blur back in your hands on any renderer, as does `decoration.shadow.enabled` for
+shadows. `animations.events.workspaces` does the same for a workspace switch.
+
 ## outputs
 
 A list of rules. Each output takes the first rule that matches it, or the
@@ -156,8 +201,8 @@ palette:
 | Key | Default |
 | --- | --- |
 | `width` | 1 |
-| `active` | `mauve` |
-| `inactive` | `crust` |
+| `active` | `#e0947a`, lys-shell's accent |
+| `inactive` | `#ffffff14`, a white hairline |
 
 `active` and `inactive` take a colour, or a gradient of 2 to 10 colours spread
 evenly across the border along `angle` degrees (0, the default, runs left to
@@ -177,7 +222,7 @@ decoration:
 
 | Key | Default |
 | --- | --- |
-| `rounding` | 0: the radius of window corners in logical pixels, scaled with the output. Surfaces are clipped to it, antialiased, and the border follows it with an outer radius of `rounding` plus the border width. Fullscreen windows stay square |
+| `rounding` | 8: the radius of window corners in logical pixels, scaled with the output. Surfaces are clipped to it, antialiased, and the border follows it with an outer radius of `rounding` plus the border width. Fullscreen windows stay square |
 | `active_opacity` | 1: the focused window's opacity, 0 to 1 |
 | `inactive_opacity` | 1: every other window's opacity |
 | `fullscreen_opacity` | 1: a fullscreen window's opacity, whether focused or not |
@@ -202,14 +247,14 @@ decoration:
 
 | Key | Default |
 | --- | --- |
-| `enabled` | `false` |
-| `range` | 4: how far the shadow fades out beyond its edge, in logical pixels |
-| `render_power` | 3: how fast it fades, 1 (linearly) to 4 (quickly, with a darker core) |
+| `enabled` | `true`, but see [the default look](#the-default-look) |
+| `range` | 24: how far the shadow fades out beyond its edge, in logical pixels |
+| `render_power` | 2: how fast it fades, 1 (linearly) to 4 (quickly, with a darker core) |
 | `sharp` | `false`: `true` gives a hard-edged shadow with no fade |
-| `offset` | `[0, 0]`: where the shadow sits relative to the window, in logical pixels |
+| `offset` | `[0, 8]`: where the shadow sits relative to the window, in logical pixels |
 | `scale` | 1: the shadow's size relative to the window, above 0 to 1 |
-| `color` | `#1a1a1aee` |
-| `color_inactive` | `color`: the shadow of windows that are not focused |
+| `color` | `#00000060` |
+| `color_inactive` | `#00000038`, or `color` when the file sets that: the shadow of windows that are not focused |
 
 The shadow is cut out under the window, so a translucent window does not show
 its own shadow through itself.
@@ -230,8 +275,8 @@ decoration:
 | Key | Default |
 | --- | --- |
 | `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha, and its popups |
-| `size` | 8: the distance between the blur's taps, in logical pixels |
-| `passes` | 1: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
+| `size` | 6: the distance between the blur's taps, in logical pixels |
+| `passes` | 2: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
 | `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups | fade |
 | `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
 
@@ -246,17 +291,19 @@ Clients ask for blur themselves through `ext_background_effect_v1`, which
 name the exact region of a surface to blur: a toplevel, a popup, a layer
 surface, a subsurface or an input method's popup. The region is honoured
 whether or not `enabled` is set, with this section's `size`, `passes` and
-`xray`, and it follows the window's rounded corners. Where a surface has one,
+`xray`, and it follows the window's rounded corners. Only a renderer that rasterizes on the CPU
+with neither `enabled` nor `layers` in the config withholds it: the global then
+offers no blur, and a region draws nothing, until a reload sets one. Where a surface has one,
 it replaces the whole-surface blur `enabled` or `layers` would draw. A window
 rule's `blur: false` turns regions off for that window and its popups, and
-nothing else does, so a client always sees the blur capability offered.
+nothing else does.
 Cursors, drag icons and session-lock surfaces ignore regions. The blur fades
 with a surface's alpha-modifier, not with a window's `opacity`, which leaves the
 blur behind a translucent window at full strength.
 
 The same section gives glass its look, for windows, listed layers, popups and
-client regions alike. Everything is off by default, and an effect that is off
-adds nothing to a frame: the pixels are those of a plain blur.
+client regions alike. Only saturation is on by default, and an effect that is off
+adds nothing to a frame: with `saturation: 1` the pixels are those of a plain blur.
 
 ```yaml
 decoration:
@@ -275,7 +322,7 @@ decoration:
 | Key | Default |
 | --- | --- |
 | `tint` | none: a colour laid over the blurred backdrop, under the client |
-| `saturation` | 1: `saturate()`, 0 to 4, as CSS filters define it |
+| `saturation` | 1.3: `saturate()`, 0 to 4, as CSS filters define it |
 | `brightness` | 1: `brightness()`, 0 to 4 |
 | `contrast` | 1: `contrast()`, 0 to 4 |
 | `grain` | 0: luminance noise over the backdrop, 0 to 1, the same pixels as lys-ui's `-lys-grain` at that opacity with the surface's corner as origin |
@@ -360,8 +407,8 @@ gaps:
 
 | Key | Default |
 | --- | --- |
-| `inner` | 0: logical pixels between neighbouring tiled windows, borders included |
-| `outer` | 0: logical pixels between the tiled windows and the edges of the output's usable area; one number for every side, or `[top, right, bottom, left]` |
+| `inner` | 8: logical pixels between neighbouring tiled windows, borders included |
+| `outer` | 8: logical pixels between the tiled windows and the edges of the output's usable area; one number for every side, or `[top, right, bottom, left]` |
 
 Floating and fullscreen windows ignore gaps; a tab group's strip and its windows
 sit inside the group's tile.
@@ -380,7 +427,7 @@ animations:
     windows_move: {curve: wobbly}
 ```
 
-Off unless `enabled: true`.
+On unless `enabled: false`.
 
 `reduced_motion: true` is for people whom motion on screen bothers. Things no
 longer travel, stretch, bounce or follow the pointer: what the table below marks
@@ -404,12 +451,33 @@ curves) and `spring` (stiffness 170, damping 26).
 
 `events` configures each event with `enabled`, `curve`, `duration`
 (milliseconds, for bézier curves; a spring takes none) and, where the table
-lists styles, `style`. Each key an event leaves out comes from its parent;
-`style` comes from the event's own default:
+lists styles, `style`. Each key an event leaves out comes from its parent, or
+from the event's own default motion below if neither it nor a parent's key sets
+that; a `duration` with no curve in the file runs `ease_out`, since a spring takes
+none. `style` comes from the event's own default.
+
+With no config each event has a spring of its own, tuned to how far things travel
+and how much attention they should draw:
+
+| Event | Spring (stiffness, damping) | Overshoot | 95% there at | Style |
+| --- | --- | --- | --- | --- |
+| `windows_move` | 380, 34 | 0.4% | 197 ms | |
+| `windows_in` | 420, 30 | 3.4% | 149 ms | `popin 92%` |
+| `windows_out` | 700, 48 | 0.1% | 154 ms | `popin 94%` |
+| `windows_minimize` | 220, 30 | none | 326 ms | `genie` |
+| `workspaces` | 300, 34 | none | 266 ms | `slide` |
+| `layers_in` | 500, 42 | none | 192 ms | `fade` |
+| `layers_out` | 700, 50 | none | 164 ms | `fade` |
+| `fade`, `border` | 600, 49 | none | 194 ms | |
+
+`fade_out` shares `windows_out`'s spring, and `borderangle` is off. A fade keeps
+its opacity at 1 when a spring passes its target.
+
+The events:
 
 | Event | Parent | Animates | Styles | Reduced motion |
 | --- | --- | --- | --- | --- |
-| `global` | | Defaults: `ease_out` over 250 ms | | fade |
+| `global` | | Defaults for events with no motion of their own: `ease_out` over 250 ms | | fade |
 | `windows` | `global` | Every window animation | | still |
 | `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between. A change that resizes windows starts once every one of them has drawn its new size, or after 100 ms at most, so a tiling change lands in one frame (see [layout changes land together](./architecture#layout-changes-land-together)) | `morph`: the window stretches ahead of itself toward where it is going, its content filling a liquid blob that melts the rectangle it is at into the one it is about to reach; `elastic`: a window dragged with the mouse bends like jelly, the part under the pointer following it and the rest catching up on a spring (`windows_move`'s, when its curve is a spring) until it settles flat | still |
 | `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows | still |
@@ -577,13 +645,13 @@ client's drag and drop.
 
 | Key | Default |
 | --- | --- |
-| `height` | 15 |
-| `padding` | 5, between the tab strip and the windows |
-| `text_height` | 8 |
-| `text_padding` | 3 |
+| `height` | 22 |
+| `padding` | 6, between the tab strip and the windows |
+| `text_height` | 11 |
+| `text_padding` | 8 |
 | `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |
 | `icon_theme` | The freedesktop icon theme tab icons named by windows resolve in, searched in the XDG data directories. Default: `Adwaita`, which falls back to `hicolor` |
-| `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `mauve`/`crust`, `surface0`/`text` and `red`/`crust` |
+| `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `#e0947a`/`crust`, `surface0`/`text` and `red`/`crust` |
 
 A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
 the title, as a square as tall as the tab less `text_padding` on each side,

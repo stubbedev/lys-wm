@@ -430,6 +430,7 @@ type Config struct {
 	BlurLayers      []string
 	Gestures        compositor.Gestures
 	Overview        compositor.OverviewStyle
+	Slower          map[render.Speed]compositor.Effects
 }
 
 var mocha = map[string]render.Color{
@@ -581,7 +582,7 @@ func (p *parser) overview(r rawOverview) compositor.OverviewStyle {
 	return style
 }
 
-func (p *parser) animations(r rawAnimations) anim.Table {
+func (p *parser) animations(r rawAnimations, motion map[anim.Event]anim.Setting) anim.Table {
 	shapes := anim.Builtins()
 	for _, name := range slices.Sorted(maps.Keys(r.Curves)) {
 		at := r.Curves[name]
@@ -633,14 +634,14 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 		}
 		settings[e] = s
 	}
-	enabled := r.Enabled != nil && *r.Enabled
+	enabled := r.Enabled == nil || *r.Enabled
 	resolve := func(s map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error) {
 		return anim.Resolve(enabled, s)
 	}
 	if enabled && r.ReducedMotion != nil && *r.ReducedMotion {
 		resolve = anim.ResolveReduced
 	}
-	table, errs := resolve(settings)
+	table, errs := resolve(anim.Over(settings, motion))
 	for _, e := range anim.Events() {
 		if err := errs[e]; err != nil {
 			p.fail(lines[e], "animations.events."+e.String(), "%v", err)
@@ -671,7 +672,9 @@ func (p *parser) opacity(a *At[float64], key string, fallback float32) float32 {
 
 func (p *parser) shadow(r rawShadow, def compositor.Shadow) compositor.Shadow {
 	s := def
-	s.Enabled = r.Enabled != nil && *r.Enabled
+	if r.Enabled != nil {
+		s.Enabled = *r.Enabled
+	}
 	s.Sharp = r.Sharp != nil && *r.Sharp
 	s.Range = p.nonNegative(r.Range, "decoration.shadow.range", def.Range)
 	s.Power = p.atLeast(r.RenderPower, "decoration.shadow.render_power", def.Power, 1, "from 1 to 4")
@@ -689,7 +692,11 @@ func (p *parser) shadow(r rawShadow, def compositor.Shadow) compositor.Shadow {
 		s.Scale = *v
 	}
 	s.Active = p.optColor(r.Color, "decoration.shadow.color", def.Active)
-	s.Inactive = p.optColor(r.ColorInactive, "decoration.shadow.color_inactive", s.Active)
+	inactive := def.Inactive
+	if r.Color != nil {
+		inactive = s.Active
+	}
+	s.Inactive = p.optColor(r.ColorInactive, "decoration.shadow.color_inactive", inactive)
 	return s
 }
 
@@ -790,8 +797,8 @@ func (p *parser) micaPasses(a *At[int]) int {
 	return v
 }
 
-func (p *parser) gaps(r rawGaps) wm.Gaps {
-	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", 0)}
+func (p *parser) gaps(r rawGaps, def wm.Gaps) wm.Gaps {
+	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", def.Inner), Outer: def.Outer}
 	if r.Outer == nil {
 		return g
 	}
@@ -1172,6 +1179,49 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	return rule
 }
 
+func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
+	return compositor.Decor{
+		BorderWidth: p.nonNegative(raw.Borders.Width, "borders.width", def.BorderWidth),
+		Rounding:    p.nonNegative(raw.Decoration.Rounding, "decoration.rounding", def.Rounding),
+		Opacity: compositor.Opacity{
+			Active:     p.opacity(raw.Decoration.ActiveOpacity, "decoration.active_opacity", def.Opacity.Active),
+			Inactive:   p.opacity(raw.Decoration.InactiveOpacity, "decoration.inactive_opacity", def.Opacity.Inactive),
+			Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
+		},
+		Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
+		Blur: compositor.Blur{
+			Enabled:  raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
+			Withhold: def.Blur.Withhold && raw.Decoration.Blur.Enabled == nil && len(raw.Decoration.Blur.Layers) == 0,
+			Size:     p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
+			Passes:   p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
+			XRay:     raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
+			Look:     p.look(raw.Decoration.Blur.rawLook, "decoration.blur").Over(def.Blur.Look),
+			Mica: compositor.Mica{
+				Enabled: raw.Decoration.Blur.Mica.Enabled != nil && *raw.Decoration.Blur.Mica.Enabled,
+				Size:    p.positive(raw.Decoration.Blur.Mica.Size, "decoration.blur.mica.size", 0),
+				Passes:  p.micaPasses(raw.Decoration.Blur.Mica.Passes),
+				Tint:    p.tint(raw.Decoration.Blur.Mica.Tint, "decoration.blur.mica.tint"),
+			},
+		},
+		Dim: compositor.Dim{
+			Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
+			Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),
+		},
+		ActiveBorder:   p.border(raw.Borders.Active, "borders.active", def.ActiveBorder),
+		InactiveBorder: p.border(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
+		Tab: compositor.TabStyle{
+			Height:      p.positive(raw.Tabs.Height, "tabs.height", def.Tab.Height),
+			Padding:     p.nonNegative(raw.Tabs.Padding, "tabs.padding", def.Tab.Padding),
+			TextHeight:  p.positive(raw.Tabs.TextHeight, "tabs.text_height", def.Tab.TextHeight),
+			TextPadding: p.nonNegative(raw.Tabs.TextPadding, "tabs.text_padding", def.Tab.TextPadding),
+			Active:      p.tabColors(raw.Tabs.Active, "tabs.active", def.Tab.Active),
+			Inactive:    p.tabColors(raw.Tabs.Inactive, "tabs.inactive", def.Tab.Inactive),
+			Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
+		},
+		DragPreview: p.dragPreview(raw.DragPreview, def.DragPreview),
+	}
+}
+
 func Parse(file string, data []byte) (Config, error) {
 	p := &parser{file: file, palette: map[string]render.Color{}}
 	var doc yaml.Node
@@ -1197,55 +1247,17 @@ func Parse(file string, data []byte) (Config, error) {
 		}
 		p.palette[name] = c
 	}
-	def := compositor.DefaultDecor()
+	look := compositor.DefaultLook(render.GPU)
 	cfg := Config{
 		File: file,
 		Keyboard: xkb.Names{
 			Rules: raw.Input.Keyboard.Rules, Model: raw.Input.Keyboard.Model, Layout: raw.Input.Keyboard.Layout,
 			Variant: raw.Input.Keyboard.Variant, Options: raw.Input.Keyboard.Options,
 		},
-		RepeatRate:  p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
-		RepeatDelay: p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
-		Input:       p.input(raw.Input),
-		Decor: compositor.Decor{
-			BorderWidth: p.nonNegative(raw.Borders.Width, "borders.width", def.BorderWidth),
-			Rounding:    p.nonNegative(raw.Decoration.Rounding, "decoration.rounding", def.Rounding),
-			Opacity: compositor.Opacity{
-				Active:     p.opacity(raw.Decoration.ActiveOpacity, "decoration.active_opacity", def.Opacity.Active),
-				Inactive:   p.opacity(raw.Decoration.InactiveOpacity, "decoration.inactive_opacity", def.Opacity.Inactive),
-				Fullscreen: p.opacity(raw.Decoration.FullscreenOpacity, "decoration.fullscreen_opacity", def.Opacity.Fullscreen),
-			},
-			Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
-			Blur: compositor.Blur{
-				Enabled: raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
-				Size:    p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
-				Passes:  p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
-				XRay:    raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
-				Look:    p.look(raw.Decoration.Blur.rawLook, "decoration.blur").Over(wm.Look{}),
-				Mica: compositor.Mica{
-					Enabled: raw.Decoration.Blur.Mica.Enabled != nil && *raw.Decoration.Blur.Mica.Enabled,
-					Size:    p.positive(raw.Decoration.Blur.Mica.Size, "decoration.blur.mica.size", 0),
-					Passes:  p.micaPasses(raw.Decoration.Blur.Mica.Passes),
-					Tint:    p.tint(raw.Decoration.Blur.Mica.Tint, "decoration.blur.mica.tint"),
-				},
-			},
-			Dim: compositor.Dim{
-				Inactive: raw.Decoration.DimInactive != nil && *raw.Decoration.DimInactive,
-				Strength: p.opacity(raw.Decoration.DimStrength, "decoration.dim_strength", def.Dim.Strength),
-			},
-			ActiveBorder:   p.border(raw.Borders.Active, "borders.active", def.ActiveBorder),
-			InactiveBorder: p.border(raw.Borders.Inactive, "borders.inactive", def.InactiveBorder),
-			Tab: compositor.TabStyle{
-				Height:      p.positive(raw.Tabs.Height, "tabs.height", def.Tab.Height),
-				Padding:     p.nonNegative(raw.Tabs.Padding, "tabs.padding", def.Tab.Padding),
-				TextHeight:  p.positive(raw.Tabs.TextHeight, "tabs.text_height", def.Tab.TextHeight),
-				TextPadding: p.nonNegative(raw.Tabs.TextPadding, "tabs.text_padding", def.Tab.TextPadding),
-				Active:      p.tabColors(raw.Tabs.Active, "tabs.active", def.Tab.Active),
-				Inactive:    p.tabColors(raw.Tabs.Inactive, "tabs.inactive", def.Tab.Inactive),
-				Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
-			},
-			DragPreview: p.dragPreview(raw.DragPreview, def.DragPreview),
-		},
+		RepeatRate:      p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
+		RepeatDelay:     p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
+		Input:           p.input(raw.Input),
+		Decor:           p.decor(raw, look.Decor),
 		WM:              compositor.DefaultSettings(),
 		Xwayland:        raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,
 		ZeroScaling:     raw.Xwayland.ZeroScaling == nil || *raw.Xwayland.ZeroScaling,
@@ -1271,8 +1283,14 @@ func Parse(file string, data []byte) (Config, error) {
 	}
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
-	cfg.WM.Gaps = p.gaps(raw.Gaps)
-	cfg.Animations = p.animations(raw.Animations)
+	cfg.WM.Gaps = p.gaps(raw.Gaps, cfg.WM.Gaps)
+	cfg.Animations = p.animations(raw.Animations, look.Motion)
+	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
+	again := &parser{file: file, palette: p.palette}
+	for _, speed := range compositor.SlowerSpeeds {
+		slower := compositor.DefaultLook(speed)
+		cfg.Slower[speed] = compositor.Effects{Decor: again.decor(raw, slower.Decor), Animations: again.animations(raw.Animations, slower.Motion)}
+	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
 	cfg.Overview = p.overview(raw.Overview)
 	for _, l := range raw.Decoration.Blur.Layers {
@@ -1355,7 +1373,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
-	cfg.Animations, cfg.BlurLayers = c.Animations, c.BlurLayers
+	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err

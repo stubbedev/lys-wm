@@ -15,12 +15,13 @@ import (
 )
 
 type Blur struct {
-	Enabled bool
-	Size    int
-	Passes  int
-	XRay    bool
-	Look    wm.Look
-	Mica    Mica
+	Enabled  bool
+	Withhold bool
+	Size     int
+	Passes   int
+	XRay     bool
+	Look     wm.Look
+	Mica     Mica
 }
 
 type Mica struct {

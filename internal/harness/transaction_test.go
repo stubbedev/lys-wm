@@ -391,7 +391,7 @@ func testAnimationsStartFromTheLandingAndRetargetFromWhatIsShown(t *testing.T, s
 	now := time.Hour
 	var gaps20, gaps40 compositor.Config
 	h := start(t, func(cfg *compositor.Config) {
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.PlainDecor()
 		cfg.Animations = linearMoves(t, time.Second)
 		cfg.Clock = func() time.Duration { return now }
 		cfg.HoldBound = time.Hour

@@ -77,6 +77,7 @@ type Config struct {
 	BlurLayers      []string
 	Gestures        Gestures
 	Overview        OverviewStyle
+	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
 }
 
@@ -99,6 +100,13 @@ type CursorConfig struct {
 
 const DefaultCursorSize = 24
 
+type Effects struct {
+	Decor      Decor
+	Animations anim.Table
+}
+
+var SlowerSpeeds = [...]render.Speed{render.CPUDriver, render.Software}
+
 func PlainSettings() wm.Settings {
 	return wm.Settings{
 		Collapse: wm.CollapseEmptySplits,
@@ -107,7 +115,9 @@ func PlainSettings() wm.Settings {
 }
 
 func DefaultSettings() wm.Settings {
-	return PlainSettings()
+	s := PlainSettings()
+	s.Gaps = wm.Gaps{Inner: lookUnit, Outer: wm.Insets{Top: lookUnit, Right: lookUnit, Bottom: lookUnit, Left: lookUnit}}
+	return s
 }
 
 func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
@@ -129,7 +139,12 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 
 func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 	cfg := PlainConfig(keymap, font)
-	cfg.WM, cfg.Decor = DefaultSettings(), DefaultDecor()
+	cfg.WM, cfg.Decor, cfg.Animations = DefaultSettings(), DefaultDecor(), anim.MustResolve(anim.DefaultMotion())
+	cfg.Slower = map[render.Speed]Effects{}
+	for _, s := range SlowerSpeeds {
+		l := DefaultLook(s)
+		cfg.Slower[s] = Effects{Decor: l.Decor, Animations: anim.MustResolve(l.Motion)}
+	}
 	return cfg
 }
 
@@ -320,6 +335,9 @@ func validate(cfg Config) (binds.Map, error) {
 }
 
 func (c *Compositor) adopt(cfg Config, m binds.Map) {
+	if e, slower := cfg.Slower[c.renderer.Speed()]; slower {
+		cfg.Decor, cfg.Animations = e.Decor, e.Animations
+	}
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.colorManagement = cfg.ColorManagement
@@ -423,6 +441,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if c.effects, err = backgroundeffect.New(display); err != nil {
 		return err
 	}
+	if err := c.effects.Offer(!c.decor.Blur.Withhold); err != nil {
+		return err
+	}
 	if err := c.addPacing(l, display); err != nil {
 		return err
 	}
@@ -499,7 +520,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(gestureErr, c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

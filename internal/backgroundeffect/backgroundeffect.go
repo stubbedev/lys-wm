@@ -4,6 +4,8 @@
 package backgroundeffect
 
 import (
+	"errors"
+
 	sbe "github.com/stubbedev/lys-wm/internal/protocol/server/backgroundeffect"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/region"
@@ -15,19 +17,40 @@ import (
 const version = 1
 
 type Manager struct {
-	regions *surface.Latched[*region.Region]
+	regions  *surface.Latched[*region.Region]
+	withheld bool
+	bound    map[*sbe.ExtBackgroundEffectManagerV1]struct{}
 }
 
 func New(d *server.Display) (*Manager, error) {
-	m := &Manager{regions: surface.NewLatched[*region.Region](nil)}
+	m := &Manager{regions: surface.NewLatched[*region.Region](nil), bound: map[*sbe.ExtBackgroundEffectManagerV1]struct{}{}}
 	if _, err := d.AddGlobal(sbe.ExtBackgroundEffectManagerV1Interface, version, m.bind); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
+func (m *Manager) Offer(blur bool) error {
+	if m.withheld == !blur {
+		return nil
+	}
+	m.withheld = !blur
+	var errs []error
+	for obj := range m.bound {
+		errs = append(errs, obj.SendCapabilities(m.capabilities()))
+	}
+	return errors.Join(errs...)
+}
+
+func (m *Manager) capabilities() sbe.ExtBackgroundEffectManagerV1Capability {
+	if m.withheld {
+		return 0
+	}
+	return sbe.ExtBackgroundEffectManagerV1CapabilityBlur
+}
+
 func (m *Manager) BlurRegion(s *surface.Surface) region.Region {
-	if r := m.regions.Get(s); r != nil {
+	if r := m.regions.Get(s); r != nil && !m.withheld {
 		return *r
 	}
 	return region.Region{}
@@ -38,7 +61,12 @@ func (m *Manager) bind(c *server.Client, id wire.ObjectID, v uint32) error {
 	if err != nil {
 		return err
 	}
-	return obj.SendCapabilities(sbe.ExtBackgroundEffectManagerV1CapabilityBlur)
+	m.bound[obj] = struct{}{}
+	server.OnDestroy(obj, func() error {
+		delete(m.bound, obj)
+		return nil
+	})
+	return obj.SendCapabilities(m.capabilities())
 }
 
 type requests struct{ m *Manager }

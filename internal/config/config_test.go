@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"maps"
@@ -88,7 +89,7 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {title: ^Open, dim_around: true}\n")); err != nil || !wm.Decide(c.Rules, "", "Open File").DimAround {
 		t.Errorf("a rule's dim_around: %+v, %v", c.Rules, err)
 	}
-	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != 3 || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
+	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != compositor.DefaultDecor().Shadow.Power || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
 		t.Errorf("decoration.shadow parsed to %+v", s)
 	}
 	if c, err := Parse("t.yaml", []byte("borders:\n  active: {colors: [mauve, \"#00ff0080\"], angle: 45}\n")); err != nil || !slices.Equal(c.Decor.ActiveBorder.Colors(), []render.Color{{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, {G: 0xff, A: 0x80}}) {
@@ -97,7 +98,7 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("decoration:\n  blur:\n    xray: true\n")); err != nil || !c.Decor.Blur.XRay {
 		t.Errorf("decoration.blur.xray: %+v, %v", c.Decor.Blur, err)
 	}
-	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: 8, Passes: 2}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
+	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor().Blur.Size, Passes: compositor.DefaultDecor().Blur.Passes, Look: compositor.DefaultDecor().Blur.Look}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
 		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
 	}
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Blur {
@@ -118,14 +119,17 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Animations.Curve(anim.Windows).Duration() != 300*time.Millisecond {
 		t.Error("windows does not inherit from global")
 	}
-	if c, err := Parse("t.yaml", []byte("animations:\n  events:\n    global: {curve: linear, duration: 100}\n")); err != nil || c.Animations.Curve(anim.Global) != anim.Instant {
-		t.Errorf("animations are on without enabled: true: %v, %v", c.Animations, err)
+	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: false\n  events:\n    global: {curve: linear, duration: 100}\n")); err != nil || c.Animations.Curve(anim.Global) != anim.Instant {
+		t.Errorf("animations are on with enabled: false: %v, %v", c.Animations, err)
 	}
 	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n  reduced_motion: true\n")); err != nil || !c.Animations.Reduced() || c.Animations.Curve(anim.WindowsMove) != anim.Instant || c.Animations.Curve(anim.FadeIn) == anim.Instant {
 		t.Errorf("reduced_motion: %v, %v", c.Animations, err)
 	}
-	if c, err := Parse("t.yaml", []byte("animations:\n  reduced_motion: true\n")); err != nil || c.Animations != (anim.Table{}) {
-		t.Errorf("reduced_motion without enabled animates: %v, %v", c.Animations, err)
+	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: false\n  reduced_motion: true\n")); err != nil || c.Animations.Reduced() || c.Animations.Curve(anim.FadeIn) != anim.Instant {
+		t.Errorf("reduced_motion with enabled: false animates: %v, %v", c.Animations, err)
+	}
+	if c, err := Parse("t.yaml", []byte("animations:\n  reduced_motion: true\n")); err != nil || !c.Animations.Reduced() || c.Animations.Curve(anim.FadeIn) == anim.Instant {
+		t.Errorf("reduced_motion on the default animations: %v, %v", c.Animations, err)
 	}
 	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n")); err != nil || c.Animations.Reduced() {
 		t.Errorf("reduced motion is on unasked: %v", err)
@@ -193,7 +197,7 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 	if cfg.Input.Devices != nil || cfg.Input.Pointer != (session.DeviceConfig{}) || cfg.Input.Touchpad != (session.DeviceConfig{}) {
 		t.Fatalf("input %+v", cfg.Input)
 	}
-	if cfg.Animations != (anim.Table{}) {
+	if cfg.Animations != anim.MustResolve(anim.DefaultMotion()) {
 		t.Fatalf("animations %+v without config", cfg.Animations)
 	}
 	if cfg.Decor != compositor.DefaultDecor() || cfg.WM != compositor.DefaultSettings() || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
@@ -562,5 +566,113 @@ func TestTheOverviewKeysParseAndCheck(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("gestures:\n  swipe:\n    - {fingers: 3, direction: left, drive: overview}\n")); err == nil || !strings.Contains(err.Error(), "overview takes") {
 		t.Errorf("a sideways overview: %v", err)
+	}
+}
+
+func TestAnEmptyConfigGetsTheDefaultLook(t *testing.T) {
+	cfg, err := Parse("empty.yaml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := compositor.DefaultDecor()
+	if def.Rounding == 0 || !def.Shadow.Enabled || cfg.WM.Gaps == (wm.Gaps{}) {
+		t.Fatalf("the default look is plain: %+v, gaps %+v", def, cfg.WM.Gaps)
+	}
+	if cfg.Decor != def || cfg.WM.Gaps != compositor.DefaultSettings().Gaps {
+		t.Errorf("decor %+v, gaps %+v", cfg.Decor, cfg.WM.Gaps)
+	}
+	if cfg.Decor.Blur.Withhold {
+		t.Error("a GPU is refused blur")
+	}
+	for _, e := range []anim.Event{anim.WindowsMove, anim.WindowsIn, anim.WindowsOut, anim.WindowsMinimize, anim.Workspaces, anim.LayersIn, anim.LayersOut, anim.Border} {
+		if cfg.Animations.Curve(e) == anim.Instant {
+			t.Errorf("%s does not animate", e)
+		}
+	}
+	if cfg.Animations.Curve(anim.BorderAngle) != anim.Instant {
+		t.Error("a border that holds one colour animates its angle")
+	}
+	soft := cfg.Slower[render.Software]
+	if soft.Decor.Rounding != def.Rounding || soft.Decor.Shadow.Enabled || !soft.Decor.Blur.Withhold || soft.Animations.Curve(anim.Workspaces) != anim.Instant {
+		t.Errorf("the software renderer's look: %+v", soft)
+	}
+	if soft.Animations.Curve(anim.WindowsMove) == anim.Instant {
+		t.Error("the software renderer's windows do not animate")
+	}
+	driver := cfg.Slower[render.CPUDriver]
+	if driver.Decor.Rounding != def.Rounding || !driver.Decor.Shadow.Enabled || !driver.Decor.Blur.Withhold || driver.Animations.Curve(anim.Workspaces) == anim.Instant {
+		t.Errorf("a CPU driver's look: %+v", driver)
+	}
+}
+
+func TestExplicitConfigBeatsTheLookOfEveryRenderer(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte(`
+decoration:
+  rounding: 3
+  shadow: {enabled: false}
+  blur: {enabled: false}
+gaps: {inner: 0, outer: 0}
+borders: {width: 2, active: "#112233", inactive: "#445566"}
+animations:
+  enabled: false
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WM.Gaps != (wm.Gaps{}) {
+		t.Errorf("gaps %+v", cfg.WM.Gaps)
+	}
+	check := func(name string, d compositor.Decor, a anim.Table) {
+		t.Helper()
+		if d.Rounding != 3 || d.Shadow.Enabled || d.BorderWidth != 2 || d.Blur.Withhold {
+			t.Errorf("%s: %+v", name, d)
+		}
+		for _, e := range anim.Events() {
+			if a.Curve(e) != anim.Instant {
+				t.Errorf("%s animates %s with enabled: false", name, e)
+			}
+		}
+	}
+	check("the GPU look", cfg.Decor, cfg.Animations)
+	for speed, e := range cfg.Slower {
+		check(fmt.Sprint("speed ", speed), e.Decor, e.Animations)
+	}
+
+	on, err := Parse("t.yaml", []byte("decoration:\n  shadow: {enabled: true}\n  blur: {enabled: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := on.Slower[render.Software].Decor; !s.Shadow.Enabled || !s.Blur.Enabled || s.Blur.Withhold {
+		t.Errorf("the software renderer overrides what was asked for: %+v", s)
+	}
+	layers, err := Parse("t.yaml", []byte("decoration:\n  blur: {layers: [waybar]}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layers.Slower[render.CPUDriver].Decor.Blur.Withhold {
+		t.Error("blur.layers on a CPU driver is withheld")
+	}
+}
+
+func TestAConfigsTimingsLayOverTheDefaultMotion(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("animations:\n  events:\n    global: {curve: linear, duration: 100}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := cfg.Animations.Curve(anim.WindowsMove); c.Duration() != 100*time.Millisecond {
+		t.Errorf("a curve on global does not reach windows_move: %v", c.Duration())
+	}
+	cfg, err = Parse("t.yaml", []byte("animations:\n  events:\n    windows_in: {duration: 90}\n"))
+	if err != nil {
+		t.Fatalf("a duration over the default spring: %v", err)
+	}
+	if c := cfg.Animations.Curve(anim.WindowsIn); c.Duration() != 90*time.Millisecond {
+		t.Errorf("windows_in with a duration: %v", c.Duration())
+	}
+	if c := cfg.Animations.Curve(anim.WindowsOut); c != anim.MustResolve(anim.DefaultMotion()).Curve(anim.WindowsOut) {
+		t.Error("a duration on windows_in reached windows_out")
+	}
+	if _, err := Parse("t.yaml", []byte("animations:\n  events:\n    windows_in: {curve: spring, duration: 90}\n")); err == nil {
+		t.Error("a duration on a spring the config names is accepted")
 	}
 }

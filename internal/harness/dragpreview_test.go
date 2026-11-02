@@ -115,7 +115,7 @@ func TestATiledWindowDraggedPreviewsWhereItDrops(t *testing.T) {
 		dragTo(h, image.Pt(150, 90))
 		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 			var err error
-			want, err = comp.WM().DropTarget(id, image.Pt(150, 90), compositor.DefaultSettings().Autotile, wm.Spacing{TabBar: compositor.DefaultDecor().Tab.Height + compositor.DefaultDecor().Tab.Padding})
+			want, err = comp.WM().DropTarget(id, image.Pt(150, 90), compositor.PlainSettings().Autotile, wm.Spacing{TabBar: compositor.PlainDecor().Tab.Height + compositor.PlainDecor().Tab.Padding})
 			return err
 		})
 		inside := want.Min.Add(want.Size().Div(2))

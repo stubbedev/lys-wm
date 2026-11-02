@@ -8,10 +8,11 @@ page is what it does and what it will not do.
 - **Tiling like hy3**: a tree of horizontal and vertical splits and tab groups,
   autotile by available width, directional focus and move, numbered workspaces
   per output, floating windows, minimizing, an overview, window rules, submaps.
-- **Drawing**: client surfaces, borders and tab bars. On request, rounded
-  corners, gaps, gradient borders, shadows, blur, opacity, dimming,
-  animations and [screen shaders](../shaders); [Config](../config) has them, and
-  they are all off by default.
+- **Drawing**: client surfaces, borders and tab bars. Rounded corners, gaps,
+  soft shadows, spring animations and blur for clients that ask are on by
+  default, as far as the renderer affords them ([the default
+  look](../config#the-default-look)). Gradient borders, opacity, dimming and
+  [screen shaders](../shaders) are on request; [Config](../config) has them all.
 - **Desktop protocols** for a full session: layer-shell, session lock, idle
   notify and inhibit, data control, screen capture, foreign toplevels,
   workspaces, output management, gamma and colour-matrix control, touchpad

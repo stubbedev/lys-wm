@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 	"github.com/stubbedev/lys-ui/icontheme"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
@@ -131,8 +132,49 @@ func PlainDecor() Decor {
 	}
 }
 
+const lookUnit = 8
+
+var (
+	lookAccent   = render.Color{R: 0xe0, G: 0x94, B: 0x7a, A: 0xff}
+	lookHairline = render.Color{R: 0xff, G: 0xff, B: 0xff, A: 0x14}
+)
+
 func DefaultDecor() Decor {
-	return PlainDecor()
+	d := PlainDecor()
+	d.Rounding = lookUnit
+	d.ActiveBorder, d.InactiveBorder = SolidBorder(lookAccent), SolidBorder(lookHairline)
+	d.Shadow = Shadow{
+		Enabled: true, Range: 24, Power: 2, Scale: 1, Offset: image.Pt(0, 8),
+		Active:   render.Color{A: 0x60},
+		Inactive: render.Color{A: 0x38},
+	}
+	d.Blur = Blur{Size: 6, Passes: 2, Look: wm.Look{SaturationShift: 0.3}}
+	d.Tab = TabStyle{
+		Height: 22, Padding: 6, TextHeight: 11, TextPadding: 8,
+		Active:   TabColors{Background: lookAccent, Text: crust},
+		Inactive: TabColors{Background: surface0, Text: textFg},
+		Urgent:   TabColors{Background: red, Text: crust},
+	}
+	return d
+}
+
+type Look struct {
+	Decor  Decor
+	Motion map[anim.Event]anim.Setting
+}
+
+func DefaultLook(s render.Speed) Look {
+	l := Look{Decor: DefaultDecor(), Motion: anim.DefaultMotion()}
+	if s == render.GPU {
+		return l
+	}
+	l.Decor.Blur.Withhold = true
+	if s == render.CPUDriver {
+		return l
+	}
+	l.Decor.Shadow.Enabled = false
+	l.Motion = anim.FrugalMotion()
+	return l
 }
 
 func (c *Compositor) spacing() wm.Spacing {
