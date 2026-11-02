@@ -306,6 +306,11 @@
       "package": "lysescape",
       "source": "lys-lib",
       "path": "wlr/lys-escape-v1.xml"
+    },
+    {
+      "package": "backgroundeffect",
+      "source": "wayland-protocols",
+      "path": "staging/ext-background-effect/ext-background-effect-v1.xml"
     }
   ]
 }
