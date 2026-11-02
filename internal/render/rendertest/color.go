@@ -149,7 +149,7 @@ func YUVThroughAColorTransform(t *testing.T, g GPU, node string) {
 	want := transform.Apply([4]float32{float32(plain[2]) / 255, float32(plain[1]) / 255, float32(plain[0]) / 255, 1})
 	for i, channel := range [3]int{2, 1, 0} {
 		v := max(min(want[channel], 1), 0)
-		if d := int(got[i]) - int(v*255+0.5); d > colorTolerance+2 || d < -colorTolerance-2 {
+		if d := int(got[i]) - int(float32(v*255)+0.5); d > colorTolerance+2 || d < -colorTolerance-2 {
 			t.Errorf("channel %d of a transformed NV12 sample is %d, want %v", i, got[i], v*255)
 		}
 	}
