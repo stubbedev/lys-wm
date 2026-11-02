@@ -638,7 +638,7 @@ func TestTheOverviewAnimatesOnASpringAndReversesInFlight(t *testing.T) {
 	if p := progress(); p != 0 {
 		t.Fatalf("opening starts at %v", p)
 	}
-	now = 100 * time.Millisecond
+	h.advanceClock(&now, 100*time.Millisecond)
 	mid := progress()
 	if mid <= 0 || mid >= 1 {
 		t.Fatalf("100ms in the spring is at %v", mid)
@@ -647,11 +647,11 @@ func TestTheOverviewAnimatesOnASpringAndReversesInFlight(t *testing.T) {
 	if p := progress(); p != mid {
 		t.Fatalf("reversing jumped from %v to %v", mid, p)
 	}
-	now += 8 * time.Millisecond
+	h.advanceClock(&now, 8*time.Millisecond)
 	if p := progress(); p < mid {
 		t.Fatalf("the spring lost its velocity: %v after %v", p, mid)
 	}
-	now += 5 * time.Second
+	h.advanceClock(&now, 5*time.Second)
 	h.Eventually("the overview gone", func(b *headless.Backend, comp *compositor.Compositor) bool {
 		return comp.OverviewProgress(now) == 0 && showing(10, 10, redPix)(b, comp)
 	})
@@ -868,7 +868,7 @@ func TestThreeFingersGrabASettlingOverview(t *testing.T) {
 	w.Stop()
 	h.Rendered(0)
 	h.dispatch("overview show")
-	now = 80 * time.Millisecond
+	h.advanceClock(&now, 80*time.Millisecond)
 	at := func() float64 {
 		var p float64
 		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
@@ -882,7 +882,7 @@ func TestThreeFingersGrabASettlingOverview(t *testing.T) {
 		t.Fatalf("80ms into opening the overview is at %v", held)
 	}
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureBegin(backend.Swipe, 3) })
-	now += time.Second
+	h.advanceClock(&now, time.Second)
 	if got := at(); got != held {
 		t.Fatalf("held fingers let it go from %v to %v", held, got)
 	}
@@ -892,7 +892,7 @@ func TestThreeFingersGrabASettlingOverview(t *testing.T) {
 		t.Fatalf("40 units from %v scrub to %v", held, got)
 	}
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureEnd(backend.Swipe, false) })
-	now += 5 * time.Second
+	h.advanceClock(&now, 5*time.Second)
 	if got := at(); got != 0 && got != 1 {
 		t.Fatalf("settled at %v", got)
 	}
@@ -1199,12 +1199,12 @@ func TestADroppedWindowFliesIntoItsThumbnail(t *testing.T) {
 		red.Stop()
 		blue.Stop()
 		h.dispatch("overview show")
-		now += time.Minute
+		h.advanceClock(&now, time.Minute)
 		h.Rendered(0)
 		plan := planOf(h, 0)
 		drop := centre(plan.Plus)
 		dragBetween(h, centre(plan.windows[2]), drop)
-		now += 30 * time.Millisecond
+		h.advanceClock(&now, 30*time.Millisecond)
 		var mid image.Point
 		var closing int
 		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
@@ -1227,7 +1227,7 @@ func TestADroppedWindowFliesIntoItsThumbnail(t *testing.T) {
 			}
 			return nil
 		})
-		now += time.Minute
+		h.advanceClock(&now, time.Minute)
 		h.Eventually("the flight over", func(b *headless.Backend, comp *compositor.Compositor) bool {
 			if err := comp.Frame(b.Outputs()[0]); err != nil {
 				return false
@@ -1282,6 +1282,14 @@ func TestAMovingOverviewFrameAllocatesNothing(t *testing.T) {
 		if got := testing.AllocsPerRun(100, func() { hover(b) }); got > closed {
 			t.Errorf("hovering allocates %v times, against %v with the overview closed", got, closed)
 		}
+		return nil
+	})
+}
+
+func (h *Harness) advanceClock(now *time.Duration, by time.Duration) {
+	h.t.Helper()
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		*now += by
 		return nil
 	})
 }

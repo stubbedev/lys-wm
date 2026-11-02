@@ -99,7 +99,7 @@ func BenchmarkOverviewSettledOneWindowDamages(b *testing.B) {
 		var now time.Duration
 		h, _ := overviewBenchHarness(b, open, &now, 30, false)
 		h.dispatch("overview show")
-		now += time.Minute
+		h.advanceClock(&now, time.Minute)
 		h.Rendered(0)
 		h.Do(func(bk *headless.Backend, c *compositor.Compositor) error {
 			o := bk.Outputs()[0]
@@ -157,7 +157,7 @@ func BenchmarkThumbRedraw(b *testing.B) {
 		var now time.Duration
 		h, _ := overviewBenchHarness(b, open, &now, 10, true)
 		h.dispatch("overview show")
-		now += time.Minute
+		h.advanceClock(&now, time.Minute)
 		h.Rendered(0)
 		h.Do(func(bk *headless.Backend, c *compositor.Compositor) error {
 			o := bk.Outputs()[0]
