@@ -563,6 +563,10 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			out := p.buf.Pix[y*p.buf.Stride:]
 			row := p.rows[y-dst.Min.Y]
+			if !masked && full == 0xff && !swap {
+				drawRow(out, tex.pix[row*tex.stride:], p.cols, clip.Min.X, clip.Max.X, dst.Min.X)
+				continue
+			}
 			from, to := solidSpan(m, y)
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				col := p.cols[x-dst.Min.X]
@@ -584,6 +588,19 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 				}
 			}
 		}
+	}
+}
+
+func drawRow(out, src []byte, cols []int, from, to, origin int) {
+	for x := from; x < to; x++ {
+		col := cols[x-origin] * 4
+		px := src[col : col+4 : col+4]
+		d := out[x*4 : x*4+4 : x*4+4]
+		if px[3] == 0xff {
+			d[0], d[1], d[2], d[3] = px[0], px[1], px[2], 0xff
+			continue
+		}
+		over(d, px[0], px[1], px[2], px[3])
 	}
 }
 
