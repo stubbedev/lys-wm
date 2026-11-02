@@ -42,9 +42,9 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 		h.Eventually("the cover shown over the glass", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return pixel(snapshot(b.Outputs()[0]), 100, 60) == [3]byte{0, 0xff, 0}
 		})
-		f0, r0 := frames(h), blurRedraws(h)
+		f0, r0 := framesAndBlurs(h)
 		pump(c, 200*time.Millisecond)
-		f1, r1 := frames(h), blurRedraws(h)
+		f1, r1 := framesAndBlurs(h)
 		if f1 == f0 {
 			t.Fatal("the animated window behind presented no frame")
 		}

@@ -341,9 +341,9 @@ func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
 			px := pixel(snapshot(b.Outputs()[0]), 55, 60)
 			return px[1] < 0x40 && px[2] > 0x40 && px[0] < 0x40
 		})
-		f0, r0 := frames(h), blurRedraws(h)
+		f0, r0 := framesAndBlurs(h)
 		pump(shell, 200*time.Millisecond)
-		f1, r1 := frames(h), blurRedraws(h)
+		f1, r1 := framesAndBlurs(h)
 		if f1 == f0 {
 			t.Fatal("the animated wallpaper presented no frame")
 		}
@@ -385,4 +385,12 @@ func TestGlassDrawsOnAnHDROutput(t *testing.T) {
 			t.Errorf("differs from the software renderer by %d", d)
 		}
 	})
+}
+
+func framesAndBlurs(h *Harness) (frames, redraws uint64) {
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		frames, redraws = b.Outputs()[0].Frames(), c.BlurRedraws()
+		return nil
+	})
+	return frames, redraws
 }

@@ -284,8 +284,8 @@ func (f *frame) clip(covered *region.Set) {
 	}
 	f.clipBack = back
 	out := f.clipOut[:0]
-	for i := len(back) - 1; i >= 0; i-- {
-		out = append(out, back[i])
+	for _, op := range slices.Backward(back) {
+		out = append(out, op)
 	}
 	f.cursorFrom = len(out)
 	out = append(out, tail...)
