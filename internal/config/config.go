@@ -587,7 +587,9 @@ func (p *parser) animations(r rawAnimations) anim.Table {
 		settings[e] = s
 	}
 	enabled := r.Enabled != nil && *r.Enabled
-	resolve := func(s map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error) { return anim.Resolve(enabled, s) }
+	resolve := func(s map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error) {
+		return anim.Resolve(enabled, s)
+	}
 	if enabled && r.ReducedMotion != nil && *r.ReducedMotion {
 		resolve = anim.ResolveReduced
 	}
