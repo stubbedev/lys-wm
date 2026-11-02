@@ -364,7 +364,10 @@ func (c *Compositor) rounded(w *window) bool {
 
 func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
 	if !c.rounded(w) {
-		return render.Mask{}
+		if !w.top.overflows(w.rect.Size()) {
+			return render.Mask{}
+		}
+		return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect)}}
 	}
 	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.decor.Rounding)}}
 }

@@ -42,6 +42,7 @@ type toplevel interface {
 	synced() bool
 	stale() bool
 	shownSize() image.Point
+	overflows(frame image.Point) bool
 	close() error
 	ping() error
 }
@@ -157,6 +158,11 @@ func (t xdgToplevel) stale() bool {
 
 func (t xdgToplevel) shownSize() image.Point {
 	return t.Geometry().Size()
+}
+
+func (t xdgToplevel) overflows(frame image.Point) bool {
+	shown := t.Geometry().Size()
+	return (shown.X > frame.X || shown.Y > frame.Y) && !t.stale()
 }
 
 func (t xdgToplevel) close() error {

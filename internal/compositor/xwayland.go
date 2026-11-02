@@ -118,6 +118,11 @@ func (t xToplevel) shownSize() image.Point {
 	return t.c.fromX(image.Rectangle{Min: at, Max: at.Add(t.Surface().Size())}).Size()
 }
 
+func (t xToplevel) overflows(frame image.Point) bool {
+	shown := t.shownSize()
+	return (shown.X > frame.X || shown.Y > frame.Y) && !t.stale()
+}
+
 func (c *Compositor) ScaleXwayland(clients func(*server.Client) bool) error {
 	c.xwaylandClients = clients
 	return errors.Join(c.layout.Physical(clients), c.reconcile())
