@@ -191,11 +191,15 @@ type Compositor struct {
 	interaction     *interaction
 	preview         *dragPreview
 	txn             *transaction
+	txnStore        transaction
 	holdTimer       *loop.Timer
 	holdBound       time.Duration
 	holds           HoldStats
 	awaited         []*window
 	layoutDirty     bool
+	dragPending     bool
+	dragMovedAt     time.Duration
+	releasing       bool
 	lagging         bool
 	wm              wm.State
 	settings        wm.Settings

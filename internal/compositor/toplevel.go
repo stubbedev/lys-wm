@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"image"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/output"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
@@ -36,7 +37,8 @@ type toplevel interface {
 	settled(w want) bool
 	apply(w want) error
 	resizes(w want) bool
-	answer() func(*surface.Update) bool
+	mark() answerMark
+	answers(u *surface.Update, m answerMark) bool
 	synced() bool
 	stale() bool
 	shownSize() image.Point
@@ -79,21 +81,41 @@ func (t xdgToplevel) scaled() bool {
 	return t.Requested().Bounds != (image.Point{})
 }
 
-func xdgState(w want) shell.State {
-	st := shell.State{Size: w.rect.Size(), Bounds: w.bounds}
+type answerMark struct {
+	serial uint32
+	size   image.Point
+}
+
+var (
+	tiledStates = []shell.ToplevelState{
+		sxdg.XdgToplevelStateTiledLeft, sxdg.XdgToplevelStateTiledRight, sxdg.XdgToplevelStateTiledTop, sxdg.XdgToplevelStateTiledBottom,
+		sxdg.XdgToplevelStateConstrainedLeft, sxdg.XdgToplevelStateConstrainedRight, sxdg.XdgToplevelStateConstrainedTop, sxdg.XdgToplevelStateConstrainedBottom,
+	}
+	activatedTiledStates      = append(slices.Clone(tiledStates), sxdg.XdgToplevelStateActivated)
+	fullscreenStates          = []shell.ToplevelState{sxdg.XdgToplevelStateFullscreen}
+	activatedFullscreenStates = []shell.ToplevelState{sxdg.XdgToplevelStateFullscreen, sxdg.XdgToplevelStateActivated}
+	activatedStates           = []shell.ToplevelState{sxdg.XdgToplevelStateActivated}
+)
+
+func xdgStates(w want) []shell.ToplevelState {
+	tiled, fullscreen := w.placed && w.layer == wm.LayerTiled, w.placed && w.layer == wm.LayerFullscreen
 	switch {
-	case !w.placed:
-	case w.layer == wm.LayerTiled:
-		st.States = append(st.States,
-			sxdg.XdgToplevelStateTiledLeft, sxdg.XdgToplevelStateTiledRight, sxdg.XdgToplevelStateTiledTop, sxdg.XdgToplevelStateTiledBottom,
-			sxdg.XdgToplevelStateConstrainedLeft, sxdg.XdgToplevelStateConstrainedRight, sxdg.XdgToplevelStateConstrainedTop, sxdg.XdgToplevelStateConstrainedBottom)
-	case w.layer == wm.LayerFullscreen:
-		st.States = append(st.States, sxdg.XdgToplevelStateFullscreen)
+	case tiled && w.activated:
+		return activatedTiledStates
+	case tiled:
+		return tiledStates
+	case fullscreen && w.activated:
+		return activatedFullscreenStates
+	case fullscreen:
+		return fullscreenStates
+	case w.activated:
+		return activatedStates
 	}
-	if w.activated {
-		st.States = append(st.States, sxdg.XdgToplevelStateActivated)
-	}
-	return st
+	return nil
+}
+
+func xdgState(w want) shell.State {
+	return shell.State{Size: w.rect.Size(), Bounds: w.bounds, States: xdgStates(w)}
 }
 
 func (t xdgToplevel) settled(w want) bool {
@@ -112,16 +134,17 @@ func (t xdgToplevel) apply(w want) error {
 }
 
 func (t xdgToplevel) resizes(w want) bool {
-	st, was := xdgState(w), t.Requested()
-	flips := st.Has(sxdg.XdgToplevelStateFullscreen) != was.Has(sxdg.XdgToplevelStateFullscreen)
-	return flips || (st.Size != was.Size && st.Size != t.Geometry().Size())
+	was, size := t.Requested(), w.rect.Size()
+	flips := (w.placed && w.layer == wm.LayerFullscreen) != was.Has(sxdg.XdgToplevelStateFullscreen)
+	return flips || (size != was.Size && size != t.Geometry().Size())
 }
 
-func (t xdgToplevel) answer() func(*surface.Update) bool {
-	serial := t.LatestSerial()
-	return func(u *surface.Update) bool {
-		return t.Acked(serial) && u.Buffer() != nil
-	}
+func (t xdgToplevel) mark() answerMark {
+	return answerMark{serial: t.LatestSerial()}
+}
+
+func (t xdgToplevel) answers(u *surface.Update, m answerMark) bool {
+	return t.Acked(m.serial) && u.Buffer() != nil
 }
 
 func (xdgToplevel) synced() bool {

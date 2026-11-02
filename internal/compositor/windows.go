@@ -21,6 +21,7 @@ type window struct {
 	top          toplevel
 	goal         image.Rectangle
 	stalled      bool
+	member       *member
 	tile         image.Rectangle
 	rect         image.Rectangle
 	visible      bool
@@ -206,36 +207,42 @@ func (c *Compositor) reconcile() error {
 	c.layoutDirty, c.lagging = false, false
 	now := c.clock()
 	a := c.wm.Arrange(c.spacing())
-	var errs []error
+	var err error
 	if c.txn != nil && !sameArrangement(a, c.txn.goal) {
-		errs = append(errs, c.land(false))
+		err = c.land(false)
 	}
 	held := c.txn != nil
-	awaited, err := c.sendGoal(a)
-	errs = append(errs, err)
+	awaited, sent := c.sendGoal(a)
+	err = errors.Join(err, sent)
+	placed := false
 	switch {
 	case held:
 	case len(awaited) > 0 && c.holdable():
-		errs = append(errs, c.begin(a, awaited))
+		err = errors.Join(err, c.begin(a, awaited))
 	default:
-		errs = append(errs, c.install(a, now))
+		placed = true
+		err = errors.Join(err, c.install(a, now))
 	}
 	var target *window
 	if hasFocus {
 		target = c.windowByID(focused)
 	}
-	if target != c.active {
+	focusMoved := target != c.active
+	if focusMoved {
 		c.active = target
 		if target != nil {
 			if target.urgent {
 				c.stateChanged()
 			}
 			c.layerFocus, target.urgent = nil, false
-			errs = append(errs, target.top.ping())
+			err = errors.Join(err, target.top.ping())
 		}
 	}
 	c.refreshLooks(now)
-	return errors.Join(append(errs, c.publish())...)
+	if !placed && !focusMoved {
+		return err
+	}
+	return errors.Join(err, c.publish())
 }
 
 func (c *Compositor) publish() error {
@@ -247,7 +254,7 @@ func errUnknownWindow(id wm.WindowID) error {
 }
 
 func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
-	var errs []error
+	var err error
 	c.tabBars = a.TabBars
 	c.stack = c.stack[:0]
 	for _, p := range a.Windows {
@@ -261,9 +268,9 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 		switch {
 		case c.overview != nil:
 		case p.Minimized && !w.minimized:
-			errs = append(errs, c.startMinimize(w, now))
+			err = errors.Join(err, c.startMinimize(w, now))
 		case !p.Minimized && w.minimized:
-			errs = append(errs, c.startRestore(w, p.Rect, now))
+			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
 		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized
@@ -271,11 +278,11 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			w.output = o
 		}
 		if moved && w.visible {
-			errs = append(errs, c.reconstrain(w))
+			err = errors.Join(err, c.reconstrain(w))
 		}
 	}
 	c.trackSwitches(now)
-	return errors.Join(errs...)
+	return err
 }
 
 func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {

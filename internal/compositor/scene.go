@@ -31,6 +31,11 @@ func (c *Compositor) Frame(b backend.Output) error {
 
 func (c *Compositor) frame(o *output.Output) error {
 	b := o.Backend()
+	if c.dragPending {
+		if err := c.recovered(c.flushDrag()); err != nil {
+			return err
+		}
+	}
 	if c.layoutDirty && c.txn == nil {
 		if err := c.recovered(c.reconcile()); err != nil {
 			return err

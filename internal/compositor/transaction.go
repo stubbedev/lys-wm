@@ -19,11 +19,15 @@ const (
 )
 
 type member struct {
-	w       *window
-	surface *surface.Surface
-	hooks   *surface.Hooks
-	barrier *surface.Barrier
-	reached bool
+	w        *window
+	c        *Compositor
+	surface  *surface.Surface
+	mark     answerMark
+	watch    func(*surface.Update)
+	barrier  *surface.Barrier
+	unshown  *surface.Hooks
+	answered bool
+	reached  bool
 }
 
 type transaction struct {
@@ -82,13 +86,13 @@ func (c *Compositor) awaits(w *window, p wm.Placement, wanted want) bool {
 }
 
 func (c *Compositor) holdable() bool {
-	return c.holdTimer != nil && !c.shell.Locked()
+	return c.holdTimer != nil && !c.releasing && !c.shell.Locked()
 }
 
 func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 	focused, hasFocus := c.wm.Focused()
 	awaited := c.awaited[:0]
-	var errs []error
+	var err error
 	for _, p := range a.Windows {
 		w := c.windowByID(p.ID)
 		if w == nil {
@@ -104,43 +108,64 @@ func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 		if c.awaits(w, p, goal) {
 			awaited = append(awaited, w)
 		}
-		errs = append(errs, c.settle(w, goal))
+		err = errors.Join(err, c.settle(w, goal))
 	}
 	c.awaited = awaited
-	return awaited, errors.Join(errs...)
+	return awaited, err
 }
 
 func (c *Compositor) begin(a wm.Arrangement, awaited []*window) error {
-	t := &transaction{goal: a, members: make([]*member, len(awaited)), began: backend.Now()}
-	var errs []error
-	for i, w := range awaited {
+	t := &c.txnStore
+	t.goal, t.members, t.began = a, t.members[:0], backend.Now()
+	var err error
+	for _, w := range awaited {
 		m := c.await(w)
-		t.members[i] = m
-		errs = append(errs, m.unthrottle())
+		t.members = append(t.members, m)
+		err = errors.Join(err, m.unthrottle())
 	}
 	c.txn = t
-	return errors.Join(append(errs, c.holdTimer.Arm(holdBound(c.interaction != nil, c.holdBound)))...)
+	return errors.Join(err, c.holdTimer.Arm(holdBound(c.interaction != nil, c.holdBound)))
 }
 
 func (c *Compositor) await(w *window) *member {
-	m := &member{w: w, surface: w.top.Surface()}
-	answers := w.top.answer()
-	m.hooks = &surface.Hooks{Commit: func(u *surface.Update) error {
-		if m.barrier != nil || !answers(u) {
-			return nil
-		}
-		m.barrier = u.Barrier(func() error {
-			m.reached = true
-			return c.landIfComplete()
-		})
-		return nil
-	}, Applied: m.unthrottle}
-	m.surface.AddHooks(m.hooks)
+	m := w.member
+	if m == nil {
+		m = &member{w: w, c: c}
+		m.watch, m.barrier = m.committed, surface.NewBarrier(m.arrived)
+		w.member = m
+	}
+	m.surface, m.mark, m.answered, m.reached = w.top.Surface(), w.top.mark(), false, false
+	m.surface.Watch(m.watch)
+	if !w.visible {
+		m.unshown = &surface.Hooks{Applied: m.unthrottle}
+		m.surface.AddHooks(m.unshown)
+	}
 	return m
 }
 
+func (m *member) committed(u *surface.Update) {
+	if !m.answered && m.w.top.answers(u, m.mark) {
+		m.answered = true
+		u.Park(m.barrier)
+	}
+}
+
+func (m *member) arrived() error {
+	m.reached = true
+	return m.c.landIfComplete()
+}
+
+func (m *member) finish() error {
+	m.surface.Watch(nil)
+	if m.unshown != nil {
+		m.surface.RemoveHooks(m.unshown)
+		m.unshown = nil
+	}
+	return m.barrier.Release()
+}
+
 func (m *member) unthrottle() error {
-	if m.w.visible {
+	if m.unshown == nil {
 		return nil
 	}
 	return m.surface.FrameDone(wire.Millis(backend.Now()))
@@ -184,14 +209,17 @@ func (c *Compositor) land(expired bool) error {
 	t := c.txn
 	c.txn = nil
 	c.holds.note(backend.Now()-t.began, expired)
-	errs := []error{c.holdTimer.Disarm(), c.install(t.goal, c.clock()), c.publish()}
-	for _, m := range t.members {
-		m.surface.RemoveHooks(m.hooks)
-		if m.barrier != nil {
-			errs = append(errs, m.barrier.Release())
-		}
+	var err error
+	if c.interaction == nil {
+		err = c.holdTimer.Disarm()
 	}
-	return errors.Join(errs...)
+	err = errors.Join(err, c.install(t.goal, c.clock()), c.publish())
+	c.releasing = true
+	for _, m := range t.members {
+		err = errors.Join(err, m.finish())
+	}
+	c.releasing = false
+	return err
 }
 
 func (c *Compositor) stretchStale(pass *frame, o *output.Output, from int, w *window) {

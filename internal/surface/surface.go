@@ -226,6 +226,7 @@ type Surface struct {
 	preferred        uint32
 	destroyed        bool
 	hooks            []*Hooks
+	watch            func(*Update)
 	unappliedScratch []*state
 }
 
@@ -270,9 +271,9 @@ func (u *Update) OnApply(f func() error) {
 	u.applied = append(u.applied, f)
 }
 
-func (u *Update) Barrier(arrived func() error) *Barrier {
-	u.barrier = &Barrier{s: u.s, arrived: arrived}
-	return u.barrier
+func (u *Update) Park(b *Barrier) {
+	b.s, b.u, b.reached = u.s, u, false
+	u.barrier = b
 }
 
 func (u *Update) gatesOpen() bool {
@@ -285,7 +286,7 @@ func (u *Update) gatesOpen() bool {
 }
 
 func (u *Update) ready() bool {
-	return u.gatesOpen() && (u.barrier == nil || u.barrier.released)
+	return u.barrier == nil && u.gatesOpen()
 }
 
 func (u *Update) absorb(later *Update) error {
@@ -297,7 +298,8 @@ func (u *Update) absorb(later *Update) error {
 	u.gates = append(u.gates, later.gates...)
 	u.applied = append(u.applied, later.applied...)
 	if later.barrier != nil {
-		u.barrier = later.barrier
+		u.barrier, later.barrier.u = later.barrier, u
+		later.barrier = nil
 	}
 	u.s.recycle(later)
 	return unlock(replaced)
@@ -320,6 +322,10 @@ func (s *Surface) newUpdate() *Update {
 	s.spare[n-1] = nil
 	s.spare = s.spare[:n-1]
 	return u
+}
+
+func (s *Surface) Watch(f func(*Update)) {
+	s.watch = f
 }
 
 func (s *Surface) AddHooks(h *Hooks) {
@@ -352,17 +358,21 @@ func (h *Hold) Release() error {
 }
 
 type Barrier struct {
-	s        *Surface
-	arrived  func() error
-	reached  bool
-	released bool
+	s       *Surface
+	u       *Update
+	arrived func() error
+	reached bool
+}
+
+func NewBarrier(arrived func() error) *Barrier {
+	return &Barrier{arrived: arrived}
 }
 
 func (b *Barrier) Release() error {
-	if b.released {
+	if b.u == nil {
 		return nil
 	}
-	b.released = true
+	b.u.barrier, b.u = nil, nil
 	return b.s.Retry()
 }
 
@@ -578,6 +588,9 @@ func (s *Surface) commit() error {
 		return err
 	}
 	u := s.newUpdate()
+	if s.watch != nil {
+		s.watch(u)
+	}
 	for _, h := range s.hooks {
 		if h.Commit != nil {
 			if err := h.Commit(u); err != nil {
@@ -630,7 +643,7 @@ func (s *Surface) reachBarrier() error {
 	}
 	head := s.queue[0]
 	b := head.barrier
-	if b == nil || b.reached || b.released || !head.gatesOpen() {
+	if b == nil || b.reached || !head.gatesOpen() {
 		return nil
 	}
 	b.reached = true

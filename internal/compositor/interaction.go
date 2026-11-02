@@ -44,9 +44,13 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 	return errors.Join(c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
 }
 
-func (c *Compositor) dragMoved() error {
-	it := c.interaction
-	return errors.Join(c.dragTo(it), c.trackDrop(it))
+func (c *Compositor) flushDrag() error {
+	if !c.dragPending || c.interaction == nil {
+		c.dragPending = false
+		return nil
+	}
+	c.dragPending = false
+	return errors.Join(c.dragTo(c.interaction), c.trackDrop(c.interaction, c.dragMovedAt))
 }
 
 func (c *Compositor) dragTo(it *interaction) error {
@@ -82,7 +86,7 @@ func (c *Compositor) dragTo(it *interaction) error {
 		}
 		return c.dragged(s, nil)
 	}
-	return c.scheduleAll()
+	return nil
 }
 
 func (c *Compositor) dragged(s wm.State, err error) error {
@@ -92,11 +96,14 @@ func (c *Compositor) dragged(s wm.State, err error) error {
 	c.wm = s
 	c.stateChanged()
 	c.layoutDirty = true
-	return c.scheduleAll()
+	return nil
 }
 
 func (c *Compositor) endDrag() error {
 	it := c.interaction
+	if err := c.flushDrag(); err != nil {
+		return fmt.Errorf("compositor: end the drag of window %d: %w", it.w.id, err)
+	}
 	if c.layoutDirty {
 		if err := c.reconcile(); err != nil {
 			return fmt.Errorf("compositor: end the drag of window %d: %w", it.w.id, err)

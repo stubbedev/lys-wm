@@ -47,6 +47,7 @@ type Toplevel struct {
 	iconSet         bool
 	destroyed       bool
 	wantsFullscreen bool
+	wireStates      []byte
 }
 
 func (t *Toplevel) Surface() *surface.Surface {
@@ -123,14 +124,14 @@ func (t *Toplevel) Configure(s State) (uint32, error) {
 			return 0, err
 		}
 	}
-	states := make([]byte, 0, 4*len(s.States))
+	t.wireStates = t.wireStates[:0]
 	for _, st := range s.States {
 		if !st.Valid(t.resource.Base().Version()) {
 			continue
 		}
-		states = binary.NativeEndian.AppendUint32(states, uint32(st))
+		t.wireStates = binary.NativeEndian.AppendUint32(t.wireStates, uint32(st))
 	}
-	if err := t.resource.SendConfigure(width, height, states); err != nil {
+	if err := t.resource.SendConfigure(width, height, t.wireStates); err != nil {
 		return 0, err
 	}
 	serial, err := t.xs.sendConfigure()

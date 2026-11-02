@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -555,6 +556,7 @@ func TestASynchronizedSubsurfaceLandsWithItsParent(t *testing.T) {
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, heldForever, small)
 		ca, a := open(t, h, "a", fillBlue)
+		a.Stop()
 		child := ca.Surface()
 		sub, err := ca.Subcompositor.GetSubsurface(child, a.Surface)
 		if err != nil {
@@ -610,4 +612,310 @@ func TestAPopupStaysWithItsWindowDuringAHold(t *testing.T) {
 	h.Eventually("the change landed", landed)
 	moved := b.Logical.X
 	h.stillShows("the popup moved with b, not ahead of it", 100-(80-moved), 20, redColor)
+}
+
+func TestAnUnsignalledFenceKeepsAnAnswerFromLanding(t *testing.T) {
+	h := StartWith(t, heldForever, small)
+	c, w := open(t, h, "fenced", fillGreen)
+	var fences []*surface.Hold
+	var gate *surface.Hooks
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		s := comp.Toplevels()[0].Surface()
+		gate = &surface.Hooks{Commit: func(u *surface.Update) error {
+			fences = append(fences, u.Hold())
+			return nil
+		}}
+		s.AddHooks(gate)
+		return nil
+	})
+	_, _ = open(t, h, "right", fillBlue)
+	c.DispatchUntil("the answer sent", func() bool { return w.Logical.X == 80 })
+	c.Sync()
+	h.Eventually("the fenced answer in the queue", func(*headless.Backend, *compositor.Compositor) bool { return len(fences) > 0 })
+	h.stillShows("the old frame until its fence signals", 150, 50, greenColor)
+	if !h.compositorHolding() {
+		t.Fatal("an answer behind an unsignalled fence landed the change")
+	}
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		comp.Toplevels()[0].Surface().RemoveHooks(gate)
+		var errs []error
+		for _, f := range fences {
+			errs = append(errs, f.Release())
+		}
+		return errors.Join(errs...)
+	})
+	h.Eventually("the signalled answer landed the change", landed)
+	h.stillShows("the new frame", 150, 50, blueColor)
+	h.stillShows("its own buffer", 70, 50, greenColor)
+}
+
+func TestAFenceThatNeverSignalsHoldsOthersOnlyUpToTheBound(t *testing.T) {
+	h := StartWith(t, flat, small)
+	c, w := open(t, h, "fenced", fillGreen)
+	var fence *surface.Hold
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		var gate *surface.Hooks
+		s := comp.Toplevels()[0].Surface()
+		gate = &surface.Hooks{Commit: func(u *surface.Update) error {
+			fence = u.Hold()
+			s.RemoveHooks(gate)
+			return nil
+		}}
+		s.AddHooks(gate)
+		return nil
+	})
+	_, _ = open(t, h, "right", fillBlue)
+	c.DispatchUntil("the answer sent", func() bool { return w.Logical.X == 80 })
+	c.Sync()
+	h.Eventually("the bound over", landed)
+	if s := h.holds(); s.Expired != 1 {
+		t.Errorf("holds %+v, want the fenced answer to have expired", s)
+	}
+	h.Eventually("the old buffer fills the new frame meanwhile", showing(75, 50, greenColor))
+	h.Eventually("the other window landed", showing(85, 50, blueColor))
+	h.Do(func(*headless.Backend, *compositor.Compositor) error { return fence.Release() })
+	h.Eventually("the signalled buffer shows, stale no more", showing(75, 50, greenColor))
+}
+
+func benchDesktop(b *testing.B, n int) *Harness {
+	b.Helper()
+	h := start(b, setup{open: softBackend, configure: flat}, benchMode)
+	for range n {
+		c := testclient.Connect(b, h.Socket())
+		w := c.Window("bench", fillGreen)
+		c.DispatchUntil("the window to map", w.Mapped)
+		w.Stop()
+	}
+	return h
+}
+
+func BenchmarkFrameWithEightWindows(b *testing.B) {
+	h := benchDesktop(b, 8)
+	time.Sleep(300 * time.Millisecond)
+	for b.Loop() {
+		h.Rendered(0)
+	}
+}
+
+func BenchmarkFocusChangeWithEightWindows(b *testing.B) {
+	h := benchDesktop(b, 8)
+	left, err := wm.ParseAction("focus left")
+	if err != nil {
+		b.Fatal(err)
+	}
+	right, err := wm.ParseAction("focus right")
+	if err != nil {
+		b.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	i := 0
+	for b.Loop() {
+		a := left
+		if i%2 == 1 {
+			a = right
+		}
+		i++
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Dispatch(a) })
+	}
+}
+
+func TestLayoutPathAllocations(t *testing.T) {
+	h := StartWith(t, dragBinds(t, flat), desktop)
+	var clients []*testclient.Client
+	var windows []*testclient.Window
+	for range 8 {
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("bench", fillGreen)
+		c.DispatchUntil("the window to map", w.Mapped)
+		c.Sync()
+		w.Stop()
+		clients, windows = append(clients, c), append(windows, w)
+	}
+	for i, c := range clients {
+		c.DispatchUntil("the window at its size", func() bool { return windows[i].Logical.X < 200 })
+		c.Sync()
+	}
+	h.Eventually("the layout landed", landed)
+	time.Sleep(100 * time.Millisecond)
+	left, err := wm.ParseAction("focus left")
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := wm.ParseAction("focus right")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		o := b.Outputs()[0]
+		frame := testing.AllocsPerRun(200, func() {
+			if err := comp.Frame(o); err != nil {
+				t.Error(err)
+			}
+		})
+		i := 0
+		focus := testing.AllocsPerRun(200, func() {
+			a := left
+			if i%2 == 1 {
+				a = right
+			}
+			i++
+			if err := comp.Dispatch(a); err != nil {
+				t.Error(err)
+			}
+		})
+		if frame != 0 {
+			t.Errorf("an unchanged frame allocates %.1f times", frame)
+		}
+		t.Logf("allocations: an unchanged frame %.1f, a focus change %.1f", frame, focus)
+		return nil
+	})
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, p := b.Outputs()[0], b.Pointer()
+		return errors.Join(p.MoveTo(o, 0.1, 0.5), p.Frame(), p.Button(btnRight, true), p.Frame())
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o, p := b.Outputs()[0], b.Pointer()
+		x := 0.1
+		motion := testing.AllocsPerRun(200, func() {
+			x += 0.0005
+			if err := errors.Join(p.MoveTo(o, x, 0.5), p.Frame()); err != nil {
+				t.Error(err)
+			}
+		})
+		if motion > 2 {
+			t.Errorf("a pointer motion during a drag allocates %.1f times; the fake pointer's own event accounts for 2", motion)
+		}
+		t.Logf("allocations: a pointer motion during a drag %.1f", motion)
+		return errors.Join(p.Button(btnRight, false), p.Frame())
+	})
+	h.key(keySuper, false)
+}
+
+func BenchmarkResizeOfEightWindows(b *testing.B) {
+	h := start(b, setup{open: softBackend, configure: flat}, benchMode)
+	var clients []*testclient.Client
+	for range 8 {
+		c := testclient.Connect(b, h.Socket())
+		w := c.Window("bench", fillGreen)
+		c.DispatchUntil("the window to map", w.Mapped)
+		c.Sync()
+		w.Stop()
+		clients = append(clients, c)
+	}
+	for _, c := range clients {
+		c.Sync()
+	}
+	h.Eventually("the layout landed", landed)
+	wider, err := wm.ParseAction("resizeactive 10 0")
+	if err != nil {
+		b.Fatal(err)
+	}
+	narrower, err := wm.ParseAction("resizeactive -10 0")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		a := wider
+		if i%2 == 1 {
+			a = narrower
+		}
+		i++
+		before := h.holds().Landed
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Dispatch(a) })
+		for _, c := range clients {
+			c.Sync()
+		}
+		h.Eventually("the resize landed", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+			return !comp.Holding() && comp.Holds().Landed > before
+		})
+	}
+}
+
+func BenchmarkDragResizeStep(b *testing.B) {
+	h := start(b, setup{open: softBackend, configure: func(cfg *compositor.Config) {
+		flat(cfg)
+	}}, benchMode)
+	c := testclient.Connect(b, h.Socket())
+	left := c.Window("left", fillGreen)
+	c.DispatchUntil("left to map", left.Mapped)
+	right := c.Window("right", fillBlue)
+	c.DispatchUntil("right to map", right.Mapped)
+	c.DispatchUntil("left halved", func() bool { return left.Logical.X < 1000 })
+	c.Sync()
+	left.Stop()
+	right.Stop()
+	h.Eventually("the layout landed", landed)
+	wider, err := wm.ParseAction("resizeactive 2 0")
+	if err != nil {
+		b.Fatal(err)
+	}
+	narrower, err := wm.ParseAction("resizeactive -2 0")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		a := wider
+		if i%2 == 1 {
+			a = narrower
+		}
+		i++
+		landedBefore := h.holds().Landed
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Dispatch(a) })
+		c.DispatchUntil("the answers", func() bool {
+			var done bool
+			h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+				done = !comp.Holding() && comp.Holds().Landed > landedBefore
+				return nil
+			})
+			return done
+		})
+	}
+}
+
+func TestALongDragEndsWhereThePointerDoes(t *testing.T) {
+	h := StartWith(t, dragBinds(t, heldForever), small)
+	c := testclient.Connect(t, h.Socket())
+	left := c.Window("left", fillGreen)
+	c.DispatchUntil("left to map", left.Mapped)
+	right := c.Window("right", fillBlue)
+	c.DispatchUntil("right to map", right.Mapped)
+	c.DispatchUntil("left halved", func() bool { return left.Logical.X == 80 })
+	c.Sync()
+	left.Stop()
+	right.Stop()
+	h.Eventually("the layout landed", landed)
+	h.key(keySuper, true)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(h.pointerAt(60, 50)(b), b.Pointer().Button(btnRight, true), b.Pointer().Frame())
+	})
+	const steps = 300
+	for i := range steps {
+		x := 60 + i%40
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error { return h.pointerAt(x, 50)(b) })
+		want := 80 + i%40
+		c.DispatchUntil("the step answered", func() bool {
+			var done bool
+			h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+				done = left.Logical.X == want && !comp.Holding()
+				return nil
+			})
+			return done
+		})
+	}
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Pointer().Button(btnRight, false), b.Pointer().Frame())
+	})
+	h.key(keySuper, false)
+	h.Eventually("the drag ended", landed)
+	last := 80 + (steps-1)%40
+	c.DispatchUntil("the client at the last size", func() bool { return left.Logical.X == last && right.Logical.X == 160-last })
+	c.Sync()
+	h.Eventually("the last change landed", landed)
+	h.Eventually("left where the pointer left it", showing(last-2, 50, greenColor))
+	h.Eventually("right beside it", showing(last+2, 50, blueColor))
 }

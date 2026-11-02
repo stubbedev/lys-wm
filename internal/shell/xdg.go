@@ -248,14 +248,16 @@ type queued[T any] struct {
 
 type configures[T any] struct {
 	pending []queued[T]
-	acked   *T
-	sent    *T
+	acked   T
+	sent    T
 	latest  uint32
+	isAcked bool
+	isSent  bool
 }
 
 func (q *configures[T]) push(serial uint32, state T) {
 	q.pending = append(q.pending, queued[T]{serial, state})
-	q.sent, q.latest = &state, serial
+	q.sent, q.isSent, q.latest = state, true, serial
 }
 
 func (q *configures[T]) waiting(serial uint32) bool {
@@ -263,11 +265,7 @@ func (q *configures[T]) waiting(serial uint32) bool {
 }
 
 func (q *configures[T]) last() (T, bool) {
-	if q.sent == nil {
-		var zero T
-		return zero, false
-	}
-	return *q.sent, true
+	return q.sent, q.isSent
 }
 
 func (q *configures[T]) ack(serial uint32) bool {
@@ -275,24 +273,25 @@ func (q *configures[T]) ack(serial uint32) bool {
 	if i < 0 {
 		return false
 	}
-	state := q.pending[i].state
-	q.acked = &state
+	q.acked, q.isAcked = q.pending[i].state, true
 	q.pending = slices.Delete(q.pending, 0, i+1)
 	return true
 }
 
 func (q *configures[T]) take() (T, bool) {
-	if q.acked == nil {
+	if !q.isAcked {
 		var zero T
 		return zero, false
 	}
-	state := *q.acked
-	q.acked = nil
+	var zero T
+	state := q.acked
+	q.acked, q.isAcked = zero, false
 	return state, true
 }
 
 func (q *configures[T]) reset() {
-	q.pending, q.acked, q.sent = nil, nil, nil
+	var zero T
+	q.pending, q.acked, q.sent, q.isAcked, q.isSent = q.pending[:0], zero, zero, false, false
 }
 
 type roleObject interface {

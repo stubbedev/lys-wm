@@ -96,12 +96,11 @@ func (c *Compositor) sharedEdges(o *output.Output) wm.SharedEdges {
 	return shared
 }
 
-func (c *Compositor) trackDrop(it *interaction) error {
+func (c *Compositor) trackDrop(it *interaction, now time.Duration) error {
 	target, ok, err := c.dropTarget(it)
 	if err != nil {
 		return err
 	}
-	now := c.clock()
 	if !ok {
 		c.hidePreview(now)
 		return nil

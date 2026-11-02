@@ -95,12 +95,13 @@ func (t xToplevel) resizes(w want) bool {
 	return size != t.Rect().Size() && size != t.Surface().Size()
 }
 
-func (t xToplevel) answer() func(*surface.Update) bool {
-	size := t.Applied().Rect.Size()
-	return func(u *surface.Update) bool {
-		b := u.Buffer()
-		return b != nil && b.Size() == size
-	}
+func (t xToplevel) mark() answerMark {
+	return answerMark{size: t.Applied().Rect.Size()}
+}
+
+func (xToplevel) answers(u *surface.Update, m answerMark) bool {
+	b := u.Buffer()
+	return b != nil && b.Size() == m.size
 }
 
 func (t xToplevel) synced() bool {

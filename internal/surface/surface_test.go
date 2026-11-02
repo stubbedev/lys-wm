@@ -1158,7 +1158,8 @@ func TestABarrierHoldsAnUpdateBehindItsGatesAndSaysWhenItIsNext(t *testing.T) {
 		if first {
 			first = false
 			u.Gate(func() bool { return fence })
-			barrier = u.Barrier(func() error { arrivals++; return nil })
+			barrier = NewBarrier(func() error { arrivals++; return nil })
+			u.Park(barrier)
 		}
 		return nil
 	}}
@@ -1215,7 +1216,8 @@ func TestABarrierReleasedBeforeItsGatesOpenNeverArrives(t *testing.T) {
 	var barrier *Barrier
 	hooks := &Hooks{Commit: func(u *Update) error {
 		u.Gate(func() bool { return fence })
-		barrier = u.Barrier(func() error { arrivals++; return nil })
+		barrier = NewBarrier(func() error { arrivals++; return nil })
+		u.Park(barrier)
 		return nil
 	}}
 	e.on(func() { server.AddHooks(hooks) })
@@ -1255,7 +1257,8 @@ func TestABarrierOnASurfaceDestroyedInTheMeantimeReleasesQuietly(t *testing.T) {
 	server := e.last(s).s
 	var barrier *Barrier
 	hooks := &Hooks{Commit: func(u *Update) error {
-		barrier = u.Barrier(func() error { return nil })
+		barrier = NewBarrier(func() error { return nil })
+		u.Park(barrier)
 		return nil
 	}}
 	e.on(func() { server.AddHooks(hooks) })

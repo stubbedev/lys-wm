@@ -335,7 +335,10 @@ func (c *Compositor) moveCursor(at time.Duration, next point) error {
 
 func (c *Compositor) pointerMoved(at time.Duration) error {
 	if c.interaction != nil {
-		return errors.Join(c.dragMoved(), c.scheduleAll())
+		if !c.dragPending {
+			c.dragPending, c.dragMovedAt = true, c.clock()
+		}
+		return c.scheduleAll()
 	}
 	if c.overviewHolds() && c.overview.press != nil {
 		return errors.Join(c.overviewMoved(c.cursor), c.cursorMoved())
