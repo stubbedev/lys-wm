@@ -398,12 +398,25 @@ func (c *Compositor) tabColors(id wm.WindowID, active bool) TabColors {
 	return c.decor.Tab.Inactive
 }
 
+func (c *Compositor) tabBarView(o *output.Output, bar wm.TabBar) (view, bool) {
+	sw, ok := c.switches[o]
+	if !ok {
+		return identity, bar.Shown
+	}
+	if v, ok := sw.viewOf(bar.Workspace, o.Logical(), c.frameTime); ok {
+		return v, true
+	}
+	return identity, bar.Shown
+}
+
 func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 	for _, bar := range c.tabBars {
-		if !bar.Rect.Overlaps(o.Logical()) {
+		v, drawn := c.tabBarView(o, bar)
+		rect := v.rect(bar.Rect, o.Logical())
+		if !drawn || !rect.Overlaps(o.Logical()) {
 			continue
 		}
-		strip := image.Rect(bar.Rect.Min.X, bar.Rect.Min.Y, bar.Rect.Max.X, bar.Rect.Min.Y+min(c.decor.Tab.Height, bar.Rect.Dy()))
+		strip := image.Rect(rect.Min.X, rect.Min.Y, rect.Max.X, rect.Min.Y+min(c.decor.Tab.Height, rect.Dy()))
 		n := len(bar.Tabs)
 		for i, id := range bar.Tabs {
 			x0 := strip.Min.X + strip.Dx()*i/n
@@ -422,7 +435,7 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 				return err
 			}
 			size := tex.Size()
-			pass.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, dst, render.Normal, 1)
+			pass.DrawTexture(tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, dst, render.Normal, float32(max(v.alpha, 0)))
 		}
 	}
 	return nil

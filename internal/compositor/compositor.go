@@ -74,6 +74,7 @@ type Config struct {
 	InheritTimeout  time.Duration
 	Animations      anim.Table
 	BlurLayers      []string
+	Gestures        Gestures
 	Clock           func() time.Duration
 }
 
@@ -118,6 +119,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Icons:          icontheme.New("", nil),
 		InheritTimeout: DefaultInheritTimeout,
 		Clock:          backend.Now,
+		Gestures:       DefaultGestures(),
 	}
 }
 
@@ -248,6 +250,8 @@ type Compositor struct {
 	genieStrips     []anim.GenieStrip
 	blurLayers      []string
 	switches        map[*output.Output]*workspaceSwitch
+	gestures        Gestures
+	gesture         gestureInput
 	shownWorkspace  map[string]wm.WorkspaceID
 	shaders         map[string]*screenShader
 }
@@ -269,6 +273,9 @@ func validate(cfg Config) (binds.Map, error) {
 	}
 	if cfg.Clock == nil {
 		return binds.Map{}, errors.New("compositor: Config.Clock is nil")
+	}
+	if !(cfg.Gestures.Distance > 0) {
+		return binds.Map{}, fmt.Errorf("compositor: gesture distance %v is not positive", cfg.Gestures.Distance)
 	}
 	if cfg.InheritTimeout <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
@@ -298,6 +305,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.colorManagement = cfg.ColorManagement
 	c.tearing, c.icons, c.inheritTimeout = cfg.Tearing, cfg.Icons, cfg.InheritTimeout
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
+	c.gestures = cfg.Gestures
 	c.rulesGen++
 }
 
@@ -462,11 +470,12 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("compositor: %w", err)
 	}
+	gestureErr := c.endDrive()
 	c.adopt(cfg, m)
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(gestureErr, c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

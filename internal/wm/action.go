@@ -702,7 +702,7 @@ func ParseAction(text string) (Action, error) {
 
 func Reference() string {
 	var b strings.Builder
-	b.WriteString("# Actions\n\nEvery keybind and `lys-wmctl dispatch` takes one of these. This file is generated from `wm.Actions`; run `go test ./internal/wm -update` after changing them.\n\n| Action | Arguments | Effect |\n| --- | --- | --- |\n")
+	b.WriteString("# Actions\n\nEvery keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` takes one of these. A gesture can also drive something directly: see `gestures` in config.md. This file is generated from `wm.Actions`; run `go test ./internal/wm -update` after changing them.\n\n| Action | Arguments | Effect |\n| --- | --- | --- |\n")
 	for _, spec := range Actions {
 		args := spec.Args
 		if args != "" {

@@ -1,6 +1,6 @@
 # Actions
 
-Every keybind and `lys-wmctl dispatch` takes one of these. This file is generated from `wm.Actions`; run `go test ./internal/wm -update` after changing them.
+Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` takes one of these. A gesture can also drive something directly: see `gestures` in config.md. This file is generated from `wm.Actions`; run `go test ./internal/wm -update` after changing them.
 
 | Action | Arguments | Effect |
 | --- | --- | --- |

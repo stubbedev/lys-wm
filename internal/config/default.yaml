@@ -64,6 +64,10 @@ binds:
   - {chord: SUPER + 0, action: workspace 10}
   - {chord: SUPER + SHIFT + 0, action: movetoworkspace 10}
 
+gestures:
+  swipe:
+    - {fingers: 3, direction: horizontal, drive: workspaces}
+
 submaps:
   resize:
     - {chord: Left, action: resizeactive -20 0, flags: [repeating]}

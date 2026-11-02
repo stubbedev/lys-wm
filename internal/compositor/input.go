@@ -148,7 +148,7 @@ func (c *Compositor) inArea(area image.Rectangle, x, y float64) point {
 	return c.clampToOutputs(denormalize(area, x, y))
 }
 
-func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
+func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	if _, lid := e.(backend.Switch); !lid {
 		if err := c.idle.Activity(); err != nil {
 			return err
@@ -225,13 +225,13 @@ func (c *Compositor) Input(_ backend.Device, e backend.Event) error {
 	case *backend.PointerFrame:
 		return c.seat.PointerFrame()
 	case backend.GestureBegin:
-		return c.seat.GestureBegin(e.Time, e.Gesture, e.Fingers)
+		return c.gestureBegin(d, e)
 	case backend.SwipeUpdate:
-		return c.seat.SwipeUpdate(e.Time, e.DX, e.DY)
+		return c.swipeUpdate(e)
 	case backend.PinchUpdate:
-		return c.seat.PinchUpdate(e.Time, e.DX, e.DY, e.Scale, e.Rotation)
+		return c.pinchUpdate(e)
 	case backend.GestureEnd:
-		return c.seat.GestureEnd(e.Time, e.Gesture, e.Cancelled)
+		return c.gestureEnd(e)
 	case backend.TouchDown:
 		area, ok := c.absoluteArea(e.Output)
 		if !ok {

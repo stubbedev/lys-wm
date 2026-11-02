@@ -22,6 +22,7 @@ type window struct {
 	tile        image.Rectangle
 	rect        image.Rectangle
 	visible     bool
+	laid        bool
 	layer       wm.PlacementLayer
 	output      *output.Output
 	urgent      bool
@@ -212,7 +213,7 @@ func (c *Compositor) reconcile() error {
 			errs = append(errs, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Layer, p.Minimized
+		w.tile, w.rect, w.visible, w.laid, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Laid, p.Layer, p.Minimized
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}
@@ -268,7 +269,7 @@ func (c *Compositor) springMoves() bool {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switches[o] != nil || c.shaderAnimates(o) || c.zoomMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
+	}) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
 }

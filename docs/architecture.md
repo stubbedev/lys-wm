@@ -632,7 +632,7 @@ Everything lives under `internal/` except the commands.
 | `outputmanagement` | `zwlr_output_manager_v1`: outputs as heads with their modes for display configuration tools, whose configurations override the config file's output rules until a reload (#107) |
 | `shm` | `wl_shm` pools and buffers, read fault-safely when a client truncates its pool (#12) |
 | `inputmethod` | `zwp_text_input_manager_v3` and `zwp_input_method_manager_v2`: text inputs follow the keyboard focus, the enabled one activates the seat's single input method, and its text, preedit and deletions reach that text input; the input method's keyboard grab takes the keys pressed while it holds it, and its popups are drawn under the text cursor (#124) |
-| `seat` | `wl_seat`, keyboard, pointer and touch, `wp_cursor_shape_v1`, and touchpad gestures through `zwp_pointer_gestures_v1`, which stay with the surface they began on (#13, #14, #108) |
+| `seat` | `wl_seat`, keyboard, pointer and touch, `wp_cursor_shape_v1`, and touchpad gestures through `zwp_pointer_gestures_v1`, which stay with the surface they began on unless the compositor claims them, when the client gets a cancelled end (#13, #14, #108) |
 | `data` | `wl_data_device_manager` and `zwp_primary_selection_device_manager_v1`: the clipboard and primary selection offered to the keyboard focus, and drag and drop (#18) |
 | `lys-lib/xcursor` | Xcursor files and theme lookup through `XCURSOR_PATH` and `Inherits`, and the built-in arrow, shared with lys-ui (#14) |
 | `xkb` | Keymap compilation, sealed keymap fds and modifier state through lys-lib's `xkb` (#13) |

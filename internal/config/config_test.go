@@ -4,6 +4,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -425,6 +426,92 @@ rules:
 	} {
 		if _, err := Parse("t.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), msg) {
 			t.Errorf("%q: %v, want %q", src, err, msg)
+		}
+	}
+}
+
+func gestureConfig(t *testing.T, text string) compositor.Gestures {
+	t.Helper()
+	cfg, err := Parse("gestures.yaml", []byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg.Gestures
+}
+
+func TestThreeFingersSwitchWorkspacesOutOfTheBox(t *testing.T) {
+	g := gestureConfig(t, "")
+	want := []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces}}
+	if !slices.Equal(g.Binds, want) || !g.Natural || g.Distance != compositor.DefaultGestureDistance {
+		t.Fatalf("defaults %+v", g)
+	}
+}
+
+func TestSlidevertSwipesWorkspacesVerticallyByDefault(t *testing.T) {
+	g := gestureConfig(t, "animations:\n  events:\n    workspaces: {style: slidevert}\n")
+	if len(g.Binds) != 1 || g.Binds[0].Direction != binds.SwipeVertical {
+		t.Fatalf("binds %+v", g.Binds)
+	}
+}
+
+func TestAGesturesSection(t *testing.T) {
+	g := gestureConfig(t, `
+input:
+  touchpad: {natural_scroll: false}
+  devices:
+    "Magic Trackpad": {natural_scroll: true}
+    "Other": {tap: true}
+gestures:
+  distance: 250
+  swipe:
+    - {fingers: 4, direction: horizontal, drive: workspaces}
+    - {fingers: 3, direction: up, action: kill}
+  pinch:
+    - {fingers: 2, direction: in, action: exec foo}
+  hold:
+    - {fingers: 4, action: fullscreen}
+`)
+	if g.Distance != 250 || g.Natural || !maps.Equal(g.Devices, map[string]bool{"Magic Trackpad": true}) {
+		t.Fatalf("settings %+v", g)
+	}
+	want := []binds.GestureBind{
+		{Kind: backend.Swipe, Fingers: 4, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces},
+		{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeUp, Action: wm.KillAction{}},
+		{Kind: backend.Pinch, Fingers: 2, Direction: binds.PinchIn, Action: wm.ExecAction{Command: "foo"}},
+		{Kind: backend.Hold, Fingers: 4, Action: wm.FullscreenAction{}},
+	}
+	if !slices.Equal(g.Binds, want) {
+		t.Fatalf("binds %+v\nwant %+v", g.Binds, want)
+	}
+}
+
+func TestAnEmptySwipeListTurnsTheDefaultOff(t *testing.T) {
+	if g := gestureConfig(t, "gestures:\n  swipe: []\n"); len(g.Binds) != 0 {
+		t.Fatalf("binds %+v", g.Binds)
+	}
+}
+
+func TestBadGesturesAreReported(t *testing.T) {
+	for _, tc := range []struct{ text, want string }{
+		{"gestures:\n  swipe:\n    - {fingers: 2, direction: up, action: kill}\n", "gestures.swipe[0].fingers"},
+		{"gestures:\n  pinch:\n    - {fingers: 1, direction: in, action: kill}\n", "gestures.pinch[0].fingers"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, action: kill}\n", "gestures.swipe[0].direction"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: sideways, action: kill}\n", "gestures.swipe[0].direction"},
+		{"gestures:\n  pinch:\n    - {fingers: 3, direction: up, action: kill}\n", "gestures.pinch[0].direction"},
+		{"gestures:\n  hold:\n    - {fingers: 3, direction: up, action: kill}\n", "gestures.hold[0].direction"},
+		{"gestures:\n  hold:\n    - {fingers: 3}\n", "gestures.hold[0]"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: up, action: kill, drive: workspaces}\n", "gestures.swipe[0]"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: up, drive: workspaces}\n", "gestures.swipe[0].drive"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: left, drive: nope}\n", "gestures.swipe[0].drive"},
+		{"gestures:\n  pinch:\n    - {fingers: 3, direction: in, drive: workspaces}\n", "gestures.pinch[0].drive"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: up, action: nope}\n", "gestures.swipe[0].action"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: up, action: movewindow}\n", "gestures.swipe[0].action"},
+		{"gestures:\n  swipe:\n    - {fingers: 3, direction: horizontal, drive: workspaces}\n    - {fingers: 3, direction: left, action: kill}\n", "gestures.swipe[1]"},
+		{"gestures:\n  distance: 0\n", "gestures.distance"},
+	} {
+		_, err := Parse("bad.yaml", []byte(tc.text))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want one naming %s", tc.text, err, tc.want)
 		}
 	}
 }

@@ -206,3 +206,17 @@ func TestRubberBandStartsOneToOneAndHasALimit(t *testing.T) {
 		t.Fatalf("a huge step goes past the limit to %v", got)
 	}
 }
+
+func BenchmarkProgressTrack(b *testing.B) {
+	b.ReportAllocs()
+	p := NewProgress(0)
+	p.Grab(0)
+	at := time.Second
+	for i := range b.N {
+		at += 8 * ms
+		p.Track(float64(i%100)/100, at)
+		if p.Velocity(at) > 1e9 {
+			b.Fatal("impossible velocity")
+		}
+	}
+}

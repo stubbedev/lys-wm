@@ -17,7 +17,7 @@ type workspaceSwitch struct {
 	from, to wm.WorkspaceID
 	forward  bool
 	style    anim.Style
-	progress anim.Tween[float64]
+	pos      anim.Progress
 }
 
 type view struct {
@@ -39,24 +39,33 @@ func (v view) rect(r, area image.Rectangle) image.Rectangle {
 	return r.Add(v.offset)
 }
 
-func (sw *workspaceSwitch) view(area image.Rectangle, incoming bool, now time.Duration) view {
-	p := min(max(sw.progress.At(now), 0), 1)
-	sign := 1
-	if !sw.forward {
-		sign = -1
+func (sw *workspaceSwitch) sign() float64 {
+	if sw.forward {
+		return 1
 	}
+	return -1
+}
+
+func (sw *workspaceSwitch) travelled(now time.Duration) float64 {
+	return float64(sw.pos.At(now) * sw.sign())
+}
+
+func (sw *workspaceSwitch) view(area image.Rectangle, incoming bool, now time.Duration) view {
+	p := sw.travelled(now)
 	shift := func(span int) int {
 		if incoming {
-			return int(math.Round(float64(sign*span) * (1 - p)))
+			return int(math.Round(float64(float64(sw.sign())*float64(span)) * (1 - p)))
 		}
-		return -int(math.Round(float64(sign*span) * p))
+		return -int(math.Round(float64(float64(sw.sign())*float64(span)) * p))
 	}
 	switch sw.style.Kind {
 	case anim.Slide:
 		return view{offset: image.Pt(shift(area.Dx()), 0), scale: 1, alpha: 1}
 	case anim.SlideVert:
 		return view{offset: image.Pt(0, shift(area.Dy())), scale: 1, alpha: 1}
-	case anim.Popin:
+	}
+	p = min(max(p, 0), 1)
+	if sw.style.Kind == anim.Popin {
 		if incoming {
 			return view{scale: sw.style.Percent/100 + float64((1-sw.style.Percent/100)*p), alpha: p}
 		}
@@ -68,12 +77,34 @@ func (sw *workspaceSwitch) view(area image.Rectangle, incoming bool, now time.Du
 	return view{scale: 1, alpha: 1 - p}
 }
 
+func (sw *workspaceSwitch) viewOf(ws wm.WorkspaceID, area image.Rectangle, now time.Duration) (view, bool) {
+	switch ws {
+	case sw.to:
+		return sw.view(area, true, now), true
+	case sw.from:
+		return sw.view(area, false, now), true
+	}
+	return identity, false
+}
+
+func (sw *workspaceSwitch) restOn(ws wm.WorkspaceID) float64 {
+	if ws == sw.to {
+		return sw.sign()
+	}
+	return 0
+}
+
+func (c *Compositor) switchAnimates(o *output.Output) bool {
+	sw, ok := c.switches[o]
+	return ok && !sw.pos.Tracking()
+}
+
 func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 	sw, ok := c.switches[o]
 	if !ok || sw.style.Kind != anim.Goo {
 		return
 	}
-	p := min(max(sw.progress.At(c.frameTime), 0), 1)
+	p := min(max(sw.travelled(c.frameTime), 0), 1)
 	strength := gomath.Sin(math.Pi * p)
 	if strength <= 0 {
 		return
@@ -82,10 +113,10 @@ func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 	for _, w := range c.stack {
 		ws, ok := c.wm.WorkspaceOf(w.id)
 		switch {
-		case !ok || w.layer == wm.LayerFullscreen || w.minimized:
-		case w.visible && ws == sw.to && w.tile.Overlaps(o.Logical()):
+		case !ok || !w.laid || w.layer == wm.LayerFullscreen || w.minimized:
+		case ws == sw.to && w.tile.Overlaps(o.Logical()):
 			in = append(in, w)
-		case !w.visible && ws == sw.from && w.output == o:
+		case ws == sw.from && w.output == o:
 			out = append(out, w)
 		}
 	}
@@ -125,34 +156,41 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 		active, ok := c.wm.ActiveOn(name)
 		prev, had := c.shownWorkspace[name]
 		c.shownWorkspace[name] = active
-		if !ok || !had || prev == active || curve == anim.Instant {
+		if !ok || !had || prev == active {
 			continue
 		}
-		sw := &workspaceSwitch{from: prev, to: active, forward: active > prev, style: c.animations.Style(anim.Workspaces), progress: anim.NewTween(0.0, anim.Lerp)}
-		sw.progress.Set(1, now, curve)
+		sw, switching := c.switches[o]
+		if switching && (active == sw.from || active == sw.to) {
+			sw.pos.Set(sw.restOn(active), now, curve)
+			continue
+		}
+		if curve == anim.Instant {
+			delete(c.switches, o)
+			continue
+		}
+		sw = &workspaceSwitch{from: prev, to: active, forward: active > prev, style: c.animations.Style(anim.Workspaces), pos: anim.NewProgress(0)}
+		sw.pos.Set(sw.sign(), now, curve)
 		c.switches[o] = sw
 	}
 }
 
 func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
 	sw, ok := c.switches[o]
-	if !ok || w.minimized || w.layer == wm.LayerFullscreen && !w.visible {
+	if !ok || !w.laid || (!w.visible && w.output != o) {
 		return identity, w.visible
 	}
 	ws, ok := c.wm.WorkspaceOf(w.id)
-	switch {
-	case !ok:
+	if !ok {
 		return identity, w.visible
-	case w.visible && ws == sw.to:
-		return sw.view(o.Logical(), true, c.frameTime), true
-	case !w.visible && ws == sw.from && w.output == o:
-		return sw.view(o.Logical(), false, c.frameTime), true
+	}
+	if v, ok := sw.viewOf(ws, o.Logical(), c.frameTime); ok {
+		return v, true
 	}
 	return identity, w.visible
 }
 
 func (c *Compositor) finishSwitches(o *output.Output, now time.Duration) {
-	if sw, ok := c.switches[o]; ok && sw.progress.Done(now) {
+	if sw, ok := c.switches[o]; ok && sw.pos.Done(now) {
 		delete(c.switches, o)
 	}
 }

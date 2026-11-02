@@ -27,8 +27,8 @@ func TestWorkspaceSwitchStylesHalfway(t *testing.T) {
 		{anim.Style{Kind: anim.Popin, Percent: 60}, true, view{scale: 0.8, alpha: 0.5}, view{scale: 1, alpha: 0.5}},
 	}
 	for _, tc := range cases {
-		sw := &workspaceSwitch{forward: tc.forward, style: tc.style, progress: anim.NewTween(0.0, anim.Lerp)}
-		sw.progress.Set(1, 0, c)
+		sw := &workspaceSwitch{forward: tc.forward, style: tc.style, pos: anim.NewProgress(0)}
+		sw.pos.Set(sw.sign(), 0, c)
 		if got := sw.view(area, true, mid); got != tc.incoming {
 			t.Errorf("%v forward %v: incoming %+v, want %+v", tc.style, tc.forward, got, tc.incoming)
 		}

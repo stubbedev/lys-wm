@@ -135,6 +135,7 @@ type rawConfig struct {
 	GPU             *At[string]           `yaml:"gpu"`
 	Tearing         bool                  `yaml:"tearing"`
 	LidSuspend      *bool                 `yaml:"lid_suspend"`
+	Gestures        rawGestures           `yaml:"gestures"`
 }
 
 type rawXwayland struct {
@@ -338,6 +339,20 @@ type rawBind struct {
 	Flags  []At[string] `yaml:"flags"`
 }
 
+type rawGestures struct {
+	Swipe    []rawGesture `yaml:"swipe"`
+	Pinch    []rawGesture `yaml:"pinch"`
+	Hold     []rawGesture `yaml:"hold"`
+	Distance *At[float64] `yaml:"distance"`
+}
+
+type rawGesture struct {
+	Fingers   At[int]     `yaml:"fingers"`
+	Direction *At[string] `yaml:"direction"`
+	Action    *At[string] `yaml:"action"`
+	Drive     *At[string] `yaml:"drive"`
+}
+
 type rawRule struct {
 	AppID     *At[string]  `yaml:"app_id"`
 	Title     *At[string]  `yaml:"title"`
@@ -398,6 +413,7 @@ type Config struct {
 	LidSuspend      bool
 	Animations      anim.Table
 	BlurLayers      []string
+	Gestures        compositor.Gestures
 }
 
 var mocha = map[string]render.Color{
@@ -950,6 +966,105 @@ func (p *parser) bind(submap string, i int, r rawBind, submaps map[string][]rawB
 	return b
 }
 
+var swipeDirections = map[string]binds.GestureDirection{
+	"left": binds.SwipeLeft, "right": binds.SwipeRight, "up": binds.SwipeUp, "down": binds.SwipeDown,
+	"horizontal": binds.SwipeHorizontal, "vertical": binds.SwipeVertical,
+}
+
+var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut}
+
+var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces}
+
+func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r rawGesture, directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
+	key := fmt.Sprintf("gestures.%s[%d]", name, i)
+	failures := len(p.errs)
+	b := binds.GestureBind{Kind: kind}
+	if r.Fingers.V < minFingers {
+		p.fail(r.Fingers.Line, key+".fingers", "%d is not a %s; it takes at least %d fingers", r.Fingers.V, name, minFingers)
+	}
+	b.Fingers = uint32(max(r.Fingers.V, 0)) //nolint:gosec // clamped above zero; finger counts are small
+	switch {
+	case directions == nil && r.Direction != nil:
+		p.fail(r.Direction.Line, key+".direction", "a %s has no direction", name)
+	case directions != nil && r.Direction == nil:
+		p.fail(r.Fingers.Line, key+".direction", "is missing")
+	case directions != nil:
+		if d := choice(p, r.Direction, key+".direction", directions); d != nil {
+			b.Direction = *d
+		}
+	}
+	switch {
+	case (r.Action == nil) == (r.Drive == nil):
+		p.fail(r.Fingers.Line, key, "takes exactly one of action and drive")
+	case r.Drive != nil:
+		if d := choice(p, r.Drive, key+".drive", gestureDrives); d != nil {
+			b.Drive = *d
+		}
+		if kind != backend.Swipe {
+			p.fail(r.Drive.Line, key+".drive", "only a swipe can drive something")
+		} else if b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical {
+			p.fail(r.Drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
+		}
+	default:
+		a, err := wm.ParseAction(r.Action.V)
+		if err != nil {
+			p.fail(r.Action.Line, key+".action", "%v", err)
+		}
+		if _, drag := a.(wm.DragAction); drag {
+			p.fail(r.Action.Line, key+".action", "%s is for mouse binds only", a)
+		}
+		b.Action = a
+	}
+	return b, len(p.errs) == failures
+}
+
+func (p *parser) gestures(r rawGestures, input rawInput, workspaces anim.Style) compositor.Gestures {
+	g := compositor.DefaultGestures()
+	if v := p.between(r.Distance, "gestures.distance", 0, math.MaxFloat64, true); v != nil {
+		g.Distance = *v
+	}
+	if input.Touchpad.NaturalScroll != nil {
+		g.Natural = *input.Touchpad.NaturalScroll
+	}
+	for _, name := range slices.Sorted(maps.Keys(input.Devices)) {
+		if v := input.Devices[name].NaturalScroll; v != nil {
+			if g.Devices == nil {
+				g.Devices = map[string]bool{}
+			}
+			g.Devices[name] = *v
+		}
+	}
+	g.Binds = nil
+	if r.Swipe == nil {
+		g.Binds = compositor.DefaultGestureBinds(workspaces)
+	}
+	kinds := []struct {
+		kind       backend.Gesture
+		name       string
+		minFingers int
+		raw        []rawGesture
+		directions map[string]binds.GestureDirection
+	}{
+		{backend.Swipe, "swipe", 3, r.Swipe, swipeDirections},
+		{backend.Pinch, "pinch", 2, r.Pinch, pinchDirections},
+		{backend.Hold, "hold", 1, r.Hold, nil},
+	}
+	for _, k := range kinds {
+		for i, raw := range k.raw {
+			b, ok := p.gesture(k.kind, k.name, k.minFingers, i, raw, k.directions)
+			if !ok {
+				continue
+			}
+			if slices.ContainsFunc(g.Binds, b.Overlaps) {
+				p.fail(raw.Fingers.Line, fmt.Sprintf("gestures.%s[%d]", k.name, i), "overlaps an earlier %d-finger %s", b.Fingers, k.name)
+				continue
+			}
+			g.Binds = append(g.Binds, b)
+		}
+	}
+	return g
+}
+
 func (p *parser) regexp(a *At[string], key string) *regexp.Regexp {
 	if a == nil {
 		return nil
@@ -1100,6 +1215,7 @@ func Parse(file string, data []byte) (Config, error) {
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
 	cfg.WM.Gaps = p.gaps(raw.Gaps)
 	cfg.Animations = p.animations(raw.Animations)
+	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
 	for _, l := range raw.Decoration.Blur.Layers {
 		cfg.BlurLayers = append(cfg.BlurLayers, l.V)
 	}
@@ -1181,6 +1297,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
 	cfg.Animations, cfg.BlurLayers = c.Animations, c.BlurLayers
+	cfg.Gestures = c.Gestures
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

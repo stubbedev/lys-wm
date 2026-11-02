@@ -125,7 +125,7 @@ input:
 | Key | Value |
 | --- | --- |
 | `tap`, `drag_lock` | Tap to click, and keep a tap-and-drag going after the finger lifts |
-| `natural_scroll` | Content follows the fingers |
+| `natural_scroll` | Content follows the fingers; also sets which way [gestures](#gestures) go |
 | `disable_while_typing` | Ignore the touchpad while the keyboard is in use |
 | `middle_emulation` | Pressing left and right together is a middle click |
 | `click_method` | `button_areas`, `clickfinger` or `none` |
@@ -413,6 +413,61 @@ with the mouse follows the pointer without animating, unless `windows_move` uses
 a spring: then the window trails the pointer on that spring and settles where
 it is dropped, and a window that comes back with its workspace
 is drawn where it belongs at once.
+
+## gestures
+
+Touchpad swipes, pinches and holds can drive lys-wm. A gesture nothing here
+claims goes to the window under the pointer, as `zwp_pointer_gestures_v1`.
+
+```yaml
+gestures:
+  distance: 400
+  swipe:
+    - {fingers: 3, direction: horizontal, drive: workspaces}
+    - {fingers: 4, direction: up, action: exec foot}
+  pinch:
+    - {fingers: 3, direction: in, action: kill}
+  hold:
+    - {fingers: 4, action: fullscreen}
+```
+
+| Key | Value |
+| --- | --- |
+| `swipe` | Default: three fingers `horizontal` drive `workspaces`, or `vertical` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
+| `pinch`, `hold` | Default: none |
+| `fingers` | How many; at least 3 for a swipe, since two are scrolling, 2 for a pinch and 1 for a hold |
+| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal` or `vertical`. Pinch: `in` or `out`. A hold has none |
+| `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
+| `drive` | Instead of `action`, swipes only: something that follows the fingers. `workspaces` takes `horizontal` or `vertical` |
+| `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
+
+Two entries for the same finger count that could match the same movement are an
+error. Claiming works the same way for every entry:
+
+- A swipe goes to the client until about a millimetre of travel shows its
+  direction. If an entry matches, the client gets a cancelled end and sees
+  nothing more of it; otherwise the client keeps the whole gesture.
+- A swipe `action` runs once, after 100 units of travel. A pinch claims and runs
+  its `action` when the scale passes 15% in that direction. A bound hold never
+  reaches the client, and runs its `action` when the fingers lift, unless
+  libinput cancels the hold.
+- While the session is locked, or a window inhibits shortcuts, every gesture goes
+  to the client.
+
+`drive: workspaces` draws the `workspaces` animation of
+[animations](#animations) at a position the fingers set, on the output under the
+pointer, with both workspaces drawn. It walks the open workspaces of that output
+in order, on past a whole workspace, and resists at the first and the last. On
+release the position plus 0.15 seconds of the fingers' velocity decides: past
+halfway it goes on, otherwise it goes back. A spring then carries that velocity to
+rest: the `workspaces` curve when it is a spring, otherwise the built-in `spring`,
+since a bézier cannot take a starting velocity. With animations off it jumps.
+Three fingers on a settling switch grab it where it is. A workspace switch from
+anywhere else ends the gesture, and the rest of its movement is ignored.
+
+The fingers move the content unless `natural_scroll` is `false`, read from
+`input.devices` for that device and then `input.touchpad`. Left unset it counts as
+on for gestures, whatever libinput's default for scrolling is.
 
 ## tabs
 
