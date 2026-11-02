@@ -103,7 +103,9 @@ func (c *Compositor) drawOverviewBackdrop(pass *frame, o *output.Output, in floa
 	}
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
 	if c.overviewStyle.Blur {
-		c.drawBlur(pass, o, glassDraw{shape: []image.Rectangle{bounds}, extent: bounds, alpha: in, look: &overviewGlass, mica: true})
+		sc := c.sceneOf(o)
+		sc.blurs.shape = append(sc.blurs.shape[:0], bounds)
+		c.drawBlur(pass, o, glassDraw{shape: sc.blurs.shape, extent: bounds, alpha: in, look: &overviewGlass, mica: true})
 	}
 	if d := c.overviewStyle.Dim; d > 0 {
 		pass.FillRect(bounds, render.Color{A: uint8(math.Round(float64(d * in * 0xff)))})

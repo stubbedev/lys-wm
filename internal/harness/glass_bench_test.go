@@ -4,7 +4,9 @@ import (
 	"errors"
 	"image"
 	"regexp"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -105,5 +107,92 @@ func BenchmarkGlassRimStep(b *testing.B) {
 			}
 			return nil
 		})
+	})
+}
+
+func benchOverview(b *testing.B, open func(testing.TB) setup, windows int, moving bool) {
+	b.Helper()
+	now := time.Hour
+	s := open(b)
+	s.configure = func(cfg *compositor.Config) {
+		cfg.Animations = animated(b)
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor.Rounding = 12
+		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pile$`), Mode: wm.RuleFloat, Size: image.Pt(1000, 700)}}
+	}
+	h := start(b, s, benchMode)
+	c := testclient.Connect(b, h.Socket())
+	for range windows {
+		w := c.Window("pile", testclient.Fill(0x40, 0x60, 0x80))
+		c.DispatchUntil("a window to map", w.Mapped)
+		w.Stop()
+	}
+	h.dispatch("overview show")
+	h.Do(func(bk *headless.Backend, comp *compositor.Compositor) error {
+		o := bk.Outputs()[0]
+		now += 10 * time.Second
+		if err := comp.Frame(o); err != nil {
+			return err
+		}
+		frame := 0
+		for b.Loop() {
+			if moving {
+				frame++
+				now += 4 * time.Millisecond
+				if frame%40 == 0 {
+					if err := comp.Dispatch(wm.OverviewAction{Mode: wm.OverviewToggle}); err != nil {
+						return err
+					}
+				}
+			}
+			if err := comp.Frame(o); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func BenchmarkOverviewFrame(b *testing.B) {
+	benchRenderers(b, func(b *testing.B, open func(testing.TB) setup) {
+		for _, n := range []int{10, 30} {
+			for name, moving := range map[string]bool{"settled": false, "moving": true} {
+				b.Run(strconv.Itoa(n)+"/"+name, func(b *testing.B) { benchOverview(b, open, n, moving) })
+			}
+		}
+	})
+}
+
+func TestASettledOverviewFrameAllocatesNothing(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates")
+	}
+	s := setup{open: softBackend}
+	s.configure = func(cfg *compositor.Config) {
+		cfg.Decor.Rounding = 12
+		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pile$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
+	}
+	h := start(t, s, small)
+	c := testclient.Connect(t, h.Socket())
+	for range 3 {
+		w := c.Window("pile", testclient.Fill(0x40, 0x60, 0x80))
+		c.DispatchUntil("a window to map", w.Mapped)
+		w.Stop()
+	}
+	h.dispatch("overview show")
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		o := b.Outputs()[0]
+		if err := comp.Frame(o); err != nil {
+			return err
+		}
+		var failed error
+		if got := testing.AllocsPerRun(50, func() {
+			if err := comp.Frame(o); err != nil {
+				failed = err
+			}
+		}); got != 0 {
+			t.Errorf("a settled overview frame allocates %v times", got)
+		}
+		return failed
 	})
 }
