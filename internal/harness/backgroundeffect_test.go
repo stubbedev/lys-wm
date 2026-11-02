@@ -465,3 +465,46 @@ func TestBackgroundEffectProtocolErrors(t *testing.T) {
 		c.ExpectProtocolError(uint32(cbe.ExtBackgroundEffectSurfaceV1ErrorSurfaceDestroyed))
 	})
 }
+
+func TestAPopupsFirstFrameIsAlreadyBlurred(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, func(cfg *compositor.Config) { cfg.Decor.Blur.Size, cfg.Decor.Blur.Passes = 3, 2 }, small)
+		c := testclient.Connect(t, h.Socket())
+		bg := c.Window("background", fineChecker)
+		c.DispatchUntil("the background to map", bg.Mapped)
+		bg.Stop()
+		settle(t, h)
+		fx := bindEffects(t, c)
+		tint := func(pix []byte, _ int, _ image.Point, _ int) {
+			for i := 0; i < len(pix); i += 4 {
+				pix[i], pix[i+1], pix[i+2], pix[i+3] = 0, 0, 0x80, 0x80
+			}
+		}
+		menu := c.Popup(bg, testclient.Placement{Size: image.Pt(40, 20), Anchor: image.Rect(20, 20, 21, 21), Edge: cxdg.XdgPositionerAnchorTopLeft, Gravity: cxdg.XdgPositionerGravityBottomRight}, nil, tint)
+		menu.Translucent = true
+		fx.set(t, fx.of(t, menu.Surface), image.Rect(0, 0, 40, 20))
+		if err := c.Display.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		tinted := func(px [3]byte) bool { return px[0] > 0x70 && (px[1] < 0x18 || px[1] > 0x68) && px[0] != px[1] }
+		frosted := func(px [3]byte) bool { return px[1] >= 0x18 && px[1] <= 0x68 && px[0] > 0x70 }
+		deadline := time.Now().Add(clientTimeout)
+		for {
+			c.Sync()
+			var px [3]byte
+			h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+				px = pixel(snapshot(b.Outputs()[0]), 30, 30)
+				return nil
+			})
+			if frosted(px) {
+				return
+			}
+			if tinted(px) {
+				t.Fatalf("a frame showed the popup %v over the unblurred desktop", px)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the popup never blurred: pixel %v", px)
+			}
+		}
+	})
+}
