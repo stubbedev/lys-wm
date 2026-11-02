@@ -27,8 +27,8 @@ hardware_tests := "TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehind
 # Measure how smoothly the animations reach the screen; docs/frame-pacing.md
 # has the columns. Refuses a software rasteriser unless args has
 # -allow-software. It runs no tests first, so `just docker pace` measures a GPU
-# whatever the hardware tests say. backend=drm takes the display: run it from a
-# text console. /run/opengl-driver holds the real drivers where it exists, and
+# whatever the hardware tests say. The drm backend takes the display: run it
+# from a text console. /run/opengl-driver holds the real drivers where it exists, and
 # elsewhere the environment says, as VK_DRIVER_FILES does on other distros.
 pace backend="headless" renderer="vulkan" rounds="10" args="":
     #!/usr/bin/env bash

@@ -31,9 +31,9 @@ not measure them.
 
 ```sh
 just pace                         # headless, Vulkan, on this machine's GPU
-just pace renderer=gles
-just pace rounds=30 args="-json report.json -scenarios move,genie"
-just pace backend=drm             # real page flips, from a text console
+just pace headless gles
+just pace headless vulkan 30 "-json report.json -scenarios move,genie"
+just pace drm vulkan              # real page flips, from a text console
 just docker pace                  # headless on the host's GPU, from a container
 ```
 
