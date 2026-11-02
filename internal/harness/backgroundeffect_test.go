@@ -97,7 +97,7 @@ func (e effects) set(t *testing.T, obj *cbe.ExtBackgroundEffectSurfaceV1, rects 
 		t.Fatal(err)
 	}
 	for _, r := range rects {
-		if err := g.Add(int32(r.Min.X), int32(r.Min.Y), int32(r.Dx()), int32(r.Dy())); err != nil { //nolint:gosec // test rects are small
+		if err := g.Add(int32(r.Min.X), int32(r.Min.Y), int32(r.Dx()), int32(r.Dy())); err != nil {
 			t.Fatal(err)
 		}
 	}
