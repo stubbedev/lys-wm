@@ -39,14 +39,16 @@ rules:
 `
 
 const (
-	eased      = 400 * time.Millisecond
-	sprung     = 900 * time.Millisecond
-	genieTime  = 600 * time.Millisecond
-	midFlight  = 120 * time.Millisecond
-	steady     = 3 * time.Second
-	settleGap  = 150 * time.Millisecond
-	pumpChunk  = 4 * time.Second
-	bandHeight = 64
+	eased       = 400 * time.Millisecond
+	sprung      = 900 * time.Millisecond
+	genieTime   = 600 * time.Millisecond
+	midFlight   = 120 * time.Millisecond
+	steady      = 3 * time.Second
+	settleGap   = 150 * time.Millisecond
+	pumpChunk   = 4 * time.Second
+	bandHeight  = 64
+	quiet       = 5 * time.Millisecond
+	settleTries = 20
 )
 
 type step struct {
@@ -118,6 +120,20 @@ func movingBand(pix []byte, stride int, size image.Point, frame int) {
 	}
 }
 
+func (s *session) settle() {
+	s.pump(sprung)
+	for range settleTries {
+		from := s.now()
+		s.client.Sync()
+		took := s.now() - from
+		if took < quiet {
+			return
+		}
+		s.pump(2 * took)
+	}
+	panic(fatal{fmt.Errorf("the compositor still took over %v to answer after %d tries to let it settle", quiet, settleTries)})
+}
+
 func (s *session) clear() {
 	for _, w := range s.windows {
 		if err := w.Destroy(); err != nil {
@@ -127,7 +143,7 @@ func (s *session) clear() {
 	s.windows = nil
 	s.client.Sync()
 	s.dispatch("workspace 1")
-	s.pump(sprung)
+	s.settle()
 }
 
 func (s *session) play(st *step) {
@@ -141,7 +157,7 @@ func (s *session) play(st *step) {
 func (s *session) run(sc *scenario, rounds int) {
 	if sc.setup != nil {
 		sc.setup(s)
-		s.pump(sprung)
+		s.settle()
 	}
 	if sc.once {
 		rounds = 1

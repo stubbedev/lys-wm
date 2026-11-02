@@ -15,11 +15,11 @@ import (
 const refresh = 10 * time.Millisecond
 
 type fakeSync struct {
-	native  bool
-	cost    time.Duration
-	fds     []int
-	now     *time.Duration
-	failed  error
+	native   bool
+	cost     time.Duration
+	fds      []int
+	now      *time.Duration
+	failed   error
 	finishes int
 }
 
