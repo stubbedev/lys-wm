@@ -191,7 +191,8 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
 			now := backend.Now()
-			return backend.LatchDeadline(o.lastVblank, now, o.state.Mode.Interval()) - now
+			interval := o.state.Mode.Interval()
+			return backend.LatchDeadlineWithin(o.lastVblank, now, interval, o.budget.Budget(interval)) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
@@ -253,6 +254,9 @@ type Output struct {
 	unread         bool
 	timer          *loop.Timer
 	latch          *loop.Timer
+	budget         backend.RenderBudget
+	frameStart     time.Duration
+	aimedAt        time.Duration
 	armed          bool
 	clock          *backend.FrameClock
 	presentPending bool
@@ -441,6 +445,8 @@ func (o *Output) frameReady() bool {
 
 func (o *Output) runFrame() error {
 	o.frames++
+	o.frameStart = backend.Now()
+	o.aimedAt, _ = backend.NextVblank(o.lastVblank, o.frameStart, o.state.Mode.Interval())
 	if err := o.backend.handler.Frame(o); err != nil {
 		return err
 	}
@@ -491,7 +497,20 @@ func (o *Output) Present(damage render.Region) error {
 	}
 	o.presentPending, o.queuedTorn = true, false
 	o.presents++
+	o.timeFrame()
 	return o.arm()
+}
+
+func (o *Output) timeFrame() {
+	if o.aimedAt == 0 {
+		return
+	}
+	now, interval := backend.Now(), o.state.Mode.Interval()
+	o.budget.Sample(now - o.frameStart)
+	if at, _ := backend.NextVblank(o.lastVblank, now, interval); at > o.aimedAt+interval/2 {
+		o.budget.Missed()
+	}
+	o.aimedAt = 0
 }
 
 func (o *Output) AllowScanout(t gpu.ScanoutTarget) {
