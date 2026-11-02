@@ -234,6 +234,62 @@ func testScreencopyIntoDMABUFsOnTheGPURenderers(t *testing.T, start gpuStarter) 
 	}
 }
 
+func dmabufScreencopy(t *testing.T, start gpuStarter) (*testclient.Client, *cwsc.ZwlrScreencopyManagerV1, *captureView) {
+	t.Helper()
+	c, _, view := dmabufCapture(t, start)
+	if !c.HasDMABUFFeedback() {
+		t.Skip("the renderer names no main device, so it offers no dmabuf captures")
+	}
+	mgr, err := cwsc.NewZwlrScreencopyManagerV1(c.Display, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Bind(mgr)
+	return c, mgr, view
+}
+
+func copyDMABUF(t *testing.T, c *testclient.Client, mgr *cwsc.ZwlrScreencopyManagerV1, target *cw.WlBuffer) *copyFrame {
+	t.Helper()
+	f := &copyFrame{}
+	frame, err := mgr.CaptureOutput(f, 0, c.Outputs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the buffer description", func() bool { return f.bufferDone })
+	if err := errors.Join(frame.Copy(target), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func TestAScreencopyIntoADMABUFTheRendererCannotDrawIntoFailsAndKeepsTheClient(t *testing.T) {
+	onEachDMABUFRenderer(t, testAScreencopyIntoADMABUFTheRendererCannotDrawIntoFailsAndKeepsTheClient)
+}
+
+func testAScreencopyIntoADMABUFTheRendererCannotDrawIntoFailsAndKeepsTheClient(t *testing.T, start gpuStarter) {
+	c, mgr, view := dmabufScreencopy(t, start)
+	refused := copyDMABUF(t, c, mgr, c.DMABUFOutside(view.size, view.modifiers).WL)
+	c.DispatchUntil("the refused copy", func() bool { return refused.ready || refused.failed })
+	if !refused.failed {
+		t.Fatalf("copy into an undrawable modifier %+v, want it failed", *refused)
+	}
+	next := copyDMABUF(t, c, mgr, c.RenderTarget(view.size, view.modifiers).WL)
+	c.DispatchUntil("the next copy", func() bool { return next.ready || next.failed })
+	if next.failed {
+		t.Fatalf("copy into a drawable modifier after a refused one %+v, want it ready", *next)
+	}
+}
+
+func TestAScreencopyIntoADMABUFOfTheWrongSizeIsAProtocolError(t *testing.T) {
+	onEachDMABUFRenderer(t, testAScreencopyIntoADMABUFOfTheWrongSizeIsAProtocolError)
+}
+
+func testAScreencopyIntoADMABUFOfTheWrongSizeIsAProtocolError(t *testing.T, start gpuStarter) {
+	c, mgr, view := dmabufScreencopy(t, start)
+	copyDMABUF(t, c, mgr, c.RenderTarget(view.size.Add(image.Pt(1, 1)), view.modifiers).WL)
+	c.ExpectProtocolError(uint32(cwsc.ZwlrScreencopyFrameV1ErrorInvalidBuffer))
+}
+
 func TestTheSoftRendererOffersNoScreencopyDMABUF(t *testing.T) {
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())

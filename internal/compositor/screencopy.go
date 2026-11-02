@@ -111,6 +111,10 @@ func (f *screencopyFrame) copy(obj *swsc.ZwlrScreencopyFrameV1, wl *sw.WlBuffer,
 		return obj.ProtocolError(swsc.ZwlrScreencopyFrameV1ErrorAlreadyUsed, "the frame was already copied")
 	}
 	target, err := f.target(wl)
+	if errors.Is(err, errUndrawable) {
+		f.finish()
+		return f.res.SendFailed()
+	}
 	if err != nil {
 		return obj.ProtocolError(swsc.ZwlrScreencopyFrameV1ErrorInvalidBuffer, "%v", err)
 	}

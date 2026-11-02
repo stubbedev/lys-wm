@@ -319,7 +319,10 @@ func (c *Compositor) captureRegion(o *output.Output, logical image.Rectangle) im
 	return o.Scale().Rect(logical).Intersect(bounds)
 }
 
-var errConstraints = errors.New("the buffer breaks the capture's constraints")
+var (
+	errConstraints = errors.New("the buffer breaks the capture's constraints")
+	errUndrawable  = fmt.Errorf("%w: the renderer cannot draw into this layout", errConstraints)
+)
 
 func shmTarget(b *shm.Buffer, size image.Point, formats []render.Format, scratch *captureScratch) (captureTarget, error) {
 	switch {
@@ -347,7 +350,7 @@ func (c *Compositor) dmabufTarget(b *dmabuf.Buffer, size image.Point) (captureTa
 		return nil, fmt.Errorf("modifiers the renderer draws %v into: %w", d.Format, err)
 	}
 	if !slices.Contains(mods, d.Modifier) {
-		return nil, fmt.Errorf("%w: the renderer cannot draw into format %v with modifier %v", errConstraints, d.Format, d.Modifier)
+		return nil, fmt.Errorf("%w: format %v with modifier %v", errUndrawable, d.Format, d.Modifier)
 	}
 	return dmabufCapture{b, r}, nil
 }
