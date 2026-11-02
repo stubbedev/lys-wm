@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,19 @@ func TestASoftwareRasteriserIsNotAGPU(t *testing.T) {
 	}
 	if err := softwareRefusal(options{}, frametrace.Header{Device: "Mesa Intel(R) Graphics (LNL)"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTicksKeepTheirCadenceWhateverEachOneCosts(t *testing.T) {
+	now := time.Second
+	var at []time.Duration
+	onTicks(4, 8*time.Millisecond, func() time.Duration { return now }, func(d time.Duration) { now += max(d, 0) }, func() {
+		at = append(at, now)
+		now += 3 * time.Millisecond
+	})
+	want := []time.Duration{time.Second, time.Second + 8*time.Millisecond, time.Second + 16*time.Millisecond, time.Second + 24*time.Millisecond}
+	if !slices.Equal(at, want) {
+		t.Fatalf("ticks at %v, want %v", at, want)
 	}
 }
 

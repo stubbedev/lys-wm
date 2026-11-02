@@ -190,10 +190,17 @@ func (s *session) swipe(line string) {
 func fingers(dx float64) func(*session) {
 	return func(s *session) {
 		s.swipe("begin")
-		for range swipeEvents {
-			s.swipe("swipe " + strconv.FormatFloat(dx, 'f', 1, 64))
-			s.pump(swipeEvery)
-		}
+		line := "swipe " + strconv.FormatFloat(dx, 'f', 1, 64)
+		onTicks(swipeEvents, swipeEvery, s.now, time.Sleep, func() { s.swipe(line) })
+		s.client.Sync()
+	}
+}
+
+func onTicks(n int, every time.Duration, now func() time.Duration, sleep func(time.Duration), tick func()) {
+	start := now()
+	for i := range n {
+		sleep(start + time.Duration(i)*every - now())
+		tick()
 	}
 }
 
