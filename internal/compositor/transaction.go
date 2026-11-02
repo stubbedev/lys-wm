@@ -225,7 +225,10 @@ func (c *Compositor) land(expired bool) error {
 		err = c.holdTimer.Disarm()
 	}
 	c.shownArranger = t.source
-	err = errors.Join(err, c.install(t.goal, c.clock()), c.publish())
+	now := c.clock()
+	err = errors.Join(err, c.install(t.goal, now))
+	c.refreshLooks(now)
+	err = errors.Join(err, c.publish())
 	c.releasing = true
 	for _, m := range t.members {
 		err = errors.Join(err, m.finish())

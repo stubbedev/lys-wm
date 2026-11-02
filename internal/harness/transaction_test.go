@@ -326,6 +326,29 @@ func TestFullscreenLandsWithItsAnswer(t *testing.T) {
 	h.stillShows("left back", 10, 50, greenColor)
 }
 
+func TestAWindowsLookLandsWithItsChange(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, func(cfg *compositor.Config) {
+			heldForever(cfg)
+			cfg.Decor.Opacity.Fullscreen = 0.5
+			cfg.WM.Gaps = wm.Gaps{Outer: wm.Insets{Top: 10, Right: 10, Bottom: 10, Left: 10}}
+		}, small)
+		c, w := open(t, h, "fading", testclient.Fill(0xff, 0xff, 0xff))
+		white := [3]byte{0xff, 0xff, 0xff}
+		h.Eventually("the window opaque while tiled", showing(15, 15, white))
+		h.dispatch("fullscreen")
+		h.Eventually("the fullscreen held", holding)
+		h.stillShows("still opaque while held", 15, 15, white)
+		c.DispatchUntil("the answer", func() bool { return w.Logical == small.Size })
+		c.Sync()
+		h.Eventually("the fullscreen landed", landed)
+		want := blend(white, [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}, 0.5)
+		if got := pixel(h.Rendered(0), 15, 15); !near(got, want) {
+			t.Errorf("a landed fullscreen window shows %v, want its half opacity, %v", got, want)
+		}
+	})
+}
+
 func TestAWorkspaceSwitchIsNotHeldBackByAFrozenClient(t *testing.T) {
 	h := StartWith(t, heldForever, small)
 	cl, left := open(t, h, "left", fillGreen)
