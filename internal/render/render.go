@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
+	"strings"
 
 	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/intconv"
@@ -324,6 +326,15 @@ type Texture interface {
 type ScreenShader interface {
 	Prepare(target Target) error
 	Destroy() error
+}
+
+type NamedDevice interface {
+	DeviceName() string
+}
+
+func SoftwareDevice(name string) bool {
+	lower := strings.ToLower(name)
+	return slices.ContainsFunc([]string{"llvmpipe", "softpipe", "lavapipe", "swiftshader", "swrast", "software"}, func(p string) bool { return strings.HasPrefix(lower, p) })
 }
 
 type Renderer interface {

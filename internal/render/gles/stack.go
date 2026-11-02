@@ -2,9 +2,9 @@ package gles
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 type Stack struct {
@@ -62,5 +62,5 @@ func (s *Stack) Close() error {
 // GBM device: its kms_swrast allocates dumb buffers, which only a card
 // node grants, and logs the refusal on a render node.
 func (s *Stack) SoftwareOnly() bool {
-	return strings.HasPrefix(s.Renderer.name, "llvmpipe") || strings.HasPrefix(s.Renderer.name, "softpipe")
+	return render.SoftwareDevice(s.Renderer.name)
 }

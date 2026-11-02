@@ -20,6 +20,17 @@ func (c *Compositor) Frame(b backend.Output) error {
 	if o == nil {
 		return backend.Broken("compositor: frame on unknown output %s", b.Name())
 	}
+	if c.frames == nil {
+		return c.frame(o)
+	}
+	c.frames.Begin(b.Name())
+	err := c.frame(o)
+	c.frames.End(b.Name(), c.animating(o, c.frameTime))
+	return err
+}
+
+func (c *Compositor) frame(o *output.Output) error {
+	b := o.Backend()
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
@@ -47,6 +58,7 @@ func (c *Compositor) dropFrame(o *output.Output, err error) error {
 	if backend.Fatal(err) {
 		return err
 	}
+	c.frames.Drop(o.Backend().Name())
 	if c.dropped[o] == 0 {
 		c.report(fmt.Errorf("%w; dropping frames until one draws", err))
 	}
@@ -128,6 +140,7 @@ func (c *Compositor) render(o *output.Output) error {
 		if err != nil {
 			return err
 		}
+		c.frames.Scanout(o.Backend().Name())
 		sc.presented()
 		sc.invalidate()
 		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
@@ -141,6 +154,7 @@ func (c *Compositor) render(o *output.Output) error {
 		o.Backend().AbortFrame()
 		return err
 	}
+	c.frames.Submit(o.Backend().Name())
 	if err := o.Backend().Present(repaint); err != nil {
 		return err
 	}
@@ -374,6 +388,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	if o == nil {
 		return nil
 	}
+	c.frames.Presented(b.Name(), p)
 	sc := c.sceneOf(o)
 	kind, refresh, seq := spt.WpPresentationFeedbackKindVsync, p.Refresh, p.Seq
 	switch {

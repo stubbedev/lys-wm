@@ -79,6 +79,10 @@ func (r *Renderer) Device() *lgpu.Device {
 	return r.d
 }
 
+func (r *Renderer) DeviceName() string {
+	return r.d.Name()
+}
+
 func (r *Renderer) Close() error {
 	r.d.Close()
 	return nil

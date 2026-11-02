@@ -30,6 +30,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/fifo"
+	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/gammacontrol"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/idle"
@@ -130,6 +131,7 @@ type Compositor struct {
 	outputs         []*output.Output
 	layout          *output.Manager
 	renderer        render.Renderer
+	frames          *frametrace.Recorder
 	surfaces        *surface.Manager
 	shm             *shm.Manager
 	seat            *seat.Seat

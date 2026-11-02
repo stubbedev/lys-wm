@@ -253,6 +253,10 @@ func (r *Renderer) Close() error {
 	return err
 }
 
+func (r *Renderer) DeviceName() string {
+	return r.name
+}
+
 func (r *Renderer) Finish() error {
 	if err := r.enter(); err != nil {
 		return err

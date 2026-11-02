@@ -13,7 +13,7 @@ gates: fmt-check tidy-check check vuln headless race
 # harness, which boots lys-wm on the headless backend and drives real clients
 # against it, the session bus and GPU tests, and the end-to-end session in
 # cmd/lys-wm.
-headless_packages := "./internal/shader/... ./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/render/vulkan/... ./internal/xwayland/... ./cmd/lys-wm/..."
+headless_packages := "./internal/shader/... ./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/render/vulkan/... ./internal/xwayland/... ./cmd/lys-wm/... ./cmd/lys-wm-pace/..."
 
 # Run the tests that need dev-shell programs. LYS_WM_HEADLESS=1 turns a missing
 # program into a failure instead of a skip.
@@ -24,11 +24,30 @@ headless:
 # shell otherwise runs on Mesa's llvmpipe.
 hardware_tests := "TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGPURenderers|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestColorParity|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGPURenderers|TestAScreencopyIntoADMABUF|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding|TestAnAsyncReadSeesTheFrameItWasStartedAfter|TestNestedLysWMRendersWithVulkan|TestATranslucentWindowBlurs|TestXRayBlur|TestABlurRegion|TestARegionIsClipped|TestARuleOffTurnsBlur|TestADecorationBlurLeaves|TestXRayAppliesToBlur|TestASubsurfaceRegion|TestAnAlphaModifierFadesTheBlur|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|TestBordersAndTabBars|TestRoundedWindowsAndBorders|TestATranslucentBorder|TestAFloatingWindowCasts|TestAGradientBorder|TestInactiveWindows|TestADimAround|TestAMovedWindow|TestWindowsPopIn|TestAWorkspaceSwitch|TestBorderColours|TestAGoo|TestAMorphing|TestAnElastic|TestAGenie|TestScreenShaders|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAShader"
 
+# Measure how smoothly the animations reach the screen; docs/frame-pacing.md
+# has the columns. Refuses a software rasteriser unless args has
+# -allow-software. It runs no tests first, so `just docker pace` measures a GPU
+# whatever the hardware tests say. backend=drm takes the display: run it from a
+# text console. /run/opengl-driver holds the real drivers where it exists, and
+# elsewhere the environment says, as VK_DRIVER_FILES does on other distros.
+pace backend="headless" renderer="vulkan" rounds="10" args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -e /run/opengl-driver ]]; then
+        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    fi
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
+    # shellcheck disable=SC2086
+    "$dir/lys-wm-pace" -backend {{quote(backend)}} -renderer {{quote(renderer)}} -rounds {{quote(rounds)}} {{args}}
+
 # Run the GPU tests on the container's /run/opengl-driver instead of the dev
 # shell's llvmpipe, failing when any of them skips, then check frame pacing on
 # each GPU renderer: headless lys-wm in a private runtime dir, with Xwayland
-# off, runs es2gears_wayland and fails below min_fps.
-hardware min_fps="57":
+# off, runs es2gears_wayland and fails below min_fps, and lys-wm-pace plays
+# the animations and fails when a step presents over max_late percent late.
+hardware min_fps="57" max_late="5":
     #!/usr/bin/env bash
     set -euo pipefail
     unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
@@ -73,6 +92,9 @@ hardware min_fps="57":
     }
     pace gles
     pace vulkan
+    go build -o "$dir/lys-wm-pace" ./cmd/lys-wm-pace
+    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer gles -rounds 5 -max-late-percent {{max_late}}
+    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer vulkan -rounds 5 -max-late-percent {{max_late}}
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and

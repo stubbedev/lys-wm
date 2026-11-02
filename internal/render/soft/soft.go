@@ -94,6 +94,10 @@ type Renderer struct {
 	pass pass
 }
 
+func (*Renderer) DeviceName() string {
+	return "software renderer"
+}
+
 func New() *Renderer {
 	r := &Renderer{}
 	r.pass.owner = r

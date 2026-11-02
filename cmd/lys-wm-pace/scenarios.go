@@ -1,0 +1,272 @@
+package main
+
+import (
+	"fmt"
+	"image"
+	"strconv"
+	"time"
+
+	"github.com/stubbedev/lys-wm/internal/ipc"
+	"github.com/stubbedev/lys-wm/internal/testclient"
+)
+
+const paceConfig = `xwayland: {enabled: false}
+decoration:
+  rounding: 12
+  shadow: {enabled: true, range: 24, render_power: 3, offset: [0, 8], color: "#00000060"}
+  blur:
+    enabled: true
+    size: 8
+    passes: 2
+    tint: "#ffffff30"
+    saturation: 1.4
+    brightness: 1.05
+    grain: 0.04
+    refraction: {bezel: 16, amount: 8}
+    specular: {strength: 0.6, width: 1}
+gaps: {inner: 8, outer: 12}
+animations:
+  enabled: true
+  curves:
+    glide: {bezier: [0.32, 0.72, 0, 1]}
+    settle: {spring: {stiffness: 170, damping: 26}}
+  events:
+    global: {curve: glide, duration: 250}
+    windows_move: {curve: settle}
+    windows_minimize: {curve: glide, duration: 450}
+rules:
+  - {title: ^glass$, float: true, size: 1000x600, opacity: 0.6}
+`
+
+const (
+	eased      = 400 * time.Millisecond
+	sprung     = 900 * time.Millisecond
+	genieTime  = 600 * time.Millisecond
+	midFlight  = 120 * time.Millisecond
+	steady     = 3 * time.Second
+	settleGap  = 150 * time.Millisecond
+	pumpChunk  = 4 * time.Second
+	bandHeight = 64
+)
+
+type step struct {
+	name       string
+	act        func(*session)
+	measure    time.Duration
+	continuous bool
+}
+
+type scenario struct {
+	name  string
+	setup func(*session)
+	steps []step
+	once  bool
+}
+
+type mark struct {
+	step       string
+	continuous bool
+	from, to   time.Duration
+}
+
+type session struct {
+	client  *testclient.Client
+	ipc     string
+	now     func() time.Duration
+	exited  <-chan error
+	marks   []mark
+	windows []*testclient.Window
+	opened  *testclient.Window
+}
+
+func (s *session) dispatch(action string) {
+	if _, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindDispatch, Action: action}); err != nil {
+		panic(fatal{fmt.Errorf("dispatch %q: %w", action, err)})
+	}
+}
+
+func (s *session) pump(d time.Duration) {
+	for d > 0 {
+		chunk := min(d, pumpChunk)
+		until := time.Now().Add(chunk)
+		s.client.DispatchUntil("the pump's clock", func() bool { return !time.Now().Before(until) })
+		d -= chunk
+	}
+}
+
+func (s *session) window(title string, paint testclient.Painter) *testclient.Window {
+	w := s.client.Window(title, paint)
+	s.client.DispatchUntil("window "+title+" to map", w.Mapped)
+	s.windows = append(s.windows, w)
+	return w
+}
+
+func (s *session) still(title string, b, g, r byte) {
+	s.window(title, testclient.Fill(b, g, r)).Stop()
+}
+
+func movingBand(pix []byte, stride int, size image.Point, frame int) {
+	for i := range pix {
+		pix[i] = 0x50
+	}
+	top := frame * 8 % max(size.Y-bandHeight, 1)
+	for y := top; y < min(top+bandHeight, size.Y); y++ {
+		row := pix[y*stride : y*stride+size.X*4]
+		for x := 0; x < len(row); x += 4 {
+			row[x], row[x+1], row[x+2], row[x+3] = 0x20, 0xc0, 0xff, 0xff
+		}
+	}
+}
+
+func (s *session) clear() {
+	for _, w := range s.windows {
+		if err := w.Destroy(); err != nil {
+			panic(fatal{fmt.Errorf("destroy a window: %w", err)})
+		}
+	}
+	s.windows = nil
+	s.client.Sync()
+	s.dispatch("workspace 1")
+	s.pump(sprung)
+}
+
+func (s *session) play(st *step) {
+	from := s.now()
+	st.act(s)
+	s.pump(st.measure)
+	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, from: from, to: s.now()})
+	s.pump(settleGap)
+}
+
+func (s *session) run(sc *scenario, rounds int) {
+	if sc.setup != nil {
+		sc.setup(s)
+		s.pump(sprung)
+	}
+	if sc.once {
+		rounds = 1
+	}
+	for range rounds {
+		for i := range sc.steps {
+			s.play(&sc.steps[i])
+		}
+	}
+	s.clear()
+}
+
+func dispatches(action string) func(*session) {
+	return func(s *session) { s.dispatch(action) }
+}
+
+func twoWindows(s *session) {
+	s.still("left", 0x40, 0x30, 0x20)
+	s.still("right", 0x20, 0x30, 0x40)
+}
+
+func twoWorkspaces(s *session) {
+	s.still("first", 0x40, 0x30, 0x20)
+	s.still("first too", 0x20, 0x40, 0x30)
+	s.dispatch("workspace 2")
+	s.pump(eased)
+	s.still("second", 0x20, 0x30, 0x40)
+	s.dispatch("workspace 1")
+}
+
+var scenarios = []scenario{
+	{
+		name: "window",
+		setup: func(s *session) {
+			s.still("base", 0x40, 0x30, 0x20)
+		},
+		steps: []step{
+			{name: "window-open", measure: eased, act: func(s *session) {
+				s.opened = s.client.Window("opened", testclient.Fill(0x20, 0x30, 0x40))
+				s.client.DispatchUntil("the opened window to map", s.opened.Mapped)
+				s.opened.Stop()
+			}},
+			{name: "window-close", measure: eased, act: func(s *session) {
+				if err := s.opened.Destroy(); err != nil {
+					panic(fatal{fmt.Errorf("close the window: %w", err)})
+				}
+				s.client.Sync()
+			}},
+		},
+	},
+	{
+		name:  "move",
+		setup: twoWindows,
+		steps: []step{
+			{name: "move-spring-left", measure: sprung, act: dispatches("move left")},
+			{name: "move-spring-right", measure: sprung, act: dispatches("move right")},
+			{name: "move-interrupted", measure: sprung, act: func(s *session) {
+				s.dispatch("move left")
+				s.pump(midFlight)
+				s.dispatch("move right")
+			}},
+		},
+	},
+	{
+		name:  "workspace",
+		setup: twoWorkspaces,
+		steps: []step{
+			{name: "workspace-there", measure: eased, act: dispatches("workspace 2")},
+			{name: "workspace-back", measure: eased, act: dispatches("workspace 1")},
+		},
+	},
+	{
+		name: "genie",
+		setup: func(s *session) {
+			s.still("base", 0x40, 0x30, 0x20)
+			s.still("minimized", 0x20, 0x30, 0x40)
+		},
+		steps: []step{
+			{name: "genie-minimize", measure: genieTime, act: dispatches("minimize")},
+			{name: "genie-restore", measure: genieTime, act: dispatches("restore")},
+		},
+	},
+	{
+		name: "glass-busy",
+		once: true,
+		setup: func(s *session) {
+			s.window("busy", movingBand)
+			s.still("glass", 0xf0, 0xf0, 0xf0)
+		},
+		steps: []step{{name: "glass-over-busy", measure: steady, continuous: true, act: func(*session) {}}},
+	},
+	{
+		name: "glass-still",
+		once: true,
+		setup: func(s *session) {
+			s.still("base", 0x40, 0x30, 0x20)
+			s.still("glass", 0xf0, 0xf0, 0xf0)
+		},
+		steps: []step{{name: "glass-over-still", measure: steady, act: func(*session) {}}},
+	},
+	{
+		name: "glass-slide",
+		setup: func(s *session) {
+			s.still("base", 0x40, 0x30, 0x20)
+			s.still("glass", 0xf0, 0xf0, 0xf0)
+			s.dispatch("workspace 2")
+			s.pump(eased)
+			s.still("second", 0x20, 0x30, 0x40)
+			s.dispatch("workspace 1")
+		},
+		steps: []step{
+			{name: "glass-slide-there", measure: eased, act: dispatches("workspace 2")},
+			{name: "glass-slide-back", measure: eased, act: dispatches("workspace 1")},
+		},
+	},
+}
+
+func scenarioNames() []string {
+	names := make([]string, len(scenarios))
+	for i := range scenarios {
+		names[i] = scenarios[i].name
+	}
+	return names
+}
+
+func millis(d time.Duration) string {
+	return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 2, 64)
+}

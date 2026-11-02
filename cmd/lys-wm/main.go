@@ -10,12 +10,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-lib/xdg"
@@ -25,9 +27,11 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/nested"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/config"
+	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/session"
 	"github.com/stubbedev/lys-wm/internal/systemd"
@@ -103,6 +107,18 @@ const (
 	glesRenderer
 	vulkanRenderer
 )
+
+func (k rendererKind) String() string {
+	switch k {
+	case softRenderer:
+		return "soft"
+	case glesRenderer:
+		return "gles"
+	case vulkanRenderer:
+		return "vulkan"
+	}
+	return fmt.Sprintf("renderer%d", k)
+}
 
 func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
 	switch requested {
@@ -346,15 +362,53 @@ func cursorConfig(getenv func(string) string) (compositor.CursorConfig, error) {
 	return cfg, nil
 }
 
+func startCPUProfile(path string) (func() error, error) {
+	if path == "" {
+		return func() error { return nil }, nil
+	}
+	f, err := os.Create(path) //nolint:gosec // the path comes from the command line
+	if err != nil {
+		return nil, fmt.Errorf("create the CPU profile: %w", err)
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		return nil, errors.Join(fmt.Errorf("start the CPU profile: %w", err), f.Close())
+	}
+	return func() error {
+		pprof.StopCPUProfile()
+		return f.Close()
+	}, nil
+}
+
+func openFrameTrace(path string, kind backendKind, renderer rendererKind, b backend.Backend, report func(error)) (*frametrace.Recorder, error) {
+	if path == "" {
+		return nil, nil
+	}
+	r := b.Renderer()
+	named, ok := r.(render.NamedDevice)
+	if !ok {
+		return nil, fmt.Errorf("frame trace: the %s renderer does not name its device", renderer)
+	}
+	h := frametrace.Header{Backend: kind.String(), Renderer: renderer.String(), Device: named.DeviceName(), Software: render.SoftwareDevice(named.DeviceName()), Vsync: kind == drmBackend}
+	sync, _ := r.(frametrace.Sync)
+	return frametrace.Create(path, h, sync, frametrace.Clock{Now: backend.Now, Signal: kdrm.SyncFileSignalTime}, report)
+}
+
 func run(args []string) (err error) {
 	flags := flag.NewFlagSet("lys-wm", flag.ContinueOnError)
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
 	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; drm takes gles or vulkan)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
+	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
+	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	stopProfile, err := startCPUProfile(*cpuProfile)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, stopProfile()) }()
 	kind, err := chooseBackend(*requested, os.Getenv("WAYLAND_DISPLAY"))
 	if err != nil {
 		return err
@@ -422,6 +476,11 @@ func run(args []string) (err error) {
 	}
 	cfg.Hooks.SwitchVT, cfg.Hooks.Lid, s.configureInput = b.switchVT, b.lid, b.configureInput
 	defer func() { err = errors.Join(err, b.Close()) }()
+	frames, err := openFrameTrace(*framesPath, kind, renderer, b, cfg.Report)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, frames.Close()) }()
 	display, err := server.New(l, server.Options{RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"), Trace: trace, Report: cfg.Report})
 	if err != nil {
 		return err
@@ -431,6 +490,7 @@ func run(args []string) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, s.comp.Close()) }()
+	s.comp.TraceFrames(frames)
 	socket, err := ipc.SocketPath(os.Getenv("XDG_RUNTIME_DIR"), display.Name())
 	if err != nil {
 		return err

@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"image"
 
+	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
+
+func (c *Compositor) TraceFrames(r *frametrace.Recorder) {
+	c.frames = r
+}
 
 func (c *Compositor) OnDispatch(f func(wm.Action)) {
 	c.dispatched = f
