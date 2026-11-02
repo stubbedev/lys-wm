@@ -12,7 +12,7 @@
           ../flake.nix
           ../flake.lock
           ../nix
-          (lib.fileset.difference ../docs ../docs/actions.md)
+          (lib.fileset.difference ../docs (lib.fileset.unions [../docs/actions.md ../docs/shaders]))
         ]
       );
     };
@@ -30,7 +30,7 @@
 
         # Pins the module dependencies in go.sum; `just vendor-hash` recomputes
         # it, and CI does so on Dependabot's pull requests.
-        vendorHash = "sha256-b6oDXNkQRkFJ0YCDZCDRL9eEDArWNsfyHzBJL0O0wyg=";
+        vendorHash = "sha256-CljKpDQ1TjExqd0rVwXgH37bRtMFvutcD1I9YAAn7/Y=";
 
         subPackages = ["cmd/lys-wm" "cmd/lys-wmctl"];
 

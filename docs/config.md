@@ -36,6 +36,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
 | `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
 | `disabled` | `true` turns the output off |
+| `shader` | A fragment shader for the output's final image: see [Screen shaders](./shaders). A shader that does not compile leaves the output unshaded and says why. Reloading the config reads the file again |
 
 A mode the output does not have is reported, and the output keeps its current
 mode.

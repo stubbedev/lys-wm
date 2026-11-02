@@ -141,6 +141,9 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+	if c.shading(o) != nil {
+		return false, hw.plane.HideCursor()
+	}
 	ops := &c.cursorOps
 	ops.ops = ops.ops[:0]
 	var err error

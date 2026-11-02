@@ -27,6 +27,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		b := o.Backend()
 		mode := b.State().Mode
 		active, _ := s.ActiveOn(b.Name())
+		shader, shaderError := c.shaderReport(o)
 		snap.Outputs = append(snap.Outputs, ipc.Output{
 			Name:        b.Name(),
 			Description: b.Description(),
@@ -36,6 +37,8 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Workspace:   active,
 			Focused:     b.Name() == focusedOutput,
 			Powered:     b.State().Lit(),
+			Shader:      shader,
+			ShaderError: shaderError,
 		})
 	}
 	for _, w := range s.Workspaces() {
@@ -74,6 +77,17 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		})
 	}
 	return snap
+}
+
+func (c *Compositor) shaderReport(o *output.Output) (path, problem string) {
+	s, ok := c.shaders[c.configuredRule(o.Backend()).Shader]
+	if !ok {
+		return "", ""
+	}
+	if s.err != nil {
+		return s.path, s.err.Error()
+	}
+	return s.path, ""
 }
 
 func ipcIcon(i *shell.Icon) *ipc.Icon {

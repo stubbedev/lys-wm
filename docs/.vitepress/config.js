@@ -23,6 +23,7 @@ export default lysConfig({
         { text: 'Config', link: '/config' },
         { text: 'Actions', link: '/actions' },
         { text: 'IPC', link: '/ipc' },
+        { text: 'Screen shaders', link: '/shaders' },
       ],
     },
     {

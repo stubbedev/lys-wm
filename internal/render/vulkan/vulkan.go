@@ -17,6 +17,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/shader"
 )
 
 var formats = []struct {
@@ -410,7 +411,7 @@ type pass struct {
 	err error
 }
 
-func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+func (r *Renderer) target(target render.Target) (*Target, error) {
 	t, ok := target.(*Target)
 	if tt, isTT := target.(*TextureTarget); isTT {
 		t, ok = tt.Target, true
@@ -420,7 +421,16 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, fmt.Errorf("vulkan: cannot render into %T", target)
 	case t.r != r:
 		return nil, errors.New("vulkan: the target belongs to another renderer")
-	case r.pass != nil:
+	}
+	return t, nil
+}
+
+func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	t, err := r.target(target)
+	if err != nil {
+		return nil, err
+	}
+	if r.pass != nil {
 		return nil, errors.New("vulkan: Begin while a pass is open")
 	}
 	p, err := r.d.Begin(t.t, damage)
@@ -490,6 +500,47 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		return
 	}
 	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha, m)
+}
+
+type screenShader struct {
+	r *Renderer
+	s *lgpu.FragmentShader
+}
+
+func (r *Renderer) NewScreenShader(p *shader.Program) (render.ScreenShader, error) {
+	s, err := r.d.NewFragmentShader(p.SPIRV())
+	if err != nil {
+		return nil, fmt.Errorf("vulkan: %w", err)
+	}
+	return &screenShader{r: r, s: s}, nil
+}
+
+func (s *screenShader) Prepare(target render.Target) error {
+	t, err := s.r.target(target)
+	if err != nil {
+		return err
+	}
+	return s.s.Prepare(t.t)
+}
+
+func (s *screenShader) Destroy() error {
+	return s.s.Close()
+}
+
+func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst image.Rectangle, seconds float32) {
+	sh, ok := s.(*screenShader)
+	tex, texOK := t.(*texture)
+	switch {
+	case !ok || sh.r != p.r:
+		p.fail(fmt.Errorf("vulkan: a screen shader of another renderer (%T)", s))
+		return
+	case !texOK || tex.r != p.r:
+		p.fail(fmt.Errorf("vulkan: a texture of another renderer (%T)", t))
+		return
+	case p.err != nil:
+		return
+	}
+	p.p.DrawFragmentShader(sh.s, tex.t, dst, [4]float32{seconds, float32(dst.Dx()), float32(dst.Dy())})
 }
 
 func (p *pass) fail(err error) {

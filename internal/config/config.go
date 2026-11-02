@@ -13,6 +13,8 @@ import (
 	"io"
 	"maps"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -141,6 +143,7 @@ type rawOutput struct {
 	Scale    *At[float64] `yaml:"scale"`
 	BitDepth *At[int]     `yaml:"bitdepth"`
 	Disabled bool         `yaml:"disabled"`
+	Shader   *At[string]  `yaml:"shader"`
 }
 
 type rawInput struct {
@@ -702,7 +705,29 @@ func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 			p.fail(r.BitDepth.Line, key+".bitdepth", "%d is not 8 or 10", r.BitDepth.V)
 		}
 	}
+	if r.Shader != nil {
+		rule.Shader = p.shaderPath(*r.Shader, key+".shader")
+	}
 	return rule
+}
+
+func (p *parser) shaderPath(a At[string], key string) string {
+	if a.V == "" {
+		p.fail(a.Line, key, "an empty path; leave the key out for no shader")
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(a.V, "~/"); ok {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			p.fail(a.Line, key, "%q: %v", a.V, err)
+			return ""
+		}
+		return filepath.Join(home, rest)
+	}
+	if filepath.IsAbs(a.V) {
+		return a.V
+	}
+	return filepath.Join(filepath.Dir(p.file), a.V)
 }
 
 var (

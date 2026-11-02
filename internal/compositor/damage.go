@@ -205,6 +205,8 @@ type scene struct {
 	stale     bool
 	last      backend.Presentation
 	blurs     blurCaches
+	shader    *screenShader
+	image     render.TextureTarget
 }
 
 func newScene() *scene {

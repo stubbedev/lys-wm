@@ -17,6 +17,8 @@
           git
           gh
           mesa-demos
+          glslang
+          spirv-tools
         ]
         ++ import ./test-programs.nix {
           inherit pkgs;

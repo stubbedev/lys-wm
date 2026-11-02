@@ -32,6 +32,11 @@ func target(t *testing.T, r *vulkan.Renderer, size image.Point) render.ReadTarge
 	return tg
 }
 
+func TestScreenShadersMatchTheSoftwareRenderer(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.ScreenShaders(t, r, target(t, r, rendertest.Size), rendertest.ExampleShaders(t)...)
+}
+
 func TestParityWithTheSoftwareRenderer(t *testing.T) {
 	r := testenv.Vulkan(t)
 	rendertest.Parity(t, r, target(t, r, rendertest.Size))

@@ -48,6 +48,8 @@ Requests must arrive within 5 seconds and be under 64 KiB.
 
 `rect` is in logical pixels; `workspace` is the one the output shows;
 `powered` is false while `dpms off` or an idle daemon has the output off.
+An output with a [screen shader](./shaders) also has `shader`, its path, and,
+when it stays off, `shader_error`, which says why.
 
 `workspaces`: a list of open workspaces, in ID order:
 

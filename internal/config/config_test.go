@@ -320,3 +320,23 @@ func TestTheBuiltInConfigCanLeaveTheSession(t *testing.T) {
 		t.Fatalf("no top-level bind exits among %d", len(cfg.Binds))
 	}
 }
+
+func TestOutputShadersResolveAgainstTheConfig(t *testing.T) {
+	t.Setenv("HOME", "/home/me")
+	cfg, err := Parse("/etc/lys/wm.yaml", []byte("outputs:\n  - match: '*'\n    shader: grade.frag\n  - match: A\n    shader: /abs.frag\n  - match: B\n    shader: ~/mine.frag\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Outputs.Fallback.Shader; got != "/etc/lys/grade.frag" {
+		t.Errorf("relative shader %q", got)
+	}
+	if got := cfg.Outputs.Named[0].Shader; got != "/abs.frag" {
+		t.Errorf("absolute shader %q", got)
+	}
+	if got := cfg.Outputs.Named[1].Shader; got != "/home/me/mine.frag" {
+		t.Errorf("home shader %q", got)
+	}
+	if _, err := Parse("t.yaml", []byte("outputs:\n  - match: A\n    shader: ''\n")); err == nil || !strings.Contains(err.Error(), "outputs[0].shader") {
+		t.Errorf("an empty shader: %v", err)
+	}
+}

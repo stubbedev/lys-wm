@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/intconv"
 
 	"github.com/stubbedev/lys-wm/internal/region"
+	"github.com/stubbedev/lys-wm/internal/shader"
 )
 
 type (
@@ -307,11 +308,20 @@ type Texture interface {
 	Destroy() error
 }
 
+// ScreenShader is a shader program in the form a renderer draws with.
+// Prepare does what drawing into target still takes, the last part a driver
+// may refuse, so that a caller can draw without it while no pass is open.
+type ScreenShader interface {
+	Prepare(target Target) error
+	Destroy() error
+}
+
 type Renderer interface {
 	Formats() []Format
 	NewTexture(format Format, size image.Point, stride int, data []byte) (Texture, error)
 	NewTarget(size image.Point) (ReadTarget, error)
 	NewTextureTarget(size image.Point) (TextureTarget, error)
+	NewScreenShader(p *shader.Program) (ScreenShader, error)
 	Begin(target Target, damage Region) (Pass, error)
 }
 
@@ -343,5 +353,6 @@ type Pass interface {
 	Kawase(t Texture, dst image.Rectangle, offset float32, up bool)
 	FillGoo(r image.Rectangle, c Color, g Goo)
 	DrawTexture(t Texture, src FRect, dst image.Rectangle, transform Transform, alpha float32, m Mask)
+	DrawScreenShader(s ScreenShader, t Texture, dst image.Rectangle, seconds float32)
 	End() error
 }

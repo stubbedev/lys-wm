@@ -79,6 +79,10 @@ func (c *Compositor) render(o *output.Output) error {
 	c.frameTime = c.clock()
 	sc := c.sceneOf(o)
 	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	shading := c.shading(o)
+	if err := sc.useShader(shading); err != nil {
+		return err
+	}
 	pass := sc.begin()
 	pass.FillRect(bounds, Background)
 	shown := sc.shown[:0]
@@ -112,8 +116,11 @@ func (c *Compositor) render(o *output.Output) error {
 	if err := sc.blurs.dropUnused(); err != nil {
 		c.report(fmt.Errorf("compositor: drop the blurs unused on %s: %w", o.Backend().Name(), err))
 	}
-	if sc.diff(bounds).Empty() {
+	if sc.diff(bounds).Empty() && (shading == nil || !shading.animated) {
 		return c.lockBlanked(o)
+	}
+	if shading != nil {
+		return c.renderShaded(o, sc, shading, bounds)
 	}
 	if direct, err := c.scanout(o, sc, bounds); err != nil || direct {
 		if err != nil {

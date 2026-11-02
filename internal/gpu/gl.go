@@ -129,6 +129,7 @@ type GL struct {
 	pEnable                  uintptr
 	pDisable                 uintptr
 	pBlendFunc               uintptr
+	ColorMask                func(r, g, b, a uint8)
 	ClearColor               func(r, g, b, a float32)
 	Clear                    func(mask uint32)
 	CreateShader             func(typ uint32) uint32
@@ -200,6 +201,7 @@ func (gl *GL) load(l *Library, path string) error {
 		{&gl.pEnable, "glEnable"},
 		{&gl.pDisable, "glDisable"},
 		{&gl.pBlendFunc, "glBlendFunc"},
+		{&gl.ColorMask, "glColorMask"},
 		{&gl.ClearColor, "glClearColor"},
 		{&gl.Clear, "glClear"},
 		{&gl.CreateShader, "glCreateShader"},

@@ -67,6 +67,7 @@ type program struct {
 	line, stops        int32
 	taps, up, merge    int32
 	smoothing          int32
+	time, resolution   int32
 	sized              image.Point
 	alphaSet           float32
 	colorSet           render.Color
@@ -843,12 +844,21 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 		mode = 1
 	}
 	gl.Uniform1f(prog.up, mode)
+	p.bindLinear(tex)
+	p.drawWhole(dst)
+}
+
+func (p *pass) bindLinear(tex *texture) {
+	gl := p.owner.gl
 	gl.BindTexture(tex.target, tex.id)
 	if tex.filter != gpu.Linear {
 		tex.filter = gpu.Linear
 		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
+}
+
+func (p *pass) drawWhole(dst image.Rectangle) {
 	verts := &p.owner.verts
 	for i, uv := range [4][2]float32{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
 		verts[i*4+2], verts[i*4+3] = uv[0], uv[1]

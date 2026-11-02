@@ -366,6 +366,18 @@ and redraws no chain while nothing behind it changes.
 The offscreen frames behind closing snapshots and window captures draw no
 blur: they have nothing behind them to blur.
 
+A screen shader is the last of these: an output's ops replay into a retained
+image with the scene's damage, and one pass draws the whole output from it through
+the shader. Its language lives in `internal/shader`, a parser and type checker
+for a GLSL ES 1.00 subset with no dependencies, because one source has to run
+on three renderers with no compiler library at runtime: GLES gets the checked source,
+Vulkan gets SPIR-V emitted straight from the typed tree with no optimiser
+(`spirv-val` and glslang check both in tests), and the software renderer gets a
+tree of closures over a register file. Function calls are static, with no stack,
+since a function can only call those above it. Capture replays the scene's ops as
+it always did, so it never passes through the shader, and a locked session
+bypasses it.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

@@ -7,12 +7,15 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"runtime"
 	"slices"
+	"sync"
 
 	lgpu "github.com/stubbedev/lys-lib/gpu"
 
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/shader"
 )
 
 type Buffer struct {
@@ -332,6 +335,100 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 			}
 		}
 	}
+}
+
+type screenShader struct {
+	owner   *Renderer
+	program *shader.Program
+	tex     *texture
+	runners []*shader.Runner
+}
+
+func (r *Renderer) NewScreenShader(p *shader.Program) (render.ScreenShader, error) {
+	s := &screenShader{owner: r, program: p}
+	for range runtime.GOMAXPROCS(0) {
+		s.runners = append(s.runners, p.Runner(s.sample))
+	}
+	return s, nil
+}
+
+func (s *screenShader) sample(u, v float32) [4]float32 {
+	t := s.tex
+	c := lgpu.Bilinear(t.pix, t.stride, t.size.X, t.size.Y, u, v)
+	return [4]float32{c[2] / 255, c[1] / 255, c[0] / 255, c[3] / 255}
+}
+
+func (*screenShader) Prepare(render.Target) error { return nil }
+
+func (s *screenShader) Destroy() error {
+	s.runners, s.tex = nil, nil
+	return nil
+}
+
+func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst image.Rectangle, seconds float32) {
+	sh, ok := s.(*screenShader)
+	tex, texOK := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: DrawScreenShader outside a pass"))
+		return
+	case !ok || sh.owner != p.owner || sh.runners == nil:
+		p.fail(fmt.Errorf("soft: %T is no screen shader of this renderer", s))
+		return
+	case !texOK || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
+		return
+	case tex.pix == nil:
+		p.fail(errors.New("soft: texture used after Destroy"))
+		return
+	case tex.drawn == p.buf:
+		p.fail(errors.New("soft: DrawScreenShader of the pass's own target"))
+		return
+	case dst.Empty():
+		return
+	}
+	sh.tex = tex
+	for _, d := range p.damage.Rects() {
+		p.shadeRect(sh, dst, dst.Intersect(d), seconds)
+	}
+}
+
+func (p *pass) shadeRect(s *screenShader, dst, clip image.Rectangle, seconds float32) {
+	if clip.Empty() {
+		return
+	}
+	var wg sync.WaitGroup
+	n := len(s.runners)
+	for i, runner := range s.runners {
+		from, to := clip.Min.Y+clip.Dy()*i/n, clip.Min.Y+clip.Dy()*(i+1)/n
+		wg.Go(func() {
+			w, h := float32(dst.Dx()), float32(dst.Dy())
+			in := shader.Inputs{Time: seconds, Width: w, Height: h}
+			for y := from; y < to; y++ {
+				row := p.buf.Pix[y*p.buf.Stride:]
+				in.Y = float32(y) + 0.5
+				in.V = (float32(y-dst.Min.Y) + 0.5) / h
+				for x := clip.Min.X; x < clip.Max.X; x++ {
+					in.X = float32(x) + 0.5
+					in.U = (float32(x-dst.Min.X) + 0.5) / w
+					c := runner.Shade(in)
+					px := row[x*4 : x*4+4]
+					px[0], px[1], px[2] = shadeByte(c[2]), shadeByte(c[1]), shadeByte(c[0])
+				}
+			}
+		})
+	}
+	wg.Wait()
+}
+
+func shadeByte(v float32) byte {
+	if !(v > 0) {
+		return 0
+	}
+	if v >= 1 {
+		return 0xff
+	}
+	return byte(float32(v*255) + 0.5)
 }
 
 func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask) {

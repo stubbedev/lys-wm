@@ -9,8 +9,9 @@ page is what it does and what it will not do.
   autotile by available width, directional focus and move, numbered workspaces
   per output, floating windows, minimizing, window rules, submaps.
 - **Drawing**: client surfaces, borders and tab bars. On request, rounded
-  corners, gaps, gradient borders, shadows, blur, opacity, dimming and
-  animations; [Config](../config) has them, and they are all off by default.
+  corners, gaps, gradient borders, shadows, blur, opacity, dimming,
+  animations and [screen shaders](../shaders); [Config](../config) has them, and
+  they are all off by default.
 - **Desktop protocols** for a full session: layer-shell, session lock, idle
   notify and inhibit, data control, screen capture, foreign toplevels,
   workspaces, output management, gamma and colour-matrix control, touchpad

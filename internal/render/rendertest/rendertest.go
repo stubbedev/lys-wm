@@ -8,6 +8,7 @@ import (
 	"errors"
 	"image"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
+	"github.com/stubbedev/lys-wm/internal/shader"
 )
 
 var (
@@ -917,4 +919,94 @@ func FrameFencesReportTheGPUFinishing(t *testing.T, g GPU) {
 		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, backend.Now())
 	}
 	t.Logf("the GPU finished the frame %v after it started", done-start)
+}
+
+const ScreenShaderTolerance = 3
+
+// ScreenShaderProgram is a shader that reaches for most of the language, for
+// the renderers to agree on.
+const ScreenShaderProgram = `
+precision highp float;
+uniform sampler2D tex;
+uniform float time;
+uniform vec2 resolution;
+varying vec2 v_texcoord;
+
+const mat3 tint = mat3(0.9, 0.1, 0.0, 0.0, 0.8, 0.2, 0.1, 0.0, 0.9);
+
+vec3 bent(vec3 c, float k) {
+    if (k > 0.5) {
+        return c * c;
+    }
+    return sqrt(c);
+}
+
+void main() {
+    vec2 px = 1.0 / resolution;
+    vec3 sum = vec3(0.0);
+    for (int i = -1; i <= 1; i++) {
+        sum += texture2D(tex, v_texcoord + vec2(float(i) * 1.5 * px.x, 0.0)).rgb;
+    }
+    vec3 c = tint * (sum / 3.0);
+    float band = 0.5 + 0.5 * sin(gl_FragCoord.y * 0.3 + time);
+    c = mix(bent(c, v_texcoord.x), c.bgr, smoothstep(0.2, 0.8, v_texcoord.y));
+    c *= 0.75 + 0.25 * band;
+    gl_FragColor = vec4(clamp(c, 0.0, 1.0), 0.0);
+}
+`
+
+func ScreenShaders(t *testing.T, r render.Renderer, target render.ReadTarget, sources ...string) {
+	t.Helper()
+	s := soft.New()
+	rtt, stt := newTextureTarget(t, r), newTextureTarget(t, s)
+	full := render.Region{image.Rectangle{Max: Size}}
+	Paint(t, r, rtt, full, Scene(Load(t, r)))
+	Paint(t, s, stt, full, Scene(Load(t, s)))
+	want := soft.NewBuffer(Size.X, Size.Y)
+	for _, source := range append(sources, ScreenShaderProgram) {
+		p, err := shader.Compile([]byte(source))
+		if err != nil {
+			t.Fatalf("%v\n%s", err, source)
+		}
+		rs, err := r.NewScreenShader(p)
+		if err != nil {
+			t.Fatalf("%v\n%s", err, source)
+		}
+		ss, err := s.NewScreenShader(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := errors.Join(rs.Prepare(target), ss.Prepare(want)); err != nil {
+			t.Fatal(err)
+		}
+		draw := func(sh render.ScreenShader, tex render.Texture) func(render.Pass) {
+			return func(p render.Pass) {
+				p.Clear(render.Color{A: 0xff})
+				p.DrawScreenShader(sh, tex, image.Rectangle{Max: Size}, 1.25)
+			}
+		}
+		Paint(t, r, target, full, draw(rs, rtt.Texture()))
+		Paint(t, s, want, full, draw(ss, stt.Texture()))
+		Compare(t, want, target, ScreenShaderTolerance)
+		if err := errors.Join(rs.Destroy(), ss.Destroy()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func ExampleShaders(t *testing.T) []string {
+	t.Helper()
+	paths, err := filepath.Glob("../../../docs/shaders/*.frag")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no example shaders: %v", err)
+	}
+	out := make([]string, len(paths))
+	for i, path := range paths {
+		src, err := os.ReadFile(path) //nolint:gosec // a test reads the repository's own examples
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i] = string(src)
+	}
+	return out
 }

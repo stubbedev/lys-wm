@@ -21,6 +21,7 @@ type OutputRule struct {
 	Scale       output.Scale
 	Depth       backend.BitDepth
 	Disabled    bool
+	Shader      string
 }
 
 const refreshToleranceMHz = 1000
@@ -285,6 +286,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.usable, o)
 	if sc, ok := c.scenes[o]; ok {
 		errs = append(errs, sc.blurs.drop())
+		errs = append(errs, sc.dropImage())
 	}
 	delete(c.scenes, o)
 	delete(c.dropped, o)

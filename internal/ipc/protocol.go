@@ -122,6 +122,8 @@ type Output struct {
 	Workspace   wm.WorkspaceID `json:"workspace"`
 	Focused     bool           `json:"focused"`
 	Powered     bool           `json:"powered"`
+	Shader      string         `json:"shader,omitempty"`
+	ShaderError string         `json:"shader_error,omitempty"`
 }
 
 type Workspace struct {

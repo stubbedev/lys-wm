@@ -228,6 +228,7 @@ type Compositor struct {
 	blurLayers      []string
 	switches        map[*output.Output]*workspaceSwitch
 	shownWorkspace  map[string]wm.WorkspaceID
+	shaders         map[string]*screenShader
 }
 
 type entered struct {
@@ -296,6 +297,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		stops:          map[stopsKey]render.Texture{},
 		switches:       map[*output.Output]*workspaceSwitch{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
+		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},
 		inherited:      map[*output.Output]*loop.Timer{},
@@ -438,7 +440,10 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(c.dropDecor(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.applyOutputRules(), c.scheduleAll())
+	for _, o := range c.outputs {
+		c.shaderOf(o)
+	}
 	c.syncLEDs()
 	if err != nil {
 		c.report(fmt.Errorf("compositor: apply the new config: %w", err))
@@ -480,7 +485,10 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs()}
+	errs := []error{c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
+	for _, sc := range c.scenes {
+		errs = append(errs, sc.dropImage())
+	}
 	for _, w := range c.windows {
 		errs = append(errs, c.dropJelly(w))
 	}

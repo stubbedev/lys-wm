@@ -65,6 +65,11 @@ func TestParityWithTheSoftwareRenderer(t *testing.T) {
 	parity(t, renderer(t))
 }
 
+func TestScreenShadersMatchTheSoftwareRenderer(t *testing.T) {
+	r := renderer(t)
+	rendertest.ScreenShaders(t, r, framebuffer(t, r, rendertest.Size), rendertest.ExampleShaders(t)...)
+}
+
 func hardware(t *testing.T) (*gles.Renderer, string) {
 	t.Helper()
 	var node string
