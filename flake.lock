@@ -627,11 +627,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793639849,
-        "narHash": "sha256-6rcSGAZTNGtKbozj+fut2qjMKSIBF5gedkX7RvfzHFc=",
+        "lastModified": 1793642314,
+        "narHash": "sha256-o3iROke5+VeatPFMigRDWifQ7kESpfjbwTwam41gIdA=",
         "owner": "stubbedev",
         "repo": "lys-lib",
-        "rev": "2769a02af98a4d7f07d770c1fac496cf9ff39d16",
+        "rev": "bf711614e20d628579835459694cf76f65a0039d",
         "type": "github"
       },
       "original": {
@@ -2529,11 +2529,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793641914,
-        "narHash": "sha256-zP1j1xYHBDxcEHXI63KwlLtIbMKh1XpTB7KxXsW/KAY=",
+        "lastModified": 1793642431,
+        "narHash": "sha256-Ch/M4eCNjtVjf0trpAm8353Cq3m0/H2zGuaGQdOLPEA=",
         "owner": "stubbedev",
         "repo": "lys-ui",
-        "rev": "b7e72161808be3a3b6cea2b05a4c93e42098ded1",
+        "rev": "255aa7b5da1b34fefaac7526b78bd8c78ef2cfc9",
         "type": "github"
       },
       "original": {
