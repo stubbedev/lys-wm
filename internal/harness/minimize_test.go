@@ -320,6 +320,8 @@ func TestAGenieDrawsItsWindowOnceUntilTheWindowChanges(t *testing.T) {
 		h.Eventually("the window gone", showing(80, 45, bg))
 		h.dispatch("restore")
 		h.Eventually("the restored window starts collapsed", showing(45, 30, bg))
+		drawn := frames(h)
+		h.Eventually("a frame of the genie", func(b *headless.Backend, _ *compositor.Compositor) bool { return b.Outputs()[0].Frames() > drawn })
 		before := redraws()
 		for _, d := range []time.Duration{2100, 2300, 2500} {
 			shown := frames(h)
