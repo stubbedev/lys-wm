@@ -503,7 +503,7 @@ func TestAFrameTheGPUFinishesLateIsAMiss(t *testing.T) {
 		}
 	}
 	settle(start+interval+time.Millisecond, true)
-	if got, want := o.budget.Budget(interval), interval/2+1500*time.Microsecond; got != want {
+	if got, want := o.budget.Budget(interval), interval/2+3*time.Millisecond; got != want {
 		t.Fatalf("after one frame finishing past the vblank the budget is %v, want the miss's margin over the half-refresh start, %v", got, want)
 	}
 	settle(start+interval+time.Millisecond, true)
@@ -512,7 +512,7 @@ func TestAFrameTheGPUFinishesLateIsAMiss(t *testing.T) {
 	}
 	o.budget = backend.RenderBudget{}
 	settle(0, false)
-	if got, want := o.budget.Budget(interval), interval/2+1500*time.Microsecond; got != want {
+	if got, want := o.budget.Budget(interval), interval/2+3*time.Millisecond; got != want {
 		t.Fatalf("still rendering at the vblank the budget is %v, want %v, a margin over the half-refresh start", got, want)
 	}
 	if o.renderFence < 0 {

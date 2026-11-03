@@ -80,7 +80,7 @@ func LatchDeadlineWithin(last, now, interval, budget time.Duration) time.Duratio
 
 const (
 	renderSamples = 32
-	renderMargin  = 1500 * time.Microsecond
+	renderMargin  = 3 * time.Millisecond
 )
 
 type RenderBudget struct {

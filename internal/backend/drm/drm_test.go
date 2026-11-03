@@ -1823,14 +1823,14 @@ func TestTheLatchFollowsMeasuredRenderTimeAndGrowsAMarginAfterAMiss(t *testing.T
 	for range 32 {
 		o.budget.Sample(time.Millisecond)
 	}
-	if got, want := half(), time.Millisecond+1500*time.Microsecond; got != want {
+	if got, want := half(), 4*time.Millisecond; got != want {
 		t.Fatalf("after 1 ms renders the latch is %v before the vblank, want %v", got, want)
 	}
 	o.aimedAt = o.lastFlip
 	if err := o.timeFrame(o.lastFlip + interval); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := half(), time.Millisecond+2*1500*time.Microsecond; got != want {
+	if got, want := half(), 7*time.Millisecond; got != want {
 		t.Fatalf("after a missed vblank the latch is %v before the vblank, want a margin more, %v", got, want)
 	}
 }

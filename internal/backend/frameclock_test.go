@@ -160,13 +160,13 @@ func TestRenderBudget(t *testing.T) {
 	for i := range 32 {
 		b.Sample(time.Duration(i%4) * time.Millisecond)
 	}
-	if got := b.Budget(interval); got != 3*time.Millisecond+1500*time.Microsecond {
+	if got := b.Budget(interval); got != 3*time.Millisecond+renderMargin {
 		t.Fatalf("the budget over renders up to 3 ms is %v, want the slowest plus the margin", got)
 	}
 	for range 32 {
 		b.Sample(10 * time.Millisecond)
 	}
-	if got := b.Budget(interval); got != 11500*time.Microsecond {
+	if got := b.Budget(interval); got != 10*time.Millisecond+renderMargin {
 		t.Fatalf("renders of 10 ms, over half the 16 ms refresh, gave a budget of %v, want the slowest plus the margin so they still make it", got)
 	}
 	for range 32 {
@@ -179,7 +179,7 @@ func TestRenderBudget(t *testing.T) {
 
 const (
 	paceInterval = 16 * time.Millisecond
-	paceMargin   = 1500 * time.Microsecond
+	paceMargin   = renderMargin
 )
 
 func paced(b *RenderBudget, costs ...time.Duration) (late int, latency []time.Duration) {
@@ -201,7 +201,7 @@ func repeat(n int, d time.Duration) []time.Duration {
 
 func TestOneSlowFrameDoesNotCostAFullRefreshOfLatency(t *testing.T) {
 	var b RenderBudget
-	const steady, slow = 2 * time.Millisecond, 5 * time.Millisecond
+	const steady, slow = 2 * time.Millisecond, 8 * time.Millisecond
 	paced(&b, repeat(40, steady)...)
 	late, latency := paced(&b, append([]time.Duration{slow}, repeat(40, steady)...)...)
 	if late != 1 {
@@ -225,13 +225,13 @@ func TestSlowFramesMoreOftenThanTheWindowStayCoveredBelowARefresh(t *testing.T) 
 	paced(&b, repeat(40, 2*time.Millisecond)...)
 	var costs []time.Duration
 	for range 20 {
-		costs = append(costs, append(repeat(19, 2*time.Millisecond), 5*time.Millisecond)...)
+		costs = append(costs, append(repeat(19, 2*time.Millisecond), 8*time.Millisecond)...)
 	}
 	late, latency := paced(&b, costs...)
 	if late != 1 {
 		t.Fatalf("%d frames late, want only the first slow one", late)
 	}
-	if got := slices.Max(latency); got != 5*time.Millisecond+paceMargin {
+	if got := slices.Max(latency); got != 8*time.Millisecond+paceMargin {
 		t.Fatalf("the budget reached %v", got)
 	}
 }
