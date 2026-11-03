@@ -29,6 +29,7 @@ var (
 		LayersOut:       {Shape: layerOutSpring, Style: &layerFade},
 		Border:          {Shape: fadeSpring},
 		BorderAngle:     {Enabled: &off},
+		Overview:        {Shape: switchSpring},
 	}
 )
 

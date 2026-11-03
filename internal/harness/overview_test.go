@@ -283,6 +283,86 @@ func TestArrowsAndEnterPickAWindow(t *testing.T) {
 	})
 }
 
+func focusedAfter(t *testing.T, h *Harness, want wm.WindowID) {
+	t.Helper()
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if id, ok := c.WM().Focused(); !ok || id != want {
+			t.Errorf("focused %d %v, want %d", id, ok, want)
+		}
+		return nil
+	})
+}
+
+func TestTabWalksTheWindowsAndWraps(t *testing.T) {
+	h := Start(t, overviewMode)
+	colouredPair(t, h)
+	h.dispatch("overview show")
+	h.tap(keyTab)
+	h.tap(keyEnter)
+	h.expectOverview(false)
+	focusedAfter(t, h, 1)
+
+	h.dispatch("overview show")
+	h.key(keyShift, true)
+	h.tap(keyTab)
+	h.key(keyShift, false)
+	h.tap(keyEnter)
+	h.expectOverview(false)
+	focusedAfter(t, h, 2)
+}
+
+func TestNumberKeysShowAWorkspaceAndTheShownOneCloses(t *testing.T) {
+	h := Start(t, overviewMode)
+	colouredPair(t, h)
+	h.dispatch("overview show")
+	h.tap(key3)
+	h.expectOverview(true)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if got := c.Snapshot().Outputs[0].Workspace; got != 3 {
+			t.Errorf("3 shows workspace %d", got)
+		}
+		return nil
+	})
+	h.tap(key3)
+	h.expectOverview(false)
+}
+
+func TestDeleteAsksTheRingedWindowToClose(t *testing.T) {
+	h := Start(t, overviewMode)
+	c, red, blue := colouredPair(t, h)
+	h.dispatch("overview show")
+	h.tap(keyDelete)
+	c.DispatchUntil("the focused window asked to close", func() bool { return blue.Closed })
+	if red.Closed {
+		t.Error("the other window was asked to close too")
+	}
+	h.expectOverview(true)
+}
+
+func TestModifiedAndOtherKeysDoNothingInTheOverview(t *testing.T) {
+	h := Start(t, overviewMode)
+	c, red, blue := colouredPair(t, h)
+	h.dispatch("overview show")
+	h.tap(keyQ)
+	h.key(keyShift, true)
+	h.tap(keyDelete)
+	h.tap(key3)
+	h.key(keyShift, false)
+	if err := c.Display.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	if red.Closed || blue.Closed {
+		t.Error("a key the overview does not take closed a window")
+	}
+	h.expectOverview(true)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if got := c.Snapshot().Outputs[0].Workspace; got != 1 {
+			t.Errorf("a modified number switched to workspace %d", got)
+		}
+		return nil
+	})
+}
+
 func TestArrowsReachTheStrip(t *testing.T) {
 	h := Start(t, overviewMode)
 	colouredPair(t, h)

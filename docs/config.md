@@ -467,6 +467,7 @@ and how much attention they should draw:
 | `windows_out` | 700, 48 | 0.1% | 154 ms | `popin 94%` |
 | `windows_minimize` | 220, 30 | none | 326 ms | `genie` |
 | `workspaces` | 300, 34 | none | 266 ms | `slide` |
+| `overview` | 300, 34 | none | 266 ms | |
 | `layers_in` | 500, 42 | none | 192 ms | `fade` |
 | `layers_out` | 700, 50 | none | 164 ms | `fade` |
 | `fade`, `border` | 600, 49 | none | 194 ms | |
@@ -484,7 +485,7 @@ The events:
 | `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows | still |
 | `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window | still |
 | `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output; `fade`: it fades where it is | cross-fade |
-| `overview` | `global` | The [overview](#overview) opening and closing, its windows moving to new places in it, and a window dropped on a thumbnail. Unlike the other events its curve does not come from `global`: it is `spring` unless this event names one, because a spring keeps its velocity when the overview reverses or a gesture lets go, and a bézier given here starts each move from rest. `enabled: false` or `animations.enabled: false` jumps, and so does `reduced_motion`. | |
+| `overview` | `global` | The [overview](#overview) opening and closing, its windows moving to new places in it, and a window dropped on a thumbnail. Unlike the other events its curve does not come from `global`: it is a spring unless this event names a curve, because a spring keeps its velocity when the overview reverses or a gesture lets go, and a bézier given here starts each move from rest. `enabled: false` or `animations.enabled: false` jumps, and so does `reduced_motion`. | |
 | `fade` | `global` | Every fade | | fade |
 | `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | | fade |
 | `fade_out` | `fade` | A closing window fading out | | fade |
@@ -636,7 +637,10 @@ it closes. Binds with modifiers still run.
 | Click `+` | Shows a new workspace, the lowest number free, and stays open |
 | Click anywhere else, `Escape` | Closes |
 | Drag a window onto a thumbnail, `+`, or another output | Moves it there with its dialogs; dropped anywhere else it springs back. Minimized windows do not drag |
-| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Other keys do nothing. Virtual keyboards work the same, through their own keymap |
+| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Virtual keyboards work the same, through their own keymap |
+| `Tab`, `Shift + Tab` | Move the ring to the next or previous window, wrapping |
+| `1` to `9`, `0` | Shows that workspace on the focused output and stays open; `0` is workspace 10, and the workspace already shown closes the overview |
+| `Delete`, `x` | Closes the ringed window and moves the ring to the next one |
 | Touch | As the pointer, with the first finger |
 
 A session lock closes it at once and it will not open under one, or during a

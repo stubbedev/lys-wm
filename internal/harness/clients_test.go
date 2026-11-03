@@ -64,17 +64,20 @@ func (h *Harness) tap(keys ...uint32) {
 }
 
 const (
-	btnLeft  = 272
-	btnRight = 273
-	keyH     = 35
-	keyI     = 23
-	keyE     = 18
-	keyC     = 46
-	keyO     = 24
-	keyEnter = 28
-	keyEsc   = 1
-	keyRight = 106
-	keyDown  = 108
+	btnLeft   = 272
+	btnRight  = 273
+	keyH      = 35
+	keyI      = 23
+	keyE      = 18
+	keyC      = 46
+	keyO      = 24
+	keyEnter  = 28
+	keyTab    = 15
+	key3      = 4
+	keyDelete = 111
+	keyEsc    = 1
+	keyRight  = 106
+	keyDown   = 108
 )
 
 func TestWestonFlowerMaps(t *testing.T) {

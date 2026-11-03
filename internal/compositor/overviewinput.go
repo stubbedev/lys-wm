@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -26,6 +27,12 @@ const (
 	keysymUp      = 0xff52
 	keysymRight   = 0xff53
 	keysymDown    = 0xff54
+	keysymTab     = 0xff09
+	keysymBackTab = 0xfe20
+	keysymDelete  = 0xffff
+	keysymX       = 0x78
+	keysym0       = 0x30
+	keysym9       = 0x39
 )
 
 type overviewPress struct {
@@ -144,15 +151,18 @@ func (c *Compositor) overviewActivate(t overviewTarget) error {
 		}
 		return c.closeOverview()
 	case overviewSpace:
-		name := t.t.o.Backend().Name()
-		if active, ok := c.wm.ActiveOn(name); ok && active == t.t.id {
-			return c.closeOverview()
-		}
-		return c.overviewShowSpace(name, t.t.id)
+		return c.overviewGoToSpace(t.t.o.Backend().Name(), t.t.id)
 	case overviewPlus:
 		return c.overviewShowSpace(t.v.output.Backend().Name(), c.wm.UnusedWorkspace())
 	}
 	return c.closeOverview()
+}
+
+func (c *Compositor) overviewGoToSpace(name string, id wm.WorkspaceID) error {
+	if active, ok := c.wm.ActiveOn(name); ok && active == id {
+		return c.closeOverview()
+	}
+	return c.overviewShowSpace(name, id)
 }
 
 func (c *Compositor) overviewShowSpace(name string, id wm.WorkspaceID) error {
@@ -271,16 +281,47 @@ func (c *Compositor) overviewTargets() ([]overviewTarget, []image.Rectangle) {
 	return targets, rects
 }
 
+func (c *Compositor) overviewSelectedRoot() overviewTarget {
+	selected := c.overview.selected
+	if t, ok := selected.(overviewWindow); ok {
+		if it := c.overviewItemOf(t.w); it != nil {
+			return overviewWindow{it.root}
+		}
+	}
+	return selected
+}
+
+func (c *Compositor) overviewCycle(by int) error {
+	targets, _ := c.overviewTargets()
+	windows := make([]overviewTarget, 0, len(targets))
+	for _, t := range targets {
+		if _, ok := t.(overviewWindow); ok {
+			windows = append(windows, t)
+		}
+	}
+	if len(windows) == 0 {
+		return nil
+	}
+	from := slices.Index(windows, c.overviewSelectedRoot())
+	if from < 0 && by < 0 {
+		from = 0
+	}
+	c.overview.selected = windows[(from+by+len(windows))%len(windows)]
+	return c.scheduleAll()
+}
+
+func (c *Compositor) overviewCloseSelected() error {
+	t, ok := c.overview.selected.(overviewWindow)
+	if !ok {
+		return nil
+	}
+	return errors.Join(c.overviewCycle(1), t.w.top.close())
+}
+
 func (c *Compositor) overviewStep(d wm.Direction) error {
 	ov := c.overview
 	targets, rects := c.overviewTargets()
-	selected := ov.selected
-	if t, ok := selected.(overviewWindow); ok {
-		if it := c.overviewItemOf(t.w); it != nil {
-			selected = overviewWindow{it.root}
-		}
-	}
-	from := slices.Index(targets, selected)
+	from := slices.Index(targets, c.overviewSelectedRoot())
 	if from < 0 {
 		for _, t := range targets {
 			if _, ok := t.(overviewWindow); ok {
@@ -298,10 +339,20 @@ func (c *Compositor) overviewStep(d wm.Direction) error {
 }
 
 func (c *Compositor) overviewKey(code uint32) (bool, error) {
-	if c.seat.Focus() != nil || c.seat.DepressedModifiers() != 0 {
+	if c.seat.Focus() != nil {
 		return false, nil
 	}
-	taken, err := c.overviewSym(c.seat.Keysym(code), code)
+	sym := c.seat.Keysym(code)
+	switch c.seat.DepressedModifiers() {
+	case 0:
+	case uint32(binds.ModShift):
+		if sym != keysymBackTab {
+			return false, nil
+		}
+	default:
+		return false, nil
+	}
+	taken, err := c.overviewSym(sym, code)
 	if taken {
 		c.held = append(c.held, code)
 	}
@@ -326,11 +377,24 @@ func (c *Compositor) overviewSym(sym, code uint32) (bool, error) {
 	if d, ok := arrowOf(sym); ok {
 		return true, errors.Join(c.overviewStep(d), c.repeatOverview(code, d))
 	}
+	if sym >= keysym0 && sym <= keysym9 {
+		id := wm.WorkspaceID(sym - keysym0)
+		if id == 0 {
+			id = 10
+		}
+		return true, c.overviewGoToSpace(c.wm.FocusedOutput(), id)
+	}
 	switch sym {
 	case keysymEscape:
 		return true, c.closeOverview()
 	case keysymReturn, keysymKPEnter, keysymSpace:
 		return true, c.overviewActivate(c.overview.selected)
+	case keysymTab:
+		return true, c.overviewCycle(1)
+	case keysymBackTab:
+		return true, c.overviewCycle(-1)
+	case keysymDelete, keysymX:
+		return true, c.overviewCloseSelected()
 	}
 	return false, nil
 }
