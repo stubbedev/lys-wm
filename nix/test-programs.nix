@@ -12,6 +12,7 @@ with pkgs; [
   foot
   wl-clipboard
   dbus
+  gtk3.dev
   (import ./lys-ui-debug.nix lys-ui)
   (import ./alacritty-swrast.nix pkgs)
 ]

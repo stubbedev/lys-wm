@@ -2,7 +2,11 @@ package harness
 
 import (
 	"encoding/binary"
+	"errors"
 	"image"
+	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -10,8 +14,13 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
+	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/xsync"
 )
+
+const gtkHoldBound = 2 * time.Second
 
 func xReport(t *testing.T) func(error) {
 	return func(err error) { t.Errorf("xwayland reported: %v", err) }
@@ -113,4 +122,114 @@ func TestAnXWindowThatNeverSyncsHoldsOnlyOnce(t *testing.T) {
 	if got := h.holds().Expired; got != expired {
 		t.Errorf("%d more holds expired: a counter that missed once is not waited for", got-expired)
 	}
+}
+
+const syncQueryCounter = 5
+
+func (c *xclient) counterValue(id xsync.Counter) uint64 {
+	c.t.Helper()
+	reply, err := xproto.QueryExtension(c.x, uint16(len("SYNC")), "SYNC").Reply()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	request := []byte{reply.MajorOpcode, syncQueryCounter, 2, 0, 0, 0, 0, 0}
+	binary.LittleEndian.PutUint32(request[4:], uint32(id))
+	cookie := c.x.NewCookie(true, true)
+	c.x.NewRequest(request, cookie)
+	answer, err := cookie.Reply()
+	if err != nil {
+		c.t.Fatalf("query counter %#x: %v", uint32(id), err)
+	}
+	return uint64(binary.LittleEndian.Uint32(answer[8:]))<<32 | uint64(binary.LittleEndian.Uint32(answer[12:]))
+}
+
+func (c *xclient) cardinalProperty(win xproto.Window, name string) []uint32 {
+	c.t.Helper()
+	c.intern(name)
+	reply, err := xproto.GetProperty(c.x, false, win, c.atoms[name], xproto.GetPropertyTypeAny, 0, 16).Reply()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	out := make([]uint32, reply.ValueLen)
+	for i := range out {
+		out[i] = binary.LittleEndian.Uint32(reply.Value[4*i:])
+	}
+	return out
+}
+
+func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
+	demo := testenv.Require(t, "gtk3-demo")
+	h := StartXwaylandWith(t, func(cfg *compositor.Config) {
+		flat(cfg)
+		cfg.HoldBound = gtkHoldBound
+	}, xReport(t), desktop)
+	xc := xDial(t, h)
+	socket := filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":"))
+	gtk := h.Run("env", "GDK_BACKEND=x11", "DISPLAY="+socket, "GTK_A11Y=none", "NO_AT_BRIDGE=1", "DBUS_SESSION_BUS_ADDRESS=disabled:", demo)
+	defer func() {
+		if t.Failed() {
+			t.Logf("gtk3-demo said:\n%s", gtk.output.String())
+		}
+	}()
+	h.Eventually("the GTK window managed and settled", xTiled(1))
+
+	clients := xc.cardinalProperty(xc.root, "_NET_CLIENT_LIST")
+	if len(clients) != 1 {
+		t.Fatalf("X clients = %#x, want the GTK window", clients)
+	}
+	win := xproto.Window(clients[0])
+	counters := xc.cardinalProperty(win, "_NET_WM_SYNC_REQUEST_COUNTER")
+	if len(counters) == 0 {
+		t.Fatal("GTK did not publish _NET_WM_SYNC_REQUEST_COUNTER")
+	}
+	counter := xsync.Counter(counters[0])
+	t.Logf("GTK's counters: %#x", counters)
+
+	answers := func(what string, change func()) {
+		t.Helper()
+		before, value := h.holds(), xc.counterValue(counter)
+		change()
+		h.Eventually(what+": the hold landed", func(_ *headless.Backend, c *compositor.Compositor) bool {
+			return c.Holds().Landed > before.Landed && !c.Holding()
+		})
+		after := h.holds()
+		if after.Expired != before.Expired {
+			t.Errorf("%s: holds went from %+v to %+v: GTK let the hold expire", what, before, after)
+		}
+		if got := xc.counterValue(counter); got <= value {
+			t.Errorf("%s: GTK's counter stayed at %d, it never answered the sync request", what, got)
+		}
+		t.Logf("%s: holds %+v, counter %d", what, after, xc.counterValue(counter))
+	}
+	var right *testclient.Window
+	var cr *testclient.Client
+	answers("a window opens beside it", func() { cr, right = open(t, h, "right", fillBlue) })
+	h.Eventually("both tiled", xTiled(2))
+	var rect ipc.Rect
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		for _, w := range windowsOf(c) {
+			if w.AppID != "lys-wm.testclient" {
+				rect = w.Rect
+			}
+		}
+		return nil
+	})
+	if got := xc.geometry(win); got.Dx() != rect.Width || got.Dy() != rect.Height {
+		t.Errorf("the GTK window is %v, its tile %+v", got, rect)
+	}
+	answers("the window beside it closes", func() {
+		if err := errors.Join(right.Destroy(), cr.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+	})
+	h.Eventually("the GTK window alone again", xTiled(1))
+
+	if err := gtk.cmd.Process.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	before := h.holds()
+	_, _ = open(t, h, "beside the stopped one", fillBlue)
+	h.Within(2*gtkHoldBound, "the stopped GTK window's hold to expire", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return c.Holds().Expired == before.Expired+1
+	})
 }
