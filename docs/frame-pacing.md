@@ -53,10 +53,41 @@ A software rasteriser is refused, naming the driver it found, because its
 numbers say nothing about a GPU. `-allow-software` accepts it for relative
 numbers and hot spots, and the report then says so on its second line and sets
 `real_gpu: false`. `-cpu-profile <file>` adds a Go CPU profile of lys-wm.
-`-max-late-percent <n>` fails when any step presents more than that share of its
-frames late; `just hardware` uses it. Most of the overview's steps are reported but not gated: one late frame is several
-percent of a scrub. `overview-scrub-30-follow-open` is gated, as the heaviest of them,
-and stays under the limit on an RTX 3060 Ti.
+
+
+## The gate
+
+Late frames, frame rates and the time columns measure the machine as much as the
+compositor, so they are reported and never fail anything. `-gate` fails on what
+no load can change, counted per step and compared with the limits checked in as
+`cmd/lys-wm-pace/baseline.json`, one set per renderer:
+
+| Limit | What it counts | What it catches |
+| --- | --- | --- |
+| `draws_per_frame` | Scene ops in the worst composited frame | Drawing what is covered, or a pile drawn twice |
+| `render_passes_per_frame` | `Renderer.Begin` calls since the last composited frame, at worst | A new offscreen pass on every frame |
+| `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
+| `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
+| `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
+| `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
+| `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
+| `allocs_per_frame` | Most heap allocations between one frame's start and end: a median would move with how many of a step's frames fall in its costly part, which the load decides | An allocation added to a frame's path |
+| `file_io_per_frame` | Median read and write syscalls in a frame, from `/proc/self/io` | A file touched on every frame |
+| `rss_growth_kib` | Resident size at the end of the last round minus the second, per scenario, as pipelines and arenas fill on first use | A leak that repeats with the animation |
+
+`/proc/self/io` counts the read and write families only: an ioctl or a socket
+call is not in `file_io_per_frame`, and the kernel offers no other unprivileged
+count. Every number is per frame or per play, not per second, so a machine too
+busy to reach 60 Hz draws fewer frames that each cost the same.
+
+The trace takes these with `runtime.ReadMemStats` and a read of `/proc/self/io`
+at both ends of each frame, outside the `cpu` column.
+
+`just pace-gate gles` and `just pace-gate vulkan` run the gate in the dev shell on
+the software rasterisers, as CI does, and `just hardware` runs it on the GPU.
+A change that means to cost more updates its limits by rerunning with
+`-write-baseline cmd/lys-wm-pace/baseline.json`, which writes this renderer's limits
+with a margin of a quarter over what it measured, and commits the difference.
 
 ## The trace
 

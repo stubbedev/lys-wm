@@ -96,6 +96,7 @@ type program struct {
 }
 
 type Renderer struct {
+	counts       render.Counts
 	d            *gpu.Display
 	gl           *gpu.GL
 	name         string
@@ -272,6 +273,10 @@ var (
 
 func (r *Renderer) Speed() render.Speed { return render.DriverSpeed(r.name) }
 
+func (r *Renderer) Counts() render.Counts {
+	return r.counts
+}
+
 func (r *Renderer) Formats() []render.Format {
 	if r.es3 {
 		return allFormats
@@ -308,6 +313,7 @@ type texture struct {
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
+	r.counts.Uploads++
 	if !slices.Contains(r.Formats(), format) {
 		return nil, fmt.Errorf("gles: unsupported texture format %d", format)
 	}
@@ -496,6 +502,7 @@ func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
 }
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) (err error) {
+	t.r.counts.Uploads++
 	if t.id == 0 {
 		return errors.New("gles: update of a destroyed texture")
 	}
@@ -736,6 +743,7 @@ type pass struct {
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	r.counts.Passes++
 	fb, ok := target.(*Framebuffer)
 	if tt, isTT := target.(*TextureTarget); isTT {
 		fb, ok = tt.Framebuffer, true
@@ -915,6 +923,7 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 }
 
 func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	p.owner.counts.Filters++
 	tex, ok := t.(*texture)
 	switch {
 	case !p.active:

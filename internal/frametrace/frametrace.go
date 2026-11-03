@@ -4,11 +4,13 @@ package frametrace
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -54,6 +56,18 @@ type Frame struct {
 	Refresh   time.Duration `json:"refresh_ns"`
 	Torn      bool          `json:"torn"`
 	Animating bool          `json:"animating"`
+	Cost      Cost          `json:"cost"`
+}
+
+type Cost struct {
+	Draws       uint64 `json:"draws"`
+	Passes      uint64 `json:"passes"`
+	Filters     uint64 `json:"filters"`
+	Uploads     uint64 `json:"uploads"`
+	Thumbs      uint64 `json:"thumbs"`
+	DamageRects uint64 `json:"damage_rects"`
+	Allocs      uint64 `json:"allocs"`
+	FileIO      uint64 `json:"file_io"`
 }
 
 type Sync interface {
@@ -79,6 +93,9 @@ type track struct {
 	refresh    time.Duration
 	open       bool
 	frame      pending
+	allocs     uint64
+	fileIO     uint64
+	carried    Cost
 	queue      []pending
 }
 
@@ -86,6 +103,9 @@ const (
 	chunkFrames  = 512
 	writerChunks = 4
 	closeFenceMS = 1000
+	ioStatPath   = "/proc/self/io"
+	ioStatSize   = 256
+	ownIOReads   = 2
 )
 
 type Recorder struct {
@@ -98,6 +118,9 @@ type Recorder struct {
 	free   chan []Frame
 	done   chan error
 	file   *os.File
+	ioStat *os.File
+	ioBuf  [ioStatSize]byte
+	mem    runtime.MemStats
 }
 
 func Create(path string, h Header, sync Sync, clock Clock, report func(error)) (*Recorder, error) {
@@ -105,15 +128,19 @@ func Create(path string, h Header, sync Sync, clock Clock, report func(error)) (
 	if err != nil {
 		return nil, fmt.Errorf("frametrace: create the trace: %w", err)
 	}
+	ioStat, err := os.Open(ioStatPath)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("frametrace: open the process's I/O counters: %w", err), f.Close())
+	}
 	line, err := json.Marshal(h)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("frametrace: encode the header of %s: %w", path, err), f.Close())
+		return nil, errors.Join(fmt.Errorf("frametrace: encode the header of %s: %w", path, err), f.Close(), ioStat.Close())
 	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		return nil, errors.Join(fmt.Errorf("frametrace: write the header of %s: %w", path, err), f.Close())
+		return nil, errors.Join(fmt.Errorf("frametrace: write the header of %s: %w", path, err), f.Close(), ioStat.Close())
 	}
 	r := &Recorder{
-		clock: clock, sync: sync, report: report, file: f, tracks: map[string]*track{},
+		clock: clock, sync: sync, report: report, file: f, ioStat: ioStat, tracks: map[string]*track{},
 		chunk: make([]Frame, 0, chunkFrames), full: make(chan []Frame, writerChunks), free: make(chan []Frame, writerChunks), done: make(chan error, 1),
 	}
 	go r.write()
@@ -141,7 +168,35 @@ func (r *Recorder) write() {
 	if failed != nil {
 		failed = fmt.Errorf("frametrace: write the trace: %w", failed)
 	}
-	r.done <- errors.Join(failed, r.file.Close())
+	r.done <- errors.Join(failed, r.file.Close(), r.ioStat.Close())
+}
+
+func (r *Recorder) usage(output string) (allocs, fileIO uint64) {
+	runtime.ReadMemStats(&r.mem)
+	n, err := r.ioStat.ReadAt(r.ioBuf[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.report(fmt.Errorf("frametrace: read the I/O counters for %s: %w", output, err))
+		return r.mem.Mallocs, 0
+	}
+	return r.mem.Mallocs, ioCalls(r.ioBuf[:n])
+}
+
+func ioCalls(stat []byte) uint64 {
+	var total uint64
+	for line := range bytes.Lines(stat) {
+		if !bytes.HasPrefix(line, []byte("syscr: ")) && !bytes.HasPrefix(line, []byte("syscw: ")) {
+			continue
+		}
+		var n uint64
+		for _, b := range line[len("syscr: "):] {
+			if b < '0' || b > '9' {
+				break
+			}
+			n = n*10 + uint64(b-'0')
+		}
+		total += n
+	}
+	return total
 }
 
 func (r *Recorder) track(output string) *track {
@@ -164,6 +219,7 @@ func (r *Recorder) Begin(output string) {
 		}
 	}
 	r.settle(t)
+	t.allocs, t.fileIO = r.usage(output)
 	now := r.clock.Now()
 	t.open = true
 	t.frame = pending{Output: output, Kind: Empty, Start: now, GPUSource: GPUNone, Refresh: t.refresh, fd: -1}
@@ -233,7 +289,7 @@ func (r *Recorder) Drop(output string) {
 	}
 }
 
-func (r *Recorder) End(output string, animating bool) {
+func (r *Recorder) End(output string, animating bool, cost Cost) {
 	if r == nil {
 		return
 	}
@@ -244,8 +300,24 @@ func (r *Recorder) End(output string, animating bool) {
 	t.open = false
 	t.frame.CPU = r.clock.Now() - t.frame.Start - t.frame.wait
 	t.frame.Animating = animating
+	allocs, fileIO := r.usage(output)
+	cost.Allocs, cost.FileIO = allocs-t.allocs, fileIO-t.fileIO-ownIOReads
+	t.frame.Cost = t.carry(cost)
 	t.queue = append(t.queue, t.frame)
 	r.settle(t)
+}
+
+func (t *track) carry(cost Cost) Cost {
+	cost.Passes += t.carried.Passes
+	cost.Filters += t.carried.Filters
+	cost.Uploads += t.carried.Uploads
+	cost.Thumbs += t.carried.Thumbs
+	if t.frame.Kind == Composited {
+		t.carried = Cost{}
+	} else {
+		t.carried = cost
+	}
+	return cost
 }
 
 func (r *Recorder) Presented(output string, p backend.Presentation) {

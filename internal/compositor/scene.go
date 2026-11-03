@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/output"
 	spt "github.com/stubbedev/lys-wm/internal/protocol/server/presentationtime"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -25,8 +26,23 @@ func (c *Compositor) Frame(b backend.Output) error {
 	}
 	c.frames.Begin(b.Name())
 	err := c.frame(o)
-	c.frames.End(b.Name(), c.animating(o, c.frameTime))
+	c.frames.End(b.Name(), c.animating(o, c.frameTime), c.frameCost(o))
 	return err
+}
+
+func (c *Compositor) frameCost(o *output.Output) frametrace.Cost {
+	sc := c.sceneOf(o)
+	now := c.renderer.Counts()
+	cost := frametrace.Cost{
+		Draws:       uint64(len(sc.prev.ops)),
+		Passes:      now.Passes - c.tracedCounts.Passes,
+		Filters:     now.Filters - c.tracedCounts.Filters,
+		Uploads:     now.Uploads - c.tracedCounts.Uploads,
+		Thumbs:      c.thumbRedraws - c.tracedThumbs,
+		DamageRects: uint64(max(len(sc.damage.Rects()), len(sc.repaint.Rects()))),
+	}
+	c.tracedCounts, c.tracedThumbs = now, c.thumbRedraws
+	return cost
 }
 
 func (c *Compositor) frame(o *output.Output) error {

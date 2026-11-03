@@ -41,25 +41,23 @@ rules:
   - {title: ^pile$, float: true, size: 1000x700}
 `
 
-const (
-	pileTitle  = "pile"
-	gatedScrub = 30
-)
+const pileTitle = "pile"
 
 const (
-	eased       = 400 * time.Millisecond
-	sprung      = 900 * time.Millisecond
-	genieTime   = 600 * time.Millisecond
-	midFlight   = 120 * time.Millisecond
-	steady      = 3 * time.Second
-	settleGap   = 150 * time.Millisecond
-	pumpChunk   = 4 * time.Second
-	bandHeight  = 64
-	swipeEvents = 30
-	swipeStep   = 12.0
-	swipeEvery  = 8 * time.Millisecond
-	quiet       = 5 * time.Millisecond
-	settleTries = 20
+	eased        = 400 * time.Millisecond
+	sprung       = 900 * time.Millisecond
+	genieTime    = 600 * time.Millisecond
+	midFlight    = 120 * time.Millisecond
+	steady       = 3 * time.Second
+	settleGap    = 150 * time.Millisecond
+	pumpChunk    = 4 * time.Second
+	bandHeight   = 64
+	swipeEvents  = 30
+	swipeStep    = 12.0
+	swipeEvery   = 8 * time.Millisecond
+	quiet        = 5 * time.Millisecond
+	settleTries  = 20
+	warmupRounds = 2
 )
 
 type step struct {
@@ -68,7 +66,6 @@ type step struct {
 	after      func(*session)
 	measure    time.Duration
 	continuous bool
-	ungated    bool
 }
 
 type scenario struct {
@@ -82,7 +79,6 @@ type scenario struct {
 type mark struct {
 	step       string
 	continuous bool
-	ungated    bool
 	from, to   time.Duration
 }
 
@@ -91,6 +87,8 @@ type session struct {
 	ipc     string
 	now     func() time.Duration
 	swipes  io.Writer
+	rss     func() int64
+	growth  []rssGrowth
 	marks   []mark
 	windows []*testclient.Window
 	opened  *testclient.Window
@@ -146,7 +144,6 @@ func (s *session) settle() {
 		}
 		s.pump(2 * took)
 	}
-	panic(fatal{fmt.Errorf("the compositor still took over %v to answer after %d tries to let it settle", quiet, settleTries)})
 }
 
 func (s *session) clear() {
@@ -165,7 +162,7 @@ func (s *session) play(st *step) {
 	from := s.now()
 	st.act(s)
 	s.pump(st.measure)
-	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, ungated: st.ungated, from: from, to: s.now()})
+	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, from: from, to: s.now()})
 	s.pump(settleGap)
 	if st.after != nil {
 		s.settle()
@@ -181,10 +178,17 @@ func (s *session) run(sc *scenario, rounds int) {
 	if sc.once {
 		rounds = 1
 	}
-	for range rounds {
+	var first int64
+	for round := range rounds {
 		for i := range sc.steps {
 			s.play(&sc.steps[i])
 		}
+		if round == warmupRounds-1 {
+			first = s.rss()
+		}
+	}
+	if rounds > warmupRounds {
+		s.growth = append(s.growth, rssGrowth{Scenario: sc.name, KiB: s.rss() - first})
 	}
 	s.clear()
 }
@@ -263,8 +267,8 @@ func overviewByAction(n int) scenario {
 		name:  name,
 		setup: pile(n),
 		steps: []step{
-			{name: name + "-open", measure: sprung, ungated: true, act: dispatches("overview show"), after: overviewIs(true)},
-			{name: name + "-close", measure: sprung, ungated: true, act: dispatches("overview hide"), after: overviewIs(false)},
+			{name: name + "-open", measure: sprung, act: dispatches("overview show"), after: overviewIs(true)},
+			{name: name + "-close", measure: sprung, act: dispatches("overview hide"), after: overviewIs(false)},
 		},
 	}
 }
@@ -276,10 +280,10 @@ func overviewByFingers(n int) scenario {
 		fakeInput: true,
 		setup:     pile(n),
 		steps: []step{
-			{name: name + "-follow-open", continuous: true, ungated: n != gatedScrub, act: fingers(0, -swipeStep)},
-			{name: name + "-release-open", measure: sprung, ungated: true, act: lifted, after: overviewIs(true)},
-			{name: name + "-follow-close", continuous: true, ungated: true, act: fingers(0, swipeStep)},
-			{name: name + "-release-close", measure: sprung, ungated: true, act: lifted, after: overviewIs(false)},
+			{name: name + "-follow-open", continuous: true, act: fingers(0, -swipeStep)},
+			{name: name + "-release-open", measure: sprung, act: lifted, after: overviewIs(true)},
+			{name: name + "-follow-close", continuous: true, act: fingers(0, swipeStep)},
+			{name: name + "-release-close", measure: sprung, act: lifted, after: overviewIs(false)},
 		},
 	}
 }

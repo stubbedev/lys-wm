@@ -73,43 +73,12 @@ func TestStepsAreSummarizedPerRun(t *testing.T) {
 		return frametrace.Frame{Output: "A", Kind: frametrace.Composited, Start: start, Present: start + 10, Refresh: 10, Animating: true}
 	}
 	marks := []mark{{step: "a", from: 0, to: 100}, {step: "b", from: 100, to: 200}, {step: "a", from: 1000, to: 1100}}
-	r := buildReport(frametrace.Header{Device: "x"}, 2, marks, []frametrace.Frame{frame(10), frame(20), frame(110), frame(150), frame(1010), frame(5000)})
+	r := buildReport(frametrace.Header{Device: "x"}, 2, marks, nil, []frametrace.Frame{frame(10), frame(20), frame(110), frame(150), frame(1010), frame(5000)})
 	if len(r.Steps) != 2 || r.Steps[0].Name != "a" || len(r.Steps[0].Runs) != 2 {
 		t.Fatalf("report = %+v", r)
 	}
 	if s := r.Steps[0].Summary; s.Frames != 3 || s.Interval.Samples != 1 {
 		t.Fatalf("step a = %+v", s)
-	}
-}
-
-func TestTheGateNamesWhatIsLate(t *testing.T) {
-	r := report{Steps: []stepReport{{Name: "smooth"}, {Name: "rough", Summary: frametrace.Summary{LatePercent: 12}}, {Name: "reported", Ungated: true, Summary: frametrace.Summary{LatePercent: 90}}}}
-	if err := r.gate(-1); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.gate(20); err != nil {
-		t.Fatal(err)
-	}
-	err := r.gate(5)
-	if err == nil || !strings.Contains(err.Error(), "rough") || strings.Contains(err.Error(), "smooth") || strings.Contains(err.Error(), "reported") {
-		t.Fatalf("gate = %v", err)
-	}
-}
-
-func TestOfTheOverviewOnlyTheThirtyWindowScrubFollowingItOpenIsGated(t *testing.T) {
-	var gated []string
-	for i := range scenarios {
-		if !strings.HasPrefix(scenarios[i].name, "overview") {
-			continue
-		}
-		for _, st := range scenarios[i].steps {
-			if !st.ungated {
-				gated = append(gated, st.name)
-			}
-		}
-	}
-	if !slices.Equal(gated, []string{"overview-scrub-30-follow-open"}) {
-		t.Fatalf("gated overview steps: %v", gated)
 	}
 }
 
@@ -128,12 +97,12 @@ func buildCompositor(t *testing.T) string {
 func TestMeasuringASoftwareRendererEndToEnd(t *testing.T) {
 	binary := buildCompositor(t)
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	refused := measure(options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"glass-still"}, maxLatePercent: -1}, io.Discard, os.Getenv)
+	refused := measure(options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"glass-still"}}, io.Discard, os.Getenv)
 	if refused == nil || !strings.Contains(refused.Error(), "no real GPU") {
 		t.Fatalf("the software renderer passed for a GPU: %v", refused)
 	}
 	var text strings.Builder
-	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "swipe", "glass-still", "overview-scrub-10"}, maxLatePercent: -1, allowSoftware: true, jsonPath: jsonPath}
+	o := options{backend: "headless", renderer: "soft", compositor: binary, rounds: 1, only: []string{"window", "swipe", "glass-still", "overview-scrub-10"}, allowSoftware: true, jsonPath: jsonPath}
 	if err := measure(o, &text, os.Getenv); err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +134,64 @@ func TestAMissingCompositorFailsWithItsLog(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'no render node for you' >&2\nexit 3\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	err := measure(options{backend: "headless", renderer: "vulkan", compositor: script, rounds: 1, maxLatePercent: -1}, io.Discard, os.Getenv)
+	err := measure(options{backend: "headless", renderer: "vulkan", compositor: script, rounds: 1}, io.Discard, os.Getenv)
 	if err == nil || !strings.Contains(err.Error(), "did not start") || !strings.Contains(err.Error(), "no render node for you") || !strings.Contains(err.Error(), "/dev/dri") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func costReport(step string, cost frametrace.CostSummary, growth ...rssGrowth) *report {
+	return &report{Steps: []stepReport{{Name: step, Summary: frametrace.Summary{Cost: cost}}}, Growth: growth}
+}
+
+func TestTheGateNamesTheStepAndTheMetricOverItsLimit(t *testing.T) {
+	var fine frametrace.CostSummary
+	fine.Draws.Worst = 10
+	b := baseline{"gles": derive(costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100}))}
+	if err := checkBaseline(b, "gles", costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100})); err != nil {
+		t.Fatalf("the run the limits came from: %v", err)
+	}
+	over := fine
+	over.Draws.Worst = 1000
+	err := checkBaseline(b, "gles", costReport("move", over))
+	if err == nil || !strings.Contains(err.Error(), "move: draws_per_frame 1000") {
+		t.Fatalf("too many draws: %v", err)
+	}
+	if err := checkBaseline(b, "gles", costReport("move", fine, rssGrowth{Scenario: "move", KiB: 1 << 30})); err == nil || !strings.Contains(err.Error(), "RSS grew") {
+		t.Fatalf("a leak: %v", err)
+	}
+	if err := checkBaseline(b, "vulkan", costReport("move", fine)); err == nil || !strings.Contains(err.Error(), "no limits for the vulkan renderer") {
+		t.Fatalf("a renderer with no limits: %v", err)
+	}
+	if err := checkBaseline(b, "gles", costReport("unknown", fine)); err == nil || !strings.Contains(err.Error(), "unknown: no limits") {
+		t.Fatalf("a step with no limits: %v", err)
+	}
+}
+
+func TestDamageRectsAreLimitedByTheCapWhateverWasObserved(t *testing.T) {
+	var c frametrace.CostSummary
+	c.DamageRects.Worst = 31
+	got := derive(costReport("move", c)).Steps["move"]["damage_rects_per_frame"]
+	if got != damageRectCap {
+		t.Fatalf("damage rect limit %d, want the cap %d", got, damageRectCap)
+	}
+}
+
+func TestEveryStepHasEveryLimitOnBothGPURenderers(t *testing.T) {
+	for _, renderer := range []string{"gles", "vulkan"} {
+		rb, ok := checkedInBaseline[renderer]
+		if !ok {
+			t.Fatalf("no baseline for %s", renderer)
+		}
+		for i := range scenarios {
+			for _, st := range scenarios[i].steps {
+				for j := range metrics {
+					m := &metrics[j]
+					if _, ok := rb.Steps[st.name][m.name]; m.gates(st.name) && !ok {
+						t.Errorf("%s: %s has no limit for %s", renderer, st.name, m.name)
+					}
+				}
+			}
+		}
 	}
 }

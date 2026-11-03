@@ -1,0 +1,638 @@
+{
+  "gles": {
+    "steps": {
+      "genie-minimize": {
+        "allocs_per_frame": 44,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 107,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 5
+      },
+      "genie-restore": {
+        "allocs_per_frame": 68,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 107,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 5
+      },
+      "glass-over-busy": {
+        "allocs_per_frame": 77,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 42,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 3
+      },
+      "glass-over-still": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 2,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "glass-slide-back": {
+        "allocs_per_frame": 218,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 62,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "glass-slide-there": {
+        "allocs_per_frame": 78,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 60,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "move-interrupted": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 35,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "move-spring-left": {
+        "allocs_per_frame": 40,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 35,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "move-spring-right": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 33,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-10-close": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 198,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-10-open": {
+        "allocs_per_frame": 36,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 198,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 4
+      },
+      "overview-30-close": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 500,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-30-open": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 483,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 4
+      },
+      "overview-scrub-10-follow-close": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 155,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-10-follow-open": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 155,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 4
+      },
+      "overview-scrub-10-release-close": {
+        "allocs_per_frame": 71,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 198,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-10-release-open": {
+        "allocs_per_frame": 138,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 140,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
+        "render_passes_per_frame": 7,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-follow-close": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 391,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-follow-open": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 416,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 4
+      },
+      "overview-scrub-30-release-close": {
+        "allocs_per_frame": 71,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 500,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-release-open": {
+        "allocs_per_frame": 138,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 357,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
+        "render_passes_per_frame": 7,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 2
+      },
+      "swipe-follow-back": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 45,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "swipe-follow-there": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 45,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "swipe-release-back": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "swipe-release-there": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 40,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "window-close": {
+        "allocs_per_frame": 42,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 28,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "window-open": {
+        "allocs_per_frame": 42,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 38,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 6
+      },
+      "workspace-back": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "workspace-there": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      }
+    },
+    "rss_growth_kib": {
+      "genie": 35756,
+      "glass-slide": 16512,
+      "move": 16760,
+      "overview-10": 16600,
+      "overview-30": 16684,
+      "overview-scrub-10": 16456,
+      "overview-scrub-30": 16496,
+      "swipe": 16392,
+      "window": 28188,
+      "workspace": 16420
+    }
+  },
+  "vulkan": {
+    "steps": {
+      "genie-minimize": {
+        "allocs_per_frame": 53,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 107,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "genie-restore": {
+        "allocs_per_frame": 60,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 107,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "glass-over-busy": {
+        "allocs_per_frame": 42,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 42,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 3
+      },
+      "glass-over-still": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 2,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "glass-slide-back": {
+        "allocs_per_frame": 147,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 60,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "glass-slide-there": {
+        "allocs_per_frame": 43,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 60,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 6,
+        "render_passes_per_frame": 8,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "move-interrupted": {
+        "allocs_per_frame": 33,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 37,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "move-spring-left": {
+        "allocs_per_frame": 40,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 33,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "move-spring-right": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 33,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-10-close": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 198,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-10-open": {
+        "allocs_per_frame": 44,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 187,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 3
+      },
+      "overview-30-close": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 500,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-30-open": {
+        "allocs_per_frame": 43,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 483,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 3
+      },
+      "overview-scrub-10-follow-close": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 155,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-10-follow-open": {
+        "allocs_per_frame": 40,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 153,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 3
+      },
+      "overview-scrub-10-release-close": {
+        "allocs_per_frame": 37,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 198,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-10-release-open": {
+        "allocs_per_frame": 95,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 140,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
+        "render_passes_per_frame": 7,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-follow-close": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 391,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-follow-open": {
+        "allocs_per_frame": 40,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 396,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 3
+      },
+      "overview-scrub-30-release-close": {
+        "allocs_per_frame": 37,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 501,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "overview-scrub-30-release-open": {
+        "allocs_per_frame": 95,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 357,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
+        "render_passes_per_frame": 7,
+        "thumb_draws_per_settle": 3,
+        "uploads_per_frame": 2
+      },
+      "swipe-follow-back": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 45,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "swipe-follow-there": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 45,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "swipe-release-back": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "swipe-release-there": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 40,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "window-close": {
+        "allocs_per_frame": 40,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 28,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 4,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 3
+      },
+      "window-open": {
+        "allocs_per_frame": 50,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 38,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "workspace-back": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      },
+      "workspace-there": {
+        "allocs_per_frame": 35,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 55,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 4
+      }
+    },
+    "rss_growth_kib": {
+      "genie": 28092,
+      "glass-slide": 16444,
+      "move": 16652,
+      "overview-10": 16736,
+      "overview-30": 16516,
+      "overview-scrub-10": 16612,
+      "overview-scrub-30": 16520,
+      "swipe": 16396,
+      "window": 31976,
+      "workspace": 16392
+    }
+  }
+}

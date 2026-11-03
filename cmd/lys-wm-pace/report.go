@@ -15,9 +15,13 @@ import (
 type stepReport struct {
 	Name       string               `json:"name"`
 	Continuous bool                 `json:"continuous"`
-	Ungated    bool                 `json:"ungated"`
 	Summary    frametrace.Summary   `json:"summary"`
 	Runs       [][]frametrace.Frame `json:"runs"`
+}
+
+type rssGrowth struct {
+	Scenario string `json:"scenario"`
+	KiB      int64  `json:"kib"`
 }
 
 type report struct {
@@ -25,15 +29,16 @@ type report struct {
 	RealGPU bool              `json:"real_gpu"`
 	Rounds  int               `json:"rounds"`
 	Steps   []stepReport      `json:"steps"`
+	Growth  []rssGrowth       `json:"rss_growth"`
 }
 
-func buildReport(h frametrace.Header, rounds int, marks []mark, frames []frametrace.Frame) report {
-	r := report{Header: h, RealGPU: !h.Software, Rounds: rounds}
+func buildReport(h frametrace.Header, rounds int, marks []mark, growth []rssGrowth, frames []frametrace.Frame) report {
+	r := report{Header: h, RealGPU: !h.Software, Rounds: rounds, Growth: growth}
 	index := map[string]int{}
 	for _, m := range marks {
 		if _, ok := index[m.step]; !ok {
 			index[m.step] = len(r.Steps)
-			r.Steps = append(r.Steps, stepReport{Name: m.step, Continuous: m.continuous, Ungated: m.ungated})
+			r.Steps = append(r.Steps, stepReport{Name: m.step, Continuous: m.continuous})
 		}
 		st := &r.Steps[index[m.step]]
 		st.Runs = append(st.Runs, framesIn(frames, m))
@@ -79,6 +84,21 @@ func (r *report) write(out io.Writer) {
 		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d (%.1f%%)\t%d\t%s\t%s\t%s\t%s\n", st.Name, s.Frames, s.Empty, s.Dropped, s.Late, s.LatePercent, s.SkippedVblank, spread(s.Interval), spread(s.CPU), spread(s.GPU), spread(s.Latency))
 	}
 	_ = w.Flush()
+	fmt.Fprintln(out)
+	r.writeCost(out)
+}
+
+func (r *report) writeCost(out io.Writer) {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "step\tdraws\tpasses\tfilters\tuploads\tdamage rects\tthumbs/run\tfilters/run\tallocs\tfile io")
+	for i := range r.Steps {
+		c := &r.Steps[i].Summary.Cost
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", r.Steps[i].Name, c.Draws.Worst, c.Passes.Worst, c.Filters.Worst, c.Uploads.Worst, c.DamageRects.Worst, c.Thumbs.RunWorst, c.Filters.RunWorst, c.Allocs.Worst, c.FileIO.P50)
+	}
+	_ = w.Flush()
+	for _, g := range r.Growth {
+		fmt.Fprintf(out, "rss growth over %s: %d KiB\n", g.Scenario, g.KiB)
+	}
 }
 
 func (r *report) save(path string) error {
@@ -100,22 +120,6 @@ func (r *report) save(path string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("write the report to %s: %w", path, err)
-	}
-	return nil
-}
-
-func (r *report) gate(maxLatePercent float64) error {
-	if maxLatePercent < 0 {
-		return nil
-	}
-	var over []string
-	for i := range r.Steps {
-		if s := &r.Steps[i].Summary; !r.Steps[i].Ungated && s.LatePercent > maxLatePercent {
-			over = append(over, fmt.Sprintf("%s %.1f%%", r.Steps[i].Name, s.LatePercent))
-		}
-	}
-	if len(over) > 0 {
-		return fmt.Errorf("over %.1f%% of frames late: %s", maxLatePercent, strings.Join(over, ", "))
 	}
 	return nil
 }

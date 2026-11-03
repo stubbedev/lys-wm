@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -37,15 +38,16 @@ var (
 )
 
 type options struct {
-	backend        string
-	renderer       string
-	compositor     string
-	jsonPath       string
-	cpuProfile     string
-	only           []string
-	rounds         int
-	maxLatePercent float64
-	allowSoftware  bool
+	backend       string
+	renderer      string
+	compositor    string
+	jsonPath      string
+	cpuProfile    string
+	only          []string
+	rounds        int
+	gate          bool
+	writeBaseline string
+	allowSoftware bool
 }
 
 func parseOptions(args []string, stderr io.Writer) (options, error) {
@@ -58,7 +60,8 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	flags.StringVar(&o.jsonPath, "json", "", "write the report with every frame to this file as JSON")
 	flags.StringVar(&o.cpuProfile, "cpu-profile", "", "write a Go CPU profile of lys-wm to this file")
 	flags.IntVar(&o.rounds, "rounds", 10, "how many times to play each animation")
-	flags.Float64Var(&o.maxLatePercent, "max-late-percent", -1, "fail when any scenario presents more than this share of frames late; negative never fails")
+	flags.BoolVar(&o.gate, "gate", false, "fail when a step's per-frame counts exceed the checked-in baseline")
+	flags.StringVar(&o.writeBaseline, "write-baseline", "", "write limits for this renderer, derived from this run, into the baseline file at this path")
 	flags.BoolVar(&o.allowSoftware, "allow-software", false, "accept a software rasteriser, for relative numbers only")
 	only := flags.String("scenarios", "", "comma-separated scenarios to run (default: all): "+strings.Join(scenarioNames(), ", "))
 	if err := flags.Parse(args); err != nil {
@@ -234,6 +237,24 @@ func (c *compositor) stop(ask bool) error {
 	return fmt.Errorf("lys-wm did not exit within %v and was killed (%w). Its log:\n%s", stopTimeout, err, tail(c.logPath))
 }
 
+func rssKiB(pid int) int64 {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		panic(fatal{fmt.Errorf("read the compositor's status: %w", err)})
+	}
+	for line := range strings.Lines(string(data)) {
+		if rest, ok := strings.CutPrefix(line, "VmRSS:"); ok {
+			fields := strings.Fields(rest)
+			kib, err := strconv.ParseInt(fields[0], 10, 64)
+			if err != nil {
+				panic(fatal{fmt.Errorf("read the compositor's resident size from %q: %w", line, err)})
+			}
+			return kib
+		}
+	}
+	panic(fatal{errors.New("the compositor's status has no VmRSS")})
+}
+
 func readHeader(path string) (frametrace.Header, error) {
 	f, err := os.Open(path) //nolint:gosec // our own trace, in our own temp dir
 	if err != nil {
@@ -283,7 +304,7 @@ func (t *tb) cleanup() {
 	}
 }
 
-func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, err error) {
+func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, growth []rssGrowth, err error) {
 	t := &tb{}
 	defer t.cleanup()
 	defer func() {
@@ -295,7 +316,7 @@ func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, e
 			err = f.err
 		}
 	}()
-	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, now: backend.Now, swipes: c.swipes}
+	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, now: backend.Now, swipes: c.swipes, rss: func() int64 { return rssKiB(c.cmd.Process.Pid) }}
 	for i := range scenarios {
 		sc := &scenarios[i]
 		if len(o.only) > 0 && !slices.Contains(o.only, sc.name) {
@@ -307,7 +328,7 @@ func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, e
 		}
 		s.run(sc, o.rounds)
 	}
-	return s.marks, nil
+	return s.marks, s.growth, nil
 }
 
 func measure(o options, stdout io.Writer, getenv func(string) string) error {
@@ -340,7 +361,7 @@ func measure(o options, stdout io.Writer, getenv func(string) string) error {
 		_ = c.stop(true)
 		return err
 	}
-	marks, driveErr := drive(o, c, run, stdout)
+	marks, growth, driveErr := drive(o, c, run, stdout)
 	if driveErr != nil {
 		driveErr = fmt.Errorf("drive the animations: %w. The compositor's log:\n%s", driveErr, tail(c.logPath))
 	}
@@ -351,14 +372,22 @@ func measure(o options, stdout io.Writer, getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	r := buildReport(h, o.rounds, marks, frames)
+	r := buildReport(h, o.rounds, marks, growth, frames)
 	r.write(stdout)
 	if o.jsonPath != "" {
 		if err := r.save(o.jsonPath); err != nil {
 			return err
 		}
 	}
-	return r.gate(o.maxLatePercent)
+	if o.writeBaseline != "" {
+		if err := updateBaseline(o.writeBaseline, o.renderer, &r); err != nil {
+			return err
+		}
+	}
+	if !o.gate {
+		return nil
+	}
+	return checkBaseline(checkedInBaseline, o.renderer, &r)
 }
 
 func main() {

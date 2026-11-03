@@ -287,6 +287,9 @@ type Compositor struct {
 	overviewStyle   OverviewStyle
 	keptBackdrop    bool
 	thumbRedraws    uint64
+	tracedCounts    render.Counts
+	tracedThumbs    uint64
+	shmSyncReads    uint64
 	switches        map[*output.Output]*workspaceSwitch
 	drawnSwitch     *workspaceSwitch
 	gooFrom, gooTo  []*window

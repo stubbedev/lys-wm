@@ -6,9 +6,9 @@ default:
 
 # Every gate a commit must pass: formatting, a tidy go.mod, the release
 # gates, the vulnerability scan and the race detector. Each package's tests run
-# once plain, in `check`, and once under `race`. CI runs `plain` and `race` as
-# separate jobs in the dev shell.
-gates: plain race
+# once plain, in `check`, and once under `race`, and the animations are played
+# against their baselines. CI runs each as a separate job in the dev shell.
+gates: plain race pace-gates
 
 # Every gate but the race detector.
 plain: fmt-check tidy-check check vuln
@@ -36,11 +36,12 @@ pace backend="headless" renderer="vulkan" rounds="10" args="":
     "$dir/lys-wm-pace" -backend {{quote(backend)}} -renderer {{quote(renderer)}} -rounds {{quote(rounds)}} {{args}}
 
 # Run the GPU tests on the container's /run/opengl-driver instead of the dev
-# shell's llvmpipe, failing when any of them skips, then check frame pacing on
-# each GPU renderer: headless lys-wm in a private runtime dir, with Xwayland
-# off, runs es2gears_wayland and fails below min_fps, and lys-wm-pace plays
-# the animations and fails when a step presents over max_late percent late.
-hardware min_fps="57" max_late="5":
+# shell's llvmpipe, failing when any of them skips, then report frame rate and
+# lateness on each GPU renderer and gate what no load can change: headless
+# lys-wm in a private runtime dir, with Xwayland off, runs es2gears_wayland and
+# reports its frame rate, and lys-wm-pace plays the animations, reports late
+# frames and fails when a step's per-frame counts pass cmd/lys-wm-pace/baseline.json.
+hardware:
     #!/usr/bin/env bash
     set -euo pipefail
     unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
@@ -82,13 +83,31 @@ hardware min_fps="57" max_late="5":
             exit 1
         fi
         echo "pacing: $fps fps on headless $renderer lys-wm at 60 Hz"
-        awk -v fps="$fps" -v min="{{min_fps}}" 'BEGIN { exit !(fps >= min) }' || { echo "hardware: $fps fps on $renderer is below {{min_fps}}" >&2; exit 1; }
     }
     pace gles
     pace vulkan
     go build -o "$dir/lys-wm-pace" ./cmd/lys-wm-pace
-    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer gles -rounds 5 -max-late-percent {{max_late}}
-    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer vulkan -rounds 5 -max-late-percent {{max_late}}
+    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer gles -rounds {{pace_rounds}} -gate
+    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer vulkan -rounds {{pace_rounds}} -gate
+
+# How many times the gates play each animation: enough for a repeated step to
+# show RSS growth, as the baselines were measured.
+pace_rounds := "3"
+
+# Both renderers at once: nothing the gate counts depends on the load.
+[parallel]
+pace-gates: (pace-gate "gles") (pace-gate "vulkan")
+
+# Fail when a step's per-frame counts pass cmd/lys-wm-pace/baseline.json on the
+# dev shell's software rasterisers. Everything it gates is counted, so a busy
+# machine passes the same; docs/frame-pacing.md has what it measures.
+pace-gate renderer="gles":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
+    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer {{quote(renderer)}} -rounds {{pace_rounds}} -allow-software -gate
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and

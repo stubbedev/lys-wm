@@ -35,10 +35,15 @@ var formats = []struct {
 }
 
 type Renderer struct {
-	d    *lgpu.Device
-	node uint64
-	pass *pass
-	idle pass
+	d      *lgpu.Device
+	node   uint64
+	pass   *pass
+	idle   pass
+	counts render.Counts
+}
+
+func (r *Renderer) Counts() render.Counts {
+	return r.counts
 }
 
 func Open(node uint64) (*Renderer, error) {
@@ -122,6 +127,7 @@ func (t *texture) Size() image.Point {
 }
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
+	t.r.counts.Uploads++
 	if err := render.CheckUpdate(t.Size(), dst, stride, len(data)); err != nil {
 		return err
 	}
@@ -134,6 +140,7 @@ func (t *texture) Destroy() error {
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
+	r.counts.Uploads++
 	f, err := fourccOf(format)
 	if err != nil {
 		return nil, err
@@ -450,6 +457,7 @@ func (r *Renderer) target(target render.Target) (*Target, error) {
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	r.counts.Passes++
 	t, err := r.target(target)
 	if err != nil {
 		return nil, err
@@ -487,6 +495,7 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 }
 
 func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	p.r.counts.Filters++
 	tex, ok := t.(*texture)
 	switch {
 	case !ok || tex.r != p.r:

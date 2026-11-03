@@ -66,6 +66,7 @@ func (t *texture) Size() image.Point {
 }
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
+	t.owner.counts.Uploads++
 	if t.pix == nil {
 		return errors.New("soft: update of a destroyed texture")
 	}
@@ -91,7 +92,12 @@ func (t *texture) Destroy() error {
 }
 
 type Renderer struct {
-	pass pass
+	pass   pass
+	counts render.Counts
+}
+
+func (r *Renderer) Counts() render.Counts {
+	return r.counts
 }
 
 func (*Renderer) DeviceName() string {
@@ -116,6 +122,7 @@ func (r *Renderer) Formats() []render.Format {
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
+	r.counts.Uploads++
 	if !slices.Contains(r.Formats(), format) {
 		return nil, fmt.Errorf("soft: unsupported texture format %d", format)
 	}
@@ -159,6 +166,7 @@ func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, err
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	r.counts.Passes++
 	buf, ok := target.(*Buffer)
 	if tt, isTT := target.(*TextureTarget); isTT {
 		buf, ok = tt.Buffer, true
@@ -342,6 +350,7 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 }
 
 func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up bool) {
+	p.owner.counts.Filters++
 	tex, ok := t.(*texture)
 	switch {
 	case !p.active:

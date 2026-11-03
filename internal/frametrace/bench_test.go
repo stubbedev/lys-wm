@@ -28,7 +28,7 @@ func BenchmarkRecorderFrame(b *testing.B) {
 		r.Begin("HEADLESS-1")
 		now += time.Millisecond
 		r.Submit("HEADLESS-1")
-		r.End("HEADLESS-1", true)
+		r.End("HEADLESS-1", true, Cost{})
 		now += 15 * time.Millisecond
 		r.Presented("HEADLESS-1", backend.Presentation{Time: now, Refresh: 16 * time.Millisecond})
 	}

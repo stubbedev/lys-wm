@@ -104,7 +104,7 @@ func (g *rig) frame(act func()) {
 	g.now += time.Millisecond
 	act()
 	g.now += time.Millisecond
-	g.r.End("A", true)
+	g.r.End("A", true, Cost{})
 }
 
 func (g *rig) flip(at time.Duration) {
@@ -118,7 +118,7 @@ func TestANilRecorderDoesNothing(t *testing.T) {
 	r.Submit("A")
 	r.Scanout("A")
 	r.Drop("A")
-	r.End("A", true)
+	r.End("A", true, Cost{})
 	r.Presented("A", backend.Presentation{Time: 1, Refresh: 1})
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestAFenceTimesTheGPUFromSubmitToSignal(t *testing.T) {
 	g.flip(g.now + 5*time.Millisecond)
 	g.signal[0] = submitted + 3*time.Millisecond
 	g.r.Begin("A")
-	g.r.End("A", false)
+	g.r.End("A", false, Cost{})
 	frames := g.frames()
 	if len(frames) != 2 {
 		t.Fatalf("%d frames, want 2", len(frames))
@@ -313,5 +313,62 @@ func TestSummaryCountsEachRunOnItsOwn(t *testing.T) {
 	}
 	if c := Summarize([][]Frame{{settled, settled}}, true); c.Interval.Samples != 1 {
 		t.Fatalf("a continuous step counted %d intervals", c.Interval.Samples)
+	}
+}
+
+func TestCountsFromFramesThatDrewNothingReachTheNextOneThatDid(t *testing.T) {
+	g := newRig(t, nil)
+	g.r.Begin("A")
+	g.r.End("A", false, Cost{Uploads: 3, Thumbs: 1, Passes: 2, Filters: 4, Draws: 9, DamageRects: 9})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{Uploads: 1, Draws: 5, DamageRects: 2})
+	g.flip(time.Second)
+	frames := g.frames()
+	if len(frames) != 2 {
+		t.Fatalf("frames = %+v", frames)
+	}
+	c := frames[1].Cost
+	if c.Uploads != 4 || c.Thumbs != 1 || c.Passes != 2 || c.Filters != 4 || c.Draws != 5 || c.DamageRects != 2 {
+		t.Fatalf("cost = %+v", c)
+	}
+}
+
+func TestAFrameDoingNoFileIOReportsNone(t *testing.T) {
+	g := newRig(t, nil)
+	for i := range 20 {
+		g.frame(func() {})
+		g.flip(time.Duration(i+1) * time.Second)
+	}
+	for _, f := range g.frames() {
+		if f.Cost.FileIO != 0 {
+			t.Fatalf("a frame that read nothing reports %d I/O calls", f.Cost.FileIO)
+		}
+	}
+}
+
+func TestAFrameAllocatingOnlyItsOwnBuffersReportsThem(t *testing.T) {
+	g := newRig(t, nil)
+	var sink [][]byte
+	const held = 64
+	g.frame(func() {
+		for range held {
+			sink = append(sink, make([]byte, 1<<10))
+		}
+	})
+	g.flip(time.Second)
+	frames := g.frames()
+	if got := frames[0].Cost.Allocs; got < held {
+		t.Fatalf("a frame allocating %d buffers reports %d allocations", held, got)
+	}
+	if len(sink) != held {
+		t.Fatal("the buffers were dropped")
+	}
+}
+
+func TestIOCallsAddReadsAndWrites(t *testing.T) {
+	stat := []byte("rchar: 9\nwchar: 7\nsyscr: 12\nsyscw: 30\nread_bytes: 5\n")
+	if got := ioCalls(stat); got != 42 {
+		t.Fatalf("ioCalls = %d, want 42", got)
 	}
 }

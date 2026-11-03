@@ -27,10 +27,11 @@ The dev shell runs the GPU tests on Mesa's llvmpipe. On a machine with a GPU,
 run `just docker hardware` after changes to rendering, DRM, dmabuf, capture or frame
 pacing: it runs the GPU, DRM-without-master and GLES harness tests on the
 host's GPU and fails if any of them skips, then measures es2gears against
-headless GLES lys-wm in a private runtime dir (Xwayland off) and fails below
-`min_fps` (57 by default, for the 60 Hz headless output), and plays every
-animation under `lys-wm-pace` (`docs/frame-pacing.md`), failing when a step
-presents over `max_late` percent of its frames late.
+headless GLES lys-wm in a private runtime dir (Xwayland off) and reports its
+frame rate, and plays every animation under `lys-wm-pace`
+(`docs/frame-pacing.md`), reporting late frames and failing when a step's
+per-frame counts pass `cmd/lys-wm-pace/baseline.json`. No gate judges time: a
+loaded machine passes the same.
 
 After changes to Xwayland, X11 window management or scaling, run the real X
 applications too. `nix build .#checks.x86_64-linux.vm-xwayland-apps` drives

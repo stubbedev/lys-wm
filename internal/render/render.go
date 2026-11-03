@@ -337,8 +337,15 @@ func SoftwareDevice(name string) bool {
 	return slices.ContainsFunc([]string{"llvmpipe", "softpipe", "lavapipe", "swiftshader", "swrast", "software"}, func(p string) bool { return strings.HasPrefix(lower, p) })
 }
 
+type Counts struct {
+	Passes  uint64
+	Filters uint64
+	Uploads uint64
+}
+
 type Renderer interface {
 	Speed() Speed
+	Counts() Counts
 	Formats() []Format
 	NewTexture(format Format, size image.Point, stride int, data []byte) (Texture, error)
 	NewTarget(size image.Point) (ReadTarget, error)
