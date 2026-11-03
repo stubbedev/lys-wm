@@ -74,6 +74,7 @@ func (f frameDone) Done(*cw.WlCallback, uint32) error {
 }
 
 func TestOnlyDamageIsRepainted(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("damage", quadrants)
@@ -143,6 +144,7 @@ func TestOnlyDamageIsRepainted(t *testing.T) {
 }
 
 func TestIdleDesktopNeverWakes(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("idle", quadrants)
@@ -237,6 +239,7 @@ func allocsPerRun(runs uint64, prepare, frame func()) uint64 {
 }
 
 func TestUndamagedFrameCallbacksArePacedByRefresh(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("idle", quadrants)

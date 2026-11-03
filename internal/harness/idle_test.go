@@ -80,6 +80,7 @@ func move(h *Harness) {
 }
 
 func TestIdleNotificationsFireAndResume(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	i := newIdler(t, h)
 	l := i.watch(60*time.Millisecond, false)
@@ -97,6 +98,7 @@ func TestIdleNotificationsFireAndResume(t *testing.T) {
 }
 
 func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("video", quadrants)
@@ -139,6 +141,7 @@ func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
 }
 
 func TestAnInhibitorStopsHoldingWhenItsSurfaceIsDestroyed(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("video", quadrants)

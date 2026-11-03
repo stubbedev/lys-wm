@@ -78,6 +78,7 @@ const (
 )
 
 func TestWestonFlowerMaps(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	flower := h.Run("weston-flower")
 	h.Eventually("weston-flower to map", mappedToplevels(1))
@@ -88,6 +89,7 @@ func TestWestonFlowerMaps(t *testing.T) {
 }
 
 func TestFootMapsAndTakesInput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	typed := filepath.Join(t.TempDir(), "typed")
 	foot := h.Run("foot", "--override=main.font=monospace:size=12", "sh", "-c", `printf ready; read -r line; printf %s "$line" > "$0"`, typed)

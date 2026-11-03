@@ -61,6 +61,7 @@ func open(t *testing.T, h *Harness, title string, paint testclient.Painter) (*te
 }
 
 func TestATilingChangeLandsTogether(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testATilingChangeLandsTogether)
 }
 
@@ -120,6 +121,7 @@ func (h *Harness) compositorHolding() bool {
 }
 
 func TestAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce)
 }
 
@@ -160,6 +162,7 @@ func testAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce(t *testing.T, start gpu
 }
 
 func TestClientsThatDoNotAnswerAConfigureHoldOnlyUpToTheBound(t *testing.T) {
+	t.Parallel()
 	for name, answer := range map[string]testclient.Answer{"no ack": testclient.AnswerNever, "ack without a commit": testclient.AnswerAckOnly} {
 		t.Run(name, func(t *testing.T) {
 			h := Start(t, small)
@@ -178,6 +181,7 @@ func TestClientsThatDoNotAnswerAConfigureHoldOnlyUpToTheBound(t *testing.T) {
 }
 
 func TestAClientKeepingItsBufferAnswersAndIsNotStretched(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	cl, left := open(t, h, "left", fillGreen)
 	cr, right := open(t, h, "right", fillBlue)
@@ -200,6 +204,7 @@ func TestAClientKeepingItsBufferAnswersAndIsNotStretched(t *testing.T) {
 }
 
 func TestChangesWithoutAResizeAreNotHeld(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	c, w := open(t, h, "lone", fillGreen)
 	dialogs := testclient.Connect(t, h.Socket())
@@ -234,6 +239,7 @@ func TestChangesWithoutAResizeAreNotHeld(t *testing.T) {
 }
 
 func TestRealClientsCatchUpWithEveryChangeAtTheirOwnPace(t *testing.T) {
+	t.Parallel()
 	for _, client := range []struct {
 		name         string
 		args         []string
@@ -278,6 +284,7 @@ func TestRealClientsCatchUpWithEveryChangeAtTheirOwnPace(t *testing.T) {
 }
 
 func TestClosingDuringAHoldLandsAtOnce(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	cl, left := open(t, h, "left", fillGreen)
 	cr, _ := open(t, h, "right", fillBlue)
@@ -308,6 +315,7 @@ func TestClosingDuringAHoldLandsAtOnce(t *testing.T) {
 }
 
 func TestFullscreenLandsWithItsAnswer(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	cl, left := open(t, h, "left", fillGreen)
 	cr, right := open(t, h, "right", fillBlue)
@@ -331,6 +339,7 @@ func TestFullscreenLandsWithItsAnswer(t *testing.T) {
 }
 
 func TestAWindowsLookLandsWithItsChange(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			heldForever(cfg)
@@ -354,6 +363,7 @@ func TestAWindowsLookLandsWithItsChange(t *testing.T) {
 }
 
 func TestAWorkspaceSwitchIsNotHeldBackByAFrozenClient(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	cl, left := open(t, h, "left", fillGreen)
 	_, _ = open(t, h, "right", fillBlue)
@@ -384,6 +394,7 @@ func TestAWorkspaceSwitchIsNotHeldBackByAFrozenClient(t *testing.T) {
 }
 
 func TestWindowsOnAnOutputThatWentAwayAreNotHeldBack(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small, small)
 	var doomed string
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
@@ -410,6 +421,7 @@ func TestWindowsOnAnOutputThatWentAwayAreNotHeldBack(t *testing.T) {
 }
 
 func TestAnimationsStartFromTheLandingAndRetargetFromWhatIsShown(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAnimationsStartFromTheLandingAndRetargetFromWhatIsShown)
 }
 
@@ -485,6 +497,7 @@ func (h *Harness) pointerAt(x, y int) func(b *headless.Backend) error {
 }
 
 func TestADragResizeCoalescesItsConfiguresToTheFrames(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, dragBinds(t, func(*compositor.Config) {}), small)
 	c := testclient.Connect(t, h.Socket())
 	left := c.Window("left", fillGreen)
@@ -522,6 +535,7 @@ func TestADragResizeCoalescesItsConfiguresToTheFrames(t *testing.T) {
 }
 
 func TestADragKeepsMovingAgainstAFrozenClient(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, dragBinds(t, heldForever), small)
 	cf, frozen := open(t, h, "frozen", fillBlue)
 	c, w := open(t, h, "dragged", fillGreen)
@@ -558,6 +572,7 @@ func TestADragKeepsMovingAgainstAFrozenClient(t *testing.T) {
 }
 
 func TestInputFlowsDuringAHold(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	a := join(t, h, "a")
 	a.w.Answer = testclient.AnswerNever
@@ -578,6 +593,7 @@ func TestInputFlowsDuringAHold(t *testing.T) {
 }
 
 func TestASynchronizedSubsurfaceLandsWithItsParent(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, heldForever, small)
 		ca, a := open(t, h, "a", fillBlue)
@@ -614,6 +630,7 @@ func TestASynchronizedSubsurfaceLandsWithItsParent(t *testing.T) {
 }
 
 func TestAPopupStaysWithItsWindowDuringAHold(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	ca, a := open(t, h, "a", fillGreen)
 	cb, b := open(t, h, "b", fillBlue)
@@ -640,6 +657,7 @@ func TestAPopupStaysWithItsWindowDuringAHold(t *testing.T) {
 }
 
 func TestAnUnsignalledFenceKeepsAnAnswerFromLanding(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, heldForever, small)
 	c, w := open(t, h, "fenced", fillGreen)
 	var fences []*surface.Hold
@@ -675,6 +693,7 @@ func TestAnUnsignalledFenceKeepsAnAnswerFromLanding(t *testing.T) {
 }
 
 func TestAFenceThatNeverSignalsHoldsOthersOnlyUpToTheBound(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, flat, small)
 	c, w := open(t, h, "fenced", fillGreen)
 	var fence *surface.Hold
@@ -903,6 +922,7 @@ func BenchmarkDragResizeStep(b *testing.B) {
 }
 
 func TestALongDragEndsWhereThePointerDoes(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, dragBinds(t, heldForever), small)
 	c := testclient.Connect(t, h.Socket())
 	left := c.Window("left", fillGreen)

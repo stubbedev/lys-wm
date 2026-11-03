@@ -23,6 +23,7 @@ func pointerWarp(t *testing.T, c *testclient.Client) *cpw.WpPointerWarpV1 {
 }
 
 func TestClientsWarpThePointerOverTheirOwnFocusedSurfaces(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	a.seen(t, "the pointer over a", func() bool { return a.in.Serial != 0 })

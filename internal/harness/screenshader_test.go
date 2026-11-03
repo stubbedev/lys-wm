@@ -56,6 +56,7 @@ func outputShader(h *Harness) (path, problem string) {
 }
 
 func TestAScreenShaderShadesTheOutputOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAScreenShaderShadesTheOutput)
 }
 
@@ -72,6 +73,7 @@ func testAScreenShaderShadesTheOutput(t *testing.T, start gpuStarter) {
 }
 
 func TestTheExampleShadersRunOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testTheExampleShadersRun)
 }
 
@@ -96,6 +98,7 @@ func testTheExampleShadersRun(t *testing.T, start gpuStarter) {
 }
 
 func TestABrokenShaderLeavesTheOutputUnshadedAndSaysWhy(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reports []string
 	path := writeShader(t, brokenShader)
@@ -122,6 +125,7 @@ func TestABrokenShaderLeavesTheOutputUnshadedAndSaysWhy(t *testing.T) {
 }
 
 func TestAMissingShaderLeavesTheOutputUnshaded(t *testing.T) {
+	t.Parallel()
 	missing := filepath.Join(t.TempDir(), "nope.frag")
 	var reports int
 	h := StartWith(t, func(cfg *compositor.Config) {
@@ -138,6 +142,7 @@ func TestAMissingShaderLeavesTheOutputUnshaded(t *testing.T) {
 }
 
 func TestAReloadChangesTheShader(t *testing.T) {
+	t.Parallel()
 	var base compositor.Config
 	path := writeShader(t, invertShader)
 	h := StartWith(t, func(cfg *compositor.Config) {
@@ -178,6 +183,7 @@ func TestAReloadChangesTheShader(t *testing.T) {
 }
 
 func TestTheLockScreenAndScreencopySeeNoShader(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testTheLockScreenAndScreencopySeeNoShader)
 }
 
@@ -211,6 +217,7 @@ func testTheLockScreenAndScreencopySeeNoShader(t *testing.T, start gpuStarter) {
 }
 
 func TestAShaderDoesNotDrawWhenNothingChanges(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAShaderDoesNotDrawWhenNothingChanges)
 }
 
@@ -229,6 +236,7 @@ func testAShaderDoesNotDrawWhenNothingChanges(t *testing.T, start gpuStarter) {
 }
 
 func TestAShaderReadingTimeKeepsDrawing(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAShaderReadingTimeKeepsDrawing)
 }
 
@@ -285,6 +293,7 @@ func testScanoutStopsOnlyWhileAShaderIsOn(t *testing.T, start gpuStarter) {
 }
 
 func TestACursorPlaneIsNotUsedUnderAShader(t *testing.T) {
+	t.Parallel()
 	h := StartWithCursorPlanes(t, image.Pt(64, 64), shaded(writeShader(t, invertShader)), small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("under", testclient.Fill(0, 0, 0xff))

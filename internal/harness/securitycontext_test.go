@@ -130,6 +130,7 @@ func TestSandboxedClientsDoNotSeePrivilegedGlobals(t *testing.T) {
 }
 
 func TestASecurityContextNeedsAListeningSocket(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m, err := cwsc.NewWpSecurityContextManagerV1(c.Display, 1)
@@ -168,6 +169,7 @@ func securityContext(t *testing.T, c *testclient.Client) (*cwsc.WpSecurityContex
 }
 
 func TestSecurityContextMetadataRules(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		code uint32
 		do   func(ctx *cwsc.WpSecurityContextV1) error

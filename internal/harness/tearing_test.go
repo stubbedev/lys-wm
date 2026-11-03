@@ -72,6 +72,7 @@ func tearingManager(t *testing.T, c *testclient.Client) *ctc.WpTearingControlMan
 }
 
 func TestOneTearingControlPerSurfaceUntilItIsGone(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := tearingManager(t, c)

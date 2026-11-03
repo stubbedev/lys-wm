@@ -70,6 +70,7 @@ func outputGamma(want []uint16) func(*headless.Backend, *compositor.Compositor) 
 }
 
 func TestGammaControlSetsAnOutputsRamps(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	if _, _, ev := gammaControl(t, h); !ev.failed {
 		t.Fatal("an output without a gamma LUT handed out a gamma control")
@@ -119,6 +120,7 @@ func TestGammaControlSetsAnOutputsRamps(t *testing.T) {
 }
 
 func TestAGammaTableIsReadFromTheStartOfItsFile(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		b.Outputs()[0].SetGammaSize(4)
@@ -147,6 +149,7 @@ func TestAGammaTableIsReadFromTheStartOfItsFile(t *testing.T) {
 }
 
 func TestGammaTablesOfTheWrongSizeAreProtocolErrors(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		b.Outputs()[0].SetGammaSize(4)
@@ -169,6 +172,7 @@ func TestGammaTablesOfTheWrongSizeAreProtocolErrors(t *testing.T) {
 }
 
 func TestGammaControlFailsWhenItsOutputGoes(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		for _, o := range b.Outputs() {

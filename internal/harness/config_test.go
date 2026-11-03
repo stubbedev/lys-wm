@@ -24,6 +24,7 @@ import (
 )
 
 func TestReloadSwapsBindsKeymapAndRepeat(t *testing.T) {
+	t.Parallel()
 	log := filepath.Join(t.TempDir(), "log")
 	dk, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "dk"})
 	if err != nil {
@@ -148,6 +149,7 @@ func layout(b *headless.Backend, c *compositor.Compositor) []placed {
 }
 
 func TestAFallbackOutputRuleCoversTheOutputsNoRuleNames(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Outputs = compositor.OutputRules{
 			Named:    []compositor.OutputRule{{Name: "HEADLESS-1", Scale: 2 * output.Unit}},
@@ -175,6 +177,7 @@ func TestAFallbackOutputRuleCoversTheOutputsNoRuleNames(t *testing.T) {
 }
 
 func TestOutputRules(t *testing.T) {
+	t.Parallel()
 	at := image.Pt(1000, 50)
 	wanted := compositor.ExactMode{Size: image.Pt(240, 150)}
 	missing := compositor.ExactMode{Size: image.Pt(800, 600), RefreshMHz: 60000}
@@ -248,6 +251,7 @@ func TestOutputRules(t *testing.T) {
 }
 
 func TestRepeatingBindsWithRepeatOff(t *testing.T) {
+	t.Parallel()
 	log := filepath.Join(t.TempDir(), "log")
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Seat.RepeatRate = 0
@@ -265,6 +269,7 @@ func TestRepeatingBindsWithRepeatOff(t *testing.T) {
 }
 
 func TestClosingTheLidDisablesTheInternalPanel(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "eDP-1", Scale: 2 * output.Unit}}}
 	})
@@ -316,6 +321,7 @@ func TestClosingTheLidDisablesTheInternalPanel(t *testing.T) {
 }
 
 func TestARepeatedReloadThatTurnsRepeatOffStopsIt(t *testing.T) {
+	t.Parallel()
 	var r reports
 	var comp *compositor.Compositor
 	reloads := 0
@@ -355,6 +361,7 @@ func TestARepeatedReloadThatTurnsRepeatOffStopsIt(t *testing.T) {
 }
 
 func TestAReenabledOutputComesBackPoweredOn(t *testing.T) {
+	t.Parallel()
 	var cfg compositor.Config
 	h := StartWith(t, func(c *compositor.Config) { cfg = *c }, small)
 	h.dispatch("dpms off")
@@ -383,6 +390,7 @@ func TestAReenabledOutputComesBackPoweredOn(t *testing.T) {
 }
 
 func TestTenBitOutputsFallBackToEightBitsWhenRefused(t *testing.T) {
+	t.Parallel()
 	var r reports
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report

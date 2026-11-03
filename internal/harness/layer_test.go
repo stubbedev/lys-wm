@@ -31,6 +31,7 @@ func topBar(interactivity cwlr.ZwlrLayerSurfaceV1KeyboardInteractivity) testclie
 }
 
 func TestBarReservesSpaceForWindows(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -61,6 +62,7 @@ func TestBarReservesSpaceForWindows(t *testing.T) {
 }
 
 func TestBackgroundLayersStayBelowWindows(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	wallpaper := c.Layer(testclient.LayerSpec{
@@ -76,6 +78,7 @@ func TestBackgroundLayersStayBelowWindows(t *testing.T) {
 }
 
 func TestLayerKeyboardInteractivity(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	_, in := c.Seat()
@@ -117,6 +120,7 @@ func TestLayerKeyboardInteractivity(t *testing.T) {
 }
 
 func TestLayersCloseWithTheirOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -128,6 +132,7 @@ func TestLayersCloseWithTheirOutput(t *testing.T) {
 }
 
 func TestALayerDroppingItsKeyboardGivesItBack(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	_, in := c.Seat()
@@ -203,6 +208,7 @@ func expectBarAcross(t *testing.T, h *Harness, name, when string) {
 }
 
 func TestALayerStaysOnItsOutputWhenTheOutputMoves(t *testing.T) {
+	t.Parallel()
 	moved := image.Pt(500, 0)
 	for _, tc := range []struct {
 		name string
@@ -237,6 +243,7 @@ func TestALayerStaysOnItsOutputWhenTheOutputMoves(t *testing.T) {
 }
 
 func TestLayersAfterTheLidOpensAgain(t *testing.T) {
+	t.Parallel()
 	h := dockedLaptop(t)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(onOutput(c.Outputs[1], topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -258,6 +265,7 @@ func TestLayersAfterTheLidOpensAgain(t *testing.T) {
 }
 
 func TestALayerOnAnOutputStartedWithTheLidClosed(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(*compositor.Config) {})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if err := b.Switches().Toggle(backend.SwitchLid, true); err != nil {

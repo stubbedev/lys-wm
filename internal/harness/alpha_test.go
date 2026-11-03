@@ -17,6 +17,7 @@ var (
 )
 
 func TestAnAlphaModifierFadesASurface(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("fading", testclient.Fill(0, 0, 0xff))
@@ -60,6 +61,7 @@ func TestAnAlphaModifierFadesASurface(t *testing.T) {
 }
 
 func TestAnAlphaMultiplierAfterTheSurfaceIsGoneIsAnError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m, err := cam.NewWpAlphaModifierV1(c.Display, 1)

@@ -31,6 +31,7 @@ func near(got, want [3]byte) bool {
 }
 
 func TestInactiveWindowsAndRuledWindowsAreTranslucent(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testInactiveWindowsAndRuledWindowsAreTranslucent)
 }
 
@@ -76,6 +77,7 @@ func testATranslucentFullscreenWindowIsComposited(t *testing.T, start gpuStarter
 }
 
 func TestInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo)
 }
 
@@ -120,6 +122,7 @@ func testInactiveWindowsDimAndAFocusChangeRepaintsOnlyTheTwo(t *testing.T, start
 }
 
 func TestADimAroundWindowDimsWhatIsBelowIt(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testADimAroundWindowDimsWhatIsBelowIt)
 }
 

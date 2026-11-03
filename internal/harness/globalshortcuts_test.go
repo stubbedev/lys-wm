@@ -23,6 +23,7 @@ func (l *shortcutLog) Released(*chgs.HyprlandGlobalShortcutV1, uint32, uint32, u
 }
 
 func TestGlobalShortcutsFollowTheirBind(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "A", action: "global voice:ptt"}), small)
 	c := testclient.Connect(t, h.Socket())
 	mgr, err := chgs.NewHyprlandGlobalShortcutsManagerV1(c.Display, 1)
@@ -54,6 +55,7 @@ func TestGlobalShortcutsFollowTheirBind(t *testing.T) {
 }
 
 func TestAGlobalShortcutIsHeldOnlyByAHeldTrigger(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t,
 		bindSpec{chord: "mouse:274", action: "global voice:ptt"},
 		bindSpec{chord: "mouse_down", action: "global voice:ptt"},

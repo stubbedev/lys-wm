@@ -46,6 +46,7 @@ func expectContentTypes(t *testing.T, h *Harness, want map[string]wm.ContentType
 }
 
 func TestIPCReportsEachWindowsContentType(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	c := testclient.Connect(t, h.Socket())
 	m := contentTypeManager(t, c)
@@ -79,6 +80,7 @@ func TestIPCReportsEachWindowsContentType(t *testing.T) {
 }
 
 func TestOneContentTypePerSurfaceUntilItIsGone(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := contentTypeManager(t, c)

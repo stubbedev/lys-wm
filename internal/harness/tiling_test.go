@@ -8,6 +8,7 @@ import (
 )
 
 func TestWindowsTileSideBySide(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	red := c.Window("red", testclient.Fill(0, 0, 0xff))

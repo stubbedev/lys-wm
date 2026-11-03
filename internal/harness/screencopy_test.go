@@ -91,6 +91,7 @@ func screenshot(t *testing.T, c *testclient.Client, mgr *cwsc.ZwlrScreencopyMana
 }
 
 func TestScreencopyCapturesOutputsAndRegions(t *testing.T) {
+	t.Parallel()
 	onEachRenderer(t, func(t *testing.T, start starter) {
 		h := start(t, small)
 		c := testclient.Connect(t, h.Socket())
@@ -133,6 +134,7 @@ func TestScreencopyCapturesOutputsAndRegions(t *testing.T) {
 }
 
 func TestADestroyedWaitingScreencopyIsNeverPainted(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("shot", quadrants)
@@ -159,6 +161,7 @@ func TestADestroyedWaitingScreencopyIsNeverPainted(t *testing.T) {
 }
 
 func TestAScreencopyOfARemovedOutputFails(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	mgr, err := cwsc.NewZwlrScreencopyManagerV1(c.Display, 3)
@@ -184,6 +187,7 @@ func TestAScreencopyOfARemovedOutputFails(t *testing.T) {
 }
 
 func TestAScreencopyFrameCopiesOnce(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	mgr, err := cwsc.NewZwlrScreencopyManagerV1(c.Display, 3)

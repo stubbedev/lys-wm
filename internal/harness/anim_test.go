@@ -27,6 +27,7 @@ func linearMoves(t *testing.T, d time.Duration) anim.Table {
 }
 
 func TestAMovedWindowAnimatesOnTheFrameClock(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAMovedWindowAnimatesOnTheFrameClock)
 }
 
@@ -91,6 +92,7 @@ func testAMovedWindowAnimatesOnTheFrameClock(t *testing.T, start gpuStarter) {
 }
 
 func TestADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testADraggedWindowFollowsThePointerWithoutAnimating)
 }
 
@@ -125,6 +127,7 @@ func testADraggedWindowFollowsThePointerWithoutAnimating(t *testing.T, start gpu
 }
 
 func TestWindowsPopInAndOutWhileTheyFade(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testWindowsPopInAndOutWhileTheyFade)
 }
 
@@ -197,6 +200,7 @@ func testWindowsPopInAndOutWhileTheyFade(t *testing.T, start gpuStarter) {
 }
 
 func TestAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAWorkspaceSwitchSlidesBothWorkspaces)
 }
 
@@ -252,6 +256,7 @@ func testAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T, start gpuStarter) {
 }
 
 func TestLayerSurfacesSlideInAndFadeOut(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testLayerSurfacesSlideInAndFadeOut)
 }
 
@@ -303,6 +308,7 @@ func testLayerSurfacesSlideInAndFadeOut(t *testing.T, start gpuStarter) {
 }
 
 func TestAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAFocusChangeFadesTheOpacityOfBothWindows)
 }
 
@@ -351,6 +357,7 @@ func testAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T, start gpuStarter
 }
 
 func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testBorderColoursFadeAndGradientsTurnOnlyTheRing)
 }
 
@@ -428,6 +435,7 @@ func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuSta
 }
 
 func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testASpringDraggedWindowTrailsThePointer)
 }
 
@@ -483,6 +491,7 @@ func testASpringDraggedWindowTrailsThePointer(t *testing.T, start gpuStarter) {
 }
 
 func TestAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAMorphingMoveStretchesTheWindowsContentAheadOfIt)
 }
 
@@ -525,6 +534,7 @@ func testAMorphingMoveStretchesTheWindowsContentAheadOfIt(t *testing.T, start gp
 }
 
 func TestAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAnElasticDragBendsTheWindowAndItSettlesFlat)
 }
 
@@ -588,6 +598,7 @@ func testAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T, start gpuStar
 }
 
 func TestAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAGooWorkspaceSwitchMeltsTheWindowsTogether)
 }
 
@@ -639,6 +650,7 @@ func testAGooWorkspaceSwitchMeltsTheWindowsTogether(t *testing.T, start gpuStart
 }
 
 func TestANewWindowBudsOffItsNeighbour(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testANewWindowBudsOffItsNeighbour)
 }
 

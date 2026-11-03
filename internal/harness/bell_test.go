@@ -11,6 +11,7 @@ import (
 )
 
 func TestTheSystemBellMarksAnUnfocusedWindowUrgent(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	first := c.Window("first", testclient.Fill(0, 0, 0xff))

@@ -20,7 +20,7 @@ type sockets struct {
 	fds      [2]int
 }
 
-func bindDisplay(dir string) (*sockets, error) {
+func bindDisplay(dir string, first int) (*sockets, error) {
 	socketDir := filepath.Join(dir, ".X11-unix")
 	switch err := os.Mkdir(socketDir, 0o700); {
 	case errors.Is(err, os.ErrExist):
@@ -31,7 +31,7 @@ func bindDisplay(dir string) (*sockets, error) {
 			return nil, fmt.Errorf("xwayland: open %s to every X server: %w", socketDir, err)
 		}
 	}
-	for n := range maxDisplays {
+	for n := first; n < maxDisplays; n++ {
 		lock := filepath.Join(dir, fmt.Sprintf(".X%d-lock", n))
 		path := filepath.Join(socketDir, fmt.Sprintf("X%d", n))
 		taken, err := takeLock(lock, path)

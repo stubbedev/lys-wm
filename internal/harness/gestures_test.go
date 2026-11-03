@@ -87,6 +87,7 @@ func (h *Harness) gesture(do func(o *headless.Output, p *headless.Pointer) error
 }
 
 func TestTouchpadGesturesReachTheSurfaceUnderThePointer(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c, log := gestureClient(t, h, "gestures")
 	h.gesture(func(o *headless.Output, p *headless.Pointer) error {
@@ -109,6 +110,7 @@ func TestTouchpadGesturesReachTheSurfaceUnderThePointer(t *testing.T) {
 }
 
 func TestAGestureStaysWithTheSurfaceItBeganOn(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	left, leftLog := gestureClient(t, h, "left")
 	right, rightLog := gestureClient(t, h, "right")
@@ -129,6 +131,7 @@ func TestAGestureStaysWithTheSurfaceItBeganOn(t *testing.T) {
 }
 
 func TestGesturesWithoutAFocusGoNowhere(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c, log := gestureClient(t, h, "")
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error {

@@ -41,7 +41,7 @@ func TestDisplaysSkipLiveLocksAndReclaimStaleOnes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, err := bindDisplay(dir)
+	s, err := bindDisplay(dir, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -66,6 +66,7 @@ func enableCTMs(h *Harness) {
 }
 
 func TestCTMControlSetsOutputsOnCommitAndResetsThemWhenItGoes(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	enableCTMs(h)
 	warm := backend.Matrix{1, 0, 0, 0, 0.75, 0, 0, 0, 0.5}
@@ -98,6 +99,7 @@ func TestCTMControlSetsOutputsOnCommitAndResetsThemWhenItGoes(t *testing.T) {
 }
 
 func TestASecondCTMManagerIsBlocked(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	enableCTMs(h)
 	warm := backend.Matrix{1, 0, 0, 0, 0.75, 0, 0, 0, 0.5}
@@ -120,6 +122,7 @@ func TestASecondCTMManagerIsBlocked(t *testing.T) {
 }
 
 func TestANegativeCTMEntryIsAProtocolError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	enableCTMs(h)
 	c, m, _ := ctmControl(t, h)

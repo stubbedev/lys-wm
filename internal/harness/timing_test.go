@@ -48,6 +48,7 @@ func (f *feedbackEvents) Discarded(*cpt.WpPresentationFeedback) error {
 }
 
 func TestPresentationFeedback(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	pe := &presentationEvents{}
@@ -78,6 +79,7 @@ func TestPresentationFeedback(t *testing.T) {
 }
 
 func TestPresentationFeedbackFollowsTheFrameThatDrewIt(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	p, err := cpt.NewWpPresentation(c.Display, 2, &presentationEvents{})
@@ -116,6 +118,7 @@ func (r *releases) Release(*cw.WlBuffer) error {
 }
 
 func TestSinglePixelBufferFillsItsViewport(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	spb, err := cspb.NewWpSinglePixelBufferManagerV1(c.Display, 1)
@@ -163,6 +166,7 @@ func requestToken(t *testing.T, c *testclient.Client, act *cxa.XdgActivationV1, 
 }
 
 func TestActivationMarksWindowsUrgent(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	aAct, err := cxa.NewXdgActivationV1(a.c.Display, 1)
@@ -222,6 +226,7 @@ func TestActivationMarksWindowsUrgent(t *testing.T) {
 }
 
 func TestActivationTokenCommittedTwice(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	act, err := cxa.NewXdgActivationV1(c.Display, 1)

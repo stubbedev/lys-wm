@@ -13,6 +13,7 @@ import (
 )
 
 func TestAClosingWindowKeepsItsFrost(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		now := time.Hour
 		d := time.Second

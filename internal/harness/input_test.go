@@ -75,6 +75,7 @@ func (r *inputRig) moveOn(output int, x, y float64) {
 }
 
 func TestPointerEntersMovesClicksAndScrolls(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.moveTo(40, 50)
@@ -110,6 +111,7 @@ func (r *inputRig) child() {
 }
 
 func TestSubsurfacesGrabsAndInputRegions(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.child()
@@ -144,6 +146,7 @@ func TestSubsurfacesGrabsAndInputRegions(t *testing.T) {
 }
 
 func TestKeyboardFocusFollowsTheMouse(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
@@ -159,6 +162,7 @@ func TestKeyboardFocusFollowsTheMouse(t *testing.T) {
 }
 
 func TestTouchGoesToTheSurfaceUnderThePoint(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.child()
@@ -177,6 +181,7 @@ func TestTouchGoesToTheSurfaceUnderThePoint(t *testing.T) {
 }
 
 func TestAbsoluteDevicesWithoutAnOutputSpanTheLayout(t *testing.T) {
+	t.Parallel()
 	r := inputOn(t, Start(t, small, small))
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.inject(func(b *headless.Backend, _ *headless.Output) error {
@@ -194,6 +199,7 @@ func TestAbsoluteDevicesWithoutAnOutputSpanTheLayout(t *testing.T) {
 }
 
 func TestLeavingToTheDesktopEndsThePointerFrame(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	_, in := c.Seat()
@@ -207,6 +213,7 @@ func TestLeavingToTheDesktopEndsThePointerFrame(t *testing.T) {
 }
 
 func TestTheCursorStaysOnAnOutput(t *testing.T) {
+	t.Parallel()
 	big := backend.Mode{Size: image.Pt(1920, 1080), RefreshMHz: 60000, Preferred: true}
 	h := Start(t, big, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -220,6 +227,7 @@ func TestTheCursorStaysOnAnOutput(t *testing.T) {
 }
 
 func TestKeyboardLEDsFollowTheLockKeys(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	const capsLock = 58
 	leds := func() (l xkb.Locks) {

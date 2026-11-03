@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,12 +106,39 @@ func StartGLES(t *testing.T, configure func(*compositor.Config), modes ...backen
 	return start(t, setup{open: glesBackend, configure: configure, traced: true}, modes...)
 }
 
+var vulkanTurn = struct {
+	sync.Mutex
+	turn   chan struct{}
+	holder testing.TB
+}{turn: make(chan struct{}, 1)}
+
+func holdVulkan(t testing.TB) {
+	t.Helper()
+	vulkanTurn.Lock()
+	held := vulkanTurn.holder == t
+	vulkanTurn.Unlock()
+	if held {
+		return
+	}
+	vulkanTurn.turn <- struct{}{}
+	vulkanTurn.Lock()
+	vulkanTurn.holder = t
+	vulkanTurn.Unlock()
+	t.Cleanup(func() {
+		vulkanTurn.Lock()
+		vulkanTurn.holder = nil
+		vulkanTurn.Unlock()
+		<-vulkanTurn.turn
+	})
+}
+
 func vulkanBackend(l *loop.Loop) (*headless.Backend, error) {
 	return headless.NewVulkan(l)
 }
 
 func StartVulkan(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
+	holdVulkan(t)
 	testenv.Vulkan(t)
 	return start(t, setup{open: vulkanBackend, configure: configure, traced: true}, modes...)
 }
@@ -123,11 +151,19 @@ func StartGLESWithCursorPlanes(t *testing.T, size image.Point, configure func(*c
 
 func StartVulkanWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
+	holdVulkan(t)
 	testenv.Vulkan(t)
 	return start(t, setup{open: withCursorPlanes(vulkanBackend, size), configure: configure, traced: true}, modes...)
 }
 
 const XTransferTimeout = 2 * time.Second
+
+const (
+	firstHarnessDisplay = 16
+	harnessDisplays     = 16
+)
+
+var xwaylandStarts atomic.Int32
 
 func StartXwayland(t *testing.T, report func(error), modes ...backend.Mode) *Harness {
 	t.Helper()
@@ -138,6 +174,10 @@ func StartXwaylandWith(t *testing.T, configure func(*compositor.Config), report 
 	t.Helper()
 	testenv.Require(t, xwayland.Path(os.Getenv))
 	return start(t, setup{open: softBackend, configure: configure, traced: true, xwayland: report}, modes...)
+}
+
+func xwaylandDisplay() int {
+	return firstHarnessDisplay + int(xwaylandStarts.Add(1))%harnessDisplays
 }
 
 func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
@@ -182,7 +222,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	h.compositor.OnDispatch(h.ipc.Dispatched)
 	h.auditIPC()
 	if s.xwayland != nil {
-		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout}
+		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, FirstDisplay: xwaylandDisplay(), Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout}
 		if h.xwayland, err = xwayland.Listen(h.loop, h.display, opts); err != nil {
 			t.Fatalf("harness: %v", err)
 		}
@@ -277,7 +317,7 @@ func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error
 
 func (h *Harness) Eventually(what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {
 	h.t.Helper()
-	h.Within(5*time.Second, what, cond)
+	h.Within(testenv.HangLimit, what, cond)
 }
 
 func (h *Harness) Within(d time.Duration, what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {

@@ -128,6 +128,7 @@ func nestedToplevels(want int) func(c *compositor.Compositor) bool {
 }
 
 func TestNestedLysWMHidesTheHostCursor(t *testing.T) {
+	t.Parallel()
 	host := Start(t, small)
 	startNested(t, host)
 	host.Eventually("the nested window under the pointer with no host cursor", func(_ *headless.Backend, c *compositor.Compositor) bool {
@@ -219,6 +220,7 @@ const (
 )
 
 func TestNestedTilingSession(t *testing.T) {
+	t.Parallel()
 	host := Start(t, desktop)
 	n := startNestedWith(t, host, func(cfg *compositor.Config) {
 		specs := []bindSpec{

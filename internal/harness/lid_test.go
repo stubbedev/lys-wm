@@ -10,6 +10,7 @@ import (
 )
 
 func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
+	t.Parallel()
 	suspends, battery := 0, true
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Hooks.Lid = compositor.LidPolicy{
@@ -62,6 +63,7 @@ func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
 }
 
 func TestWithoutALidPolicyTheLidNeverSuspends(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(*compositor.Config) {})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		_, err := b.AddNamedOutput("eDP-1", small)
@@ -75,6 +77,7 @@ func TestWithoutALidPolicyTheLidNeverSuspends(t *testing.T) {
 }
 
 func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
+	t.Parallel()
 	var r reports
 	refusal := errors.New("session: logind refused to suspend: org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress")
 	suspends := 0
@@ -115,6 +118,7 @@ func powerChanged(h *Harness) {
 }
 
 func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
+	t.Parallel()
 	var r reports
 	failure := errors.New("session: read the power supplies under /sys: read class/power_supply/AC/online: no such device")
 	suspends := 0

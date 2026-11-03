@@ -45,6 +45,7 @@ func colorRep(t *testing.T, h *Harness) (*testclient.Client, *ccr.WpColorReprese
 }
 
 func TestColorRepresentationAdvertisesWhatTheImportHonours(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	_, _, ev := colorRep(t, h)
 	if !slices.Equal(ev.alpha, []ccr.WpColorRepresentationSurfaceV1AlphaMode{ccr.WpColorRepresentationSurfaceV1AlphaModePremultipliedElectrical}) {
@@ -62,6 +63,7 @@ func TestColorRepresentationAdvertisesWhatTheImportHonours(t *testing.T) {
 }
 
 func TestColorRepresentationProtocolErrors(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	for name, c := range map[string]struct {
 		do   func(t *testing.T, c *testclient.Client, m *ccr.WpColorRepresentationManagerV1)

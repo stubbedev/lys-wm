@@ -108,6 +108,7 @@ func iconImage(t *testing.T, h *Harness, size int) (ipc.IconImage, image.Image) 
 }
 
 func TestIconBuffersInRGBOrderKeepTheirColours(t *testing.T) {
+	t.Parallel()
 	for _, format := range []cw.WlShmFormat{cw.WlShmFormatAbgr8888, cw.WlShmFormatXbgr8888} {
 		t.Run(fmt.Sprint(format), func(t *testing.T) {
 			h := Start(t, small)
@@ -136,6 +137,7 @@ func TestIconBuffersInRGBOrderKeepTheirColours(t *testing.T) {
 }
 
 func TestToplevelIconsReachIPCAndTheTab(t *testing.T) {
+	t.Parallel()
 	decor := compositor.PlainDecor()
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Decor = decor }, tall)
 	c := testclient.Connect(t, h.Socket())
@@ -194,6 +196,7 @@ func iconTheme(t *testing.T, icons map[string]string) *icontheme.Theme {
 }
 
 func TestTabsDrawThemeIconsByNameAndBuffersWhenTheNameIsUnknown(t *testing.T) {
+	t.Parallel()
 	decor := compositor.PlainDecor()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Decor, cfg.Icons = decor, iconTheme(t, map[string]string{"lys-wm-red": "ff0000"})
@@ -211,6 +214,7 @@ func TestTabsDrawThemeIconsByNameAndBuffersWhenTheNameIsUnknown(t *testing.T) {
 }
 
 func TestIconsKeepNoBufferLargerThanAnythingDrawsThem(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := iconManager(t, c)
@@ -229,6 +233,7 @@ func TestIconsKeepNoBufferLargerThanAnythingDrawsThem(t *testing.T) {
 }
 
 func TestAnEmptyIconResetsTheIcon(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := iconManager(t, c)
@@ -241,6 +246,7 @@ func TestAnEmptyIconResetsTheIcon(t *testing.T) {
 }
 
 func TestToplevelIconErrors(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		code cxti.XdgToplevelIconV1Error
@@ -303,6 +309,7 @@ func TestToplevelIconErrors(t *testing.T) {
 }
 
 func TestDestroyingABufferAfterItsIconIsFine(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := iconManager(t, c)

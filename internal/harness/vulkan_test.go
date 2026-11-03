@@ -19,6 +19,7 @@ func composed(t *testing.T, h *Harness) *soft.Buffer {
 }
 
 func TestTheVulkanRendererComposesLikeTheSoftwareRenderer(t *testing.T) {
+	t.Parallel()
 	want := composed(t, Start(t, small))
 	got := composed(t, StartVulkan(t, func(*compositor.Config) {}, small))
 	if got.W != want.W || got.H != want.H {

@@ -78,6 +78,7 @@ func (l *locker) cover(size image.Point, b, g, r byte) {
 }
 
 func TestSessionLockCoversTheDesktopAndTakesTheKeyboard(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	l := lockSession(t, r.h)
@@ -100,6 +101,7 @@ func TestSessionLockCoversTheDesktopAndTakesTheKeyboard(t *testing.T) {
 }
 
 func TestAnAbandonedLockStaysUntilANewLockerTakesOver(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	first := lockSession(t, h)
 	first.seen("locked")
@@ -126,6 +128,7 @@ func TestAnAbandonedLockStaysUntilANewLockerTakesOver(t *testing.T) {
 }
 
 func TestOnlyLockedBindsRunWhileLocked(t *testing.T) {
+	t.Parallel()
 	workspace := func(n string) wm.Action {
 		a, err := wm.ParseAction("workspace " + n)
 		if err != nil {
@@ -151,6 +154,7 @@ func TestOnlyLockedBindsRunWhileLocked(t *testing.T) {
 }
 
 func TestSessionLockProtocolErrors(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		what string
 		code uint32
@@ -192,6 +196,7 @@ func TestSessionLockProtocolErrors(t *testing.T) {
 }
 
 func TestOutputsAddedWhileLockedStayBlank(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("hidden", quadrants)
@@ -210,6 +215,7 @@ func TestOutputsAddedWhileLockedStayBlank(t *testing.T) {
 }
 
 func TestPoweringOffBeforeTheLockFrameStillConfirmsTheLock(t *testing.T) {
+	t.Parallel()
 	slow := small
 	slow.RefreshMHz = 1000
 	h := Start(t, slow)
@@ -227,6 +233,7 @@ func TestPoweringOffBeforeTheLockFrameStillConfirmsTheLock(t *testing.T) {
 }
 
 func TestTouchesFollowAFingerOnTheLockScreen(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	l := lockSession(t, h)
 	l.seen("locked")

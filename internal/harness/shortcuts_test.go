@@ -16,6 +16,7 @@ func (l *constraintLog) Inactive(*cksi.ZwpKeyboardShortcutsInhibitorV1) error {
 }
 
 func TestShortcutInhibitorPassesKeysButKeepsLockedBinds(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t,
 		bindSpec{chord: "A", action: "workspace 2", flags: binds.Flags{Locked: true}},
 		bindSpec{chord: "B", action: "workspace 3"},

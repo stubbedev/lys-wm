@@ -67,6 +67,7 @@ func (s *modalScene) expectFocus(what string, w *testclient.Window) {
 }
 
 func TestFocusingTheParentOfAModalDialogFocusesTheDialog(t *testing.T) {
+	t.Parallel()
 	s := modal(t, true)
 	s.clickApp()
 	s.expectFocus("the modal dialog keeps the keyboard", s.dialog)
@@ -89,12 +90,14 @@ func TestFocusingTheParentOfAModalDialogFocusesTheDialog(t *testing.T) {
 }
 
 func TestAPlainDialogDoesNotHoldTheFocus(t *testing.T) {
+	t.Parallel()
 	s := modal(t, false)
 	s.clickApp()
 	s.expectFocus("the app takes the keyboard from a non-modal dialog", s.app)
 }
 
 func TestADialogObjectCanBeMadeAgainAfterTheFirstIsGone(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := dialogManager(t, c)
@@ -116,6 +119,7 @@ func TestADialogObjectCanBeMadeAgainAfterTheFirstIsGone(t *testing.T) {
 }
 
 func TestASecondDialogObjectIsAnError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	m := dialogManager(t, c)

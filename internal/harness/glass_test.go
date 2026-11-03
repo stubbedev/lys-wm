@@ -72,6 +72,7 @@ func maxDifference(a, b *soft.Buffer, area image.Rectangle) int {
 }
 
 func TestGlassLooksTheSameOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	everything := wm.Look{Tint: glassTint, SaturationShift: 0.5, BrightnessShift: 0.1, ContrastShift: -0.1, Grain: 0.1, Refraction: wm.Refraction{Bezel: 6, Amount: 4}, Specular: wm.Specular{Strength: 0.5, Width: 1}}
 	for name, look := range map[string]wm.Look{
 		"off":        {},
@@ -99,6 +100,7 @@ func TestGlassLooksTheSameOnEveryRenderer(t *testing.T) {
 }
 
 func TestGlassColourIsTheBackdropAdjustedThenTinted(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		plain := glassLook(t, start, quadrants, wm.Look{})
 		look := wm.Look{Tint: glassTint, SaturationShift: 0.6, BrightnessShift: -0.3, ContrastShift: 0.2}
@@ -121,6 +123,7 @@ func TestGlassColourIsTheBackdropAdjustedThenTinted(t *testing.T) {
 }
 
 func TestGlassGrainIsLysUIsGrain(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		const strength = 0.3
 		got := glassLook(t, start, testclient.Fill(0x60, 0x60, 0x60), wm.Look{Grain: strength})
@@ -154,6 +157,7 @@ func twoBands(pix []byte, stride int, size image.Point, _ int) {
 }
 
 func TestGlassBendsTheBackdropAtItsBezel(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		plain := glassLook(t, start, twoBands, wm.Look{})
 		bent := glassLook(t, start, twoBands, wm.Look{Refraction: wm.Refraction{Bezel: 12, Amount: 14}})
@@ -170,6 +174,7 @@ func TestGlassBendsTheBackdropAtItsBezel(t *testing.T) {
 }
 
 func TestARuleOverridesTheLookForItsWindow(t *testing.T) {
+	t.Parallel()
 	bright := float32(-0.5)
 	plain := glassLook(t, StartWith, testclient.Fill(0x80, 0x80, 0x80), wm.Look{})
 	h := glassOn(t, StartWith, testclient.Fill(0x80, 0x80, 0x80), func(cfg *compositor.Config) {
@@ -233,6 +238,7 @@ func animated(t testing.TB) anim.Table {
 }
 
 func TestTheRimFollowsThePointerAndRedrawsOnlyItself(t *testing.T) {
+	t.Parallel()
 	specularCases(t, func(t *testing.T, start gpuStarter) {
 		h := glassOn(t, start, testclient.Fill(0x20, 0x20, 0x20), func(cfg *compositor.Config) {
 			cfg.Animations = animated(t)
@@ -275,6 +281,7 @@ func TestTheRimFollowsThePointerAndRedrawsOnlyItself(t *testing.T) {
 }
 
 func TestTheRimStaysStillWithAnimationsOff(t *testing.T) {
+	t.Parallel()
 	specularCases(t, func(t *testing.T, start gpuStarter) {
 		table, errs := anim.Resolve(false, nil)
 		if len(errs) != 0 {
@@ -317,6 +324,7 @@ func startWallpaper(t *testing.T, h *Harness) (*testclient.Client, *testclient.W
 }
 
 func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		on := true
 		second := clearWindowRule("second")
@@ -361,6 +369,7 @@ func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
 }
 
 func TestGlassDrawsOnAnHDROutput(t *testing.T) {
+	t.Parallel()
 	look := wm.Look{Tint: glassTint, SaturationShift: 0.5, BrightnessShift: 0.1, ContrastShift: -0.1, Grain: 0.1, Refraction: wm.Refraction{Bezel: 6, Amount: 4}, Specular: wm.Specular{Strength: 0.5, Width: 1}}
 	pixels := func(t *testing.T, start gpuStarter, look wm.Look) *soft.Buffer {
 		t.Helper()

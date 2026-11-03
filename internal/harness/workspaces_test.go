@@ -125,6 +125,7 @@ func watchWorkspaces(t *testing.T, h *Harness) (*wsView, *testclient.Client, *ce
 }
 
 func TestAnUrgentWindowMarksItsWorkspaceUrgent(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	first := c.Window("first", quadrants)
@@ -147,6 +148,7 @@ func TestAnUrgentWindowMarksItsWorkspaceUrgent(t *testing.T) {
 }
 
 func TestExtWorkspacesFollowAndDriveTheWindowManager(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("busy", quadrants)

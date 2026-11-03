@@ -67,6 +67,7 @@ func floatingForDrag(t *testing.T, h *Harness) (*testclient.Client, *testclient.
 }
 
 func TestAFloatingWindowDraggedToAnEdgePreviewsAndSnapsOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) { dragConfig(t, cfg) }, small)
 		c, w := floatingForDrag(t, h)
@@ -92,6 +93,7 @@ func TestAFloatingWindowDraggedToAnEdgePreviewsAndSnapsOnEveryRenderer(t *testin
 }
 
 func TestATiledWindowDraggedPreviewsWhereItDrops(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) { dragConfig(t, cfg) }, small)
 		c := testclient.Connect(t, h.Socket())
@@ -139,6 +141,7 @@ func TestATiledWindowDraggedPreviewsWhereItDrops(t *testing.T) {
 }
 
 func TestThePreviewCanBeTurnedOffAndThenNothingSnaps(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		dragConfig(t, cfg)
 		cfg.Decor.DragPreview.Enabled = false
@@ -161,6 +164,7 @@ func TestThePreviewCanBeTurnedOffAndThenNothingSnaps(t *testing.T) {
 }
 
 func TestThePreviewBlursWhatIsBehindItOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			dragConfig(t, cfg)
@@ -185,6 +189,7 @@ func TestThePreviewBlursWhatIsBehindItOnEveryRenderer(t *testing.T) {
 }
 
 func TestThePreviewSpringsAndFadesAndUnderReducedMotionOnlyFades(t *testing.T) {
+	t.Parallel()
 	for name, build := range map[string]func(map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error){
 		"full":    func(s map[anim.Event]anim.Setting) (anim.Table, map[anim.Event]error) { return anim.Resolve(true, s) },
 		"reduced": anim.ResolveReduced,

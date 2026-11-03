@@ -75,6 +75,7 @@ func eventuallyLines(t *testing.T, path string, cond func(int) bool) {
 }
 
 func TestKeybinds(t *testing.T) {
+	t.Parallel()
 	log := filepath.Join(t.TempDir(), "log")
 	h := StartWith(t, withBinds(t,
 		bindSpec{chord: "SUPER + Return", action: "exec echo spawned >> " + log},
@@ -166,6 +167,7 @@ func showingWorkspace(id wm.WorkspaceID) func(*headless.Backend, *compositor.Com
 }
 
 func TestDragsNeedAMouseBind(t *testing.T) {
+	t.Parallel()
 	var r reports
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Report = r.report
@@ -199,6 +201,7 @@ func TestDragsNeedAMouseBind(t *testing.T) {
 }
 
 func TestCtrlAltFunctionKeysSwitchVTs(t *testing.T) {
+	t.Parallel()
 	var switched []uint32
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Hooks.SwitchVT = func(vt uint32) error {
@@ -227,6 +230,7 @@ func TestCtrlAltFunctionKeysSwitchVTs(t *testing.T) {
 }
 
 func TestVTSwitchingSurvivesConfigReloads(t *testing.T) {
+	t.Parallel()
 	var switched []uint32
 	var comp *compositor.Compositor
 	h := StartWith(t, func(cfg *compositor.Config) {

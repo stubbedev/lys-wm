@@ -21,6 +21,7 @@ func clearWindowRule(title string) wm.Rule {
 }
 
 func TestAHiddenBlurCostsNothing(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1}
@@ -43,7 +44,7 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 			return pixel(snapshot(b.Outputs()[0]), 100, 60) == [3]byte{0, 0xff, 0}
 		})
 		f0, r0 := framesAndBlurs(h)
-		pump(c, 200*time.Millisecond)
+		pumpFrames(h, c, 12)
 		f1, r1 := framesAndBlurs(h)
 		if f1 == f0 {
 			t.Fatal("the animated window behind presented no frame")
@@ -59,6 +60,7 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 }
 
 func TestABlurBehindAnOpaqueWindowIgnoresWhatThatWindowHides(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1}
@@ -80,10 +82,10 @@ func TestABlurBehindAnOpaqueWindowIgnoresWhatThatWindowHides(t *testing.T) {
 		h.Eventually("the glass over the wall", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return near(pixel(snapshot(b.Outputs()[0]), 100, 60), [3]byte{0xff, 0, 0})
 		})
-		pump(c, 100*time.Millisecond)
+		pumpFrames(h, c, 6)
 		r0 := blurRedraws(h)
 		f0 := frames(h)
-		pump(c, 100*time.Millisecond)
+		pumpFrames(h, c, 6)
 		if frames(h) == f0 {
 			t.Fatal("the window behind presented no frame")
 		}
@@ -109,6 +111,12 @@ func frames(h *Harness) uint64 {
 		return nil
 	})
 	return n
+}
+
+func pumpFrames(h *Harness, c *testclient.Client, n uint64) {
+	h.t.Helper()
+	until := frames(h) + n
+	c.DispatchUntil("frames to pass", func() bool { return frames(h) >= until })
 }
 
 func pump(c *testclient.Client, d time.Duration) {

@@ -39,6 +39,7 @@ func takeover(h *Harness) (presents uint64, inherited bool) {
 }
 
 func TestAnInheritedFrameStaysUntilAClientDraws(t *testing.T) {
+	t.Parallel()
 	h := StartInherited(t, func(*compositor.Config) {}, small)
 	idleFrames(h, 5)
 	if presents, inherited := takeover(h); presents != 0 || !inherited {
@@ -61,6 +62,7 @@ func TestAnInheritedFrameStaysUntilAClientDraws(t *testing.T) {
 }
 
 func TestAnInheritedFrameGivesWayWhenNoClientDraws(t *testing.T) {
+	t.Parallel()
 	r := &reports{}
 	timeout := 50 * time.Millisecond
 	start := time.Now()

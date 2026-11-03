@@ -28,6 +28,7 @@ func zoomConfig(cfg *compositor.Config) {
 }
 
 func TestZoomMagnifiesAroundThePointerOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, zoomConfig, small)
 		c := testclient.Connect(t, h.Socket())
@@ -50,6 +51,7 @@ func TestZoomMagnifiesAroundThePointerOnEveryRenderer(t *testing.T) {
 }
 
 func TestTheViewFollowsThePointerAndWhatItPointsAtIsWhatClientsSee(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := inputOn(t, start(t, zoomConfig, small))
 		r.expect("kb_enter win", "enter win 80,50", "frame")
@@ -74,6 +76,7 @@ func TestTheViewFollowsThePointerAndWhatItPointsAtIsWhatClientsSee(t *testing.T)
 }
 
 func TestZoomOnAFractionalOutputKeepsTheTipOverTheContent(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			zoomConfig(cfg)
@@ -98,6 +101,7 @@ func TestZoomOnAFractionalOutputKeepsTheTipOverTheContent(t *testing.T) {
 }
 
 func TestUnderZoomAFingerTouchesWhatItLandsOn(t *testing.T) {
+	t.Parallel()
 	r := inputOn(t, StartWith(t, zoomConfig, small))
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	r.inject(func(b *headless.Backend, o *headless.Output) error {
@@ -113,6 +117,7 @@ func TestUnderZoomAFingerTouchesWhatItLandsOn(t *testing.T) {
 }
 
 func TestZoomSpringsAndSettlesThenCostsNoFrames(t *testing.T) {
+	t.Parallel()
 	spring, err := anim.NewSpring(40, 13, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -155,6 +160,7 @@ func TestZoomSpringsAndSettlesThenCostsNoFrames(t *testing.T) {
 }
 
 func TestReducedMotionZoomsAtOnce(t *testing.T) {
+	t.Parallel()
 	table, errs := anim.ResolveReduced(nil)
 	if len(errs) != 0 {
 		t.Fatal(errs)
@@ -207,6 +213,7 @@ func TestScanoutStopsWhileZoomedAndResumes(t *testing.T) {
 }
 
 func TestACursorPlaneHidesWhileZoomedAndComesBack(t *testing.T) {
+	t.Parallel()
 	h := StartWithCursorPlanes(t, plane, zoomConfig, small)
 	h.Eventually("the arrow on the cursor plane", func(b *headless.Backend, c *compositor.Compositor) bool {
 		return b.Outputs()[0].Cursor().Visible() && arrowAt(image.Pt(80, 50))(b, c)
@@ -235,6 +242,7 @@ func TestACursorPlaneHidesWhileZoomedAndComesBack(t *testing.T) {
 }
 
 func TestCapturesShowTheUnzoomedScreen(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, zoomConfig, small)
 		c := testclient.Connect(t, h.Socket())
@@ -262,6 +270,7 @@ func TestCapturesShowTheUnzoomedScreen(t *testing.T) {
 }
 
 func TestZoomOnAnHDROutputKeepsItsColour(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, fullWindowConfig(compositor.OutputRule{}), small)
 		c := testclient.Connect(t, h.Socket())
@@ -281,6 +290,7 @@ func TestZoomOnAnHDROutputKeepsItsColour(t *testing.T) {
 }
 
 func TestZoomAppliesUnderAScreenShader(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		invert := shaded(writeShader(t, invertShader))
 		h := start(t, func(cfg *compositor.Config) {
@@ -301,6 +311,7 @@ func TestZoomAppliesUnderAScreenShader(t *testing.T) {
 }
 
 func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		zoomConfig(cfg)
 		mods, err := binds.ModSuper.Mask(cfg.Seat.Keymap)

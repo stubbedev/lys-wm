@@ -221,6 +221,7 @@ func hdrConfig(rule compositor.OutputRule) func(*compositor.Config) {
 }
 
 func TestColorManagementIsOfferedOnlyWhenAsked(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	if testclient.Connect(t, h.Socket()).HasGlobal(ccm.WpColorManagerV1Interface.Name) {
 		t.Fatal("wp_color_manager_v1 is offered with HDR off and no color_management")
@@ -237,6 +238,7 @@ func TestColorManagementIsOfferedOnlyWhenAsked(t *testing.T) {
 }
 
 func TestColorManagementAdvertisesWhatItHonours(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, hdrConfig(compositor.OutputRule{}), small)
 	_, _, ev := colorManager(t, h)
 	if !slices.Equal(ev.intents, []ccm.WpColorManagerV1RenderIntent{ccm.WpColorManagerV1RenderIntentPerceptual}) {
@@ -261,6 +263,7 @@ func TestColorManagementAdvertisesWhatItHonours(t *testing.T) {
 }
 
 func TestAnOutputDescribesItsSignal(t *testing.T) {
+	t.Parallel()
 	sdr := StartWith(t, func(cfg *compositor.Config) { cfg.ColorManagement = true }, small)
 	c, m, _ := colorManager(t, sdr)
 	info := outputInfo(t, c, m)
@@ -286,6 +289,7 @@ func TestAnOutputDescribesItsSignal(t *testing.T) {
 }
 
 func TestColorManagementProtocolErrors(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, hdrConfig(compositor.OutputRule{}), small)
 	for name, cse := range map[string]struct {
 		do   func(t *testing.T, c *testclient.Client, m *ccm.WpColorManagerV1)
@@ -412,6 +416,7 @@ func memfd(t *testing.T, data []byte) int {
 }
 
 func TestAnICCProfileBecomesADescriptionOrAFailure(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, hdrConfig(compositor.OutputRule{}), small)
 	c, m, _ := colorManager(t, h)
 	create := func(data []byte) *descEvents {
@@ -453,6 +458,7 @@ func (e *preferredEvents) PreferredChanged2(_ *ccm.WpColorManagementSurfaceFeedb
 }
 
 func TestASurfaceHearsWhatItsOutputPrefers(t *testing.T) {
+	t.Parallel()
 	var cfg compositor.Config
 	h := StartWith(t, func(c *compositor.Config) {
 		c.ColorManagement = true
@@ -542,6 +548,7 @@ func tagWith(m *ccm.WpColorManagerV1, d *ccm.WpImageDescriptionV1) func(*testcli
 }
 
 func TestSDRWhiteShowsAtTheConfiguredBrightness(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		for _, nits := range []float64{0, 100, 300} {
 			h := start(t, fullWindowConfig(compositor.OutputRule{SDRBrightness: nits}), small)
@@ -558,6 +565,7 @@ func TestSDRWhiteShowsAtTheConfiguredBrightness(t *testing.T) {
 }
 
 func TestTaggedPQAnchorsToTheOutputsSDRWhite(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, fullWindowConfig(compositor.OutputRule{SDRBrightness: 100}), small)
 		c, m, _ := colorManager(t, h)
@@ -569,6 +577,7 @@ func TestTaggedPQAnchorsToTheOutputsSDRWhite(t *testing.T) {
 }
 
 func TestScreencopyOfAnHDROutputIsSDR(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, fullWindowConfig(compositor.OutputRule{}), small)
 		c, m, _ := colorManager(t, h)
@@ -607,6 +616,7 @@ func TestScreencopyOfAnHDROutputIsSDR(t *testing.T) {
 }
 
 func TestHDRContentTonemapsOnAnSDROutput(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.ColorManagement = true
@@ -629,6 +639,7 @@ func TestHDRContentTonemapsOnAnSDROutput(t *testing.T) {
 }
 
 func TestADisplayWithoutHDRStaysSDRAndSaysSo(t *testing.T) {
+	t.Parallel()
 	var r reports
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Report = r.report
@@ -652,6 +663,7 @@ func TestADisplayWithoutHDRStaysSDRAndSaysSo(t *testing.T) {
 }
 
 func TestARendererWithoutAWorkingSpaceStaysSDRAndSaysSo(t *testing.T) {
+	t.Parallel()
 	var r reports
 	open := func(l *loop.Loop) (*headless.Backend, error) {
 		b := headless.New(l)
@@ -680,6 +692,7 @@ func TestARendererWithoutAWorkingSpaceStaysSDRAndSaysSo(t *testing.T) {
 }
 
 func TestOffHDROutputsKeepEightBitSDRState(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if got := b.Outputs()[0].State(); got.HDR != (backend.HDRMetadata{}) || got.Depth != backend.Depth8 {
@@ -690,6 +703,7 @@ func TestOffHDROutputsKeepEightBitSDRState(t *testing.T) {
 }
 
 func TestAnHDROutputIsTenBitAndCarriesThePanelsMetadata(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, hdrConfig(compositor.OutputRule{HDRPeak: 600}), small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		got := b.Outputs()[0].State()
@@ -701,6 +715,7 @@ func TestAnHDROutputIsTenBitAndCarriesThePanelsMetadata(t *testing.T) {
 }
 
 func TestBlurShadowsAndCornersCompositeInTheWorkingSpace(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		half := float32(0.5)
 		h := start(t, func(cfg *compositor.Config) {
@@ -745,6 +760,7 @@ func TestTheCursorDrawsInTheFrameOnAnHDROutput(t *testing.T) {
 }
 
 func TestGammaIsRefusedAndTheColorMatrixAppliesInTheEncodeOnHDR(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, fullWindowConfig(compositor.OutputRule{}), small)
 	g, _, ev := gammaControl(t, h)
 	g.DispatchUntil("gamma refused", func() bool { return ev.failed })
@@ -766,6 +782,7 @@ func TestGammaIsRefusedAndTheColorMatrixAppliesInTheEncodeOnHDR(t *testing.T) {
 }
 
 func TestReloadTurnsHDROnAndOff(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		var cfg compositor.Config
 		h := start(t, func(c *compositor.Config) {
@@ -814,6 +831,7 @@ func testICCProfile() []byte {
 }
 
 func TestAScreenShaderStaysOffOnAnHDROutputAndSaysSo(t *testing.T) {
+	t.Parallel()
 	var r reports
 	path := t.TempDir() + "/invert.frag"
 	if err := os.WriteFile(path, []byte("precision mediump float;\nvarying vec2 v_texcoord;\nuniform sampler2D tex;\nvoid main() { gl_FragColor = vec4(1.0) - texture2D(tex, v_texcoord); }\n"), 0o600); err != nil {

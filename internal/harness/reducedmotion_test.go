@@ -13,6 +13,7 @@ import (
 )
 
 func TestAClosingWindowWithItsMotionOffOnlyFades(t *testing.T) {
+	t.Parallel()
 	d := 10 * time.Second
 	off, on := false, true
 	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
@@ -51,6 +52,7 @@ func TestAClosingWindowWithItsMotionOffOnlyFades(t *testing.T) {
 }
 
 func TestUnderReducedMotionAReleasedSwipeOnlyCrossFades(t *testing.T) {
+	t.Parallel()
 	off := false
 	table, errs := anim.ResolveReduced(map[anim.Event]anim.Setting{anim.Fade: {Enabled: &off}})
 	if len(errs) != 0 {

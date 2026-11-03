@@ -31,6 +31,7 @@ func (r *inputRig) click() {
 }
 
 func TestPopupMenusGrabAndDismiss(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	seat, in := c.Seat()
@@ -81,6 +82,7 @@ func TestPopupMenusGrabAndDismiss(t *testing.T) {
 }
 
 func TestGrabsFromClientsWithoutInputAreRefused(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	background := testclient.Connect(t, h.Socket())
 	seat, _ := background.Seat()
@@ -101,6 +103,7 @@ func TestGrabsFromClientsWithoutInputAreRefused(t *testing.T) {
 }
 
 func TestPopupsAreClickableWithoutAGrab(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	tip := r.c.Popup(r.w, menuAt(image.Pt(150, 90), image.Pt(30, 20)), nil, testclient.Fill(0x80, 0x80, 0x80))
@@ -119,6 +122,7 @@ func TestPopupsAreClickableWithoutAGrab(t *testing.T) {
 }
 
 func TestAnAckForADismissedPopupIsNotAnError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	seat, in := c.Seat()

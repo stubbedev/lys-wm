@@ -131,6 +131,7 @@ func (w *wlrToplevel) activated() bool {
 }
 
 func TestForeignToplevelsListAndManageWindows(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	a := c.Window("first", quadrants)

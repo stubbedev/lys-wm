@@ -39,6 +39,7 @@ func (p *party) seen(t *testing.T, what string, cond func() bool) {
 }
 
 func TestClipboardFollowsKeyboardFocus(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
@@ -79,6 +80,7 @@ func TestClipboardFollowsKeyboardFocus(t *testing.T) {
 }
 
 func TestASelectionSetAgainStaysTheSelection(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
@@ -100,6 +102,7 @@ func TestASelectionSetAgainStaysTheSelection(t *testing.T) {
 }
 
 func TestPrimarySelection(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
@@ -134,6 +137,7 @@ func dropZone(t *testing.T, h *Harness) *party {
 }
 
 func TestDragAndDropBetweenClients(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	zone := dropZone(t, h)
@@ -195,6 +199,7 @@ func TestDragAndDropBetweenClients(t *testing.T) {
 }
 
 func TestDragAndDropStartedByTouch(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	zone := dropZone(t, h)
@@ -250,6 +255,7 @@ func TestDragAndDropStartedByTouch(t *testing.T) {
 }
 
 func TestACancelledTouchCancelsItsDrag(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	touch := func(f func(t *headless.Touch, o *headless.Output) error) {
@@ -276,6 +282,7 @@ func TestACancelledTouchCancelsItsDrag(t *testing.T) {
 }
 
 func TestDragWithoutATakerIsCancelled(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := join(t, h, "a")
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -299,6 +306,7 @@ func TestDragWithoutATakerIsCancelled(t *testing.T) {
 }
 
 func TestDataDeviceProtocolErrors(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		press bool

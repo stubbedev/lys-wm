@@ -15,6 +15,7 @@ import (
 )
 
 func TestATranslucentWindowBlursWhatIsBehindIt(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testATranslucentWindowBlursWhatIsBehindIt)
 }
 
@@ -57,6 +58,7 @@ func testATranslucentWindowBlursWhatIsBehindIt(t *testing.T, start gpuStarter) {
 }
 
 func TestXRayBlurShowsTheWallpaperNotTheWindowsBelow(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testXRayBlurShowsTheWallpaperNotTheWindowsBelow)
 }
 

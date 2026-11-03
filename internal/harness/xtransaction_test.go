@@ -67,6 +67,7 @@ func (c *xclient) syncRequest() uint64 {
 }
 
 func TestAnXWindowLandsOnItsCommitAtTheNewSize(t *testing.T) {
+	t.Parallel()
 	h := StartXwaylandWith(t, heldForever, xReport(t), small)
 	xc := xDial(t, h)
 	xc.window(image.Rect(0, 0, 90, 70), 0x00ff00, false, map[string][]byte{"WM_CLASS": []byte("plain\x00XTest\x00")})
@@ -81,6 +82,7 @@ func TestAnXWindowLandsOnItsCommitAtTheNewSize(t *testing.T) {
 }
 
 func TestAnXWindowWithASyncCounterIsWaitedFor(t *testing.T) {
+	t.Parallel()
 	h := StartXwaylandWith(t, heldForever, xReport(t), small)
 	xc := xDial(t, h)
 	_, counter := xc.syncedWindow(image.Rect(0, 0, 90, 70), 0x00ff00)
@@ -104,6 +106,7 @@ func TestAnXWindowWithASyncCounterIsWaitedFor(t *testing.T) {
 }
 
 func TestAnXWindowThatNeverSyncsHoldsOnlyOnce(t *testing.T) {
+	t.Parallel()
 	h := StartXwaylandWith(t, flat, xReport(t), small)
 	xc := xDial(t, h)
 	_, _ = xc.syncedWindow(image.Rect(0, 0, 90, 70), 0x00ff00)
@@ -158,6 +161,7 @@ func (c *xclient) cardinalProperty(win xproto.Window, name string) []uint32 {
 }
 
 func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
+	t.Parallel()
 	demo := testenv.Require(t, "gtk3-demo")
 	h := StartXwaylandWith(t, func(cfg *compositor.Config) {
 		flat(cfg)

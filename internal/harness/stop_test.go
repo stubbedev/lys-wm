@@ -12,6 +12,7 @@ import (
 )
 
 func TestStoppedManagersFinishOnceAndFallSilent(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	watcher := testclient.Connect(t, h.Socket())
 	ext := &extWatcher{toplevels: map[*cel.ExtForeignToplevelHandleV1]*extToplevel{}}

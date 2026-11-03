@@ -21,6 +21,7 @@ import (
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/render/gles"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wire"
 	"github.com/stubbedev/lys-wm/internal/wlclient"
 )
@@ -174,7 +175,7 @@ func (c *Client) Sync() {
 
 func (c *Client) DispatchUntil(what string, cond func() bool) {
 	c.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testenv.HangLimit)
 	defer func() { c.must(c.Display.Flush()) }()
 	for !cond() {
 		if time.Now().After(deadline) {

@@ -510,6 +510,7 @@ func TestEveryOutputShowsItsOwnAtOnce(t *testing.T) {
 }
 
 func TestTheOverviewIsAnEventAndAQuery(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	lines := h.watch()
 	query := func() string {
@@ -809,6 +810,7 @@ func (h *Harness) overviewProgress() float64 {
 }
 
 func TestThreeFingersScrubTheOverview(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -902,6 +904,7 @@ func TestThreeFingersGrabASettlingOverview(t *testing.T) {
 }
 
 func TestAStyleOnTheVerticalAxisGivesWayToWorkspaces(t *testing.T) {
+	t.Parallel()
 	for _, b := range compositor.DefaultGestureBinds(anim.Style{Kind: anim.SlideVert}) {
 		if b.Drive == binds.DriveOverview {
 			t.Errorf("the overview takes %+v from a vertical workspace style", b)

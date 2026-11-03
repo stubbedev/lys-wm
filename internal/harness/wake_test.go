@@ -76,6 +76,7 @@ func straddling(t *testing.T, h *Harness, c *testclient.Client) *testclient.Wind
 }
 
 func TestACommitWakesOnlyTheOutputsShowingTheSurface(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("animating", testclient.Fill(0, 0, 0xff))
@@ -93,6 +94,7 @@ func TestACommitWakesOnlyTheOutputsShowingTheSurface(t *testing.T) {
 }
 
 func TestALayerSurfaceCommitWakesOnlyItsOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Layer(testclient.LayerSpec{Layer: cwlr.ZwlrLayerShellV1LayerTop, Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight, Size: image.Pt(0, 20)}, testclient.Fill(0, 0, 0xff))
@@ -106,6 +108,7 @@ func TestALayerSurfaceCommitWakesOnlyItsOutput(t *testing.T) {
 }
 
 func TestACommitOnAHiddenSurfaceWakesNothingAndShowsWhenRevealed(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("hidden", testclient.Fill(0, 0, 0xff))
@@ -127,6 +130,7 @@ func TestACommitOnAHiddenSurfaceWakesNothingAndShowsWhenRevealed(t *testing.T) {
 }
 
 func TestAPopupGrowingOntoAnotherOutputIsDrawnThere(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("win", testclient.Fill(0, 0, 0xff))
@@ -140,6 +144,7 @@ func TestAPopupGrowingOntoAnotherOutputIsDrawnThere(t *testing.T) {
 }
 
 func TestAPopupRepositionedOntoAnotherOutputIsDrawnThere(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("win", testclient.Fill(0, 0, 0xff))
@@ -162,6 +167,7 @@ func TestAPopupRepositionedOntoAnotherOutputIsDrawnThere(t *testing.T) {
 }
 
 func TestAPopupsWindowGeometryCarryingItOntoAnotherOutputIsDrawnThere(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("win", testclient.Fill(0, 0, 0xff))
@@ -177,6 +183,7 @@ func TestAPopupsWindowGeometryCarryingItOntoAnotherOutputIsDrawnThere(t *testing
 }
 
 func TestANewWindowOnAnIdleOutputIsDrawnWhileAnotherAnimates(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	busy := c.Window("busy", testclient.Fill(0, 0, 0xff))
@@ -188,6 +195,7 @@ func TestANewWindowOnAnIdleOutputIsDrawnWhileAnotherAnimates(t *testing.T) {
 }
 
 func TestAFloatingWindowOnBothOutputsGrowsOnBoth(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := straddling(t, h, c)
@@ -198,6 +206,7 @@ func TestAFloatingWindowOnBothOutputsGrowsOnBoth(t *testing.T) {
 }
 
 func TestAFloatingWindowGrowingWakesTheOtherOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("float", testclient.Fill(0, 0, 0xff))
@@ -213,6 +222,7 @@ func TestAFloatingWindowGrowingWakesTheOtherOutput(t *testing.T) {
 }
 
 func TestASubsurfaceAddedToAWindowOnBothOutputsIsDrawnOnBoth(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := straddling(t, h, c)
@@ -230,6 +240,7 @@ func TestASubsurfaceAddedToAWindowOnBothOutputsIsDrawnOnBoth(t *testing.T) {
 }
 
 func TestPartialDamageReachesEveryOutputShowingTheSurface(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, small)
 	c := testclient.Connect(t, h.Socket())
 	w := straddling(t, h, c)
@@ -254,6 +265,7 @@ func TestPartialDamageReachesEveryOutputShowingTheSurface(t *testing.T) {
 }
 
 func TestAClientCursorGrowingIsDrawn(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	_, in := c.Seat()
@@ -275,6 +287,7 @@ func TestAClientCursorGrowingIsDrawn(t *testing.T) {
 }
 
 func TestALayerMovingItsPopupOntoAnotherOutputIsDrawnThere(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	layer := c.Layer(testclient.LayerSpec{Layer: cwlr.ZwlrLayerShellV1LayerTop, Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorRight, Size: image.Pt(20, 20)}, testclient.Fill(0, 0, 0xff))

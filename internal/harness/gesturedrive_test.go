@@ -156,6 +156,7 @@ func (r *swipeRig) expectNoMoreFrames() {
 }
 
 func TestASwipeTracksTheFingersAndCommits(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := startSwipeRig(t, start, anim.Style{Kind: anim.Slide}, nil)
 		r.redBlue()
@@ -183,6 +184,7 @@ func TestASwipeTracksTheFingersAndCommits(t *testing.T) {
 }
 
 func TestASwipeShortOfHalfGoesBack(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := startSwipeRig(t, start, anim.Style{Kind: anim.Slide}, nil)
 		r.redBlue()
@@ -201,6 +203,7 @@ func TestASwipeShortOfHalfGoesBack(t *testing.T) {
 }
 
 func TestAFlickCommitsFromAShortDistance(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -214,6 +217,7 @@ func TestAFlickCommitsFromAShortDistance(t *testing.T) {
 }
 
 func TestAFlickBackCancelsFromFarAlong(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -229,6 +233,7 @@ func TestAFlickBackCancelsFromFarAlong(t *testing.T) {
 }
 
 func TestACancelledSwipeGoesBack(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -242,6 +247,7 @@ func TestACancelledSwipeGoesBack(t *testing.T) {
 }
 
 func TestASwipeRubberBandsAtTheEnds(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := startSwipeRig(t, start, anim.Style{Kind: anim.Slide}, nil)
 		r.redBlue()
@@ -269,6 +275,7 @@ func TestASwipeRubberBandsAtTheEnds(t *testing.T) {
 }
 
 func TestASwipeAcrossAWholeWorkspaceWalksOn(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
@@ -290,6 +297,7 @@ func TestASwipeAcrossAWholeWorkspaceWalksOn(t *testing.T) {
 }
 
 func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := startSwipeRig(t, start, anim.Style{Kind: anim.Slide}, nil)
 		r.redBlue()
@@ -325,6 +333,7 @@ func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
 }
 
 func TestASwipeThatGrabsThenGoesNowhereSettlesWhereItWasGoing(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -343,6 +352,7 @@ func TestASwipeThatGrabsThenGoesNowhereSettlesWhereItWasGoing(t *testing.T) {
 }
 
 func TestASwipeRespectsNaturalScrollOff(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, func(cfg *compositor.Config) { cfg.Gestures.Natural = false })
 	r.redBlue()
 	r.begin()
@@ -356,6 +366,7 @@ func TestASwipeRespectsNaturalScrollOff(t *testing.T) {
 }
 
 func TestASwipeDrivesSlidevert(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		r := startSwipeRig(t, start, anim.Style{Kind: anim.SlideVert}, func(cfg *compositor.Config) {
 			cfg.Gestures.Binds = compositor.DefaultGestureBinds(anim.Style{Kind: anim.SlideVert})
@@ -378,6 +389,7 @@ func TestASwipeDrivesSlidevert(t *testing.T) {
 }
 
 func TestAKeySwitchWhileTrackingEndsTheGesture(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
@@ -412,6 +424,7 @@ func TestAKeySwitchWhileTrackingEndsTheGesture(t *testing.T) {
 }
 
 func TestAKeySwitchToTheWorkspaceBeingSwipedToCarriesOnFromThere(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -427,6 +440,7 @@ func TestAKeySwitchToTheWorkspaceBeingSwipedToCarriesOnFromThere(t *testing.T) {
 }
 
 func TestAKeyboardActionWhileTrackingRuns(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
 	r.redBlue()
 	r.begin()
@@ -441,6 +455,7 @@ func TestAKeyboardActionWhileTrackingRuns(t *testing.T) {
 }
 
 func TestAClaimedSwipeCancelsOnTheClient(t *testing.T) {
+	t.Parallel()
 	h := Start(t, tall)
 	c, log := gestureClient(t, h, "gestures")
 	h.gesture(func(o *headless.Output, p *headless.Pointer) error {
@@ -457,6 +472,7 @@ func TestAClaimedSwipeCancelsOnTheClient(t *testing.T) {
 }
 
 func TestASwipeOnAnUnboundAxisStaysWithTheClient(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Gestures.Binds = []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces}}
 	}, tall)
@@ -472,6 +488,7 @@ func TestASwipeOnAnUnboundAxisStaysWithTheClient(t *testing.T) {
 }
 
 func TestGestureActionsRunAndStayFromTheClient(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Gestures.Binds = []binds.GestureBind{
 			{Kind: backend.Pinch, Fingers: 2, Direction: binds.PinchIn, Action: wm.WorkspaceAction{Target: wm.WorkspaceID(2)}},
@@ -508,6 +525,7 @@ func TestGestureActionsRunAndStayFromTheClient(t *testing.T) {
 }
 
 func TestLockedGesturesStayWithClients(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Gestures.Binds = []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeHorizontal, Drive: binds.DriveWorkspaces}}
 	}, tall)
@@ -519,6 +537,7 @@ func TestLockedGesturesStayWithClients(t *testing.T) {
 }
 
 func TestAHiddenTabIsNotDrawnWhileSwiping(t *testing.T) {
+	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, func(cfg *compositor.Config) { cfg.WM.Autotile.Enabled = false })
 	red := r.c.Window("red", testclient.Fill(0, 0, 0xff))
 	r.c.DispatchUntil("red to map", red.Mapped)

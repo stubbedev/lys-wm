@@ -29,6 +29,7 @@ func presented(i int) func(*headless.Backend, *compositor.Compositor) bool {
 }
 
 func TestDesktopIsDrawnOnEveryOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Eventually("the first frame", presented(0))
 	golden.Assert(t, "desktop", h.Snapshot(0))
@@ -43,6 +44,7 @@ func TestDesktopIsDrawnOnEveryOutput(t *testing.T) {
 }
 
 func TestWaylandInfoConnects(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	out := h.Run("wayland-info").Wait(t, 10*time.Second)
 	if trace := h.Trace(); !strings.Contains(trace, "wl_display@1.get_registry(new id wl_registry@2)") {
@@ -85,6 +87,7 @@ func showing(x, y int, want [3]byte) func(*headless.Backend, *compositor.Composi
 }
 
 func TestWindowIsComposited(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("quadrants", quadrants)
@@ -105,6 +108,7 @@ func TestWindowIsComposited(t *testing.T) {
 }
 
 func TestWindowKeepsAnimating(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("counter", func(pix []byte, _ int, _ image.Point, frame int) {
@@ -119,6 +123,7 @@ func TestWindowKeepsAnimating(t *testing.T) {
 }
 
 func TestSurfaceTreeIsComposited(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("tree", quadrants)
@@ -180,6 +185,7 @@ func checker(pix []byte, stride int, size image.Point, _ int) {
 }
 
 func TestFractionalScaleRendersCrisp(t *testing.T) {
+	t.Parallel()
 	h := startScaled(t)
 	c := testclient.Connect(t, h.Socket())
 	w := c.ScaledWindow("crisp", testclient.FractionalScale, checker)
@@ -211,6 +217,7 @@ func TestFractionalScaleRendersCrisp(t *testing.T) {
 }
 
 func TestIntegerScaleIsScaledOnce(t *testing.T) {
+	t.Parallel()
 	h := startScaled(t)
 	c := testclient.Connect(t, h.Socket())
 	w := c.ScaledWindow("integer", testclient.IntegerScale, quadrants)

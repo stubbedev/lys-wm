@@ -30,6 +30,7 @@ func unresponsive(id int, want bool) func(*headless.Backend, *compositor.Composi
 }
 
 func TestHungClientsAreMarkedUnresponsive(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	lines := h.watch()
 	hung := testclient.Connect(t, h.Socket())
@@ -39,8 +40,7 @@ func TestHungClientsAreMarkedUnresponsive(t *testing.T) {
 		ws := c.Snapshot().Windows
 		return len(ws) == 1 && ws[0].Focused
 	})
-	time.Sleep(shell.PingTimeout)
-	h.Eventually("the hung window marked unresponsive", unresponsive(1, true))
+	h.Within(2*shell.PingTimeout, "the hung window marked unresponsive", unresponsive(1, true))
 	expectEvent(t, lines, `{"event":"unresponsive","window":1,"unresponsive":true}`)
 
 	alive := testclient.Connect(t, h.Socket())
@@ -81,6 +81,7 @@ func openFDs(t *testing.T) int {
 }
 
 func TestGarbageDisconnectsOnlyItsSender(t *testing.T) {
+	t.Parallel()
 	h := StartUntraced(t, small)
 	r := dialRaw(t, h.Socket())
 	if _, err := unix.Write(r.conn.FD(), []byte{1, 0, 0, 0, 0, 0, 4, 0, 0xde, 0xad, 0xbe, 0xef}); err != nil {
@@ -93,6 +94,7 @@ func TestGarbageDisconnectsOnlyItsSender(t *testing.T) {
 }
 
 func TestIDsOutsideTheClientRangeAreErrors(t *testing.T) {
+	t.Parallel()
 	for name, send := range map[string]func(r *rawClient) error{
 		"a server-side new id": func(r *rawClient) error {
 			return r.send(displayID, getRegistry, func(e *wire.Encoder) { e.Uint(0xff000005) })
@@ -152,6 +154,7 @@ func TestFDFloodsAreDisconnectedAndClosed(t *testing.T) {
 }
 
 func TestClientsThatNeverReadAreDisconnected(t *testing.T) {
+	t.Parallel()
 	h := StartUntraced(t, small)
 	r := dialRaw(t, h.Socket())
 	for deadline := time.Now().Add(2 * fuzzTimeout); ; {
@@ -177,6 +180,7 @@ func TestClientsThatNeverReadAreDisconnected(t *testing.T) {
 }
 
 func TestStalledWindowsDoNotStallOthers(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	hung := testclient.Connect(t, h.Socket())
 	w := hung.Window("stalled", quadrants)
@@ -252,6 +256,7 @@ func TestDisconnectedClientsLeaveNothingBehind(t *testing.T) {
 }
 
 func TestClientsLeavingABacklogDoNotStopTheCompositor(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	gone := testclient.Connect(t, h.Socket())
 	w := gone.Window("leaving", quadrants)
@@ -273,6 +278,7 @@ func TestClientsLeavingABacklogDoNotStopTheCompositor(t *testing.T) {
 }
 
 func TestAClientLeavingWithAnOlderWindowFocusedDoesNotStopTheCompositor(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	gone := testclient.Connect(t, h.Socket())
 	for _, name := range []string{"older", "newer"} {
@@ -309,6 +315,7 @@ func (deafToplevel) ConfigureBounds(*cxdg.XdgToplevel, int32, int32) error   { r
 func (deafToplevel) WmCapabilities(*cxdg.XdgToplevel, []byte) error          { return nil }
 
 func TestUnackedConfiguresDoNotStallOthers(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	for range 3 {

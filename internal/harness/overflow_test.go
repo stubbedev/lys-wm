@@ -9,6 +9,7 @@ import (
 )
 
 func TestABufferLargerThanItsFrameStaysInsideIt(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testABufferLargerThanItsFrameStaysInsideIt)
 }
 

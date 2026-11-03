@@ -38,6 +38,7 @@ func arrowAt(tip image.Point) func(*headless.Backend, *compositor.Compositor) bo
 }
 
 func TestBuiltinArrowFollowsThePointer(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Eventually("the arrow at the pointer", arrowAt(image.Pt(80, 50)))
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -48,6 +49,7 @@ func TestBuiltinArrowFollowsThePointer(t *testing.T) {
 }
 
 func TestClientCursorSurfaceAndHiding(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	cursor := r.c.Surface()
@@ -74,6 +76,7 @@ func TestClientCursorSurfaceAndHiding(t *testing.T) {
 }
 
 func TestCursorShapeFromTheThemeAtFractionalScale(t *testing.T) {
+	t.Parallel()
 	theme := testenv.CursorTheme(t)
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
@@ -120,6 +123,7 @@ func planeOf(h *Harness) planeState {
 }
 
 func TestCursorPlaneMovesWithoutRepainting(t *testing.T) {
+	t.Parallel()
 	h := StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small)
 	h.Eventually("the arrow on the cursor plane", func(b *headless.Backend, c *compositor.Compositor) bool {
 		return b.Outputs()[0].Cursor().Visible() && arrowAt(image.Pt(80, 50))(b, c)
@@ -150,6 +154,7 @@ func TestCursorPlaneMovesWithoutRepainting(t *testing.T) {
 }
 
 func TestClientCursorsOnThePlaneAndInTheFrame(t *testing.T) {
+	t.Parallel()
 	r := inputOn(t, StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	cursor := r.c.Surface()
@@ -187,6 +192,7 @@ func TestClientCursorsOnThePlaneAndInTheFrame(t *testing.T) {
 }
 
 func TestARefusingCursorPlaneFallsBackToTheFrame(t *testing.T) {
+	t.Parallel()
 	reports := make(chan error, 4)
 	h := StartWithCursorPlanes(t, plane, func(cfg *compositor.Config) { cfg.Report = func(err error) { reports <- err } }, small)
 	h.Eventually("the arrow on the cursor plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
@@ -210,6 +216,7 @@ func TestARefusingCursorPlaneFallsBackToTheFrame(t *testing.T) {
 }
 
 func TestCursorsCopyToThePlaneUnlessTheyAreScaled(t *testing.T) {
+	t.Parallel()
 	r := inputOn(t, StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small))
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	counts := func() (images, copies uint64) {
@@ -255,6 +262,7 @@ func TestCursorsCopyToThePlaneUnlessTheyAreScaled(t *testing.T) {
 }
 
 func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
+	t.Parallel()
 	theme := testenv.CursorTheme(t)
 	h := StartWithCursorPlanes(t, plane, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
@@ -273,6 +281,7 @@ func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
 }
 
 func TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback(t *testing.T) {
+	t.Parallel()
 	for _, stack := range []struct {
 		name  string
 		start func(*testing.T, image.Point, func(*compositor.Config), ...backend.Mode) *Harness

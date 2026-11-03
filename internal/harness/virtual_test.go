@@ -32,6 +32,7 @@ func keymapFD(t *testing.T, padding int) (int, uint32) {
 }
 
 func TestVirtualKeyboardsTypeWithTheirOwnKeymap(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	real := r.in.KeymapSize
@@ -82,6 +83,7 @@ func TestVirtualKeyboardsTypeWithTheirOwnKeymap(t *testing.T) {
 }
 
 func TestVirtualPointersMoveClickAndScroll(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	driver := testclient.Connect(t, r.h.Socket())
@@ -137,6 +139,7 @@ func (*keySerials) Modifiers(*cw.WlKeyboard, uint32, uint32, uint32, uint32, uin
 func (*keySerials) RepeatInfo(*cw.WlKeyboard, int32, int32) error { return nil }
 
 func TestEveryKeyboardOfAClientSharesAKeysSerial(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	a, b := &keySerials{}, &keySerials{}

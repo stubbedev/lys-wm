@@ -83,6 +83,7 @@ func clipboardManager(t *testing.T, h *Harness) *extManager {
 }
 
 func TestDataControlWatchesAndSetsTheClipboard(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	m := clipboardManager(t, h)
 	if m.events != 2 || m.selection != nil || m.primary != nil {
@@ -155,6 +156,7 @@ func (w *wlrManager) PrimarySelection(_ *cwdc.ZwlrDataControlDeviceV1, o *cwdc.Z
 func (w *wlrManager) Finished(*cwdc.ZwlrDataControlDeviceV1) error { return nil }
 
 func TestWlrDataControlSeesThePrimarySelection(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	seat, _ := c.Seat()
@@ -192,6 +194,7 @@ func (wlrContent) Send(_ *cwdc.ZwlrDataControlSourceV1, _ string, fd int) error 
 func (wlrContent) Cancelled(*cwdc.ZwlrDataControlSourceV1) error { return nil }
 
 func TestDataControlSourcesAreUsedOnce(t *testing.T) {
+	t.Parallel()
 	type rig struct {
 		c    *testclient.Client
 		code uint32

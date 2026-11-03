@@ -174,6 +174,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 }
 
 func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
+	t.Parallel()
 	dk, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "dk"})
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +210,7 @@ func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
 }
 
 func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	c := testclient.Connect(t, h.Socket())
 	a := c.Window("a", quadrants)
@@ -251,6 +253,7 @@ func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
 }
 
 func TestWorkspacePreviousThroughIPC(t *testing.T) {
+	t.Parallel()
 	h := Start(t, desktop)
 	lines := h.watch()
 	for _, step := range []struct {
@@ -295,6 +298,7 @@ func (h *Harness) expectActive(c *Client) {
 }
 
 func TestCapsLockShowsInTheLocksQuery(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	const capsLock = 58
 	tap := func() {

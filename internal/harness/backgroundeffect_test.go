@@ -129,6 +129,7 @@ func startGlass(t *testing.T, start gpuStarter, configure func(*compositor.Confi
 }
 
 func TestABlurRegionBlursBehindItAlone(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, nil)
 		fx := bindEffects(t, c)
@@ -168,6 +169,7 @@ func TestABlurRegionBlursBehindItAlone(t *testing.T) {
 }
 
 func TestARegionIsClippedToItsSurface(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, nil)
 		fx := bindEffects(t, c)
@@ -182,6 +184,7 @@ func TestARegionIsClippedToItsSurface(t *testing.T) {
 }
 
 func TestABlurRegionFollowsRoundedCorners(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
 			cfg.Decor.BorderWidth, cfg.Decor.Rounding = 0, 10
@@ -198,6 +201,7 @@ func TestABlurRegionFollowsRoundedCorners(t *testing.T) {
 }
 
 func TestARuleOffTurnsBlurRegionsOff(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		off := false
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
@@ -220,6 +224,7 @@ func TestARuleOffTurnsBlurRegionsOff(t *testing.T) {
 }
 
 func TestADecorationBlurLeavesARegionItsShape(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 3, Passes: 2}
@@ -236,6 +241,7 @@ func TestADecorationBlurLeavesARegionItsShape(t *testing.T) {
 }
 
 func TestXRayAppliesToBlurRegions(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur.XRay = true
@@ -272,6 +278,7 @@ func TestXRayAppliesToBlurRegions(t *testing.T) {
 }
 
 func TestASubsurfaceRegionBlursWhatIsBehindIt(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, nil)
 		child := c.Surface()
@@ -291,6 +298,7 @@ func TestASubsurfaceRegionBlursWhatIsBehindIt(t *testing.T) {
 }
 
 func TestAnAlphaModifierFadesTheBlur(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, nil)
 		fx := bindEffects(t, c)
@@ -316,6 +324,7 @@ func TestAnAlphaModifierFadesTheBlur(t *testing.T) {
 }
 
 func TestPopupsBlurByTheirRegion(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) { cfg.Decor.Blur.Size, cfg.Decor.Blur.Passes = 3, 2 }, small)
 		c := testclient.Connect(t, h.Socket())
@@ -353,6 +362,7 @@ func TestPopupsBlurByTheirRegion(t *testing.T) {
 }
 
 func TestDecorationBlurReachesPopupsOfBlurredParents(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		off := false
 		h := start(t, func(cfg *compositor.Config) {
@@ -398,6 +408,7 @@ func TestDecorationBlurReachesPopupsOfBlurredParents(t *testing.T) {
 }
 
 func TestABlurRegionIsNotRedrawnWhenNothingBehindItChanged(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
 			cfg.Decor.Blur.Size, cfg.Decor.Blur.Passes = 1, 2
@@ -441,6 +452,7 @@ func TestABlurRegionIsNotRedrawnWhenNothingBehindItChanged(t *testing.T) {
 }
 
 func TestBackgroundEffectProtocolErrors(t *testing.T) {
+	t.Parallel()
 	t.Run("a surface's second object", func(t *testing.T) {
 		h := Start(t, small)
 		c := testclient.Connect(t, h.Socket())
@@ -467,6 +479,7 @@ func TestBackgroundEffectProtocolErrors(t *testing.T) {
 }
 
 func TestAPopupsFirstFrameIsAlreadyBlurred(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) { cfg.Decor.Blur.Size, cfg.Decor.Blur.Passes = 3, 2 }, small)
 		c := testclient.Connect(t, h.Socket())

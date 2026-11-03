@@ -15,6 +15,7 @@ import (
 )
 
 func TestBordersAndTabBars(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testBordersAndTabBars)
 }
 
@@ -50,6 +51,7 @@ func testBordersAndTabBars(t *testing.T, start gpuStarter) {
 var tall = backend.Mode{Size: image.Pt(160, 120), RefreshMHz: 60000, Preferred: true}
 
 func TestGapsSeparateTiledWindowsAndReloadRearranges(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testGapsSeparateTiledWindowsAndReloadRearranges)
 }
 
@@ -80,6 +82,7 @@ func testGapsSeparateTiledWindowsAndReloadRearranges(t *testing.T, start gpuStar
 }
 
 func TestRoundedWindowsAndBorders(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testRoundedWindowsAndBorders)
 }
 
@@ -139,6 +142,7 @@ func testARoundedWindowThatFillsTheOutputIsComposited(t *testing.T, start gpuSta
 }
 
 func TestATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testATranslucentBorderBlendsWithoutDroppingFrames)
 }
 
@@ -171,6 +175,7 @@ func testATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T, start gpuSt
 }
 
 func TestAFloatingWindowCastsARoundedShadow(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAFloatingWindowCastsARoundedShadow)
 }
 
@@ -193,6 +198,7 @@ func testAFloatingWindowCastsARoundedShadow(t *testing.T, start gpuStarter) {
 }
 
 func TestAGradientBorderRunsAlongItsAngle(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAGradientBorderRunsAlongItsAngle)
 }
 

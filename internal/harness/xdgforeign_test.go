@@ -67,6 +67,7 @@ func foreignApp(t *testing.T, h *Harness) (*testclient.Client, *testclient.Windo
 }
 
 func TestAPortalDialogOpensOverTheAppItBelongsTo(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	app, window := foreignApp(t, h)
 	appForeign := bindForeignV2(t, app)
@@ -108,6 +109,7 @@ func TestAPortalDialogOpensOverTheAppItBelongsTo(t *testing.T) {
 }
 
 func TestGtk3StyleForeignV1Parents(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	app, window := foreignApp(t, h)
 	exporter, err := cxf1.NewZxdgExporterV1(app.Display, 1)
@@ -146,6 +148,7 @@ func TestGtk3StyleForeignV1Parents(t *testing.T) {
 }
 
 func TestExportingASurfaceWithoutAToplevelIsAnError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	foreign := bindForeignV2(t, c)

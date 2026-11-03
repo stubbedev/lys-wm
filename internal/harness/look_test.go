@@ -34,6 +34,7 @@ func speedOf(h *Harness) render.Speed {
 }
 
 func TestTheDefaultLookFitsTheRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, defaultLook, tall)
 		c := testclient.Connect(t, h.Socket())
@@ -59,6 +60,7 @@ func TestTheDefaultLookFitsTheRenderer(t *testing.T) {
 }
 
 func TestBlurIsOfferedOnlyWhereItIsCheapUnlessAsked(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		var asked compositor.Config
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
@@ -106,6 +108,7 @@ func TestBlurIsOfferedOnlyWhereItIsCheapUnlessAsked(t *testing.T) {
 }
 
 func TestATabStripAndItsWindowAreOneRoundedShape(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, defaultLook, tall)
 		c := testclient.Connect(t, h.Socket())

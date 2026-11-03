@@ -43,6 +43,7 @@ func powerFor(t *testing.T, c *testclient.Client) (*cwop.ZwlrOutputPowerV1, *pow
 }
 
 func TestOutputPowerProtocol(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("power", testclient.Fill(0, 0, 0xff))
@@ -89,6 +90,7 @@ func TestOutputPowerProtocol(t *testing.T) {
 }
 
 func TestAPowerModeOutsideTheEnumIsAnError(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	p, _ := powerFor(t, c)
@@ -99,6 +101,7 @@ func TestAPowerModeOutsideTheEnumIsAnError(t *testing.T) {
 }
 
 func TestPowerControlFailsWhenItsOutputGoes(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	_, ev := powerFor(t, c)

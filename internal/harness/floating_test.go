@@ -21,6 +21,7 @@ var (
 )
 
 func TestFloatingFullscreenAndTransients(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	red := c.Window("red", testclient.Fill(0, 0, 0xff))
@@ -63,6 +64,7 @@ func TestFloatingFullscreenAndTransients(t *testing.T) {
 }
 
 func TestFullscreenCoversTheTopLayerButNotOverlay(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -101,6 +103,7 @@ func mouseDrag(t *testing.T, h *Harness) func(button uint32, from, to image.Poin
 }
 
 func TestMouseDragsMoveAndResize(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t,
 		bindSpec{chord: "SUPER + mouse:272", action: "movewindow"},
 		bindSpec{chord: "SUPER + mouse:273", action: "resizewindow"},
@@ -127,6 +130,7 @@ func TestMouseDragsMoveAndResize(t *testing.T) {
 }
 
 func TestWindowRulesFloatAndSize(t *testing.T) {
+	t.Parallel()
 	steam := regexp.MustCompile(`^lys-wm\.testclient$`)
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{
@@ -150,6 +154,7 @@ func TestWindowRulesFloatAndSize(t *testing.T) {
 }
 
 func TestAFloatingWindowOverAnotherOutputTakesTheClicksItCovers(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, small)
 	c := testclient.Connect(t, h.Socket())
 	float := c.Window("float", testclient.Fill(0, 0, 0xff))
@@ -197,6 +202,7 @@ func TestAFloatingWindowOverAnotherOutputTakesTheClicksItCovers(t *testing.T) {
 }
 
 func TestAWindowAcrossOutputsPrefersTheHighestScale(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, small)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[1], 240)
@@ -232,6 +238,7 @@ func fixedSize(size image.Point) func(*testclient.Window) error {
 }
 
 func TestWaylandWindowsThatAskToFloatFloat(t *testing.T) {
+	t.Parallel()
 	for name, setup := range map[string]func(*testing.T, *testclient.Client) func(*testclient.Window) error{
 		"a fixed size": func(*testing.T, *testclient.Client) func(*testclient.Window) error {
 			return fixedSize(image.Pt(60, 40))
@@ -262,6 +269,7 @@ func TestWaylandWindowsThatAskToFloatFloat(t *testing.T) {
 }
 
 func TestAFixedSizeWaylandWindowFloatsAtItsSize(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	fixed := c.WindowWith("fixed", testclient.Fill(0, 0xff, 0), fixedSize(image.Pt(60, 40)))
@@ -272,6 +280,7 @@ func TestAFixedSizeWaylandWindowFloatsAtItsSize(t *testing.T) {
 }
 
 func TestWaylandWindowsThatDoNotAskToFloatTile(t *testing.T) {
+	t.Parallel()
 	for name, cfg := range map[string]struct {
 		rules []wm.Rule
 		setup func(*testclient.Window) error
@@ -295,6 +304,7 @@ func TestWaylandWindowsThatDoNotAskToFloatTile(t *testing.T) {
 }
 
 func TestDraggingAFloatingWindowSmallerStopsAtItsMinimum(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:273", action: "resizewindow"}), small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.WindowWith("roomy", testclient.Fill(0, 0, 0xff), func(w *testclient.Window) error { return w.Toplevel.SetMinSize(60, 40) })
@@ -309,6 +319,7 @@ func TestDraggingAFloatingWindowSmallerStopsAtItsMinimum(t *testing.T) {
 }
 
 func TestAFloatingWindowGrowsWhenItRaisesItsMinimum(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("growing", testclient.Fill(0, 0, 0xff))
@@ -322,6 +333,7 @@ func TestAFloatingWindowGrowsWhenItRaisesItsMinimum(t *testing.T) {
 }
 
 func TestWindowsFloatOrTileAgainWhenWhatDecidedItChanges(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^Friends List$`), Mode: wm.RuleFloat}}
 	}, small)
@@ -359,6 +371,7 @@ func TestWindowsFloatOrTileAgainWhenWhatDecidedItChanges(t *testing.T) {
 }
 
 func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
 	}, desktop)
@@ -371,6 +384,7 @@ func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
 }
 
 func TestFullscreenAskedBeforeMappingIsHonoured(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	red := c.Window("red", testclient.Fill(0, 0, 0xff))

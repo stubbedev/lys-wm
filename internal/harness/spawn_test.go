@@ -13,6 +13,7 @@ import (
 )
 
 func TestSpawnedCommandsReportHowTheyExited(t *testing.T) {
+	t.Parallel()
 	r := &reports{}
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Report = r.report }, small)
 	h.dispatch("exec true")
@@ -36,6 +37,7 @@ func TestSpawnedCommandsReportHowTheyExited(t *testing.T) {
 }
 
 func TestSpawnedCommandsWriteToTheCompositorsStderr(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	read, write, err := os.Pipe()
 	if err != nil {

@@ -257,6 +257,7 @@ func everyHead(m *omManager, change map[*omHead][]headSetting) map[*omHead][]hea
 }
 
 func TestOutputManagementListsHeads(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	m := outputManager(t, c)
@@ -290,6 +291,7 @@ func TestOutputManagementListsHeads(t *testing.T) {
 }
 
 func TestOutputManagementAppliesAConfiguration(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -346,6 +348,7 @@ func TestOutputManagementAppliesAConfiguration(t *testing.T) {
 }
 
 func TestAReleasedModeIsNeverNamedCurrent(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		_, err := b.AddNamedOutput("HEADLESS-9", wideMode, smallMode)
@@ -376,6 +379,7 @@ func TestAReleasedModeIsNeverNamedCurrent(t *testing.T) {
 }
 
 func TestOutputManagementRefusesWhatItCannotDo(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small, small)
 	c := testclient.Connect(t, h.Socket())
 	m := outputManager(t, c)
@@ -417,6 +421,7 @@ func TestOutputManagementRefusesWhatItCannotDo(t *testing.T) {
 }
 
 func TestOutputManagementProtocolErrors(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		what string
 		code uint32

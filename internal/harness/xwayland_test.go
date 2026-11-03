@@ -49,6 +49,7 @@ func xConnect(t *testing.T, h *Harness) {
 }
 
 func TestXwaylandStartsOnTheFirstXClientAndAfterACrash(t *testing.T) {
+	t.Parallel()
 	reports := make(chan error, 4)
 	h := StartXwayland(t, func(err error) { reports <- err }, small)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
@@ -178,6 +179,7 @@ func windowsOf(c *compositor.Compositor) []ipc.Window {
 }
 
 func TestManagedXMenusTooltipsAndNotificationsFloat(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"MENU", "POPUP_MENU", "DROPDOWN_MENU", "COMBO", "TOOLTIP", "NOTIFICATION", "DND"} {
 		t.Run(kind, func(t *testing.T) {
 			h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
@@ -196,6 +198,7 @@ func TestManagedXMenusTooltipsAndNotificationsFloat(t *testing.T) {
 }
 
 func TestXWindowsAreManaged(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{
@@ -255,6 +258,7 @@ func TestXWindowsAreManaged(t *testing.T) {
 }
 
 func TestAnXWindowIconifiesItself(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
@@ -295,6 +299,7 @@ func TestAnXWindowIconifiesItself(t *testing.T) {
 }
 
 func TestXPropertyChangesReachTheWindow(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	win := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{
@@ -377,6 +382,7 @@ func kill(h *Harness) {
 }
 
 func TestXWindowsCloseTheICCCMWay(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	polite := xDial(t, h)
 	names := []string{"WM_PROTOCOLS", "WM_DELETE_WINDOW"}
@@ -417,6 +423,7 @@ func TestXWindowsCloseTheICCCMWay(t *testing.T) {
 }
 
 func TestXWindowsLearnTheirGeometryAndFrame(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	xc.intern("_NET_FRAME_EXTENTS", "_NET_REQUEST_FRAME_EXTENTS", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DIALOG")
@@ -456,6 +463,7 @@ func TestXWindowsLearnTheirGeometryAndFrame(t *testing.T) {
 }
 
 func TestXWindowsRenderUnscaledOnHiDPIOutputs(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -483,6 +491,7 @@ func TestXWindowsRenderUnscaledOnHiDPIOutputs(t *testing.T) {
 }
 
 func TestXWindowsMapAcrossMixedScales(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled, small)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -513,6 +522,7 @@ func TestXWindowsMapAcrossMixedScales(t *testing.T) {
 }
 
 func TestXWindowsMovedPartlyOffAnOutputKeepItsScale(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -541,6 +551,7 @@ func TestXWindowsMovedPartlyOffAnOutputKeepItsScale(t *testing.T) {
 }
 
 func TestFixedSizeXWindowsKeepTheirSizeOnFractionalScales(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -567,6 +578,7 @@ func TestFixedSizeXWindowsKeepTheirSizeOnFractionalScales(t *testing.T) {
 }
 
 func TestFloatingXWindowsMapAtLeastAtTheirMinimumSize(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -594,6 +606,7 @@ func TestFloatingXWindowsMapAtLeastAtTheirMinimumSize(t *testing.T) {
 }
 
 func TestXWindowsLandPixelForPixelAtOddLogicalPositions(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		return c.SetOutputScale(b.Outputs()[0], 180)
@@ -641,6 +654,7 @@ func TestXWindowsLandPixelForPixelAtOddLogicalPositions(t *testing.T) {
 }
 
 func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	xc.intern("WM_PROTOCOLS", "_NET_WM_PING")
@@ -653,8 +667,7 @@ func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
 	if ping.Type != xc.atoms["WM_PROTOCOLS"] || xproto.Atom(ping.Data.Data32[0]) != xc.atoms["_NET_WM_PING"] {
 		t.Fatalf("focusing the window sent %#v, not a _NET_WM_PING", ping)
 	}
-	time.Sleep(shell.PingTimeout)
-	h.Eventually("the silent X window marked unresponsive", unresponsive(1, true))
+	h.Within(2*shell.PingTimeout, "the silent X window marked unresponsive", unresponsive(1, true))
 	ping.Window = xc.root
 	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureNotify|xproto.EventMaskSubstructureRedirect, string(ping.Bytes())).Check(); err != nil {
 		t.Fatal(err)
@@ -663,6 +676,7 @@ func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
 }
 
 func TestAnXModalDialogKeepsTheFocus(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{
@@ -684,6 +698,7 @@ func TestAnXModalDialogKeepsTheFocus(t *testing.T) {
 }
 
 func TestXModalDialogsTransientForEachOtherDoNotHangLysWM(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	modal := map[string][]byte{"WM_CLASS": []byte("first\x00XTest\x00"), "_NET_WM_STATE": xc.atom("_NET_WM_STATE_MODAL")}
@@ -704,6 +719,7 @@ func TestXModalDialogsTransientForEachOtherDoNotHangLysWM(t *testing.T) {
 }
 
 func TestABadNetWMStateActionIsReportedNotFatal(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reported []error
 	h := StartXwayland(t, func(err error) {

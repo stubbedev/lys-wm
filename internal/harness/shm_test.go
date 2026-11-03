@@ -113,6 +113,7 @@ func fullDamage(s *cw.WlSurface, b *cw.WlBuffer, size image.Point) error {
 }
 
 func TestAFifoQueuedCommitWhoseBufferWasDestroyedStillShowsIt(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	pc := pace(t, h)
 	w := pc.window(t)
@@ -139,6 +140,7 @@ func TestAFifoQueuedCommitWhoseBufferWasDestroyedStillShowsIt(t *testing.T) {
 }
 
 func TestASynchronizedSubsurfaceCacheWhoseBufferWasDestroyedStillShowsIt(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("parent", quadrants)
@@ -162,6 +164,7 @@ func TestASynchronizedSubsurfaceCacheWhoseBufferWasDestroyedStillShowsIt(t *test
 }
 
 func TestABufferDestroyedAfterItsCommitAppliedStaysOnScreen(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("destroyed after", quadrants)

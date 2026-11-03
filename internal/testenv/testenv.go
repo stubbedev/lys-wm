@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
@@ -22,6 +23,8 @@ import (
 )
 
 const strictEnv = "LYS_WM_HEADLESS"
+
+const HangLimit = 30 * time.Second
 
 func missing(t testing.TB, format string, args ...any) {
 	t.Helper()

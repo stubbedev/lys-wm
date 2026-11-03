@@ -91,6 +91,7 @@ func (r *inputRig) nothingLeakedBeforeASentinel() {
 }
 
 func TestAnArmTakesOneEscapeAndItsRelease(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -108,6 +109,7 @@ func TestAnArmTakesOneEscapeAndItsRelease(t *testing.T) {
 }
 
 func TestEscapeReachesTheWindowWithoutAnArm(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	r.escapeReachesTheWindow()
@@ -123,6 +125,7 @@ func TestEscapeReachesTheWindowWithoutAnArm(t *testing.T) {
 }
 
 func TestOtherKeysPassAnArm(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -132,6 +135,7 @@ func TestOtherKeysPassAnArm(t *testing.T) {
 }
 
 func TestAModifiedEscapeReachesTheWindow(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -144,6 +148,7 @@ func TestAModifiedEscapeReachesTheWindow(t *testing.T) {
 }
 
 func TestADisarmDuringThePressKeepsTheReleaseFromTheWindow(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -159,6 +164,7 @@ func TestADisarmDuringThePressKeepsTheReleaseFromTheWindow(t *testing.T) {
 }
 
 func TestATakenEscapeHeldAcrossAModifierStaysTaken(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -173,6 +179,7 @@ func TestATakenEscapeHeldAcrossAModifierStaysTaken(t *testing.T) {
 }
 
 func TestAPressRepeatedWhileTakenStaysTaken(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -187,6 +194,7 @@ func TestAPressRepeatedWhileTakenStaysTaken(t *testing.T) {
 }
 
 func TestAKeyTheWindowSawDownIsNotTakenByALaterArm(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	r.h.key(keyEscape, true)
@@ -200,6 +208,7 @@ func TestAKeyTheWindowSawDownIsNotTakenByALaterArm(t *testing.T) {
 }
 
 func TestTheArmDiesWithItsClient(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -225,6 +234,7 @@ func TestTheArmDiesWithItsClient(t *testing.T) {
 }
 
 func TestTheNewestArmTakesThePress(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	older, newer := escapeClient(t, r.h), escapeClient(t, r.h)
@@ -240,6 +250,7 @@ func TestTheNewestArmTakesThePress(t *testing.T) {
 }
 
 func TestABindOnEscapeWinsOverAnArm(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, withBinds(t, bindSpec{chord: "Escape", action: "workspace 2"}), small)
 	r := inputOn(t, h)
 	r.focused()
@@ -251,6 +262,7 @@ func TestABindOnEscapeWinsOverAnArm(t *testing.T) {
 }
 
 func TestAnArmGivesWayToTheSessionLock(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -268,6 +280,7 @@ func TestAnArmGivesWayToTheSessionLock(t *testing.T) {
 }
 
 func TestAnArmGivesWayToAnExclusiveLayer(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := escapeClient(t, r.h)
@@ -287,6 +300,7 @@ func TestAnArmGivesWayToAnExclusiveLayer(t *testing.T) {
 }
 
 func TestAnArmGivesWayToAPopupGrab(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	r.moveOn(0, 70, 40)
@@ -304,6 +318,7 @@ func TestAnArmGivesWayToAPopupGrab(t *testing.T) {
 }
 
 func TestAnArmGivesWayToAnInputMethodGrab(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")
@@ -321,6 +336,7 @@ func TestAnArmGivesWayToAnInputMethodGrab(t *testing.T) {
 }
 
 func TestAnArmGivesWayToAShortcutsInhibitor(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	mgr, err := cksi.NewZwpKeyboardShortcutsInhibitManagerV1(r.c.Display, 1)
@@ -340,6 +356,7 @@ func TestAnArmGivesWayToAShortcutsInhibitor(t *testing.T) {
 }
 
 func TestAnArmedClientHoldingTheKeyboardGetsEscapeAsAKey(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	a := armerOn(t, r.c)
@@ -349,6 +366,7 @@ func TestAnArmedClientHoldingTheKeyboardGetsEscapeAsAKey(t *testing.T) {
 }
 
 func TestAnArmFiresWithNothingFocused(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	a := escapeClient(t, h)
 	_, ev := a.arm()
@@ -391,6 +409,7 @@ func virtualTap(t *testing.T, c *testclient.Client, kb *cvk.ZwpVirtualKeyboardV1
 }
 
 func TestAnArmTakesEscapeFromAVirtualKeyboard(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	typist := testclient.Connect(t, r.h.Socket())
@@ -408,6 +427,7 @@ func TestAnArmTakesEscapeFromAVirtualKeyboard(t *testing.T) {
 }
 
 func TestAVirtualModifiedEscapeReachesTheWindow(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	typist := testclient.Connect(t, r.h.Socket())
@@ -427,6 +447,7 @@ func TestAVirtualModifiedEscapeReachesTheWindow(t *testing.T) {
 }
 
 func TestAVirtualKeymapDecidesWhatIsEscape(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	remapped := strings.ReplaceAll(testenv.Keymap(t).Text(), "[ 0xff1b ]", "[ a ]")
@@ -440,6 +461,7 @@ func TestAVirtualKeymapDecidesWhatIsEscape(t *testing.T) {
 }
 
 func TestAnUncompilableVirtualKeymapPassesItsKeys(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.focused()
 	typist := testclient.Connect(t, r.h.Socket())

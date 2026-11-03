@@ -28,6 +28,7 @@ func failingPresents(t *testing.T, err error) (*Harness, *reports) {
 }
 
 func TestAFailedFrameIsDroppedAndRetried(t *testing.T) {
+	t.Parallel()
 	h, got := failingPresents(t, fmt.Errorf("commit: %w", unix.EBUSY))
 	var failed uint64
 	h.Eventually("frames failing", func(b *headless.Backend, _ *compositor.Compositor) bool {
@@ -53,6 +54,7 @@ func TestAFailedFrameIsDroppedAndRetried(t *testing.T) {
 }
 
 func TestALostDeviceOrABrokenInvariantEndsTheSession(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		err  error

@@ -44,6 +44,7 @@ type Options struct {
 	Log             io.Writer
 	Report          func(error)
 	Listener        Listener
+	FirstDisplay    int
 	TransferTimeout time.Duration
 }
 
@@ -78,7 +79,7 @@ func Listen(l *loop.Loop, d *server.Display, opts Options) (*Server, error) {
 		return nil, fmt.Errorf("xwayland: find %s (set %s to its path): %w", opts.Binary, Env, err)
 	}
 	opts.Binary = binary
-	socks, err := bindDisplay(opts.Dir)
+	socks, err := bindDisplay(opts.Dir, opts.FirstDisplay)
 	if err != nil {
 		return nil, err
 	}

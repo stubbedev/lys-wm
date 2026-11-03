@@ -182,6 +182,7 @@ func until(t *testing.T, c *testclient.Client, what string, log *testclient.Log,
 }
 
 func TestAnInputMethodTypesIntoTheFocusedTextInput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")
@@ -213,6 +214,7 @@ func TestAnInputMethodTypesIntoTheFocusedTextInput(t *testing.T) {
 }
 
 func TestAnInputMethodCommitWithAStaleSerialChangesNothing(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")
@@ -225,6 +227,7 @@ func TestAnInputMethodCommitWithAStaleSerialChangesNothing(t *testing.T) {
 }
 
 func TestAnInputMethodGrabsTheKeyboard(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")
@@ -252,6 +255,7 @@ func TestAnInputMethodGrabsTheKeyboard(t *testing.T) {
 }
 
 func TestInputMethodPopupsSitUnderTheTextCursor(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")
@@ -286,6 +290,7 @@ func TestInputMethodPopupsSitUnderTheTextCursor(t *testing.T) {
 }
 
 func TestAnUnavailableInputMethodNeitherTypesNorGrabs(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	ty := typing(t, h, "editor")
 	until(t, ty.c, "the focused text input entered", &ty.log.log, "enter")

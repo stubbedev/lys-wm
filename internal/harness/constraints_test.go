@@ -74,6 +74,7 @@ func (r *inputRig) nudge(dx, dy float64) {
 }
 
 func TestRelativePointerReportsRawMotion(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	mgr, err := crp.NewZwpRelativePointerManagerV1(r.c.Display, 1)
@@ -96,6 +97,7 @@ func TestRelativePointerReportsRawMotion(t *testing.T) {
 }
 
 func TestLockedPointerHoldsTheCursorAndWarpsToTheHint(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	l := &constraintLog{}
@@ -121,6 +123,7 @@ func TestLockedPointerHoldsTheCursorAndWarpsToTheHint(t *testing.T) {
 }
 
 func TestALockOutlivesFocusOnlyWhenPersistent(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		lifetime cpc.ZwpPointerConstraintsV1Lifetime
@@ -154,6 +157,7 @@ func TestALockOutlivesFocusOnlyWhenPersistent(t *testing.T) {
 }
 
 func TestConfinedPointerStaysInItsRegion(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	area, err := r.c.Compositor.CreateRegion()
@@ -204,6 +208,7 @@ func TestConfinedPointerStaysInItsRegion(t *testing.T) {
 }
 
 func TestPointerConstraintsAreOnePerSurface(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	m := r.constraints()
 	l := &constraintLog{}
@@ -217,6 +222,7 @@ func TestPointerConstraintsAreOnePerSurface(t *testing.T) {
 }
 
 func TestALockedPointerHoldsAgainstVirtualAbsoluteMotion(t *testing.T) {
+	t.Parallel()
 	r := startInput(t)
 	r.expect("kb_enter win", "enter win 80,50", "frame")
 	l := &constraintLog{}

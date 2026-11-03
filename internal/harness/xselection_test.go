@@ -165,6 +165,7 @@ func (c *xclient) names(list []byte) []string {
 }
 
 func TestWaylandSelectionsPasteIntoX(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	a := join(t, h, "a")
 	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
@@ -317,6 +318,7 @@ func receive(t *testing.T, p *party, mime string) string {
 }
 
 func TestXSelectionsPasteIntoWayland(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	big := bytes.Repeat([]byte("fedcba9876543210"), 12<<10)
 	for i, text := range [][]byte{[]byte("hello from x"), big} {
@@ -350,6 +352,7 @@ func TestXSelectionsPasteIntoWayland(t *testing.T) {
 }
 
 func TestARefusedXPasteIsReportedNotFatal(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reported []error
 	h := StartXwayland(t, func(err error) {
@@ -387,6 +390,7 @@ func TestARefusedXPasteIsReportedNotFatal(t *testing.T) {
 }
 
 func TestAnXSelectionDiesWithXwayland(t *testing.T) {
+	t.Parallel()
 	reports := make(chan error, 8)
 	h := StartXwayland(t, func(err error) { reports <- err }, small)
 	xc := xDial(t, h)
@@ -418,6 +422,7 @@ func TestAnXSelectionDiesWithXwayland(t *testing.T) {
 }
 
 func TestASilentXOwnerDoesNotHoldUpLaterPastes(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reported []error
 	h := StartXwayland(t, func(err error) {
@@ -461,6 +466,7 @@ func TestASilentXOwnerDoesNotHoldUpLaterPastes(t *testing.T) {
 }
 
 func TestClipboardAndPrimaryFromXKeepTheirOwnTargets(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	owners := map[string]*xowner{}
 	for name, targets := range map[string][]string{"CLIPBOARD": {"UTF8_STRING"}, "PRIMARY": {"text/html"}} {
@@ -490,6 +496,7 @@ func TestClipboardAndPrimaryFromXKeepTheirOwnTargets(t *testing.T) {
 }
 
 func TestALargeSelectionStreamsIntoXRatherThanBufferingWhole(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	a := join(t, h, "a")
 	a.seen(t, "a focused", func() bool { return slices.Contains(a.in.Log, "kb_enter a") })
@@ -542,6 +549,7 @@ func TestALargeSelectionStreamsIntoXRatherThanBufferingWhole(t *testing.T) {
 }
 
 func TestAStalledTransferToXIsDroppedOnTimeAndReleasesItsSource(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reported []error
 	h := StartXwayland(t, func(err error) {
@@ -595,6 +603,7 @@ func TestAStalledTransferToXIsDroppedOnTimeAndReleasesItsSource(t *testing.T) {
 }
 
 func TestStalledTransfersToXAreBoundedAndDieWithTheirWindow(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var reported []error
 	h := StartXwayland(t, func(err error) {

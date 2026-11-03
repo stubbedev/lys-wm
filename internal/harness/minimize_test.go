@@ -40,6 +40,7 @@ func snapshotWindow(h *Harness, id int) (minimized, found bool) {
 }
 
 func TestAMinimizedWindowHidesAndComesBack(t *testing.T) {
+	t.Parallel()
 	h := Start(t, backend.Mode{Size: image.Pt(800, 400), RefreshMHz: 60000, Preferred: true})
 	c := testclient.Connect(t, h.Socket())
 	red, blue := [3]byte{0xff, 0, 0}, [3]byte{0, 0, 0xff}
@@ -82,6 +83,7 @@ func TestAMinimizedWindowHidesAndComesBack(t *testing.T) {
 }
 
 func TestAClientMinimizesItself(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	gray := [3]byte{0x60, 0x60, 0x60}
@@ -98,6 +100,7 @@ func TestAClientMinimizesItself(t *testing.T) {
 }
 
 func TestForeignToplevelsSeeAndChangeMinimized(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	gray := [3]byte{0x60, 0x60, 0x60}
@@ -132,6 +135,7 @@ func TestForeignToplevelsSeeAndChangeMinimized(t *testing.T) {
 }
 
 func TestAGenieHeadsForTheTaskbarRectangle(t *testing.T) {
+	t.Parallel()
 	now := time.Hour
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Animations = genieTable(t, time.Second)
@@ -172,6 +176,7 @@ func TestAGenieHeadsForTheTaskbarRectangle(t *testing.T) {
 }
 
 func TestAGenieCollapsesTowardTheNearestEdgeAndComesBack(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, testAGenieCollapsesTowardTheNearestEdgeAndComesBack)
 }
 
@@ -228,6 +233,7 @@ func testAGenieCollapsesTowardTheNearestEdgeAndComesBack(t *testing.T, start gpu
 }
 
 func TestReversingAGenieMidwayKeepsItsPlace(t *testing.T) {
+	t.Parallel()
 	now := time.Hour
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Animations = genieTable(t, time.Second)
@@ -255,6 +261,7 @@ func TestReversingAGenieMidwayKeepsItsPlace(t *testing.T) {
 }
 
 func TestUnderReducedMotionAWindowMinimizesAsAFade(t *testing.T) {
+	t.Parallel()
 	d := 10 * time.Second
 	table, errs := anim.ResolveReduced(map[anim.Event]anim.Setting{anim.Global: {Shape: anim.Linear, Duration: &d}})
 	if len(errs) != 0 {
@@ -281,6 +288,7 @@ func TestUnderReducedMotionAWindowMinimizesAsAFade(t *testing.T) {
 }
 
 func TestAGenieDrawsItsWindowOnceUntilTheWindowChanges(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		now := time.Hour
 		at := func(h *Harness, d time.Duration) {
