@@ -313,13 +313,14 @@ func (l *Loop) Idle(f func() error) {
 }
 
 func (l *Loop) runIdle() error {
-	for len(l.idle) > 0 && !l.stopped {
-		l.running, l.idle = l.idle, l.running[:0]
-		for i, f := range l.running {
-			l.running[i] = nil
-			if err := f(); err != nil {
-				return err
-			}
+	if l.stopped {
+		return nil
+	}
+	l.running, l.idle = l.idle, l.running[:0]
+	for i, f := range l.running {
+		l.running[i] = nil
+		if err := f(); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -364,13 +365,20 @@ func (l *Loop) Run() error {
 			break
 		}
 		l.busy += time.Since(woke)
-		n, err := unix.EpollWait(l.epfd, l.events, -1)
+		block := -1
+		if len(l.idle) > 0 {
+			block = 0
+		}
+		n, err := unix.EpollWait(l.epfd, l.events, block)
 		woke = time.Now()
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
 		if err != nil {
 			return fmt.Errorf("loop: epoll_wait: %w", err)
+		}
+		if n == 0 {
+			continue
 		}
 		l.wakeups++
 		l.batch++

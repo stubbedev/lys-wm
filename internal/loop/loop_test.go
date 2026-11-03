@@ -633,3 +633,39 @@ func TestALevelSourceDrainedAfterAStopIsNotCalledAgain(t *testing.T) {
 		t.Fatalf("a source with nothing left to read was called %d times in all", calls)
 	}
 }
+
+func TestAnIdleThatKeepsRepostingDoesNotStarveSources(t *testing.T) {
+	l := newLoop(t)
+	fd, err := unix.Eventfd(1, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	const limit = 1000
+	passes, served := 0, false
+	src, err := l.AddFD(fd, Readable, func(Events) error {
+		served = true
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Remove()
+	var repost func() error
+	repost = func() error {
+		passes++
+		if served || passes == limit {
+			l.Stop()
+			return nil
+		}
+		l.Idle(repost)
+		return nil
+	}
+	l.Idle(repost)
+	if err := l.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if !served {
+		t.Fatalf("a readable source went unserved through %d idle passes", passes)
+	}
+}
