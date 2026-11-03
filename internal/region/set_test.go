@@ -61,17 +61,22 @@ func TestSetMatchesRegionAndReusesItsBuffers(t *testing.T) {
 	}
 }
 
-func TestSimplifyKeepsRectsUpToTheLimitAndThenTheirBounds(t *testing.T) {
-	var s Set
-	for i := range 4 {
+func TestACappedSetKeepsRectsUpToItsLimitAndThenTheirBounds(t *testing.T) {
+	s := Capped(3)
+	for i := range 3 {
 		s.Add(image.Rect(i*10, 0, i*10+5, 5))
 	}
-	s.Simplify(4)
-	if len(s.Rects()) != 4 {
+	if len(s.Rects()) != 3 {
 		t.Fatalf("at the limit: %v", s.Rects())
 	}
-	s.Simplify(3)
+	s.Add(image.Rect(30, 0, 35, 5))
 	if got, want := s.Rects(), image.Rect(0, 0, 35, 5); len(got) != 1 || got[0] != want {
 		t.Fatalf("over the limit: %v, want %v", got, want)
+	}
+	s.Reset()
+	s.Add(image.Rect(0, 0, 1, 1))
+	s.Add(image.Rect(2, 0, 3, 1))
+	if len(s.Rects()) != 2 {
+		t.Fatalf("a reset set forgot its rects or its limit: %v", s.Rects())
 	}
 }

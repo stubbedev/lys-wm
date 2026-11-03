@@ -16,7 +16,7 @@ import (
 
 const (
 	maxBufferAge   = 4
-	maxDamageRects = 64
+	maxDamageRects = 32
 )
 
 type drawOp struct {
@@ -378,7 +378,11 @@ type scene struct {
 }
 
 func newScene() *scene {
-	return &scene{content: map[*surface.Surface]*region.Set{}}
+	return &scene{
+		content: map[*surface.Surface]*region.Set{},
+		damage:  region.Capped(maxDamageRects),
+		repaint: region.Capped(maxDamageRects),
+	}
 }
 
 func (sc *scene) damaged(s *surface.Surface, d []image.Rectangle) {
@@ -441,7 +445,6 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 		content.Reset()
 	}
 	sc.damage.Clip(bounds)
-	sc.damage.Simplify(maxDamageRects)
 	return &sc.damage
 }
 

@@ -4,6 +4,11 @@ import "image"
 
 type Set struct {
 	rects, pieces, scratch []image.Rectangle
+	limit                  int
+}
+
+func Capped(limit int) Set {
+	return Set{limit: limit}
 }
 
 func (s *Set) Reset() {
@@ -32,6 +37,10 @@ func (s *Set) Bounds() image.Rectangle {
 
 func (s *Set) Add(r image.Rectangle) {
 	s.rects = appendUncovered(s.rects, r, &s.pieces, &s.scratch)
+	if s.limit > 0 && len(s.rects) > s.limit {
+		whole := bounds(s.rects)
+		s.rects = append(s.rects[:0], whole)
+	}
 }
 
 func (s *Set) AddSet(o *Set) {
@@ -48,14 +57,6 @@ func (s *Set) AddRegion(g Region) {
 
 func (s *Set) CopyFrom(o *Set) {
 	s.rects = append(s.rects[:0], o.rects...)
-}
-
-func (s *Set) Simplify(limit int) {
-	if len(s.rects) <= limit {
-		return
-	}
-	whole := bounds(s.rects)
-	s.rects = append(s.rects[:0], whole)
 }
 
 func (s *Set) Clip(bounds image.Rectangle) {
