@@ -11,7 +11,7 @@ lys-wm.overrideAttrs (old: {
   checkPhase = ''
     runHook preCheck
     export HOME="$TMPDIR"
-    just headless
+    just test
     runHook postCheck
   '';
 })

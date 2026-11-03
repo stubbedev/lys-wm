@@ -5,20 +5,9 @@ default:
     @just --list
 
 # Every gate a commit must pass: formatting, a tidy go.mod, the release
-# gates, the vulnerability scan, the headless harness and the race detector.
-# CI runs this in the dev shell.
-gates: fmt-check tidy-check check vuln headless race
-
-# The packages whose tests need dev-shell programs: the compositor-in-the-loop
-# harness, which boots lys-wm on the headless backend and drives real clients
-# against it, the session bus and GPU tests, and the end-to-end session in
-# cmd/lys-wm.
-headless_packages := "./internal/shader/... ./internal/harness/... ./internal/backend/nested/... ./internal/systemd/... ./internal/session/... ./internal/syncobj/... ./internal/gpu/... ./internal/render/gles/... ./internal/render/vulkan/... ./internal/xwayland/... ./cmd/lys-wm/... ./cmd/lys-wm-pace/..."
-
-# Run the tests that need dev-shell programs. LYS_WM_HEADLESS=1 turns a missing
-# program into a failure instead of a skip.
-headless:
-    LYS_WM_HEADLESS=1 go test -count=1 {{headless_packages}}
+# gates, the vulnerability scan and the race detector. Each package's tests run
+# once plain, in `check`, and once under `race`. CI runs this in the dev shell.
+gates: fmt-check tidy-check check vuln race
 
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
@@ -163,12 +152,11 @@ vm-online test memory="10g":
 fuzz duration="5m":
     LYS_WM_HEADLESS=1 go test -run='^$' -fuzz=FuzzRequests -fuzztime={{duration}} ./internal/harness/
 
-# Run every test, headless ones included, and the patched xgb fork's under
-# the race detector, which needs cgo; the binaries lys-wm ships keep
-# CGO_ENABLED=0.
+# Run every test and the patched xgb fork's under the race detector, which
+# needs cgo; the binaries lys-wm ships keep CGO_ENABLED=0. LYS_WM_HEADLESS=1
+# turns a missing dev-shell program into a failure instead of a skip.
 race:
-    CGO_ENABLED=1 go test -race -count=1 ./...
-    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race -count=1 {{headless_packages}}
+    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race -count=1 ./...
     cd third_party/xgb && CGO_ENABLED=1 go test -race -count=1 ./...
 
 # Run every release gate in order: vet, lint, test, build.
@@ -186,9 +174,11 @@ no-fused:
 lint:
     golangci-lint run
 
-# Run the test suite for every package.
+# Run the test suite for every package, the harness that boots lys-wm on the
+# headless backend and drives real clients included. LYS_WM_HEADLESS=1 turns a
+# missing dev-shell program into a failure instead of a skip.
 test:
-    go test ./...
+    LYS_WM_HEADLESS=1 go test -count=1 ./...
 
 # Compile-check every package; the output is discarded.
 build:

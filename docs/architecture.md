@@ -808,7 +808,7 @@ needs it, never an implicit global. [GPU](#gpu) has the selection rule (#62).
 - The compositor-in-the-loop harness (#10) boots the same compositor
   `cmd/lys-wm` runs on the headless backend, in process, with a private
   `XDG_RUNTIME_DIR`, and drives real clients from the dev shell against it.
-  `just headless` runs it with `LYS_WM_HEADLESS=1`, which turns a missing
+  `just test` runs it with `LYS_WM_HEADLESS=1`, which turns a missing
   client into a failure; it is part of `just gates`, so CI runs it too.
 
 ## The lid
