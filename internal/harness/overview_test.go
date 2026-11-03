@@ -140,6 +140,7 @@ func TestTheOverviewOnEveryRenderer(t *testing.T) {
 			r, bl := centre(plan.windows[1]), centre(plan.windows[2])
 			return showingAbout(r.X, r.Y, redPix)(b, comp) && showingAbout(bl.X, bl.Y, bluePix)(b, comp)
 		})
+		h.Eventually("the thumbnail filtered", func(_ *headless.Backend, comp *compositor.Compositor) bool { return !comp.OverviewThumbsRough() })
 		h.assertGolden("overview")
 		h.dispatch("overview hide")
 		h.expectOverview(false)
@@ -1335,5 +1336,28 @@ func TestAClosedOverviewKeepsItsBlurUntilTheWallpaperChanges(t *testing.T) {
 		if got := redraws(); got == first {
 			t.Fatal("a wallpaper changed while closed kept its old blur")
 		}
+	})
+}
+
+func TestTheFirstThumbnailIsDrawnBeforeTheFirstOverviewFrame(t *testing.T) {
+	h := Start(t, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("window", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	w.Stop()
+	h.Rendered(0)
+	action, err := wm.ParseAction("overview show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		before := comp.OverviewThumbRedraws()
+		if err := comp.Dispatch(action); err != nil {
+			return err
+		}
+		if got := comp.OverviewThumbRedraws() - before; got != 1 {
+			t.Errorf("entering the overview drew %d thumbnails, want the active workspace's", got)
+		}
+		return nil
 	})
 }

@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"slices"
 	"strconv"
@@ -169,7 +170,31 @@ func (c *Compositor) openOverview() error {
 	now := c.clock()
 	c.ensureOverview()
 	c.overview.progress.Set(1, now, c.animations.Curve(anim.Overview))
-	return errors.Join(c.syncOverview(now), c.takeOverviewInput(), c.scheduleAll())
+	return c.enterOverview(now)
+}
+
+func (c *Compositor) enterOverview(now time.Duration) error {
+	return errors.Join(c.syncOverview(now), c.takeOverviewInput(), c.drawFirstThumbs(), c.scheduleAll())
+}
+
+func (c *Compositor) drawFirstThumbs() error {
+	c.frameTime = c.clock()
+	var errs []error
+	for _, o := range c.outputs {
+		v, ok := c.overview.views[o]
+		if !ok || !c.outputLive(o) {
+			continue
+		}
+		for _, t := range v.spaces {
+			if t.id != v.workspace || t.target != nil || t.rect.Empty() {
+				continue
+			}
+			if err := c.refreshThumb(o, v, t, false); err != nil {
+				errs = append(errs, fmt.Errorf("the first thumbnail of workspace %d: %w", t.id, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (c *Compositor) ensureOverview() {
@@ -240,7 +265,7 @@ func (c *Compositor) driveOverview(b binds.GestureBind, at time.Duration) (drive
 	d.ov = c.overview
 	d.ov.progress.Grab(now)
 	d.ov.progress.Track(d.ov.progress.At(now), at)
-	return d, errors.Join(c.syncOverview(now), c.takeOverviewInput(), c.scheduleAll())
+	return d, c.enterOverview(now)
 }
 
 func (d *overviewDrive) live() bool {
