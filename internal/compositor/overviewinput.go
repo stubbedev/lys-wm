@@ -219,6 +219,15 @@ func (c *Compositor) flyInto(it *overviewItem, o *output.Output, into image.Rect
 	return nil
 }
 
+func (c *Compositor) abandonOverviewPress() {
+	ov := c.overview
+	pr := ov.press
+	ov.press = nil
+	if pr != nil && pr.dragging {
+		pr.item.slot.Set(pr.item.goal, c.clock(), c.animations.Curve(anim.Overview))
+	}
+}
+
 func (c *Compositor) overviewItemOutput(it *overviewItem) *output.Output {
 	for o, v := range c.overview.views {
 		if slices.Contains(v.items, it) {

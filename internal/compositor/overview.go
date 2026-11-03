@@ -308,7 +308,8 @@ func (c *Compositor) closeOverview() error {
 
 func (c *Compositor) returnOverviewInput() error {
 	ov := c.overview
-	ov.open, ov.press = false, nil
+	ov.open = false
+	c.abandonOverviewPress()
 	c.stateChanged()
 	return errors.Join(c.refocus(), c.refreshPointer(), c.scheduleAll())
 }
@@ -437,7 +438,7 @@ func (c *Compositor) syncOverview(now time.Duration) error {
 		ov.selected = nil
 	}
 	if pr := ov.press; pr != nil && (pr.item != nil && !c.live(pr.item.root) || !c.overviewTargetLive(pr.target)) {
-		ov.press = nil
+		c.abandonOverviewPress()
 	}
 	return errors.Join(errs...)
 }

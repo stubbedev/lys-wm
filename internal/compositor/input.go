@@ -303,10 +303,11 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case backend.TouchCancel:
 		var err error
 		if c.overviewHolds() {
-			c.overview.press = nil
+			c.abandonOverviewPress()
+			err = c.scheduleAll()
 		}
 		if c.touchDragging() {
-			err = c.drag.Cancel()
+			err = errors.Join(err, c.drag.Cancel())
 		}
 		clear(c.touches)
 		return errors.Join(err, c.seat.TouchCancel())

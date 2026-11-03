@@ -1469,3 +1469,123 @@ func TestADraggedWindowKeepsItsPopup(t *testing.T) {
 	left := image.Pt(slot.Min.X+100*slot.Dx()/800+by.X+2, slot.Min.Y+100*slot.Dy()/500+by.Y+2)
 	h.Eventually("its corner carried too", showing(left.X, left.Y, greenPix))
 }
+
+func fingerAt(p image.Point) (float64, float64) {
+	return float64(p.X) / float64(overviewMode.Size.X), float64(p.Y) / float64(overviewMode.Size.Y)
+}
+
+func (h *Harness) fingerDown(p image.Point) {
+	h.t.Helper()
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		x, y := fingerAt(p)
+		return errors.Join(b.Touch().Down(0, b.Outputs()[0], x, y), b.Touch().Frame())
+	})
+}
+
+func (h *Harness) fingerTo(p image.Point) {
+	h.t.Helper()
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		x, y := fingerAt(p)
+		return errors.Join(b.Touch().Motion(0, x, y), b.Touch().Frame())
+	})
+}
+
+func (h *Harness) fingerUp() {
+	h.t.Helper()
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Touch().Up(0), b.Touch().Frame())
+	})
+}
+
+func springOverview(t *testing.T, now *time.Duration, start gpuStarter) (*Harness, *testclient.Client) {
+	t.Helper()
+	h := start(t, func(cfg *compositor.Config) {
+		cfg.Animations = springTable(t)
+		cfg.Clock = func() time.Duration { return *now }
+		plainOverview(cfg)
+	}, overviewMode)
+	c, red, blue := colouredPair(t, h)
+	red.Stop()
+	blue.Stop()
+	h.dispatch("overview show")
+	h.advanceClock(now, time.Minute)
+	h.Rendered(0)
+	return h, c
+}
+
+func (h *Harness) frameAt(now *time.Duration, by time.Duration) {
+	h.t.Helper()
+	h.advanceClock(now, by)
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		return comp.Frame(b.Outputs()[0])
+	})
+}
+
+func (h *Harness) windowRect(id wm.WindowID, now *time.Duration) image.Rectangle {
+	h.t.Helper()
+	var r image.Rectangle
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		var ok bool
+		if r, ok = comp.OverviewWindowRect(id, *now); !ok {
+			h.t.Errorf("window %d has no rectangle in the overview", id)
+		}
+		return nil
+	})
+	return r
+}
+
+func TestACancelledDragPutsTheWindowBack(t *testing.T) {
+	for name, cancel := range map[string]func(*Harness){
+		"touch cancel": func(h *Harness) {
+			h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+				return errors.Join(b.Touch().Cancel(0), b.Touch().Frame())
+			})
+		},
+		"overview closed": func(h *Harness) {
+			h.dispatch("overview hide")
+			h.dispatch("overview show")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var now time.Duration
+			h, _ := springOverview(t, &now, StartWith)
+			plan := planOf(h, 0)
+			slot := plan.windows[2]
+			h.fingerDown(centre(slot))
+			h.fingerTo(centre(slot).Add(image.Pt(60, 40)))
+			if got := h.windowRect(2, &now); got == slot {
+				t.Fatalf("the finger did not carry the window out of %v", slot)
+			}
+			cancel(h)
+			h.frameAt(&now, time.Minute)
+			if got := h.windowRect(2, &now); got != slot {
+				t.Errorf("the window is at %v, its slot is %v", got, slot)
+			}
+			h.Eventually("the window drawn in its slot", showing(centre(slot).X, centre(slot).Y, bluePix))
+		})
+	}
+}
+
+func TestASecondFingerLeavesADragAlone(t *testing.T) {
+	var now time.Duration
+	h, _ := springOverview(t, &now, StartWith)
+	plan := planOf(h, 0)
+	slot := plan.windows[2]
+	h.fingerDown(centre(slot))
+	to := centre(slot).Add(image.Pt(60, 40))
+	h.fingerTo(to)
+	carried := h.windowRect(2, &now)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		x, y := fingerAt(centre(plan.windows[1]))
+		return errors.Join(b.Touch().Down(1, b.Outputs()[0], x, y), b.Touch().Frame(), b.Touch().Motion(1, x+0.1, y), b.Touch().Frame(), b.Touch().Up(1), b.Touch().Frame())
+	})
+	if got := h.windowRect(2, &now); got != carried {
+		t.Errorf("a second finger moved the carried window from %v to %v", carried, got)
+	}
+	h.expectOverview(true)
+	h.fingerUp()
+	h.frameAt(&now, time.Minute)
+	if got := h.windowRect(2, &now); got != slot {
+		t.Errorf("the window dropped on nothing is at %v, its slot is %v", got, slot)
+	}
+}
