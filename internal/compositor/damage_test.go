@@ -179,3 +179,31 @@ func BenchmarkSDRReplayOf100Ops(b *testing.B) {
 		f.replay(p, to)
 	}
 }
+
+func TestManyDamageRectsBecomeTheirBounds(t *testing.T) {
+	bounds := image.Rect(0, 0, 4000, 100)
+	bg := drawOp{fill: true, color: Background, dst: bounds}
+	boxes := func(n int) []drawOp {
+		ops := []drawOp{bg}
+		for i := range n {
+			ops = append(ops, drawOp{fill: true, color: render.Color{A: 0xff}, dst: image.Rect(i*20, 0, i*20+10, 10)})
+		}
+		return ops
+	}
+	for _, tc := range []struct {
+		n, rects int
+		area     int
+	}{
+		{n: maxDamageRects, rects: maxDamageRects, area: maxDamageRects * 100},
+		{n: maxDamageRects + 1, rects: 1, area: (maxDamageRects*20 + 10) * 10},
+	} {
+		sc := newScene()
+		sc.frameWith(bg)
+		sc.diff(bounds)
+		sc.presented()
+		sc.frameWith(boxes(tc.n)...)
+		if d := sc.diff(bounds); len(d.Rects()) != tc.rects || d.Area() != tc.area {
+			t.Fatalf("%d boxes damaged %d rects of area %d, want %d of %d", tc.n, len(d.Rects()), d.Area(), tc.rects, tc.area)
+		}
+	}
+}

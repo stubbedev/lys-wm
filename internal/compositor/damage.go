@@ -14,7 +14,10 @@ import (
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
-const maxBufferAge = 4
+const (
+	maxBufferAge   = 4
+	maxDamageRects = 64
+)
 
 type drawOp struct {
 	fill      bool
@@ -438,6 +441,7 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 		content.Reset()
 	}
 	sc.damage.Clip(bounds)
+	sc.damage.Simplify(maxDamageRects)
 	return &sc.damage
 }
 

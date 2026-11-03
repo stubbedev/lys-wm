@@ -50,6 +50,14 @@ func (s *Set) CopyFrom(o *Set) {
 	s.rects = append(s.rects[:0], o.rects...)
 }
 
+func (s *Set) Simplify(limit int) {
+	if len(s.rects) <= limit {
+		return
+	}
+	whole := bounds(s.rects)
+	s.rects = append(s.rects[:0], whole)
+}
+
 func (s *Set) Clip(bounds image.Rectangle) {
 	s.rects = appendClipped(s.rects[:0], s.rects, bounds)
 }

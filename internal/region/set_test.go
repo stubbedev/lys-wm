@@ -60,3 +60,18 @@ func TestSetMatchesRegionAndReusesItsBuffers(t *testing.T) {
 		t.Fatalf("%v allocations per reuse", allocs)
 	}
 }
+
+func TestSimplifyKeepsRectsUpToTheLimitAndThenTheirBounds(t *testing.T) {
+	var s Set
+	for i := range 4 {
+		s.Add(image.Rect(i*10, 0, i*10+5, 5))
+	}
+	s.Simplify(4)
+	if len(s.Rects()) != 4 {
+		t.Fatalf("at the limit: %v", s.Rects())
+	}
+	s.Simplify(3)
+	if got, want := s.Rects(), image.Rect(0, 0, 35, 5); len(got) != 1 || got[0] != want {
+		t.Fatalf("over the limit: %v, want %v", got, want)
+	}
+}
