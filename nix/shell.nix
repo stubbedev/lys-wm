@@ -16,9 +16,6 @@
           govulncheck
           git
           gh
-          mesa-demos
-          glslang
-          spirv-tools
         ]
         ++ ["${inputs.lys-ci}"]
         ++ import ./test-programs.nix {
