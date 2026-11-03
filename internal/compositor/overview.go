@@ -174,10 +174,10 @@ func (c *Compositor) openOverview() error {
 }
 
 func (c *Compositor) enterOverview(now time.Duration) error {
-	return errors.Join(c.syncOverview(now), c.takeOverviewInput(), c.drawFirstThumbs(), c.scheduleAll())
+	return errors.Join(c.syncOverview(now), c.takeOverviewInput(), c.prepareFirstFrame(), c.scheduleAll())
 }
 
-func (c *Compositor) drawFirstThumbs() error {
+func (c *Compositor) prepareFirstFrame() error {
 	c.frameTime = c.clock()
 	var errs []error
 	for _, o := range c.outputs {
@@ -185,6 +185,7 @@ func (c *Compositor) drawFirstThumbs() error {
 		if !ok || !c.outputLive(o) {
 			continue
 		}
+		errs = append(errs, c.drawOverviewSelection(&c.overview.scratch, o, v, 1, 1))
 		for _, t := range v.spaces {
 			if t.id != v.workspace || t.target != nil || t.rect.Empty() {
 				continue
