@@ -274,3 +274,30 @@ func TestRepeatedMissesNoSampleExplainsStopAtTheRefresh(t *testing.T) {
 		t.Fatalf("the budget after many misses is %v, want the whole refresh and no more", got)
 	}
 }
+
+func TestOneFrameNoBudgetCouldHoldDoesNotPinTheNextToAWholeRefresh(t *testing.T) {
+	var b RenderBudget
+	const steady = 2 * time.Millisecond
+	paced(&b, repeat(40, steady)...)
+	_, latency := paced(&b, append([]time.Duration{30 * time.Millisecond}, repeat(5, steady)...)...)
+	for i, got := range latency[1:] {
+		if want := steady + 2*paceMargin; got != want {
+			t.Fatalf("%d frames after one of 30 ms the budget is %v, want the steady frames' and the miss's margin, %v", i+1, got, want)
+		}
+	}
+	if late, _ := paced(&b, 30*time.Millisecond); late != 1 {
+		t.Fatal("a second frame of 30 ms was not late")
+	}
+	if got := b.Budget(paceInterval); got != paceInterval {
+		t.Fatalf("a second such frame in the window leaves a budget of %v, want the whole refresh", got)
+	}
+}
+
+func TestAStartupFrameSlowerThanARefreshLeavesTheColdBudgetAtHalf(t *testing.T) {
+	var b RenderBudget
+	b.Sample(50 * time.Millisecond)
+	b.Sample(time.Millisecond)
+	if got := b.Budget(paceInterval); got != paceInterval/2 {
+		t.Fatalf("after one slow startup frame the budget is %v", got)
+	}
+}
