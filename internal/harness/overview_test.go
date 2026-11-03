@@ -1398,3 +1398,74 @@ func TestAnIconifiedXWindowThatNeverDrewHoldsATileInTheRow(t *testing.T) {
 		return len(ws) == 1 && !ws[0].Minimized && ws[0].Rect.Width == 800
 	})
 }
+
+func TestAWindowWhoseBufferIsGoneKeepsItsTileEvenDragged(t *testing.T) {
+	onEachDMABUFRenderer(t, func(t *testing.T, start gpuStarter) {
+		var now time.Duration
+		tile := render.Color{R: 0xc0, G: 0x20, B: 0xa0, A: 0xff}
+		h := start(t, func(cfg *compositor.Config) {
+			cfg.Animations = springTable(t)
+			cfg.Clock = func() time.Duration { return now }
+			plainOverview(cfg)
+			cfg.Decor.Tab.Inactive.Background = tile
+		}, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("gone", testclient.Fill(0, 0, 0xff))
+		c.DispatchUntil("the window to map", w.Mapped)
+		w.Stop()
+		d := c.DMABUF(image.Pt(800, 500), testclient.Fill(0, 0xff, 0))
+		if err := errors.Join(w.Surface.Attach(d.WL, 0, 0), w.Surface.DamageBuffer(0, 0, 800, 500), w.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		h.Eventually("the dmabuf drawn", showing(10, 10, greenPix))
+		if err := errors.Join(d.WL.Destroy(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+		h.dispatch("overview show")
+		h.advanceClock(&now, time.Minute)
+		h.Rendered(0)
+		slot := onlySlot(t, h)
+		from := centre(slot)
+		want := [3]byte{tile.R, tile.G, tile.B}
+		h.Eventually("the tile in the slot", showing(from.X, from.Y, want))
+		to := from.Add(image.Pt(slot.Dx()/2+60, 0))
+		h.moveAt(from, overviewMode.Size)
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return errors.Join(b.Pointer().Button(btnLeft, true), b.Pointer().Frame())
+		})
+		h.moveAt(to, overviewMode.Size)
+		h.Eventually("the tile beside the pointer", showing(to.X-40, to.Y, want))
+	})
+}
+
+func TestADraggedWindowKeepsItsPopup(t *testing.T) {
+	var now time.Duration
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = springTable(t)
+		cfg.Clock = func() time.Duration { return now }
+		plainOverview(cfg)
+	}, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("win", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	p := c.Popup(w, menuAt(image.Pt(100, 100), image.Pt(200, 100)), nil, testclient.Fill(0, 0xff, 0))
+	c.DispatchUntil("the popup to map", p.Mapped)
+	h.Eventually("the popup in place", showing(200, 150, greenPix))
+	h.dispatch("overview show")
+	h.advanceClock(&now, time.Minute)
+	h.Rendered(0)
+	slot := planOf(h, 0).windows[1]
+	on := image.Pt(slot.Min.X+200*slot.Dx()/800, slot.Min.Y+150*slot.Dy()/500)
+	grab := centre(slot)
+	by := image.Pt(-90, 40)
+	h.moveAt(grab, overviewMode.Size)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Pointer().Button(btnLeft, true), b.Pointer().Frame())
+	})
+	h.moveAt(grab.Add(by), overviewMode.Size)
+	moved := on.Add(by)
+	h.Eventually("the popup carried with its window", showing(moved.X, moved.Y, greenPix))
+	left := image.Pt(slot.Min.X+100*slot.Dx()/800+by.X+2, slot.Min.Y+100*slot.Dy()/500+by.Y+2)
+	h.Eventually("its corner carried too", showing(left.X, left.Y, greenPix))
+}

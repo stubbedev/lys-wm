@@ -139,7 +139,10 @@ func (c *Compositor) drawOverviewEntry(pass *frame, o *output.Output, e overview
 	if alpha <= 0 {
 		return shown
 	}
-	at := v.rect(e.rect(o, p, c.frameTime), o.Logical())
+	return c.drawOverviewWindow(pass, o, w, v.rect(e.rect(o, p, c.frameTime), o.Logical()), p, alpha, shown)
+}
+
+func (c *Compositor) drawOverviewWindow(pass *frame, o *output.Output, w *window, at image.Rectangle, p, alpha float64, shown []*surface.Surface) []*surface.Surface {
 	if c.textureOf(w.top.Surface()) == nil {
 		r := deviceRect(o, at)
 		pass.fillMasked(r, scaleColor(c.decor.Tab.Inactive.Background, float32(alpha)), render.Mask{Keep: render.RoundRect{Rect: r, Radius: deviceLength(o, overviewRadius)}})
@@ -171,12 +174,11 @@ func (c *Compositor) drawOverviewDragged(pass *frame, o *output.Output, p float6
 			if e.item != pr.item {
 				continue
 			}
-			alpha := e.w.fade.At(c.frameTime)
 			at := e.rect(from, p, c.frameTime)
 			if !at.Overlaps(o.Logical()) {
 				continue
 			}
-			shown = c.paintWindow(pass, o, e.w, at, alpha, true, shown)
+			shown = c.drawOverviewWindow(pass, o, e.w, at, p, e.w.fade.At(c.frameTime), shown)
 		}
 	}
 	return shown
