@@ -15,7 +15,7 @@ import (
 
 func TestAPiledOverviewClosingDoesNotDrawWhatIsCovered(t *testing.T) {
 	var now time.Duration
-	const screens, most = 5, 500
+	const screens, most = 6, 300
 	h := StartGLES(t, func(cfg *compositor.Config) {
 		cfg.Animations = springTable(t)
 		cfg.Clock = func() time.Duration { return now }

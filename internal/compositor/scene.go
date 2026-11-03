@@ -142,7 +142,7 @@ func (c *Compositor) render(o *output.Output) error {
 	for _, s := range shown {
 		s.Latch()
 	}
-	sc.cur.clip(&sc.covered)
+	sc.cur.clip()
 	c.resolveBlurs(o, &sc.cur, 0)
 	sc.cur.dropHiddenRims()
 	if err := sc.blurs.dropUnused(); err != nil {

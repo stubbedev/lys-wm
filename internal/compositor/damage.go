@@ -38,9 +38,9 @@ type drawOp struct {
 }
 
 const (
-	clipMinPixels   = 128 * 128
-	clipMaxPieces   = 24
-	clipPiecePixels = 16384
+	clipMinPixels   = 256 * 256
+	clipMaxPieces   = 8
+	clipPiecePixels = 32768
 )
 
 func (op drawOp) clippable() bool {
@@ -146,6 +146,7 @@ type frame struct {
 	clipBack   []drawOp
 	clipOut    []drawOp
 	clipPieces []image.Rectangle
+	occluders  region.Occluders
 }
 
 func (f *frame) FillRect(r image.Rectangle, c render.Color) {
@@ -258,18 +259,21 @@ func (f *frame) cull(covered *region.Set) {
 	f.ops, f.cursorFrom = f.ops[:n], f.cursorFrom-kept
 }
 
-func (f *frame) clip(covered *region.Set) {
-	covered.Reset()
+func (f *frame) clip() {
+	f.occluders.Reset()
 	scene, tail := f.ops[:f.cursorFrom], f.ops[f.cursorFrom:]
 	back := f.clipBack[:0]
 	for i := len(scene) - 1; i >= 0; i-- {
 		op := &scene[i]
-		if covered.Covers(op.dst) {
+		if f.occluders.Hides(op.dst) {
 			continue
 		}
 		split := false
-		if op.clippable() && !covered.Empty() {
-			f.clipPieces = covered.AppendUncovered(op.dst, f.clipPieces[:0])
+		if op.clippable() {
+			f.clipPieces = f.occluders.Visible(op.dst, f.clipPieces[:0])
+			if len(f.clipPieces) == 0 {
+				continue
+			}
 			if worthClipping(f.clipPieces, op.dst) {
 				split = true
 				for _, p := range f.clipPieces {
@@ -280,7 +284,7 @@ func (f *frame) clip(covered *region.Set) {
 		if !split {
 			back = append(back, *op)
 		}
-		op.solid(covered.Add)
+		op.solid(f.occluders.Add)
 	}
 	f.clipBack = back
 	out := f.clipOut[:0]
