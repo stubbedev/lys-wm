@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -109,9 +110,9 @@ type eglFuncs struct {
 	destroyImage       func(dpy, image uintptr) uint32
 	queryDMABUFFormats func(dpy uintptr, max int32, formats *int32, num *int32) uint32
 	queryDMABUFMods    func(dpy uintptr, format, max int32, modifiers *uint64, externalOnly *uint32, num *int32) uint32
-	createSync         func(dpy uintptr, typ uint32, attribs *int32) uintptr
-	destroySync        func(dpy, sync uintptr) uint32
-	dupNativeFenceFD   func(dpy, sync uintptr) int32
+	pCreateSync        uintptr
+	pDestroySync       uintptr
+	pDupNativeFenceFD  uintptr
 	waitSync           func(dpy, sync uintptr, flags int32) int32
 	clientWaitSync     func(dpy, sync uintptr, flags int32, timeout uint64) int32
 }
@@ -122,12 +123,13 @@ var initialized = struct {
 }{count: map[uintptr]int{}}
 
 type Library struct {
-	switches   atomic.Uint64
-	egl        eglFuncs
-	gl         GL
-	clientExts []string
-	eglLib     uintptr
-	glesLib    uintptr
+	syncAttribs [3]int32
+	switches    atomic.Uint64
+	egl         eglFuncs
+	gl          GL
+	clientExts  []string
+	eglLib      uintptr
+	glesLib     uintptr
 }
 
 func Load(paths Paths) (*Library, error) {
@@ -164,9 +166,9 @@ func Load(paths Paths) (*Library, error) {
 		{&e.destroyImage, "eglDestroyImageKHR"},
 		{&e.queryDMABUFFormats, "eglQueryDmaBufFormatsEXT"},
 		{&e.queryDMABUFMods, "eglQueryDmaBufModifiersEXT"},
-		{&e.createSync, "eglCreateSyncKHR"},
-		{&e.destroySync, "eglDestroySyncKHR"},
-		{&e.dupNativeFenceFD, "eglDupNativeFenceFDANDROID"},
+		{&e.pCreateSync, "eglCreateSyncKHR"},
+		{&e.pDestroySync, "eglDestroySyncKHR"},
+		{&e.pDupNativeFenceFD, "eglDupNativeFenceFDANDROID"},
 		{&e.waitSync, "eglWaitSyncKHR"},
 		{&e.clientWaitSync, "eglClientWaitSyncKHR"},
 	} {
@@ -507,6 +509,21 @@ type Sync struct {
 	h uintptr
 }
 
+func (d *Display) createSync(typ uint32, attribs ...int32) uintptr {
+	gl := &d.lib.gl
+	copy(d.lib.syncAttribs[:], attribs)
+	gl.args[0], gl.args[1], gl.args[2] = d.dpy, uintptr(typ), uintptr(unsafe.Pointer(&d.lib.syncAttribs[0])) //nolint:gosec // a pointer EGL only reads during the call
+	h, _, _ := purego.SyscallN(d.lib.egl.pCreateSync, gl.args[:3]...)
+	return h
+}
+
+func (d *Display) syncCall(fn, sync uintptr) uintptr {
+	gl := &d.lib.gl
+	gl.args[0], gl.args[1] = d.dpy, sync
+	r, _, _ := purego.SyscallN(fn, gl.args[:2]...)
+	return r
+}
+
 func (d *Display) requireFences() error {
 	if !d.Has("EGL_ANDROID_native_fence_sync") {
 		return fmt.Errorf("%w: EGL_ANDROID_native_fence_sync", ErrUnsupported)
@@ -518,8 +535,7 @@ func (d *Display) Fence() (*Sync, error) {
 	if err := d.requireFences(); err != nil {
 		return nil, err
 	}
-	attribs := []int32{eglNone}
-	h := d.lib.egl.createSync(d.dpy, eglSyncNativeFence, &attribs[0])
+	h := d.createSync(eglSyncNativeFence, eglNone)
 	if h == 0 {
 		return nil, d.lib.fail("eglCreateSyncKHR(native fence)")
 	}
@@ -531,8 +547,7 @@ func (d *Display) PlainFence() (*Sync, error) {
 	if !d.Has("EGL_KHR_fence_sync") {
 		return nil, fmt.Errorf("%w: EGL_KHR_fence_sync", ErrUnsupported)
 	}
-	attribs := []int32{eglNone}
-	h := d.lib.egl.createSync(d.dpy, eglSyncFence, &attribs[0])
+	h := d.createSync(eglSyncFence, eglNone)
 	if h == 0 {
 		return nil, d.lib.fail("eglCreateSyncKHR(fence)")
 	}
@@ -544,8 +559,7 @@ func (d *Display) ImportFence(fd int) (*Sync, error) {
 	if err := d.requireFences(); err != nil {
 		return nil, err
 	}
-	attribs := []int32{eglSyncNativeFenceFD, int32(fd), eglNone} //nolint:gosec // file descriptors fit an EGLint
-	h := d.lib.egl.createSync(d.dpy, eglSyncNativeFence, &attribs[0])
+	h := d.createSync(eglSyncNativeFence, eglSyncNativeFenceFD, int32(fd), eglNone) //nolint:gosec // file descriptors fit an EGLint
 	if h == 0 {
 		return nil, d.lib.fail("eglCreateSyncKHR(import fence fd)")
 	}
@@ -553,7 +567,7 @@ func (d *Display) ImportFence(fd int) (*Sync, error) {
 }
 
 func (s *Sync) FD() (int, error) {
-	fd := s.d.lib.egl.dupNativeFenceFD(s.d.dpy, s.h)
+	fd := int32(s.d.syncCall(s.d.lib.egl.pDupNativeFenceFD, s.h)) //nolint:gosec // EGLint is the low 32 bits
 	if fd == eglNoNativeFenceFD {
 		return -1, s.d.lib.fail("eglDupNativeFenceFDANDROID")
 	}
@@ -580,7 +594,7 @@ func (s *Sync) ClientWait() error {
 }
 
 func (s *Sync) Destroy() error {
-	if s.d.lib.egl.destroySync(s.d.dpy, s.h) != eglTrue {
+	if uint32(s.d.syncCall(s.d.lib.egl.pDestroySync, s.h)) != eglTrue { //nolint:gosec // EGLBoolean is the low 32 bits
 		return s.d.lib.fail("eglDestroySyncKHR")
 	}
 	return nil

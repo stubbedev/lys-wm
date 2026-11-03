@@ -358,3 +358,25 @@ func TestDisplaysOnOneDeviceShareItsTermination(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAFenceAllocatesOnlyItsHandle(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates")
+	}
+	d, _ := surfaceless(t)
+	if !d.Has("EGL_KHR_fence_sync") {
+		t.Skip("no EGL_KHR_fence_sync")
+	}
+	got := testing.AllocsPerRun(50, func() {
+		s, err := d.PlainFence()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Destroy(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if got > 1 {
+		t.Errorf("a fence created and destroyed allocates %v times, want its one handle", got)
+	}
+}
