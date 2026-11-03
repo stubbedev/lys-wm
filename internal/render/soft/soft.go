@@ -366,6 +366,10 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 		p.kawaseFloat(tex, dst, offset, up)
 		return
 	}
+	if !up && offset == 1 && tex.size == dst.Size().Mul(2) {
+		p.halve(tex, dst)
+		return
+	}
 	sample := func(u, v float32) [4]float32 { return lgpu.Bilinear(tex.pix, tex.stride, tex.size.X, tex.size.Y, u, v) }
 	hx, hy := 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset
 	for _, d := range p.damage.Rects() {
@@ -381,6 +385,26 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 			}
 		}
 	}
+}
+
+func (p *pass) halve(tex *texture, dst image.Rectangle) {
+	for _, d := range p.damage.Rects() {
+		clip := dst.Intersect(d)
+		for y := clip.Min.Y; y < clip.Max.Y; y++ {
+			row := p.buf.Pix[y*p.buf.Stride:]
+			from := (y - dst.Min.Y) * 2 * tex.stride
+			top, bottom := tex.pix[from:], tex.pix[from+tex.stride:]
+			for x := clip.Min.X; x < clip.Max.X; x++ {
+				at := (x - dst.Min.X) * 8
+				u, v := top[at:at+8:at+8], bottom[at:at+8:at+8]
+				over(row[x*4:x*4+4], mean4(u[0], u[4], v[0], v[4]), mean4(u[1], u[5], v[1], v[5]), mean4(u[2], u[6], v[2], v[6]), mean4(u[3], u[7], v[3], v[7]))
+			}
+		}
+	}
+}
+
+func mean4(a, b, c, d byte) byte {
+	return byte((uint32(a) + uint32(b) + uint32(c) + uint32(d) + 2) >> 2)
 }
 
 type screenShader struct {

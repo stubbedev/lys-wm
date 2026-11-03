@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	lgpu "github.com/stubbedev/lys-lib/gpu"
+
 	"github.com/stubbedev/lys-wm/internal/golden"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/rendertest"
@@ -399,4 +401,89 @@ func TestSurvivesAFaultingUpload(t *testing.T) {
 
 func TestStreamedUpdatesStayInOrder(t *testing.T) {
 	rendertest.StreamedUpdatesStayInOrder(t, soft.New(), soft.NewBuffer(1, 1))
+}
+
+func TestHalvingAtOffsetOneIsTheKawaseOfTheRest(t *testing.T) {
+	const w, h = 64, 48
+	data := make([]byte, w*h*4)
+	seed := uint32(1)
+	for i := 0; i < len(data); i += 4 {
+		seed = seed*1664525 + 1013904223
+		alpha := byte(seed >> 24)
+		data[i], data[i+1], data[i+2], data[i+3] = byte(seed>>8)%(alpha/2+1), byte(seed>>12)%(alpha/2+1), byte(seed>>16)%(alpha/2+1), alpha
+	}
+	r := soft.New()
+	tex, err := r.NewTexture(render.ARGB8888, image.Pt(w, h), w*4, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := image.Rect(3, 2, 3+w/2, 2+h/2)
+	b := soft.NewBuffer(40, 30)
+	frame(t, r, b, render.Region{{Max: image.Pt(40, 30)}}, func(p render.Pass) {
+		p.Clear(render.Color{})
+		p.Kawase(tex, dst, 1, false)
+	})
+	sample := func(u, v float32) [4]float32 { return lgpu.Bilinear(data, w*4, w, h, u, v) }
+	hx, hy := float32(0.5/w), float32(0.5/h)
+	for y := dst.Min.Y; y < dst.Max.Y; y++ {
+		for x := dst.Min.X; x < dst.Max.X; x++ {
+			u := (float32(x-dst.Min.X) + 0.5) / float32(dst.Dx())
+			v := (float32(y-dst.Min.Y) + 0.5) / float32(dst.Dy())
+			want := lgpu.KawaseAt(sample, false, u, v, hx, hy)
+			got := at(b, x, y)
+			for k := range want {
+				if diff := math.Abs(float64(got[k]) - float64(want[k])); diff > 1 {
+					t.Fatalf("(%d,%d) channel %d: %d, the shader's Kawase gives %v", x, y, k, got[k], want[k])
+				}
+			}
+		}
+	}
+	if got := at(b, 2, 2); got != [4]byte{} {
+		t.Errorf("drew %v left of its rectangle", got)
+	}
+	if got := at(b, dst.Max.X, 2); got != [4]byte{} {
+		t.Errorf("drew %v right of its rectangle", got)
+	}
+}
+
+func TestHalvingKeepsToTheDamageAndBlends(t *testing.T) {
+	r := soft.New()
+	half := px(0x40, 0x40, 0x40, 0x80)
+	tex := newTex(t, r, render.ARGB8888, 4, 2, half, half, half, half, half, half, half, half)
+	b := soft.NewBuffer(2, 1)
+	frame(t, r, b, render.Region{{Max: image.Pt(2, 1)}}, func(p render.Pass) { p.Clear(render.Color{B: 0xff, A: 0xff}) })
+	frame(t, r, b, render.Region{{Min: image.Pt(1, 0), Max: image.Pt(2, 1)}}, func(p render.Pass) {
+		p.Kawase(tex, image.Rect(0, 0, 2, 1), 1, false)
+	})
+	if got, want := at(b, 0, 0), px(0xff, 0, 0, 0xff); got != want {
+		t.Errorf("outside the damage: %v, want %v", got, want)
+	}
+	if got, want := at(b, 1, 0), px(0x40+0x7f, 0x40, 0x40, 0xff); got != want {
+		t.Errorf("translucent over opaque: %v, want %v", got, want)
+	}
+}
+
+func BenchmarkKawaseHalving(b *testing.B) {
+	r := soft.New()
+	src := make([]byte, 1920*1080*4)
+	for i := range src {
+		src[i] = byte(i)
+	}
+	tex, err := r.NewTexture(render.ARGB8888, image.Pt(1920, 1080), 1920*4, src)
+	if err != nil {
+		b.Fatal(err)
+	}
+	dst := soft.NewBuffer(960, 540)
+	all := render.Region{{Max: image.Pt(960, 540)}}
+	b.ReportAllocs()
+	for b.Loop() {
+		p, err := r.Begin(dst, all)
+		if err != nil {
+			b.Fatal(err)
+		}
+		p.Kawase(tex, image.Rect(0, 0, 960, 540), 1, false)
+		if err := p.End(); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

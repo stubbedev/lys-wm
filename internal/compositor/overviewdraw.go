@@ -296,7 +296,6 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 	f := &c.overview.scratch
 	f.ops = f.ops[:0]
 	bounds := deviceRect(o, o.Logical())
-	f.FillRect(bounds, Background)
 	for e := range c.layersAt(o, belowWindows) {
 		c.drawTree(f, o, e.surface.Surface(), flat(e.bounds().Min), nil)
 	}
