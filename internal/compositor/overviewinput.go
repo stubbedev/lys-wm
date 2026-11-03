@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -170,15 +171,15 @@ func (c *Compositor) overviewDrop(pr *overviewPress, at point) error {
 	s := c.wm
 	var dest wm.WorkspaceID
 	var err error
-	var into image.Rectangle
+	onThumb := false
 	switch t := c.overviewTargetAt(at).(type) {
 	case overviewSpace:
-		dest, into = t.t.id, t.t.rect
+		dest, onThumb = t.t.id, true
 	case overviewPlus:
 		if s, err = s.FocusOutput(t.v.output.Backend().Name()); err != nil {
 			return err
 		}
-		dest, into = s.UnusedWorkspace(), t.v.plus
+		dest, onThumb = s.UnusedWorkspace(), true
 	default:
 		if o := c.outputAt(at); o != nil && o != home {
 			dest, _ = s.ActiveOn(o.Backend().Name())
@@ -189,34 +190,48 @@ func (c *Compositor) overviewDrop(pr *overviewPress, at point) error {
 		it.slot.Set(it.goal, now, c.animations.Curve(anim.Overview))
 		return c.scheduleAll()
 	}
-	ov.carried = &overviewCarried{root: it.root, at: it.slot.At(now)}
-	if !into.Empty() {
-		if err := c.flyInto(it, c.outputAt(at), into, now); err != nil {
-			return err
-		}
-	}
 	for _, m := range slices.Clone(it.members) {
 		if s, err = s.MoveWindowToWorkspace(m.id, dest, c.settings.Autotile); err != nil {
 			return err
 		}
 	}
-	return c.update(s, nil)
+	from := it.slot.At(now)
+	ov.carried = &overviewCarried{root: it.root, at: from}
+	if !onThumb {
+		return c.update(s, nil)
+	}
+	return c.flyInto(it.root, c.outputAt(at), s, dest, from, now)
 }
 
-func (c *Compositor) flyInto(it *overviewItem, o *output.Output, into image.Rectangle, now time.Duration) error {
-	tt, err := c.snapshot(it.root)
-	if err != nil || tt == nil || o == nil {
+func (c *Compositor) flyInto(w *window, o *output.Output, s wm.State, dest wm.WorkspaceID, from image.Rectangle, now time.Duration) error {
+	curve := c.animations.Curve(anim.Overview)
+	var tt render.TextureTarget
+	if curve != anim.Instant && o != nil {
+		var err error
+		if tt, err = c.snapshot(w); err != nil {
+			return err
+		}
+	}
+	if err := c.update(s, nil); err != nil || tt == nil {
+		if tt != nil {
+			return errors.Join(err, tt.Destroy())
+		}
 		return err
 	}
-	curve := c.animations.Curve(anim.Overview)
-	if curve == anim.Instant {
-		return tt.Destroy()
-	}
-	cl := &closing{snapshot: tt, output: o, level: windowLevel, motion: anim.NewTween(it.slot.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
-	cl.motion.Set(into, now, curve)
+	cl := &closing{snapshot: tt, output: o, level: windowLevel, motion: anim.NewTween(from, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	cl.motion.Set(overviewThumbGoal(s, o, dest), now, curve)
 	cl.fade.Set(0, now, curve)
 	c.closing = append(c.closing, cl)
-	return nil
+	return c.scheduleAll()
+}
+
+func overviewThumbGoal(s wm.State, o *output.Output, id wm.WorkspaceID) image.Rectangle {
+	spaces := workspacesOn(s, o.Backend().Name(), 0)
+	at := slices.Index(spaces, id)
+	if at < 0 {
+		return image.Rectangle{}
+	}
+	return wm.PlanOverview(o.Logical(), len(spaces), nil, nil).Strip[at]
 }
 
 func (c *Compositor) abandonOverviewPress() {

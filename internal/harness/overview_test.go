@@ -1589,3 +1589,84 @@ func TestASecondFingerLeavesADragAlone(t *testing.T) {
 		t.Errorf("the window dropped on nothing is at %v, its slot is %v", got, slot)
 	}
 }
+
+func TestAFingerCarriesAWindowAndItFliesIntoItsThumbnail(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		var now time.Duration
+		h, _ := springOverview(t, &now, start)
+		plan := planOf(h, 0)
+		slot := plan.windows[2]
+		h.fingerDown(centre(slot))
+		held := image.Pt(centre(slot).X+60, plan.Strip[0].Max.Y+70)
+		h.fingerTo(centre(slot).Add(image.Pt(20, 20)))
+		h.fingerTo(held)
+		h.frameAt(&now, time.Millisecond)
+		h.Rendered(0)
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			if got := pixel(snapshot(b.Outputs()[0]), held.X, held.Y); got != bluePix {
+				t.Errorf("under the finger at %v: %v, not the window it carries", held, got)
+			}
+			return nil
+		})
+		drop := centre(plan.Plus)
+		h.fingerTo(drop)
+		h.fingerUp()
+		h.expectOverview(true)
+		var flights int
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+			flights = comp.ClosingCount()
+			if ws, _ := comp.WM().WorkspaceOf(2); ws != 2 {
+				t.Errorf("the window is on workspace %d, want the new one", ws)
+			}
+			return nil
+		})
+		if flights != 1 {
+			t.Fatalf("%d windows in flight, want 1", flights)
+		}
+		h.frameAt(&now, 30*time.Millisecond)
+		h.frameAt(&now, time.Minute)
+		h.Eventually("the flight over", func(b *headless.Backend, comp *compositor.Compositor) bool {
+			return comp.Frame(b.Outputs()[0]) == nil && comp.ClosingCount() == 0
+		})
+	})
+}
+
+func TestAFlightLandsOnTheThumbnailWhereItNowIs(t *testing.T) {
+	var now time.Duration
+	h, _ := springOverview(t, &now, StartWith)
+	drop := centre(planOf(h, 0).Plus)
+	dragBetween(h, centre(planOf(h, 0).windows[2]), drop)
+	plan := planOf(h, 0)
+	if len(plan.spaces) != 2 {
+		t.Fatalf("spaces %v", plan.spaces)
+	}
+	want := centre(plan.Strip[1])
+	var at image.Point
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		if comp.ClosingCount() != 1 {
+			t.Fatalf("%d windows in flight", comp.ClosingCount())
+		}
+		at = comp.ClosingAt(now + time.Minute)
+		return nil
+	})
+	if at != want {
+		t.Errorf("the flight lands at %v, the new thumbnail is centred at %v", at, want)
+	}
+}
+
+func TestDroppingAWindowOnItsOwnThumbnailSendsItBackWithoutAFlight(t *testing.T) {
+	var now time.Duration
+	h, _ := springOverview(t, &now, StartWith)
+	plan := planOf(h, 0)
+	dragBetween(h, centre(plan.windows[2]), centre(plan.Strip[0]))
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		if comp.ClosingCount() != 0 {
+			t.Errorf("%d flights for a window that stays", comp.ClosingCount())
+		}
+		return nil
+	})
+	h.frameAt(&now, time.Minute)
+	if got := h.windowRect(2, &now); got != plan.windows[2] {
+		t.Errorf("the window is at %v, its slot is %v", got, plan.windows[2])
+	}
+}

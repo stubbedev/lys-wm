@@ -529,12 +529,7 @@ func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.D
 		}
 	}
 	v.order = append(append(v.order, hidden...), front...)
-	spaces := make([]wm.WorkspaceID, 0, len(v.spaces)+1)
-	for _, w := range c.wm.Workspaces() {
-		if w.Output == name {
-			spaces = append(spaces, w.ID)
-		}
-	}
+	spaces := workspacesOn(c.wm, name, len(v.spaces)+1)
 	windows, minimized := make([]image.Rectangle, 0, len(v.items)), []image.Rectangle(nil)
 	for _, it := range v.items {
 		if it.minimized {
@@ -556,6 +551,16 @@ func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.D
 	}
 	v.plus = plan.Plus
 	return c.syncThumbs(v, o, spaces, plan.Strip, placements)
+}
+
+func workspacesOn(s wm.State, name string, room int) []wm.WorkspaceID {
+	spaces := make([]wm.WorkspaceID, 0, room)
+	for _, w := range s.Workspaces() {
+		if w.Output == name {
+			spaces = append(spaces, w.ID)
+		}
+	}
+	return spaces
 }
 
 func (c *Compositor) moveOverviewItem(ov *overview, it *overviewItem, goal image.Rectangle, now time.Duration) {
