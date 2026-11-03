@@ -560,3 +560,76 @@ func TestDisarmAfterRemoveIsAnError(t *testing.T) {
 		t.Fatalf("Disarm after Remove = %v, want ErrClosed", err)
 	}
 }
+
+func TestATimerInTheWakeupThatStopsTheLoopFiresOnTheNextRun(t *testing.T) {
+	l := newLoop(t)
+	fires := 0
+	expiredTimers(t, l, 2, func(int) {
+		fires++
+		l.Stop()
+	})
+	run(t, l)
+	if fires != 1 {
+		t.Fatalf("%d timers fired before the stop, want 1", fires)
+	}
+	stopAfter(t, l, 30*time.Millisecond)
+	run(t, l)
+	if fires != 2 {
+		t.Fatal("a timer whose expiry shared a wakeup with the stop never fired")
+	}
+}
+
+func TestATimerReArmedAfterAStopWaitsForItsNewDeadline(t *testing.T) {
+	l := newLoop(t)
+	fires := 0
+	timers := expiredTimers(t, l, 2, func(int) {
+		fires++
+		l.Stop()
+	})
+	run(t, l)
+	for _, timer := range timers {
+		if err := timer.Arm(time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stopAfter(t, l, 30*time.Millisecond)
+	run(t, l)
+	if fires != 1 {
+		t.Fatalf("%d timers fired, want the other waiting an hour", fires)
+	}
+}
+
+func TestALevelSourceDrainedAfterAStopIsNotCalledAgain(t *testing.T) {
+	l := newLoop(t)
+	calls := 0
+	var reads []int
+	for range 2 {
+		r, w := pipe(t)
+		reads = append(reads, r)
+		if _, err := l.AddFD(r, Readable, func(Events) error {
+			calls++
+			l.Stop()
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := unix.Write(w, []byte{1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(t, l)
+	if calls != 1 {
+		t.Fatalf("%d sources called before the stop, want 1", calls)
+	}
+	var buf [1]byte
+	for _, r := range reads {
+		if _, err := unix.Read(r, buf[:]); err != nil && !errors.Is(err, unix.EAGAIN) {
+			t.Fatal(err)
+		}
+	}
+	stopAfter(t, l, 10*time.Millisecond)
+	run(t, l)
+	if calls != 1 {
+		t.Fatalf("a source with nothing left to read was called %d times in all", calls)
+	}
+}

@@ -40,6 +40,7 @@ func tokenOf(ev *unix.EpollEvent) token {
 type source struct {
 	fd      int
 	owned   bool
+	edge    bool
 	handler func(Events) error
 }
 
@@ -48,6 +49,7 @@ type Loop struct {
 	sources map[token]*source
 	next    token
 	events  []unix.EpollEvent
+	pending []unix.EpollEvent
 	idle    []func() error
 	running []func() error
 	before  []func() error
@@ -96,7 +98,7 @@ func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error
 	if err := unix.EpollCtl(l.epfd, unix.EPOLL_CTL_ADD, fd, &ev); err != nil {
 		return 0, fmt.Errorf("loop: add fd %d: %w", fd, err)
 	}
-	l.sources[t] = &source{fd: fd, owned: owned, handler: handler}
+	l.sources[t] = &source{fd: fd, owned: owned, edge: events&edgeTriggered != 0, handler: handler}
 	return t, nil
 }
 
@@ -346,6 +348,9 @@ func (l *Loop) Run() error {
 	l.stopped = false
 	woke := time.Now()
 	defer func() { l.busy += time.Since(woke) }()
+	if err := l.dispatch(true); err != nil {
+		return err
+	}
 	for !l.stopped {
 		if err := l.runIdle(); err != nil {
 			return err
@@ -369,18 +374,24 @@ func (l *Loop) Run() error {
 		}
 		l.wakeups++
 		l.batch++
-		for i := range l.events[:n] {
-			if l.stopped {
-				break
-			}
-			ev := &l.events[i]
-			s, ok := l.sources[tokenOf(ev)]
-			if !ok {
-				continue
-			}
-			if err := s.handler(Events(ev.Events)); err != nil {
-				return err
-			}
+		l.pending = l.events[:n]
+		if err := l.dispatch(false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *Loop) dispatch(edgesOnly bool) error {
+	for len(l.pending) > 0 && !l.stopped {
+		ev := &l.pending[0]
+		l.pending = l.pending[1:]
+		s, ok := l.sources[tokenOf(ev)]
+		if !ok || edgesOnly && !s.edge {
+			continue
+		}
+		if err := s.handler(Events(ev.Events)); err != nil {
+			return err
 		}
 	}
 	return nil
