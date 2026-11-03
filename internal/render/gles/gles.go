@@ -98,6 +98,7 @@ type program struct {
 type Renderer struct {
 	counts       render.Counts
 	d            *gpu.Display
+	device       uint64
 	gl           *gpu.GL
 	name         string
 	solid        program
@@ -452,6 +453,9 @@ func (r *Renderer) NativeFences() bool {
 }
 
 func (r *Renderer) MainDevice() (uint64, error) {
+	if r.device != 0 {
+		return r.device, nil
+	}
 	node, err := r.RenderNode()
 	if err != nil {
 		return 0, err

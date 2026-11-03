@@ -2,6 +2,9 @@ package gles
 
 import (
 	"errors"
+	"fmt"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -37,8 +40,15 @@ func (s *Stack) open(fd int, paths gpu.Paths) error {
 	if s.Display, err = s.eglLib.OnGBM(s.GBM); err != nil {
 		return err
 	}
-	s.Renderer, err = New(s.Display)
-	return err
+	if s.Renderer, err = New(s.Display); err != nil {
+		return err
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		return fmt.Errorf("gles: stat the GBM device: %w", err)
+	}
+	s.Renderer.device = st.Rdev
+	return nil
 }
 
 func (s *Stack) Close() error {
