@@ -52,6 +52,7 @@ in
         - {app_id: ^steam$, title: ^Steam$, tile: true}
         - {app_id: ^steam$, title: ^Friends List$, size: 400x900}
     '';
+    timeout = 1800;
     machineConfig = {
       virtualisation = {
         memorySize = pkgs.lib.mkForce 6144;

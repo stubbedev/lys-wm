@@ -12,14 +12,15 @@
   backgroundOnly ? true,
   machineConfig ? {},
   extraTest ? _: "",
+  timeout ? 900,
 }: let
   user = "alice";
   uid = 1000;
   runtime = "/run/user/${toString uid}";
   run = command: "su ${user} -c 'XDG_RUNTIME_DIR=${runtime} DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime}/bus ${command}'";
 in
-  pkgs.testers.runNixOSTest {
-    inherit name;
+  import ./vm-test.nix pkgs {
+    inherit name timeout;
 
     nodes.machine = {config, ...}: {
       imports = [module machineConfig];

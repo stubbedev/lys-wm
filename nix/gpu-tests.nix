@@ -39,8 +39,9 @@
   '';
   tests_ = tests;
 in
-  pkgs.testers.runNixOSTest {
+  import ./vm-test.nix pkgs {
     name = "lys-wm-gpu-tests";
+    timeout = 1200;
     nodes.machine = {
       boot.kernelModules = ["udmabuf"];
       virtualisation = {
@@ -77,7 +78,7 @@ in
       ${run {
         name = "harness";
         dir = "harness";
-        tests = "TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|TestABlurRegion|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|Nested(LysWMRendersWithVulkan|GLESNames|GPURenderers)|FrameCost|OnTheGPURenderers|TestADMABUFDestroyed|TestFullscreenDMABUFs|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestAFullscreenDMABUF|TestAnARGBDMABUF|TestATenBit|TestDestroyingAReplaced|TestAFullscreenSurface|TestATranslucentFullscreen|TestARoundedWindow|TestImageCopyCaptureIntoDMABUFs|TestACaptureIntoADMABUF|TestAFrameDestroyedWhile|TestScaledClientCursors|TestTenBitShm|TheVulkanRenderer|TestIntegerScale|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAGenie|TestScanoutStopsOnly";
+        tests = "TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|TestABlurRegion|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|Nested(LysWMRendersWithVulkan|GLESNames|GPURenderers)|FrameCost|OnTheGPURenderers|TestADMABUFDestroyed|TestFullscreenDMABUFs|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestAFullscreenDMABUF|TestAnARGBDMABUF|TestATenBit|TestDestroyingAReplaced|TestAFullscreenSurface|TestATranslucentFullscreen|TestARoundedWindow|TestImageCopyCaptureIntoDMABUFs|TestACaptureIntoADMABUF|TestAFrameDestroyedWhile|TestScaledClientCursors|TestTenBitShm|TheVulkanRenderer|TestIntegerScale|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAGenie|TestScanoutStopsOnly|TestAWindowWhoseBufferIsGone";
         allowSkips = "OnHardware|TestScreencopyIntoDMABUFs|TestACaptureIntoADMABUF|TestNestedFrameCost/gles|TestAnARGBDMABUF|TestATenBitDMABUF";
       }}
     '';
