@@ -209,6 +209,31 @@ type buffer struct {
 	busy bool
 }
 
+type bufferSet struct {
+	list   []*buffer
+	mapped []byte
+}
+
+func (s *bufferSet) unmap() {
+	if s.mapped == nil {
+		return
+	}
+	_ = unix.Munmap(s.mapped)
+	s.mapped = nil
+}
+
+func (s *bufferSet) destroy() error {
+	if s == nil {
+		return nil
+	}
+	errs := make([]error, 0, len(s.list))
+	for _, b := range s.list {
+		errs = append(errs, b.wl.Destroy())
+	}
+	s.unmap()
+	return errors.Join(errs...)
+}
+
 type release struct{ b *buffer }
 
 func (r release) Release(*cw.WlBuffer) error {
@@ -223,18 +248,18 @@ func (c *Client) Buffer(size image.Point, frame int, paint Painter) *cw.WlBuffer
 
 func (c *Client) FormatBuffer(size image.Point, format cw.WlShmFormat, frame int, paint Painter) *cw.WlBuffer {
 	c.t.Helper()
-	b := c.buffers(size, format, 1)[0]
+	b := c.buffers(size, format, 1).list[0]
 	paint(b.pix, size.X*4, size, frame)
 	return b.wl
 }
 
 func (c *Client) Target(size image.Point) (*cw.WlBuffer, []byte) {
 	c.t.Helper()
-	b := c.buffers(size, cw.WlShmFormatXrgb8888, 1)[0]
+	b := c.buffers(size, cw.WlShmFormatXrgb8888, 1).list[0]
 	return b.wl, b.pix
 }
 
-func (c *Client) buffers(size image.Point, format cw.WlShmFormat, n int) []*buffer {
+func (c *Client) buffers(size image.Point, format cw.WlShmFormat, n int) *bufferSet {
 	c.t.Helper()
 	stride := size.X * 4
 	frame := stride * size.Y
@@ -244,18 +269,18 @@ func (c *Client) buffers(size image.Point, format cw.WlShmFormat, n int) []*buff
 	c.must(unix.Ftruncate(fd, int64(n*frame)))
 	m, err := unix.Mmap(fd, 0, n*frame, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	c.must(err)
-	c.t.Cleanup(func() { _ = unix.Munmap(m) })
+	set := &bufferSet{list: make([]*buffer, n), mapped: m}
+	c.t.Cleanup(set.unmap)
 	pool, err := c.Shm.CreatePool(fd, int32(n*frame)) //nolint:gosec // test buffers are small
 	c.must(err)
-	out := make([]*buffer, n)
-	for i := range out {
+	for i := range set.list {
 		b := &buffer{pix: m[i*frame : (i+1)*frame]}
 		b.wl, err = pool.CreateBuffer(release{b}, int32(i*frame), int32(size.X), int32(size.Y), int32(stride), format) //nolint:gosec // test buffers are small
 		c.must(err)
-		out[i] = b
+		set.list[i] = b
 	}
 	c.must(pool.Destroy())
-	return out
+	return set
 }
 
 type Scaling uint8
@@ -290,7 +315,7 @@ type Window struct {
 	Frames       int
 	Closed       bool
 	States       []cxdg.XdgToplevelState
-	buffers      []*buffer
+	buffers      *bufferSet
 	drawn        int
 	stopped      bool
 	Translucent  bool
@@ -438,11 +463,11 @@ func (w *Window) Destroy() error {
 	w.destroyed = true
 	switch {
 	case w.Layer != nil:
-		return errors.Join(w.Layer.Destroy(), w.Surface.Destroy())
+		return errors.Join(w.Layer.Destroy(), w.Surface.Destroy(), w.buffers.destroy())
 	case w.Popup != nil:
-		return errors.Join(w.Popup.Destroy(), w.XdgSurface.Destroy(), w.Surface.Destroy())
+		return errors.Join(w.Popup.Destroy(), w.XdgSurface.Destroy(), w.Surface.Destroy(), w.buffers.destroy())
 	}
-	return errors.Join(w.Toplevel.Destroy(), w.XdgSurface.Destroy(), w.Surface.Destroy())
+	return errors.Join(w.Toplevel.Destroy(), w.XdgSurface.Destroy(), w.Surface.Destroy(), w.buffers.destroy())
 }
 
 func (w *Window) Mapped() bool {
@@ -454,7 +479,7 @@ func (w *Window) draw() error {
 		return nil
 	}
 	var b *buffer
-	for _, candidate := range w.buffers {
+	for _, candidate := range w.buffers.list {
 		if !candidate.busy {
 			b = candidate
 			break
@@ -583,7 +608,9 @@ func (w *Window) configured() error {
 		if w.Translucent {
 			format = cw.WlShmFormatArgb8888
 		}
+		replaced := w.buffers
 		w.buffers = w.c.buffers(size, format, 2)
+		return errors.Join(w.draw(), replaced.destroy())
 	}
 	return w.draw()
 }

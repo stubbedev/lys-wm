@@ -393,3 +393,40 @@ func TestAnObjectThatCannotBeCreatedClosesItsFDs(t *testing.T) {
 		t.Fatalf("%d file descriptors open after the refused create_pool, %d before", n, baseline)
 	}
 }
+
+func TestAWindowLetsGoOfTheBuffersItOutgrew(t *testing.T) {
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	other := c.Window("other", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the other window to map", other.Mapped)
+	beside := c.Window("resized", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("the resized window to map", beside.Mapped)
+	half := beside.Logical
+	c.Sync()
+	baseline := 0
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		baseline = openFDs(t)
+		return nil
+	})
+	for range 5 {
+		if err := errors.Join(beside.Toplevel.SetFullscreen(nil), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		c.DispatchUntil("the window to fill the output", func() bool { return beside.Logical == small.Size })
+		if err := errors.Join(beside.Toplevel.UnsetFullscreen(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		c.DispatchUntil("the window back beside the other", func() bool { return beside.Logical == half })
+	}
+	c.Sync()
+	h.Eventually("no more file descriptors than before the resizes", func(*headless.Backend, *compositor.Compositor) bool {
+		return openFDs(t) <= baseline
+	})
+	if err := beside.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	c.Sync()
+	h.Eventually("the destroyed window's pool closed", func(*headless.Backend, *compositor.Compositor) bool {
+		return openFDs(t) < baseline
+	})
+}
