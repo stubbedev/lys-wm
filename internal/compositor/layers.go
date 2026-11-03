@@ -84,7 +84,7 @@ func (c *Compositor) arrange(o *output.Output) (layerChanges, error) {
 		case !e.appeared && e.shown():
 			c.layerAppear(e, c.clock())
 		case moved:
-			e.motion.Jump(e.bounds())
+			e.motion.Jump(e.box)
 		}
 		errs = append(errs, e.surface.Configure(e.box.Size()))
 		if moved {
@@ -207,8 +207,8 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 			if err := c.drawRims(pass, o, rims); err != nil {
 				c.report(fmt.Errorf("compositor: the rim of the %q layer surface: %w", e.surface.Namespace(), err))
 			}
-			if at := e.motion.At(c.frameTime); e.appeared && at != e.bounds() {
-				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at))
+			if at := e.motion.At(c.frameTime); e.appeared && at != e.box {
+				pass.remap(from, deviceRect(o, e.bounds()), deviceRect(o, at.Add(o.Position())))
 			}
 			if a := e.fade.At(c.frameTime); e.appeared && a < 1 {
 				pass.fade(from, float32(max(a, 0)))

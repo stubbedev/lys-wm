@@ -49,7 +49,7 @@ func (c *Compositor) layerStyled(e anim.Event, l *layer) (image.Rectangle, float
 
 func (c *Compositor) layerAppear(l *layer, now time.Duration) {
 	l.appeared = true
-	goal := l.bounds()
+	goal := l.box
 	l.motion = anim.NewTween(goal, anim.LerpRect)
 	l.fade = anim.NewTween(1.0, anim.Lerp)
 	curve := c.animations.Curve(anim.LayersIn)
@@ -57,7 +57,7 @@ func (c *Compositor) layerAppear(l *layer, now time.Duration) {
 		return
 	}
 	start, alpha := c.layerStyled(anim.LayersIn, l)
-	l.motion.Jump(start)
+	l.motion.Jump(start.Sub(l.output.Position()))
 	l.motion.Set(goal, now, curve)
 	l.fade.Jump(alpha)
 	l.fade.Set(1, now, curve)
@@ -98,7 +98,7 @@ func (c *Compositor) layerClosing(l *layer, now time.Duration) error {
 	}
 	l.snapshot, l.frost = nil, nil
 	end, alpha := c.layerStyled(anim.LayersOut, l)
-	cl := &closing{snapshot: tt, frost: fr, output: l.output, level: level{layer: l.surface.Current().Layer}, motion: anim.NewTween(l.motion.At(now), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
+	cl := &closing{snapshot: tt, frost: fr, output: l.output, level: level{layer: l.surface.Current().Layer}, motion: anim.NewTween(l.motion.At(now).Add(l.output.Position()), anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	cl.motion.Set(end, now, curve)
 	cl.fade.Set(alpha, now, curve)
 	c.closing = append(c.closing, cl)

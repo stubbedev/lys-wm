@@ -407,6 +407,7 @@ func (c *Client) Popup(parent *Window, p Placement, grab *Grab, paint Painter) *
 }
 
 type LayerSpec struct {
+	Output        *cw.WlOutput
 	Layer         cwlr.ZwlrLayerShellV1Layer
 	Anchor        cwlr.ZwlrLayerSurfaceV1Anchor
 	Size          image.Point
@@ -420,7 +421,7 @@ func (c *Client) Layer(spec LayerSpec, paint Painter) *Window {
 	var err error
 	w.Surface, err = c.Compositor.CreateSurface(surfaceEvents{w})
 	c.must(err)
-	w.Layer, err = c.LayerShell.GetLayerSurface(layerEvents{w}, w.Surface, nil, spec.Layer, "lys-wm.testclient")
+	w.Layer, err = c.LayerShell.GetLayerSurface(layerEvents{w}, w.Surface, spec.Output, spec.Layer, "lys-wm.testclient")
 	c.must(err)
 	c.must(errors.Join(
 		w.Layer.SetAnchor(spec.Anchor),

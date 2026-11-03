@@ -3,10 +3,14 @@ package harness
 import (
 	"errors"
 	"image"
+	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/outputmanagement"
+	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
@@ -154,4 +158,122 @@ func TestALayerDroppingItsKeyboardGivesItBack(t *testing.T) {
 	c.Sync()
 	r.h.tap(30)
 	r.expect("key 30 1", "key 30 0")
+}
+
+func dockedLaptop(t *testing.T) *Harness {
+	t.Helper()
+	h := StartWith(t, func(*compositor.Config) {})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		_, err := b.AddNamedOutput("eDP-1", small)
+		if err != nil {
+			return err
+		}
+		_, err = b.AddNamedOutput("DP-1", small)
+		return err
+	})
+	return h
+}
+
+func outputIndex(t *testing.T, h *Harness, name string) int {
+	t.Helper()
+	at := -1
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		at = slices.IndexFunc(b.Outputs(), func(o *headless.Output) bool { return o.Name() == name })
+		return nil
+	})
+	if at < 0 {
+		t.Fatalf("no output %s", name)
+	}
+	return at
+}
+
+func onOutput(o *cw.WlOutput, spec testclient.LayerSpec) testclient.LayerSpec {
+	spec.Output = o
+	return spec
+}
+
+func expectBarAcross(t *testing.T, h *Harness, name, when string) {
+	t.Helper()
+	shot := h.Rendered(outputIndex(t, h, name))
+	for _, x := range []int{5, small.Size.X - 5} {
+		if got := pixel(shot, x, 5); got != barColor {
+			t.Errorf("%s: %s shows %v at %d,5, want the bar", when, name, got, x)
+		}
+	}
+}
+
+func TestALayerStaysOnItsOutputWhenTheOutputMoves(t *testing.T) {
+	moved := image.Pt(500, 0)
+	for _, tc := range []struct {
+		name string
+		move func(*headless.Backend, *compositor.Compositor) error
+	}{
+		{"the lid closing", func(b *headless.Backend, _ *compositor.Compositor) error {
+			return b.Switches().Toggle(backend.SwitchLid, true)
+		}},
+		{"the panel unplugged", func(b *headless.Backend, _ *compositor.Compositor) error {
+			return b.RemoveOutput(b.Outputs()[0])
+		}},
+		{"a configuration placing it", func(b *headless.Backend, c *compositor.Compositor) error {
+			return c.Configure([]outputmanagement.HeadConfig{{Output: b.Outputs()[1], Enabled: true, Position: &moved}}, true)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := dockedLaptop(t)
+			c := testclient.Connect(t, h.Socket())
+			bar := c.Layer(onOutput(c.Outputs[1], topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+			c.DispatchUntil("the bar to map", bar.Mapped)
+			h.Eventually("the bar on the external output", showingOn(1, 5, 5, barColor))
+
+			h.Do(tc.move)
+			c.Sync()
+
+			expectBarAcross(t, h, "DP-1", tc.name)
+			if bar.Closed || bar.Logical != image.Pt(small.Size.X, 20) {
+				t.Errorf("after %s the bar is closed %v, configured to %v", tc.name, bar.Closed, bar.Logical)
+			}
+		})
+	}
+}
+
+func TestLayersAfterTheLidOpensAgain(t *testing.T) {
+	h := dockedLaptop(t)
+	c := testclient.Connect(t, h.Socket())
+	bar := c.Layer(onOutput(c.Outputs[1], topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	lid := func(closed bool) {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return b.Switches().Toggle(backend.SwitchLid, closed)
+		})
+		c.Sync()
+	}
+	lid(true)
+	lid(false)
+	expectBarAcross(t, h, "DP-1", "the lid opened again")
+
+	back := testclient.Connect(t, h.Socket())
+	panel := back.Layer(onOutput(back.Outputs[1], topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	back.DispatchUntil("the panel's bar to map", panel.Mapped)
+	expectBarAcross(t, h, "eDP-1", "a bar opened on the panel coming back")
+}
+
+func TestALayerOnAnOutputStartedWithTheLidClosed(t *testing.T) {
+	h := StartWith(t, func(*compositor.Config) {})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if err := b.Switches().Toggle(backend.SwitchLid, true); err != nil {
+			return err
+		}
+		if _, err := b.AddNamedOutput("eDP-1", small); err != nil {
+			return err
+		}
+		_, err := b.AddNamedOutput("DP-1", small)
+		return err
+	})
+	c := testclient.Connect(t, h.Socket())
+	if len(c.Outputs) != 1 {
+		t.Fatalf("%d outputs advertised with the lid closed, want the external one", len(c.Outputs))
+	}
+	bar := c.Layer(onOutput(c.Outputs[0], topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	expectBarAcross(t, h, "DP-1", "started with the lid closed")
 }
