@@ -113,18 +113,23 @@ func xDial(t *testing.T, h *Harness) *xclient {
 
 func (c *xclient) window(rect image.Rectangle, pixel uint32, override bool, props map[string][]byte) xproto.Window {
 	c.t.Helper()
-	win, err := xproto.NewWindowId(c.x)
-	if err != nil {
-		c.t.Fatal(err)
-	}
 	var or uint32
 	if override {
 		or = 1
 	}
+	return c.create(rect, xproto.CwBackPixel|xproto.CwOverrideRedirect, []uint32{pixel, or}, props)
+}
+
+func (c *xclient) create(rect image.Rectangle, mask uint32, values []uint32, props map[string][]byte) xproto.Window {
+	c.t.Helper()
+	win, err := xproto.NewWindowId(c.x)
+	if err != nil {
+		c.t.Fatal(err)
+	}
 	screen := xproto.Setup(c.x).DefaultScreen(c.x)
 	checks := []interface{ Check() error }{
 		xproto.CreateWindowChecked(c.x, screen.RootDepth, win, c.root, int16(rect.Min.X), int16(rect.Min.Y), uint16(rect.Dx()), uint16(rect.Dy()), 0,
-			xproto.WindowClassInputOutput, screen.RootVisual, xproto.CwBackPixel|xproto.CwOverrideRedirect, []uint32{pixel, or}),
+			xproto.WindowClassInputOutput, screen.RootVisual, mask, values),
 	}
 	for name, value := range props {
 		typ, format := xproto.Atom(xproto.AtomString), byte(8)

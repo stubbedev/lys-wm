@@ -44,11 +44,21 @@ func (c *Compositor) family(w *window) []*window {
 	return out
 }
 
+func (c *Compositor) placedTile(w *window) image.Rectangle {
+	ws, _ := c.wm.WorkspaceOf(w.id)
+	for _, p := range c.wm.WorkspacePlacements(ws, c.spacing()) {
+		if p.ID == w.id {
+			return p.Rect
+		}
+	}
+	return image.Rectangle{}
+}
+
 func (c *Compositor) minimize(w *window) error {
 	s := c.wm
 	var err error
 	for _, x := range c.family(w) {
-		if s, err = s.Minimize(x.id, x.tile); err != nil {
+		if s, err = s.Minimize(x.id, c.placedTile(x)); err != nil {
 			return err
 		}
 		if c.interaction != nil && c.interaction.w == x {

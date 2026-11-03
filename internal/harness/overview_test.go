@@ -1131,28 +1131,14 @@ func TestAnIconifiedXWindowKeepsItsContentInTheRow(t *testing.T) {
 	xc := xDial(t, h)
 	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
 	h.Eventually("the X window drawn", showing(100, 100, redPix))
-	iconify := xproto.ClientMessageEvent{Format: 32, Window: main, Type: xc.atoms["WM_CHANGE_STATE"], Data: xproto.ClientMessageDataUnionData32New([]uint32{3, 0, 0, 0, 0})}
-	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureRedirect|xproto.EventMaskSubstructureNotify, string(iconify.Bytes())).Check(); err != nil {
-		t.Fatal(err)
-	}
-	h.Eventually("the X window minimized", func(_ *headless.Backend, c *compositor.Compositor) bool {
-		ws := windowsOf(c)
-		return len(ws) == 1 && ws[0].Minimized
-	})
+	iconifyX(t, h, xc, main)
 	h.dispatch("overview show")
-	var slots []image.Rectangle
-	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
-		slots = c.OverviewSlots(c.Outputs()[0])
-		return nil
-	})
-	if len(slots) != 1 {
-		t.Fatalf("slots %v", slots)
-	}
-	at := centre(slots[0])
+	slot := onlySlot(t, h)
+	at := centre(slot)
 	h.Rendered(0)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if got := pixel(snapshot(b.Outputs()[0]), at.X, at.Y); got != redPix {
-			t.Errorf("the slot %v of an iconified X window shows %v, not its content", slots[0], got)
+			t.Errorf("the slot %v of an iconified X window shows %v, not its content", slot, got)
 		}
 		return nil
 	})
@@ -1359,5 +1345,56 @@ func TestTheFirstThumbnailIsDrawnBeforeTheFirstOverviewFrame(t *testing.T) {
 			t.Errorf("entering the overview drew %d thumbnails, want the active workspace's", got)
 		}
 		return nil
+	})
+}
+
+func iconifyX(t *testing.T, h *Harness, xc *xclient, win xproto.Window) {
+	t.Helper()
+	iconify := xproto.ClientMessageEvent{Format: 32, Window: win, Type: xc.atoms["WM_CHANGE_STATE"], Data: xproto.ClientMessageDataUnionData32New([]uint32{3, 0, 0, 0, 0})}
+	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureRedirect|xproto.EventMaskSubstructureNotify, string(iconify.Bytes())).Check(); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the X window minimized", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].Minimized
+	})
+}
+
+func onlySlot(t *testing.T, h *Harness) image.Rectangle {
+	t.Helper()
+	var slots []image.Rectangle
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		slots = c.OverviewSlots(c.Outputs()[0])
+		return nil
+	})
+	if len(slots) != 1 {
+		t.Fatalf("slots %v", slots)
+	}
+	return slots[0]
+}
+
+func TestAnIconifiedXWindowThatNeverDrewHoldsATileInTheRow(t *testing.T) {
+	tile := render.Color{R: 0xc0, G: 0x20, B: 0xa0, A: 0xff}
+	h := StartXwaylandWith(t, func(cfg *compositor.Config) {
+		plainOverview(cfg)
+		cfg.Decor.Tab.Inactive.Background = tile
+	}, func(err error) { t.Errorf("xwayland: %v", err) }, overviewMode)
+	xc := xDial(t, h)
+	main := xc.create(image.Rect(10, 10, 90, 70), 0, nil, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
+	h.Eventually("the X window managed", func(_ *headless.Backend, c *compositor.Compositor) bool { return len(windowsOf(c)) == 1 })
+	iconifyX(t, h, xc, main)
+	h.dispatch("overview show")
+	slot := onlySlot(t, h)
+	if slot.Dx() < 20 || slot.Dy() < 20 {
+		t.Fatalf("an X window iconified before its first layout landed has the slot %v", slot)
+	}
+	at := centre(slot)
+	want := [3]byte{tile.R, tile.G, tile.B}
+	h.Eventually("the tile in the slot "+slot.String(), showing(at.X, at.Y, want))
+	h.clickAt(at)
+	h.expectOverview(false)
+	h.Eventually("the X window back and tiled", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && !ws[0].Minimized && ws[0].Rect.Width == 800
 	})
 }
