@@ -20,7 +20,7 @@ runtime dir, session bus or display socket, and no DRM card node except under
 `just docker hardware`, whose tests open the cards without master and never
 commit.
 
-After every push, watch CI until it is green (`gh run watch`). A red `main`
+Verify locally before pushing, push, and check CI once when pushes stop; do not sit polling it. A red `main`
 is fixed before anything else lands.
 
 The dev shell runs the GPU tests on Mesa's llvmpipe. On a machine with a GPU,

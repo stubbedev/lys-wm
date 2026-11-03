@@ -135,6 +135,9 @@ func testAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce(t *testing.T, start gpu
 	if first.Last < compositor.DefaultHoldBound-5*time.Millisecond {
 		t.Errorf("the hold ended after %v, before its bound of %v, with nobody answering", first.Last, compositor.DefaultHoldBound)
 	}
+	if over := first.Last - compositor.DefaultHoldBound; !raceEnabled && over > 500*time.Millisecond {
+		t.Errorf("the hold lasted %v, %v past its bound of %v", first.Last, over, compositor.DefaultHoldBound)
+	}
 	h.Eventually("the frozen window's old buffer fills its new frame", showing(75, 50, greenColor))
 	h.Eventually("and stays out of its neighbour", showing(85, 50, blueColor))
 	_, _ = open(t, h, "third", fillRed)
