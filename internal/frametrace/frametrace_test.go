@@ -372,3 +372,11 @@ func TestIOCallsAddReadsAndWrites(t *testing.T) {
 		t.Fatalf("ioCalls = %d, want 42", got)
 	}
 }
+
+func TestWhatOneRunAloneCostsIsNotRepeated(t *testing.T) {
+	frame := func(allocs uint64) Frame { return Frame{Kind: Composited, Cost: Cost{Allocs: allocs}} }
+	s := summarizeCost([][]Frame{{frame(337), frame(4)}, {frame(5), frame(4)}, {frame(6)}})
+	if s.Allocs.Worst != 337 || s.Allocs.Repeated != 5 {
+		t.Fatalf("worst %d, repeated %d: want 337 and 5", s.Allocs.Worst, s.Allocs.Repeated)
+	}
+}

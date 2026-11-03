@@ -102,33 +102,39 @@ func glesBackend(l *loop.Loop) (*headless.Backend, error) {
 
 func StartGLES(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
+	glesTurn.hold(t)
 	testenv.GPU(t)
 	return start(t, setup{open: glesBackend, configure: configure, traced: true}, modes...)
 }
 
-var vulkanTurn = struct {
+type rendererTurn struct {
 	sync.Mutex
 	turn   chan struct{}
 	holder testing.TB
-}{turn: make(chan struct{}, 1)}
+}
 
-func holdVulkan(t testing.TB) {
+var (
+	glesTurn   = rendererTurn{turn: make(chan struct{}, 1)}
+	vulkanTurn = rendererTurn{turn: make(chan struct{}, 1)}
+)
+
+func (r *rendererTurn) hold(t testing.TB) {
 	t.Helper()
-	vulkanTurn.Lock()
-	held := vulkanTurn.holder == t
-	vulkanTurn.Unlock()
+	r.Lock()
+	held := r.holder == t
+	r.Unlock()
 	if held {
 		return
 	}
-	vulkanTurn.turn <- struct{}{}
-	vulkanTurn.Lock()
-	vulkanTurn.holder = t
-	vulkanTurn.Unlock()
+	r.turn <- struct{}{}
+	r.Lock()
+	r.holder = t
+	r.Unlock()
 	t.Cleanup(func() {
-		vulkanTurn.Lock()
-		vulkanTurn.holder = nil
-		vulkanTurn.Unlock()
-		<-vulkanTurn.turn
+		r.Lock()
+		r.holder = nil
+		r.Unlock()
+		<-r.turn
 	})
 }
 
@@ -138,20 +144,21 @@ func vulkanBackend(l *loop.Loop) (*headless.Backend, error) {
 
 func StartVulkan(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
-	holdVulkan(t)
+	vulkanTurn.hold(t)
 	testenv.Vulkan(t)
 	return start(t, setup{open: vulkanBackend, configure: configure, traced: true}, modes...)
 }
 
 func StartGLESWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
+	glesTurn.hold(t)
 	testenv.GPU(t)
 	return start(t, setup{open: withCursorPlanes(glesBackend, size), configure: configure, traced: true}, modes...)
 }
 
 func StartVulkanWithCursorPlanes(t *testing.T, size image.Point, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
 	t.Helper()
-	holdVulkan(t)
+	vulkanTurn.hold(t)
 	testenv.Vulkan(t)
 	return start(t, setup{open: withCursorPlanes(vulkanBackend, size), configure: configure, traced: true}, modes...)
 }

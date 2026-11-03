@@ -74,7 +74,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
 | `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
 | `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
-| `allocs_per_frame` | Most heap allocations between one frame's start and end: a median would move with how many of a step's frames fall in its costly part, which the load decides | An allocation added to a frame's path |
+| `allocs_per_frame` | Heap allocations in the costliest frame of a play, taking the play where that is lowest. What only happens once, as the overview building its blur chain, passes: a median would move with how many frames fall in a step's costly part, which the load decides, and the worst alone would catch a burst from another goroutine | An allocation added to a path every play takes |
 | `file_io_per_frame` | Median read and write syscalls in a frame, from `/proc/self/io` | A file touched on every frame |
 | `rss_growth_kib` | Resident size at the end of the last round minus the second, per scenario, as pipelines and arenas fill on first use | A leak that repeats with the animation |
 

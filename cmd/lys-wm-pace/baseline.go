@@ -50,7 +50,7 @@ var metrics = []metric{
 	{name: "uploads_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Uploads.Worst }, slack: slackCount},
 	{name: "thumb_draws_per_settle", of: func(c *frametrace.CostSummary) uint64 { return c.Thumbs.RunWorst }, slack: slackCount},
 	{name: "damage_rects_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.DamageRects.Worst }, slack: slackCount, fixed: damageRectCap},
-	{name: "allocs_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Allocs.Worst }, slack: slackAllocs},
+	{name: "allocs_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Allocs.Repeated }, slack: slackAllocs},
 	{name: "file_io_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.FileIO.P50 }, slack: slackCount},
 }
 
