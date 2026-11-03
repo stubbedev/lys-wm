@@ -641,6 +641,7 @@ it closes. Binds with modifiers still run.
 | `Tab`, `Shift + Tab` | Move the ring to the next or previous window, wrapping |
 | `1` to `9`, `0` | Shows that workspace on the focused output and stays open; `0` is workspace 10, and the workspace already shown closes the overview |
 | `Delete`, `x` | Closes the ringed window and moves the ring to the next one |
+| `Shift + Left`, `Shift + Right` | Move the ringed window and its dialogs to the workspace numbered one below or above, and stay open |
 | Touch | As the pointer, with the first finger |
 
 A session lock closes it at once and it will not open under one, or during a

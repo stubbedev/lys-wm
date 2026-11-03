@@ -339,6 +339,36 @@ func TestDeleteAsksTheRingedWindowToClose(t *testing.T) {
 	h.expectOverview(true)
 }
 
+func TestShiftArrowsMoveTheRingedWindowAWorkspace(t *testing.T) {
+	h := Start(t, overviewMode)
+	colouredPair(t, h)
+	h.dispatch("overview show")
+	workspaceOf := func(id wm.WindowID) wm.WorkspaceID {
+		var got wm.WorkspaceID
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			got, _ = c.WM().WorkspaceOf(id)
+			return nil
+		})
+		return got
+	}
+	h.key(keyShift, true)
+	h.tap(keyLeft)
+	h.key(keyShift, false)
+	if got := workspaceOf(2); got != 1 {
+		t.Fatalf("left of workspace 1 moved the window to %d", got)
+	}
+	h.key(keyShift, true)
+	h.tap(keyRight)
+	h.key(keyShift, false)
+	h.expectOverview(true)
+	if got := workspaceOf(2); got != 2 {
+		t.Fatalf("right moved the ringed window to %d, want 2", got)
+	}
+	if got := workspaceOf(1); got != 1 {
+		t.Fatalf("the other window moved to %d", got)
+	}
+}
+
 func TestModifiedAndOtherKeysDoNothingInTheOverview(t *testing.T) {
 	h := Start(t, overviewMode)
 	c, red, blue := colouredPair(t, h)

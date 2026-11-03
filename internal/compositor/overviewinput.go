@@ -200,17 +200,52 @@ func (c *Compositor) overviewDrop(pr *overviewPress, at point) error {
 		it.slot.Set(it.goal, now, c.animations.Curve(anim.Overview))
 		return c.scheduleAll()
 	}
-	for _, m := range slices.Clone(it.members) {
-		if s, err = s.MoveWindowToWorkspace(m.id, dest, c.settings.Autotile); err != nil {
-			return err
-		}
+	if s, err = c.overviewCarry(it, s, dest, now); err != nil {
+		return err
 	}
-	from := it.slot.At(now)
-	ov.carried = &overviewCarried{root: it.root, at: from}
 	if !onThumb {
 		return c.update(s, nil)
 	}
-	return c.flyInto(it.root, c.outputAt(at), s, dest, from, now)
+	return c.flyInto(it.root, c.outputAt(at), s, dest, ov.carried.at, now)
+}
+
+func (c *Compositor) overviewCarry(it *overviewItem, s wm.State, dest wm.WorkspaceID, now time.Duration) (wm.State, error) {
+	var err error
+	for _, m := range slices.Clone(it.members) {
+		if s, err = s.MoveWindowToWorkspace(m.id, dest, c.settings.Autotile); err != nil {
+			return s, err
+		}
+	}
+	c.overview.carried = &overviewCarried{root: it.root, at: it.slot.At(now)}
+	return s, nil
+}
+
+func (c *Compositor) overviewMoveSelected(d wm.Direction) error {
+	t, ok := c.overview.selected.(overviewWindow)
+	if !ok {
+		return nil
+	}
+	it := c.overviewItemOf(t.w)
+	if it == nil {
+		return nil
+	}
+	current, ok := c.wm.WorkspaceOf(it.root.id)
+	if !ok {
+		return nil
+	}
+	dest := current + 1
+	if d == wm.Left {
+		dest = current - 1
+	}
+	if dest < 1 {
+		return nil
+	}
+	now := c.clock()
+	s, err := c.overviewCarry(it, c.wm, dest, now)
+	if err != nil {
+		return err
+	}
+	return c.flyInto(it.root, c.overviewItemOutput(it), s, dest, c.overview.carried.at, now)
 }
 
 func (c *Compositor) flyInto(w *window, o *output.Output, s wm.State, dest wm.WorkspaceID, from image.Rectangle, now time.Duration) error {
@@ -346,7 +381,15 @@ func (c *Compositor) overviewKey(code uint32) (bool, error) {
 	switch c.seat.DepressedModifiers() {
 	case 0:
 	case uint32(binds.ModShift):
-		if sym != keysymBackTab {
+		switch sym {
+		case keysymBackTab:
+		case keysymLeft:
+			c.held = append(c.held, code)
+			return true, c.overviewMoveSelected(wm.Left)
+		case keysymRight:
+			c.held = append(c.held, code)
+			return true, c.overviewMoveSelected(wm.Right)
+		default:
 			return false, nil
 		}
 	default:
