@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -174,17 +175,102 @@ func TestRenderBudget(t *testing.T) {
 	if got := b.Budget(interval); got != interval {
 		t.Fatalf("renders slower than the refresh gave a budget of %v, want the whole refresh", got)
 	}
+}
+
+const (
+	paceInterval = 16 * time.Millisecond
+	paceMargin   = 1500 * time.Microsecond
+)
+
+func paced(b *RenderBudget, costs ...time.Duration) (late int, latency []time.Duration) {
+	for _, cost := range costs {
+		ahead := b.Budget(paceInterval)
+		if cost > ahead {
+			late++
+			b.Missed(paceInterval)
+		}
+		b.Sample(cost)
+		latency = append(latency, ahead)
+	}
+	return late, latency
+}
+
+func repeat(n int, d time.Duration) []time.Duration {
+	return slices.Repeat([]time.Duration{d}, n)
+}
+
+func TestOneSlowFrameDoesNotCostAFullRefreshOfLatency(t *testing.T) {
+	var b RenderBudget
+	const steady, slow = 2 * time.Millisecond, 5 * time.Millisecond
+	paced(&b, repeat(40, steady)...)
+	late, latency := paced(&b, append([]time.Duration{slow}, repeat(40, steady)...)...)
+	if late != 1 {
+		t.Fatalf("%d frames late around one slow one", late)
+	}
+	if latency[0] != steady+paceMargin {
+		t.Fatalf("the slow frame started %v ahead", latency[0])
+	}
+	for i, got := range latency[1:32] {
+		if got != slow+paceMargin {
+			t.Fatalf("%d frames after the slow one the budget is %v, want the slow frame's cost plus the margin", i+1, got)
+		}
+	}
+	if got := latency[len(latency)-1]; got != steady+paceMargin {
+		t.Fatalf("once the slow frame left the window the budget is %v", got)
+	}
+}
+
+func TestSlowFramesMoreOftenThanTheWindowStayCoveredBelowARefresh(t *testing.T) {
+	var b RenderBudget
+	paced(&b, repeat(40, 2*time.Millisecond)...)
+	var costs []time.Duration
+	for range 20 {
+		costs = append(costs, append(repeat(19, 2*time.Millisecond), 5*time.Millisecond)...)
+	}
+	late, latency := paced(&b, costs...)
+	if late != 1 {
+		t.Fatalf("%d frames late, want only the first slow one", late)
+	}
+	if got := slices.Max(latency); got != 5*time.Millisecond+paceMargin {
+		t.Fatalf("the budget reached %v", got)
+	}
+}
+
+func TestAStackSlowerThanHalfARefreshIsLateOnlyOnceFromCold(t *testing.T) {
+	var b RenderBudget
+	const cost = 10 * time.Millisecond
+	late, latency := paced(&b, repeat(40, cost)...)
+	if late != 1 {
+		t.Fatalf("%d frames late from cold", late)
+	}
+	if got := latency[len(latency)-1]; got != cost+paceMargin {
+		t.Fatalf("the budget settled on %v", got)
+	}
+}
+
+func TestAMissNoSampleExplainsGrowsTheBudgetAMarginAndExpires(t *testing.T) {
+	var b RenderBudget
+	const cost = time.Millisecond
+	paced(&b, repeat(32, cost)...)
+	before := b.Budget(paceInterval)
+	b.Missed(paceInterval)
+	if got := b.Budget(paceInterval); got != before+paceMargin {
+		t.Fatalf("after a miss the budget is %v, from %v", got, before)
+	}
 	for range 32 {
-		b.Sample(time.Millisecond)
+		b.Sample(cost)
 	}
-	b.Missed()
-	if got := b.Budget(interval); got != interval {
-		t.Fatalf("right after a miss the budget is %v, want the whole refresh", got)
+	if got := b.Budget(paceInterval); got != before {
+		t.Fatalf("32 frames after a miss the budget is %v, want it measured again at %v", got, before)
 	}
-	for range 32 {
-		b.Sample(time.Millisecond)
+}
+
+func TestRepeatedMissesNoSampleExplainsStopAtTheRefresh(t *testing.T) {
+	var b RenderBudget
+	for range 100 {
+		b.Missed(paceInterval)
 	}
-	if got := b.Budget(interval); got != 2500*time.Microsecond {
-		t.Fatalf("32 frames after a miss the budget is %v, want it measured again", got)
+	if got := b.Budget(paceInterval); got != paceInterval {
+		t.Fatalf("the budget after many misses is %v, want the whole refresh and no more", got)
 	}
 }

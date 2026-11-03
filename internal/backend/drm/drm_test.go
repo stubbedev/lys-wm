@@ -1808,7 +1808,7 @@ func TestAPlaneCommitOnAGoneDeviceEndsTheSession(t *testing.T) {
 	}
 }
 
-func TestTheLatchFollowsMeasuredRenderTimeAndBacksOffAfterAMiss(t *testing.T) {
+func TestTheLatchFollowsMeasuredRenderTimeAndGrowsAMarginAfterAMiss(t *testing.T) {
 	r := start(t)
 	o := r.b.Outputs()[0]
 	interval := modeOf(o.mode).Interval()
@@ -1830,8 +1830,8 @@ func TestTheLatchFollowsMeasuredRenderTimeAndBacksOffAfterAMiss(t *testing.T) {
 	if err := o.timeFrame(o.lastFlip + interval); err != nil {
 		t.Fatal(err)
 	}
-	if got := half(); got != interval {
-		t.Fatalf("after a missed vblank the latch is %v before the vblank, want the whole refresh", got)
+	if got, want := half(), time.Millisecond+2*1500*time.Microsecond; got != want {
+		t.Fatalf("after a missed vblank the latch is %v before the vblank, want a margin more, %v", got, want)
 	}
 }
 

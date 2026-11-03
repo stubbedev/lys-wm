@@ -86,30 +86,26 @@ const (
 type RenderBudget struct {
 	samples [renderSamples]time.Duration
 	n, next int
-	held    int
 }
 
 func (b *RenderBudget) Sample(took time.Duration) {
 	b.samples[b.next] = took
 	b.next = (b.next + 1) % renderSamples
 	b.n = min(b.n+1, renderSamples)
-	b.held = max(b.held-1, 0)
 }
 
-func (b *RenderBudget) Missed() {
-	b.held = renderSamples
+func (b *RenderBudget) Missed(interval time.Duration) {
+	b.Sample(b.Budget(interval))
 }
 
 func (b *RenderBudget) Budget(interval time.Duration) time.Duration {
-	if b.held > 0 {
-		return interval
-	}
-	if b.n < renderSamples {
-		return interval / 2
-	}
 	var slowest time.Duration
 	for _, s := range b.samples {
 		slowest = max(slowest, s)
 	}
-	return min(slowest+renderMargin, interval)
+	budget := slowest + renderMargin
+	if b.n < renderSamples {
+		budget = max(budget, interval/2)
+	}
+	return min(budget, interval)
 }

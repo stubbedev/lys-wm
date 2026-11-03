@@ -508,8 +508,8 @@ func TestAFrameTheGPUFinishesLateIsAMiss(t *testing.T) {
 	}
 	o.budget = backend.RenderBudget{}
 	settle(0, false)
-	if got := o.budget.Budget(interval); got != interval {
-		t.Fatalf("still rendering at the vblank the budget is %v", got)
+	if got, want := o.budget.Budget(interval), interval/2+1500*time.Microsecond; got != want {
+		t.Fatalf("still rendering at the vblank the budget is %v, want %v, a margin over the half-refresh start", got, want)
 	}
 	if o.renderFence < 0 {
 		t.Fatal("an unsignalled fence was dropped before its time was read")
@@ -520,6 +520,46 @@ func TestAFrameTheGPUFinishesLateIsAMiss(t *testing.T) {
 	}
 	if o.renderFence >= 0 {
 		t.Fatal("a signalled fence stays open")
+	}
+}
+
+type fencedFrames struct {
+	render.Renderer
+}
+
+func (fencedFrames) NativeFences() bool     { return true }
+func (fencedFrames) SyncFile() (int, error) { return -1, nil }
+
+func TestAFrameStillRenderingAtItsVblankEarnsItsBudgetBeforeTheNextFrameTakesItsFence(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		signalled bool
+	}{{"finished since the vblank", true}, {"still rendering at the next frame", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, o := fencedOutput(t)
+			b.renderer = fencedFrames{b.renderer}
+			interval := o.state.Mode.Interval()
+			gpu := 12 * time.Millisecond
+			now := backend.Now()
+			start := now - gpu
+			b.fenceTime = func(int) (time.Duration, bool, error) { return 0, false, nil }
+			o.fakeFence(t)
+			o.fenceStart, o.aimedAt = start, start+interval
+			if err := o.timeFrame(start+interval, true); err != nil {
+				t.Fatal(err)
+			}
+			if tc.signalled {
+				b.fenceTime = func(int) (time.Duration, bool, error) { return start + gpu, true, nil }
+			}
+			o.frameStart = backend.Now()
+			o.fenceFrame()
+			if got := o.budget.Budget(interval); got < gpu {
+				t.Fatalf("a %v frame left a budget of %v", gpu, got)
+			}
+			if o.renderFence >= 0 {
+				t.Fatal("the old fence stays open")
+			}
+		})
 	}
 }
 

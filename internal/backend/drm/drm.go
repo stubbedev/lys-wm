@@ -1284,7 +1284,7 @@ func (o *Output) dropRenderFence() error {
 func (o *Output) timeFrame(flip time.Duration) error {
 	interval := modeOf(o.mode).Interval()
 	if o.aimedAt != 0 && flip > o.aimedAt+interval/2 {
-		o.budget.Missed()
+		o.budget.Missed(interval)
 	}
 	o.aimedAt = 0
 	if o.renderFence < 0 || o.untimed {

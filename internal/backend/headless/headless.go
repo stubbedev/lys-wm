@@ -541,8 +541,12 @@ func (o *Output) fenceFrame() {
 		o.noTiming(errors.New("the renderer has no native fences"))
 		return
 	}
+	o.settleFence(backend.Now())
 	if err := o.dropFence(); err != nil {
 		o.backend.report(fmt.Errorf("headless: close the render fence of %s: %w", o.name, err))
+	}
+	if o.untimed {
+		return
 	}
 	fd, err := f.SyncFile()
 	switch {
@@ -555,33 +559,48 @@ func (o *Output) fenceFrame() {
 	}
 }
 
+func (o *Output) settleFence(now time.Duration) {
+	if o.renderFence < 0 {
+		return
+	}
+	done, ok, err := o.backend.fenceTime(o.renderFence)
+	switch {
+	case err != nil:
+		o.noTiming(err)
+	case !ok:
+		o.budget.Sample(now - o.fenceStart)
+	case done > o.fenceStart:
+		o.budget.Sample(done - o.fenceStart)
+	}
+}
+
 func (o *Output) timeFrame(flip time.Duration, flipped bool) error {
 	interval := o.state.Mode.Interval()
 	missed := flipped && o.aimedAt != 0 && flip > o.aimedAt+interval/2
 	if flipped {
 		o.aimedAt = 0
 	}
-	if o.renderFence >= 0 && !o.untimed {
-		done, ok, err := o.backend.fenceTime(o.renderFence)
-		switch {
-		case err != nil:
-			o.noTiming(err)
-		case !ok:
-			missed = missed || flipped
-		default:
-			if done > o.fenceStart {
-				o.budget.Sample(done - o.fenceStart)
-			}
-			missed = missed || flipped && done > flip
+	if o.renderFence < 0 || o.untimed {
+		if missed {
+			o.budget.Missed(interval)
 		}
-		if ok || err != nil {
-			if err := o.dropFence(); err != nil {
-				return fmt.Errorf("headless: close the render fence of %s: %w", o.name, err)
-			}
-		}
+		return nil
 	}
-	if missed {
-		o.budget.Missed()
+	done, ok, err := o.backend.fenceTime(o.renderFence)
+	if err != nil {
+		o.noTiming(err)
+	}
+	if missed || flipped && err == nil && (!ok || done > flip) {
+		o.budget.Missed(interval)
+	}
+	if !ok && err == nil {
+		return nil
+	}
+	if ok && done > o.fenceStart {
+		o.budget.Sample(done - o.fenceStart)
+	}
+	if err := o.dropFence(); err != nil {
+		return fmt.Errorf("headless: close the render fence of %s: %w", o.name, err)
 	}
 	return nil
 }
