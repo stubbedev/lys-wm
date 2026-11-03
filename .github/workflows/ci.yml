@@ -37,11 +37,34 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Gates (formatting, vet, lint, test, build, govulncheck)
-        run: nix develop -c just gates
+        run: nix develop -c just plain
       - name: Nix package and NixOS module
         run: nix build -L . .#checks.${{ matrix.system }}.module
 
+  race:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Every package under the race detector
+        run: nix develop -c just race
+
   vm:
+    strategy:
+      fail-fast: false
+      matrix:
+        checks:
+          - .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu
+          - .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -52,9 +75,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VMs with one GPU, two GPUs, a configured primary, a display-only card, the cursor plane and zero-scaled X windows
-        run: nix build -L .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests
+        run: nix build -L ${{ matrix.checks }}
 
   clients:
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [vm-apps, vm-screencast]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -65,7 +92,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: NixOS VMs with everyday clients and screen sharing
-        run: nix build -L .#checks.x86_64-linux.vm-apps .#checks.x86_64-linux.vm-screencast
+        run: nix build -L .#checks.x86_64-linux.${{ matrix.check }}
 
   lys-shell:
     runs-on: ubuntu-latest

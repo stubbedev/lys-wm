@@ -6,8 +6,12 @@ default:
 
 # Every gate a commit must pass: formatting, a tidy go.mod, the release
 # gates, the vulnerability scan and the race detector. Each package's tests run
-# once plain, in `check`, and once under `race`. CI runs this in the dev shell.
-gates: fmt-check tidy-check check vuln race
+# once plain, in `check`, and once under `race`. CI runs `plain` and `race` as
+# separate jobs in the dev shell.
+gates: plain race
+
+# Every gate but the race detector.
+plain: fmt-check tidy-check check vuln
 
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
