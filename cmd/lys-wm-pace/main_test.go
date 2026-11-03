@@ -96,6 +96,23 @@ func TestTheGateNamesWhatIsLate(t *testing.T) {
 	}
 }
 
+func TestOfTheOverviewOnlyTheThirtyWindowScrubFollowingItOpenIsGated(t *testing.T) {
+	var gated []string
+	for i := range scenarios {
+		if !strings.HasPrefix(scenarios[i].name, "overview") {
+			continue
+		}
+		for _, st := range scenarios[i].steps {
+			if !st.ungated {
+				gated = append(gated, st.name)
+			}
+		}
+	}
+	if !slices.Equal(gated, []string{"overview-scrub-30-follow-open"}) {
+		t.Fatalf("gated overview steps: %v", gated)
+	}
+}
+
 func buildCompositor(t *testing.T) string {
 	t.Helper()
 	testenv.Keymap(t)

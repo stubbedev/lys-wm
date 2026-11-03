@@ -41,7 +41,10 @@ rules:
   - {title: ^pile$, float: true, size: 1000x700}
 `
 
-const pileTitle = "pile"
+const (
+	pileTitle  = "pile"
+	gatedScrub = 30
+)
 
 const (
 	eased       = 400 * time.Millisecond
@@ -65,6 +68,7 @@ type step struct {
 	after      func(*session)
 	measure    time.Duration
 	continuous bool
+	ungated    bool
 }
 
 type scenario struct {
@@ -72,7 +76,6 @@ type scenario struct {
 	setup     func(*session)
 	steps     []step
 	once      bool
-	ungated   bool
 	fakeInput bool
 }
 
@@ -158,11 +161,11 @@ func (s *session) clear() {
 	s.settle()
 }
 
-func (s *session) play(st *step, ungated bool) {
+func (s *session) play(st *step) {
 	from := s.now()
 	st.act(s)
 	s.pump(st.measure)
-	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, ungated: ungated, from: from, to: s.now()})
+	s.marks = append(s.marks, mark{step: st.name, continuous: st.continuous, ungated: st.ungated, from: from, to: s.now()})
 	s.pump(settleGap)
 	if st.after != nil {
 		s.settle()
@@ -180,7 +183,7 @@ func (s *session) run(sc *scenario, rounds int) {
 	}
 	for range rounds {
 		for i := range sc.steps {
-			s.play(&sc.steps[i], sc.ungated)
+			s.play(&sc.steps[i])
 		}
 	}
 	s.clear()
@@ -257,12 +260,11 @@ func pile(n int) func(*session) {
 func overviewByAction(n int) scenario {
 	name := "overview-" + strconv.Itoa(n)
 	return scenario{
-		name:    name,
-		ungated: true,
-		setup:   pile(n),
+		name:  name,
+		setup: pile(n),
 		steps: []step{
-			{name: name + "-open", measure: sprung, act: dispatches("overview show"), after: overviewIs(true)},
-			{name: name + "-close", measure: sprung, act: dispatches("overview hide"), after: overviewIs(false)},
+			{name: name + "-open", measure: sprung, ungated: true, act: dispatches("overview show"), after: overviewIs(true)},
+			{name: name + "-close", measure: sprung, ungated: true, act: dispatches("overview hide"), after: overviewIs(false)},
 		},
 	}
 }
@@ -271,14 +273,13 @@ func overviewByFingers(n int) scenario {
 	name := "overview-scrub-" + strconv.Itoa(n)
 	return scenario{
 		name:      name,
-		ungated:   true,
 		fakeInput: true,
 		setup:     pile(n),
 		steps: []step{
-			{name: name + "-follow-open", continuous: true, act: fingers(0, -swipeStep)},
-			{name: name + "-release-open", measure: sprung, act: lifted, after: overviewIs(true)},
-			{name: name + "-follow-close", continuous: true, act: fingers(0, swipeStep)},
-			{name: name + "-release-close", measure: sprung, act: lifted, after: overviewIs(false)},
+			{name: name + "-follow-open", continuous: true, ungated: n != gatedScrub, act: fingers(0, -swipeStep)},
+			{name: name + "-release-open", measure: sprung, ungated: true, act: lifted, after: overviewIs(true)},
+			{name: name + "-follow-close", continuous: true, ungated: true, act: fingers(0, swipeStep)},
+			{name: name + "-release-close", measure: sprung, ungated: true, act: lifted, after: overviewIs(false)},
 		},
 	}
 }

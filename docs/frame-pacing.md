@@ -54,10 +54,9 @@ numbers say nothing about a GPU. `-allow-software` accepts it for relative
 numbers and hot spots, and the report then says so on its second line and sets
 `real_gpu: false`. `-cpu-profile <file>` adds a Go CPU profile of lys-wm.
 `-max-late-percent <n>` fails when any step presents more than that share of its
-frames late; `just hardware` uses it. The overview's steps are reported but not
-gated: they have not run on a real GPU yet, and one late frame is several percent
-of a scrub, where the first frame of every open also builds the blur and the
-thumbnails.
+frames late; `just hardware` uses it. Most of the overview's steps are reported but not gated: one late frame is several
+percent of a scrub. `overview-scrub-30-follow-open` is gated, as the heaviest of them,
+and stays under the limit on an RTX 3060 Ti.
 
 ## The trace
 
