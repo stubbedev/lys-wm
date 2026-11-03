@@ -529,6 +529,10 @@ func (o *Output) dropFence() error {
 	return unix.Close(fd)
 }
 
+func (o *Output) StopTiming() {
+	o.untimed = true
+}
+
 func (o *Output) fenceFrame() {
 	f, ok := o.backend.renderer.(frameFencer)
 	switch {

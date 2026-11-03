@@ -47,6 +47,14 @@ func startNestedWith(t *testing.T, host *Harness, configure func(*compositor.Con
 
 func startNestedOn(t *testing.T, host *Harness, renderer nested.Renderer, configure func(*compositor.Config)) *nestedLysWM {
 	t.Helper()
+	if renderer == nested.Vulkan {
+		host.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			for _, o := range b.Outputs() {
+				o.StopTiming()
+			}
+			return nil
+		})
+	}
 	n := &nestedLysWM{t: t, host: host, dir: testenv.SocketDir(t)}
 	var err error
 	if n.loop, err = loop.New(); err != nil {
