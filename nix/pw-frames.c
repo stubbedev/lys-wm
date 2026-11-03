@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <pipewire/pipewire.h>
 #include <spa/param/video/format-utils.h>
@@ -17,7 +18,17 @@ struct capture {
 	int skip;
 	int written;
 	int status;
+	long long connected_ms;
+	long long last_ms;
+	long long first_ms;
+	long long gap_ms;
 };
+
+static long long now_ms(void) {
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
 
 static void fail(struct capture *c, const char *message) {
 	fprintf(stderr, "pw-frames: %s\n", message);
@@ -62,13 +73,23 @@ static void on_process(void *data) {
 	struct spa_data *d = &buf->datas[0];
 	uint32_t width = c->format.size.width, height = c->format.size.height;
 	int corrupted = h != NULL && (h->flags & SPA_META_HEADER_FLAG_CORRUPTED);
-	if (!corrupted && d->data != NULL && d->chunk->size > 0 && c->skip > 0) {
-		c->skip--;
-	} else if (!corrupted && d->data != NULL && d->chunk->size > 0) {
+	if (!corrupted && d->data != NULL && d->chunk->size > 0) {
 		int32_t stride = d->chunk->stride > 0 ? d->chunk->stride : (int32_t)width * 4;
 		if ((uint64_t)stride * (height - 1) + width * 4 > d->maxsize) {
 			pw_stream_queue_buffer(c->stream, b);
 			fail(c, "a buffer is smaller than its frame");
+			return;
+		}
+		long long now = now_ms();
+		if (c->first_ms < 0) {
+			c->first_ms = now - c->connected_ms;
+		} else if (now - c->last_ms > c->gap_ms) {
+			c->gap_ms = now - c->last_ms;
+		}
+		c->last_ms = now;
+		if (c->skip > 0) {
+			c->skip--;
+			pw_stream_queue_buffer(c->stream, b);
 			return;
 		}
 		const uint8_t *pixels = (const uint8_t *)d->data + d->chunk->offset;
@@ -106,7 +127,7 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 	pw_init(&argc, &argv);
-	struct capture c = {.skip = atoi(argv[3]), .wanted = atoi(argv[4])};
+	struct capture c = {.skip = atoi(argv[3]), .wanted = atoi(argv[4]), .first_ms = -1};
 	if ((c.out = fopen(argv[5], "wb")) == NULL) {
 		perror("pw-frames: open the output");
 		return 1;
@@ -132,6 +153,7 @@ int main(int argc, char *argv[]) {
 		SPA_FORMAT_VIDEO_format, SPA_POD_CHOICE_ENUM_Id(3, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRA),
 		SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(&SPA_RECTANGLE(1280, 800), &SPA_RECTANGLE(1, 1), &SPA_RECTANGLE(8192, 8192)),
 		SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&SPA_FRACTION(30, 1), &SPA_FRACTION(0, 1), &SPA_FRACTION(1000, 1)));
+	c.connected_ms = now_ms();
 	if (pw_stream_connect(c.stream, PW_DIRECTION_INPUT, (uint32_t)atoi(argv[2]), PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS, params, 1) < 0) {
 		fprintf(stderr, "pw-frames: connect the stream\n");
 		return 1;
@@ -147,5 +169,6 @@ int main(int argc, char *argv[]) {
 		perror("pw-frames: close the output");
 		return 1;
 	}
+	printf("first %lld gap %lld\n", c.first_ms, c.gap_ms);
 	return c.status;
 }

@@ -11,6 +11,9 @@ CURSOR_MODES = {"hidden": 1, "embedded": 2}
 BACKGROUND = bytes([0x2E, 0x1E, 0x1E])
 CURSOR_REACH = 64
 FRAMES_WHILE_THE_PICKER_CLOSES = 30
+FIRST_FRAME_MS = 10000
+MAX_GAP_MS = 2000
+SETTLED_SHARE = 0.01
 COLOR_TOLERANCE = 3
 
 
@@ -82,6 +85,10 @@ def read_frames(path):
     return width, height, [captured[at:at + size] for at in range(0, len(captured), size)]
 
 
+def background_share(frame, width, height):
+    return sum(1 for at in range(0, len(frame), 4) if frame[at:at + 3] == BACKGROUND) / (width * height)
+
+
 def capture(args):
     remote, node = start_cast(args.source, args.cursor)
     result = subprocess.run(
@@ -93,17 +100,28 @@ def capture(args):
     )
     if result.returncode != 0:
         sys.exit(f"screencast: pw-frames exited {result.returncode}: {result.stderr}")
-    sizes = result.stdout.split("\n")[0].split()
+    lines = result.stdout.strip().split("\n")
+    sizes = lines[0].split()
     if len(sizes) != 2:
         sys.exit(f"screencast: pw-frames reported no size in {result.stdout!r}")
+    timing = lines[-1].split()
+    if len(timing) != 4 or timing[0] != "first" or timing[2] != "gap":
+        sys.exit(f"screencast: pw-frames reported no timing in {result.stdout!r}")
+    first_ms, gap_ms = int(timing[1]), int(timing[3])
     with open(f"{args.path}.size", "w") as f:
         f.write(f"{sizes[0]} {sizes[1]} {args.frames}\n")
     width, height, frames = read_frames(args.path)
     distinct = len(set(frames))
-    last = frames[-1]
-    background = sum(1 for at in range(0, len(last), 4) if last[at:at + 3] == BACKGROUND) / (width * height)
+    background = background_share(frames[-1], width, height)
+    settling = background_share(frames[0], width, height)
     print(f"screencast: {args.source} stream node {node}, {width}x{height}, cursor {args.cursor}", flush=True)
-    print(f"screencast: {distinct} distinct frames of {len(frames)}; {background:.3f} of the last is the desktop background", flush=True)
+    print(f"screencast: {distinct} distinct frames of {len(frames)}; {background:.3f} of the last is the desktop background, {settling:.3f} of the first; first frame after {first_ms} ms, longest gap {gap_ms} ms", flush=True)
+    if first_ms > FIRST_FRAME_MS:
+        sys.exit(f"screencast: the first frame took {first_ms} ms")
+    if gap_ms > MAX_GAP_MS:
+        sys.exit(f"screencast: the stream stalled for {gap_ms} ms, discarded frames included")
+    if abs(background - settling) > SETTLED_SHARE:
+        sys.exit(f"screencast: the desktop went from {settling:.3f} to {background:.3f} of the frames after {FRAMES_WHILE_THE_PICKER_CLOSES} discarded: the picker is still closing")
     if distinct < 2:
         sys.exit("screencast: the stream shows no live content")
     if args.source == "monitor" and not 0.1 <= background < 1:
