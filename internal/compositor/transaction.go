@@ -46,6 +46,7 @@ type HoldStats struct {
 	Expired int
 	Longest time.Duration
 	Last    time.Duration
+	Armed   time.Duration
 }
 
 func (s *HoldStats) note(held time.Duration, expired bool) {
@@ -135,7 +136,8 @@ func (c *Compositor) begin(x *wm.Arranger, awaited []*window) error {
 		err = errors.Join(err, m.unthrottle())
 	}
 	c.txn = t
-	return errors.Join(err, c.holdTimer.Arm(holdBound(c.interaction != nil, c.holdBound)))
+	c.holds.Armed = holdBound(c.interaction != nil, c.holdBound)
+	return errors.Join(err, c.holdTimer.Arm(c.holds.Armed))
 }
 
 func (c *Compositor) await(w *window) *member {
