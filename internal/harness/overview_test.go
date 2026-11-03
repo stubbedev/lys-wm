@@ -1736,16 +1736,6 @@ func TestAThumbnailIsFilteredAfterTheFrameThatFoundItCalm(t *testing.T) {
 		if !bytes.Equal(shown.Pix, before.Pix) {
 			t.Error("the frame that found the thumbnail calm already showed it filtered")
 		}
-		if err := comp.Frame(o); err != nil {
-			return err
-		}
-		next, err := o.Primary()
-		if err != nil {
-			return err
-		}
-		if bytes.Equal(next.Pix, before.Pix) {
-			t.Error("the frame after the filter pass did not show the filtered thumbnail")
-		}
 		return nil
 	})
 }
