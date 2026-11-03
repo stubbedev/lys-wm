@@ -189,7 +189,7 @@ func (c *Compositor) drawFirstThumbs() error {
 			if t.id != v.workspace || t.target != nil || t.rect.Empty() {
 				continue
 			}
-			if err := c.refreshThumb(o, v, t, false); err != nil {
+			if err := c.refreshThumb(o, v, t, t.calm(c.overview.progress.Done(c.frameTime), c.frameTime)); err != nil {
 				errs = append(errs, fmt.Errorf("the first thumbnail of workspace %d: %w", t.id, err))
 			}
 		}

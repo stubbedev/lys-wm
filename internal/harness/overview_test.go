@@ -140,7 +140,6 @@ func TestTheOverviewOnEveryRenderer(t *testing.T) {
 			r, bl := centre(plan.windows[1]), centre(plan.windows[2])
 			return showingAbout(r.X, r.Y, redPix)(b, comp) && showingAbout(bl.X, bl.Y, bluePix)(b, comp)
 		})
-		h.Eventually("the thumbnail filtered", func(_ *headless.Backend, comp *compositor.Compositor) bool { return !comp.OverviewThumbsRough() })
 		h.assertGolden("overview")
 		h.dispatch("overview hide")
 		h.expectOverview(false)
@@ -1669,4 +1668,26 @@ func TestDroppingAWindowOnItsOwnThumbnailSendsItBackWithoutAFlight(t *testing.T)
 	if got := h.windowRect(2, &now); got != plan.windows[2] {
 		t.Errorf("the window is at %v, its slot is %v", got, plan.windows[2])
 	}
+}
+
+func TestAThumbnailDrawnOnEnteringAnOverviewAtRestIsAlreadyFiltered(t *testing.T) {
+	h := Start(t, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("window", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	w.Stop()
+	h.Rendered(0)
+	action, err := wm.ParseAction("overview show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		if err := comp.Dispatch(action); err != nil {
+			return err
+		}
+		if comp.OverviewThumbsRough() {
+			t.Error("entering an overview that does not animate left an unfiltered thumbnail on screen")
+		}
+		return nil
+	})
 }
