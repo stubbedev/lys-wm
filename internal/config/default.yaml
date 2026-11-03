@@ -10,6 +10,7 @@ env:
 binds:
   - {chord: SUPER + Return, action: exec foot}
   - {chord: SUPER + Space, action: exec lys-shell launcher}
+  - {chord: SUPER + A, action: exec lys-shell panel dashboard}
   - {chord: SUPER + Q, action: kill}
   - {chord: SUPER + SHIFT + R, action: reload}
   - {chord: SUPER + SHIFT + E, action: exit}
