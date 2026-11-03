@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +138,34 @@ func TestAMissingCompositorFailsWithItsLog(t *testing.T) {
 	err := measure(options{backend: "headless", renderer: "vulkan", compositor: script, rounds: 1}, io.Discard, os.Getenv)
 	if err == nil || !strings.Contains(err.Error(), "did not start") || !strings.Contains(err.Error(), "no render node for you") || !strings.Contains(err.Error(), "/dev/dri") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestOnlyGrowthThatRepeatsCounts(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		samples []int64
+		want    int64
+	}{
+		{"a leak of 11680 KiB a round", []int64{100000, 111680, 123360, 135040}, 11680},
+		{"an arena that grows once", []int64{100000, 120000, 120100, 120200}, 100},
+		{"a scavenge in the middle", []int64{100000, 100500, 99000, 100500}, -1500},
+		{"two samples", []int64{100000, 100300}, 300},
+	} {
+		if got := repeatedGrowth(c.samples); got != c.want {
+			t.Errorf("%s: %d KiB, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestALimitNeedsRoundsForGrowthToRepeat(t *testing.T) {
+	for _, args := range [][]string{{"-gate", "-rounds", "4"}, {"-write-baseline", "b.json", "-rounds", "4"}} {
+		if _, err := parseOptions(args, io.Discard); err == nil || !strings.Contains(err.Error(), "needs at least") {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	if _, err := parseOptions([]string{"-gate", "-rounds", strconv.Itoa(gateRounds)}, io.Discard); err != nil {
+		t.Error(err)
 	}
 }
 

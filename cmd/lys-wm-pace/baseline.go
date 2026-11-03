@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"slices"
 	"strings"
@@ -16,8 +15,7 @@ import (
 type limits map[string]uint64
 
 type rendererBaseline struct {
-	Steps  map[string]limits `json:"steps"`
-	Growth limits            `json:"rss_growth_kib"`
+	Steps map[string]limits `json:"steps"`
 }
 
 type baseline map[string]rendererBaseline
@@ -26,7 +24,7 @@ const (
 	damageRectCap     = 32
 	slackAllocs       = 32
 	slackCount        = 2
-	slackGrowthKiB    = 16384
+	repeatedGrowthKiB = 1024
 	marginDenominator = 4
 )
 
@@ -75,7 +73,7 @@ func withMargin(observed, slack, fixed uint64) uint64 {
 }
 
 func derive(r *report) rendererBaseline {
-	b := rendererBaseline{Steps: make(map[string]limits, len(r.Steps)), Growth: make(limits, len(r.Growth))}
+	b := rendererBaseline{Steps: make(map[string]limits, len(r.Steps))}
 	for i := range r.Steps {
 		st := &r.Steps[i]
 		l := make(limits, len(metrics))
@@ -86,9 +84,6 @@ func derive(r *report) rendererBaseline {
 			}
 		}
 		b.Steps[st.Name] = l
-	}
-	for _, g := range r.Growth {
-		b.Growth[g.Scenario] = withMargin(uint64(max(g.KiB, 0)), slackGrowthKiB, 0)
 	}
 	return b
 }
@@ -157,13 +152,8 @@ func checkBaseline(b baseline, r *report) error {
 		}
 	}
 	for _, g := range r.Growth {
-		limit, ok := rb.Growth[g.Scenario]
-		if !ok {
-			limit = math.MaxUint64
-			over = append(over, g.Scenario+": no RSS growth limit in the baseline")
-		}
-		if g.KiB > 0 && uint64(g.KiB) > limit {
-			over = append(over, fmt.Sprintf("%s: RSS grew %d KiB over its rounds, limit %d", g.Scenario, g.KiB, limit))
+		if g.KiB > repeatedGrowthKiB {
+			over = append(over, fmt.Sprintf("%s: RSS grew at least %d KiB in every round, limit %d", g.Scenario, g.KiB, repeatedGrowthKiB))
 		}
 	}
 	if len(over) > 0 {

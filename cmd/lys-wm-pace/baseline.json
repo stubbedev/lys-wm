@@ -303,18 +303,6 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
-    },
-    "rss_growth_kib": {
-      "genie": 28284,
-      "glass-slide": 16572,
-      "move": 16520,
-      "overview-10": 16632,
-      "overview-30": 16516,
-      "overview-scrub-10": 16424,
-      "overview-scrub-30": 16496,
-      "swipe": 16392,
-      "window": 31960,
-      "workspace": 16396
     }
   },
   "gles/software": {
@@ -621,18 +609,6 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
-    },
-    "rss_growth_kib": {
-      "genie": 47560,
-      "glass-slide": 16448,
-      "move": 16604,
-      "overview-10": 18660,
-      "overview-30": 16564,
-      "overview-scrub-10": 16436,
-      "overview-scrub-30": 16492,
-      "swipe": 16460,
-      "window": 27988,
-      "workspace": 16396
     }
   },
   "vulkan/gpu": {
@@ -939,18 +915,6 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
-    },
-    "rss_growth_kib": {
-      "genie": 28348,
-      "glass-slide": 16404,
-      "move": 16536,
-      "overview-10": 16584,
-      "overview-30": 17508,
-      "overview-scrub-10": 16492,
-      "overview-scrub-30": 16488,
-      "swipe": 16396,
-      "window": 31956,
-      "workspace": 16392
     }
   },
   "vulkan/software": {
@@ -1257,18 +1221,6 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
-    },
-    "rss_growth_kib": {
-      "genie": 28148,
-      "glass-slide": 16384,
-      "move": 16772,
-      "overview-10": 16940,
-      "overview-30": 16384,
-      "overview-scrub-10": 16464,
-      "overview-scrub-30": 16524,
-      "swipe": 16392,
-      "window": 31960,
-      "workspace": 16468
     }
   }
 }

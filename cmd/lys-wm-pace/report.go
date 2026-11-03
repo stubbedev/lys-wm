@@ -32,6 +32,14 @@ type report struct {
 	Growth  []rssGrowth       `json:"rss_growth"`
 }
 
+func repeatedGrowth(samples []int64) int64 {
+	smallest := samples[1] - samples[0]
+	for i := 2; i < len(samples); i++ {
+		smallest = min(smallest, samples[i]-samples[i-1])
+	}
+	return smallest
+}
+
 func buildReport(h frametrace.Header, rounds int, marks []mark, growth []rssGrowth, frames []frametrace.Frame) report {
 	r := report{Header: h, RealGPU: !h.Software, Rounds: rounds, Growth: growth}
 	index := map[string]int{}
@@ -97,7 +105,7 @@ func (r *report) writeCost(out io.Writer) {
 	}
 	_ = w.Flush()
 	for _, g := range r.Growth {
-		fmt.Fprintf(out, "rss growth over %s: %d KiB\n", g.Scenario, g.KiB)
+		fmt.Fprintf(out, "rss growth in every round of %s: %d KiB\n", g.Scenario, g.KiB)
 	}
 }
 

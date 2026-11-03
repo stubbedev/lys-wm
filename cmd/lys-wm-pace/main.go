@@ -76,6 +76,9 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	if o.rounds < 1 {
 		return options{}, fmt.Errorf("-rounds %d: needs at least one round", o.rounds)
 	}
+	if (o.gate || o.writeBaseline != "") && o.rounds < gateRounds {
+		return options{}, fmt.Errorf("-rounds %d: a limit needs at least %d rounds, for growth to repeat", o.rounds, gateRounds)
+	}
 	if *only != "" {
 		o.only = strings.Split(*only, ",")
 		for _, name := range o.only {

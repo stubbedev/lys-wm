@@ -58,6 +58,7 @@ const (
 	quiet        = 5 * time.Millisecond
 	settleTries  = 20
 	warmupRounds = 2
+	gateRounds   = 5
 )
 
 type step struct {
@@ -178,17 +179,17 @@ func (s *session) run(sc *scenario, rounds int) {
 	if sc.once {
 		rounds = 1
 	}
-	var first int64
+	samples := make([]int64, 0, rounds)
 	for round := range rounds {
 		for i := range sc.steps {
 			s.play(&sc.steps[i])
 		}
-		if round == warmupRounds-1 {
-			first = s.rss()
+		if round >= warmupRounds-1 {
+			samples = append(samples, s.rss())
 		}
 	}
 	if rounds > warmupRounds {
-		s.growth = append(s.growth, rssGrowth{Scenario: sc.name, KiB: s.rss() - first})
+		s.growth = append(s.growth, rssGrowth{Scenario: sc.name, KiB: repeatedGrowth(samples)})
 	}
 	s.clear()
 }

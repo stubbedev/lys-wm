@@ -93,9 +93,9 @@ hardware:
     done
     exit "$rc"
 
-# How many times the gates play each animation: enough for a repeated step to
-# show RSS growth, as the baselines were measured.
-pace_rounds := "3"
+# How many times the gates play each animation: enough for RSS growth to repeat
+# over three rounds after the two that warm up, as the baselines were measured.
+pace_rounds := "5"
 
 # Both renderers at once: nothing the gate counts depends on the load.
 [parallel]
