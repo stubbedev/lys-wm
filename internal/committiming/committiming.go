@@ -30,6 +30,11 @@ type Manager struct {
 	clock   Clock
 	timers  []*timer
 	waiting []*timer
+	armedAt time.Duration
+}
+
+func (m *Manager) LastArmed() time.Duration {
+	return m.armedAt
 }
 
 func New(d *server.Display, l *loop.Loop, clock Clock) (*Manager, error) {
@@ -201,6 +206,7 @@ func (t *timer) arm() error {
 	if next == 0 {
 		return t.clock.Disarm()
 	}
+	t.m.armedAt = next
 	return t.clock.Arm(next - now)
 }
 

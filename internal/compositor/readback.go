@@ -20,6 +20,10 @@ func (c *Compositor) offLoop(work func() error, then func(error) error) {
 	})
 }
 
+func (c *Compositor) ShmSyncReads() uint64 {
+	return c.shmSyncReads
+}
+
 func (c *Compositor) asyncReader() (render.AsyncReader, bool) {
 	r, ok := c.renderer.(render.AsyncReader)
 	return r, ok && r.AsyncReads()

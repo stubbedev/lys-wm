@@ -76,3 +76,7 @@ func (c *Compositor) nextFlip(s *surface.Surface) (time.Duration, bool) {
 	}
 	return next, found
 }
+
+func (c *Compositor) CommitTimerArmed() time.Duration {
+	return c.timing.LastArmed()
+}

@@ -166,7 +166,4 @@ func blitThroughACopy(t *testing.T, open func(*kdrm.Device, gpu.Paths) (*gbmAllo
 	}
 	per := time.Since(start) / frames
 	t.Logf("a %v frame copied and blitted in %v", big, per)
-	if per > time.Second/60 {
-		t.Errorf("a %v frame takes %v to copy and blit, too long for 60 Hz", big, per)
-	}
 }

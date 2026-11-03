@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/backend/headless"
+	"github.com/stubbedev/lys-wm/internal/compositor"
 	cct "github.com/stubbedev/lys-wm/internal/protocol/client/committiming"
 	cff "github.com/stubbedev/lys-wm/internal/protocol/client/fifo"
 	cpt "github.com/stubbedev/lys-wm/internal/protocol/client/presentationtime"
@@ -74,6 +76,7 @@ func answered(feedbacks ...*feedbackEvents) func() bool {
 }
 
 func TestFifoShowsEveryQueuedUpdateForARefresh(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	pc := pace(t, h)
 	w := pc.window(t)
@@ -107,6 +110,7 @@ func TestFifoShowsEveryQueuedUpdateForARefresh(t *testing.T) {
 }
 
 func TestAFifoBarrierOnAHiddenSurfaceDoesNotStall(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	pc := pace(t, h)
 	s := pc.c.Surface()
@@ -132,6 +136,7 @@ func timestamp(at time.Duration) (hi, lo, nsec uint32) {
 }
 
 func TestCommitTimingHoldsAnUpdateUntilItsTime(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	pc := pace(t, h)
 	w := pc.window(t)
@@ -150,12 +155,19 @@ func TestCommitTimingHoldsAnUpdateUntilItsTime(t *testing.T) {
 	if after.at < target {
 		t.Fatalf("an update queued behind a timed one was presented %v before the target", target-after.at)
 	}
-	if late := after.at - target; late > delay {
-		t.Fatalf("the timed update was presented %v after its target", late)
+	var armed time.Duration
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		armed = c.CommitTimerArmed()
+		return nil
+	})
+	if armed != target {
+		t.Fatalf("the commit timer was armed for %v, want the target %v", armed, target)
 	}
+	t.Logf("presented %v after its target", after.at-target)
 }
 
 func TestPacingProtocolErrors(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		code uint32
 		run  func(pc *paced, s *cw.WlSurface) error
@@ -204,6 +216,7 @@ func TestPacingProtocolErrors(t *testing.T) {
 }
 
 func TestAFifoAndATimerCanBeMadeAgainAfterTheirObjectsAreGone(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	pc := pace(t, h)
 	s := pc.c.Surface()

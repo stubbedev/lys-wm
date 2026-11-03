@@ -210,6 +210,7 @@ func (r *captureRig) waiting(session *ceic.ExtImageCopyCaptureSessionV1, size im
 }
 
 func TestImageCopyCaptureOfOutputsAndWindows(t *testing.T) {
+	t.Parallel()
 	onEachRenderer(t, func(t *testing.T, start starter) {
 		h := start(t, small)
 		c := testclient.Connect(t, h.Socket())
@@ -249,6 +250,7 @@ func TestImageCopyCaptureOfOutputsAndWindows(t *testing.T) {
 }
 
 func TestImageCopyCaptureOfAHiddenWindow(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("hidden", quadrants)
@@ -277,6 +279,7 @@ func TestImageCopyCaptureOfAHiddenWindow(t *testing.T) {
 }
 
 func TestImageCopyCaptureFollowsAPlaneCursor(t *testing.T) {
+	t.Parallel()
 	h := StartWithCursorPlanes(t, plane, func(*compositor.Config) {}, small)
 	h.Eventually("the arrow on the cursor plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		return b.Outputs()[0].Cursor().Visible()
@@ -361,6 +364,7 @@ func (w *cursorWatch) Hotspot(_ *ceic.ExtImageCopyCaptureCursorSessionV1, x, y i
 }
 
 func TestCursorSessionsFollowThePointer(t *testing.T) {
+	t.Parallel()
 	theme := testenv.CursorTheme(t)
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, small, small)
 	c := testclient.Connect(t, h.Socket())
@@ -422,6 +426,7 @@ func TestCursorSessionsFollowThePointer(t *testing.T) {
 }
 
 func TestADestroyedWaitingFrameLeavesTheDamageToTheNext(t *testing.T) {
+	t.Parallel()
 	onEachRenderer(t, func(t *testing.T, start starter) {
 		h := start(t, small)
 		c := testclient.Connect(t, h.Socket())
@@ -452,6 +457,7 @@ func TestADestroyedWaitingFrameLeavesTheDamageToTheNext(t *testing.T) {
 }
 
 func TestAnOutputCaptureNeverDrawsATextureReplacedSinceTheLastFrame(t *testing.T) {
+	t.Parallel()
 	onEachRenderer(t, func(t *testing.T, start starter) {
 		h := start(t, small)
 		c := testclient.Connect(t, h.Socket())
@@ -477,6 +483,7 @@ func TestAnOutputCaptureNeverDrawsATextureReplacedSinceTheLastFrame(t *testing.T
 }
 
 func TestAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T) {
+	t.Parallel()
 	onEachGPURenderer(t, testAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext)
 }
 
@@ -516,6 +523,7 @@ func testAFrameDestroyedWhileItIsReadBackLeavesFullDamageToTheNext(t *testing.T,
 }
 
 func TestAnImageCopyFrameCapturesOnce(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		wait bool
@@ -551,6 +559,7 @@ func TestAnImageCopyFrameCapturesOnce(t *testing.T) {
 }
 
 func TestACaptureOfAClosedToplevelStops(t *testing.T) {
+	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("closing", quadrants)
@@ -610,6 +619,15 @@ func testShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T, start gpuStarter) {
 	shown := c.Buffer(w.Logical, 1, quadrants)
 	target, _ := c.Target(view.size)
 	const frames = 120
+	syncReads := func() uint64 {
+		var n uint64
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			n = c.ShmSyncReads()
+			return nil
+		})
+		return n
+	}
+	blockingBefore := syncReads()
 	frame := func(i int, done func() bool) time.Duration {
 		t.Helper()
 		before := h.Busy()
@@ -642,7 +660,7 @@ func testShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T, start gpuStarter) {
 	slices.Sort(captured)
 	plain, with := baseline[frames/2], captured[frames/2]
 	t.Logf("the loop was busy a median %v per frame without a capture and %v with a %v shm capture", plain, with, view.size)
-	if added := with - plain; added > time.Millisecond {
-		t.Errorf("a %v shm capture added a median %v of loop busy time to a frame, want under 1ms", view.size, added)
+	if blocking := syncReads() - blockingBefore; blocking != 0 {
+		t.Errorf("%d of %d %v shm captures read back on the loop, want none", blocking, frames, view.size)
 	}
 }

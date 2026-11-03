@@ -52,6 +52,7 @@ func (t shmCapture) fill(c *Compositor, k *capture, finish func(error) error) er
 }
 
 func (t shmCapture) read(c *Compositor, k *capture) (err error) {
+	c.shmSyncReads++
 	target, err := c.renderer.NewTarget(k.size)
 	if err != nil {
 		return err
