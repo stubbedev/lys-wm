@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"errors"
 	"image"
 	"math"
@@ -1687,6 +1688,63 @@ func TestAThumbnailDrawnOnEnteringAnOverviewAtRestIsAlreadyFiltered(t *testing.T
 		}
 		if comp.OverviewThumbsRough() {
 			t.Error("entering an overview that does not animate left an unfiltered thumbnail on screen")
+		}
+		return nil
+	})
+}
+
+func TestAThumbnailIsFilteredAfterTheFrameThatFoundItCalm(t *testing.T) {
+	h := StartGLES(t, func(*compositor.Config) {}, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	black := c.Window("black", testclient.Fill(0, 0, 0))
+	c.DispatchUntil("black to map", black.Mapped)
+	black.Stop()
+	white := c.Window("white", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("white to map", white.Mapped)
+	white.Stop()
+	h.Rendered(0)
+	h.dispatch("overview show")
+	h.Rendered(0)
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		comp.DirtyOverviewThumbs()
+		return nil
+	})
+	h.Eventually("the thumbnail redrawn while its windows were moving", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		return comp.OverviewThumbsRough()
+	})
+	time.Sleep(300 * time.Millisecond)
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		o := b.Outputs()[0]
+		before, err := o.Primary()
+		if err != nil {
+			return err
+		}
+		for comp.OverviewThumbsRough() {
+			if err := comp.Frame(o); err != nil {
+				return err
+			}
+			if comp.OverviewThumbsRough() {
+				if before, err = o.Primary(); err != nil {
+					return err
+				}
+			}
+		}
+		shown, err := o.Primary()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(shown.Pix, before.Pix) {
+			t.Error("the frame that found the thumbnail calm already showed it filtered")
+		}
+		if err := comp.Frame(o); err != nil {
+			return err
+		}
+		next, err := o.Primary()
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(next.Pix, before.Pix) {
+			t.Error("the frame after the filter pass did not show the filtered thumbnail")
 		}
 		return nil
 	})

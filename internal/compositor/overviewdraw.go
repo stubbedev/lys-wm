@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -199,10 +200,16 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 		if t.rect.Empty() {
 			continue
 		}
-		if !redrawn && t.due(deviceRect(o, t.rect).Size(), settled, c.frameTime) {
+		size := deviceRect(o, t.rect).Size()
+		if !redrawn && t.due(size, settled, c.frameTime) {
 			redrawn = true
-			if err := c.refreshThumb(o, v, t, t.calm(settled, c.frameTime)); err != nil {
-				return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
+			switch calm := t.calm(settled, c.frameTime); {
+			case calm && t.target != nil && t.target.Size() == size:
+				v.filtering = t
+			default:
+				if err := c.refreshThumb(o, v, t, calm); err != nil {
+					return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
+				}
 			}
 		}
 		dst := deviceRect(o, slide(t.rect))
@@ -210,9 +217,9 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 			pass.fillMasked(dst, scaleColor(Background, in), render.Mask{Keep: render.RoundRect{Rect: dst, Radius: radius}})
 			continue
 		}
-		size := t.target.Size()
+		drawn := t.target.Size()
 		pass.ops = append(pass.ops, drawOp{
-			tex: t.target.Texture(), src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: dst, alpha: in, version: t.version,
+			tex: t.target.Texture(), src: render.FRect{W: float64(drawn.X), H: float64(drawn.Y)}, dst: dst, alpha: in, version: t.version,
 			mask: render.Mask{Keep: render.RoundRect{Rect: dst, Radius: radius}},
 		})
 		if t.id == v.workspace {
@@ -239,6 +246,25 @@ func (c *Compositor) drawOverviewRing(pass *frame, o *output.Output, r image.Rec
 	radius := deviceLength(o, overviewRadius)
 	ring := render.Mask{Keep: render.RoundRect{Rect: outer, Radius: radius + float32(inner.Min.X-outer.Min.X)}, Cut: render.RoundRect{Rect: inner, Radius: radius}}
 	c.paintBorder(pass, c.decor.ActiveBorder, outer, inner, ring, a, 0)
+}
+
+func (c *Compositor) filterThumb(o *output.Output) error {
+	if c.overview == nil {
+		return nil
+	}
+	v := c.overview.views[o]
+	if v == nil || v.filtering == nil {
+		return nil
+	}
+	t := v.filtering
+	v.filtering = nil
+	if !slices.Contains(v.spaces, t) {
+		return nil
+	}
+	if err := c.refreshThumb(o, v, t, true); err != nil {
+		return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
+	}
+	return c.schedule(o)
 }
 
 func thumbStep(i int, size, screen image.Point) (image.Point, bool) {

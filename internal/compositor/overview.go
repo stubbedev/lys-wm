@@ -65,6 +65,7 @@ type overviewCarried struct {
 }
 
 type overviewView struct {
+	filtering *overviewThumb
 	output    *output.Output
 	workspace wm.WorkspaceID
 	items     []*overviewItem
