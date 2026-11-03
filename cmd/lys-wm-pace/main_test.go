@@ -141,30 +141,49 @@ func TestAMissingCompositorFailsWithItsLog(t *testing.T) {
 }
 
 func costReport(step string, cost frametrace.CostSummary, growth ...rssGrowth) *report {
-	return &report{Steps: []stepReport{{Name: step, Summary: frametrace.Summary{Cost: cost}}}, Growth: growth}
+	return &report{Header: frametrace.Header{Renderer: "gles", Software: true}, Steps: []stepReport{{Name: step, Summary: frametrace.Summary{Cost: cost}}}, Growth: growth}
 }
 
-func TestTheGateNamesTheStepAndTheMetricOverItsLimit(t *testing.T) {
+func TestTheGateNamesEveryStepAndMetricOverItsLimit(t *testing.T) {
 	var fine frametrace.CostSummary
 	fine.Draws.Worst = 10
-	b := baseline{"gles": derive(costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100}))}
-	if err := checkBaseline(b, "gles", costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100})); err != nil {
+	b := baseline{"gles/software": derive(costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100}))}
+	b["gles/software"].Steps["genie"] = b["gles/software"].Steps["move"]
+	if err := checkBaseline(b, costReport("move", fine, rssGrowth{Scenario: "move", KiB: 100})); err != nil {
 		t.Fatalf("the run the limits came from: %v", err)
 	}
 	over := fine
-	over.Draws.Worst = 1000
-	err := checkBaseline(b, "gles", costReport("move", over))
-	if err == nil || !strings.Contains(err.Error(), "move: draws_per_frame 1000") {
-		t.Fatalf("too many draws: %v", err)
+	over.Draws.Worst, over.Passes.Worst = 1000, 1000
+	r := costReport("move", over, rssGrowth{Scenario: "move", KiB: 1 << 30})
+	r.Steps = append(r.Steps, stepReport{Name: "genie", Summary: frametrace.Summary{Cost: over}})
+	err := checkBaseline(b, r)
+	if err == nil {
+		t.Fatal("nothing over its limit")
 	}
-	if err := checkBaseline(b, "gles", costReport("move", fine, rssGrowth{Scenario: "move", KiB: 1 << 30})); err == nil || !strings.Contains(err.Error(), "RSS grew") {
-		t.Fatalf("a leak: %v", err)
+	for _, want := range []string{"move: draws_per_frame 1000", "move: render_passes_per_frame 1000", "genie: draws_per_frame 1000", "genie: render_passes_per_frame 1000", "RSS grew"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%q missing from: %v", want, err)
+		}
 	}
-	if err := checkBaseline(b, "vulkan", costReport("move", fine)); err == nil || !strings.Contains(err.Error(), "no limits for the vulkan renderer") {
-		t.Fatalf("a renderer with no limits: %v", err)
-	}
-	if err := checkBaseline(b, "gles", costReport("unknown", fine)); err == nil || !strings.Contains(err.Error(), "unknown: no limits") {
+	if err := checkBaseline(b, costReport("unknown", fine)); err == nil || !strings.Contains(err.Error(), "unknown: no limits") {
 		t.Fatalf("a step with no limits: %v", err)
+	}
+}
+
+func TestAGPUIsNotHeldToTheSoftwareRenderersLimits(t *testing.T) {
+	var c frametrace.CostSummary
+	c.Filters.Worst = 8
+	gpu := costReport("overview-10-open", c)
+	gpu.RealGPU, gpu.Header.Software = true, false
+	var none frametrace.CostSummary
+	b := baseline{"gles/software": derive(costReport("overview-10-open", none))}
+	err := checkBaseline(b, gpu)
+	if err == nil || !strings.Contains(err.Error(), "no limits for gles/gpu") {
+		t.Fatalf("a GPU against software limits: %v", err)
+	}
+	b["gles/gpu"] = derive(gpu)
+	if err := checkBaseline(b, gpu); err != nil {
+		t.Fatalf("a GPU against its own limits: %v", err)
 	}
 }
 
@@ -177,12 +196,13 @@ func TestDamageRectsAreLimitedByTheCapWhateverWasObserved(t *testing.T) {
 	}
 }
 
-func TestEveryStepHasEveryLimitOnBothGPURenderers(t *testing.T) {
-	for _, renderer := range []string{"gles", "vulkan"} {
-		rb, ok := checkedInBaseline[renderer]
-		if !ok {
-			t.Fatalf("no baseline for %s", renderer)
+func TestEveryStepHasEveryLimitInEveryBaseline(t *testing.T) {
+	for _, key := range []string{"gles/software", "vulkan/software"} {
+		if _, ok := checkedInBaseline[key]; !ok {
+			t.Errorf("no baseline for %s", key)
 		}
+	}
+	for renderer, rb := range checkedInBaseline {
 		for i := range scenarios {
 			for _, st := range scenarios[i].steps {
 				for j := range metrics {

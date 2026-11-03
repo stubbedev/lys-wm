@@ -60,7 +60,10 @@ numbers and hot spots, and the report then says so on its second line and sets
 Late frames, frame rates and the time columns measure the machine as much as the
 compositor, so they are reported and never fail anything. `-gate` fails on what
 no load can change, counted per step and compared with the limits checked in as
-`cmd/lys-wm-pace/baseline.json`, one set per renderer:
+`cmd/lys-wm-pace/baseline.json`, one set per renderer and class of device: `gles/gpu`,
+`vulkan/gpu`, `gles/software` and `vulkan/software`. They differ for good reason: a
+software rasteriser turns the overview's blur off by default, so its limits say nothing
+about a GPU. Every step and metric over its limit is named in one run:
 
 | Limit | What it counts | What it catches |
 | --- | --- | --- |
@@ -85,9 +88,10 @@ at both ends of each frame, outside the `cpu` column.
 
 `just pace-gate gles` and `just pace-gate vulkan` run the gate in the dev shell on
 the software rasterisers, as CI does, and `just hardware` runs it on the GPU.
-A change that means to cost more updates its limits by rerunning with
-`-write-baseline cmd/lys-wm-pace/baseline.json`, which writes this renderer's limits
-with a margin of a quarter over what it measured, and commits the difference.
+A change that means to cost more updates its limits and commits the difference:
+`just pace-baseline-software` writes the software sets, and `just docker pace-baseline`
+the GPU sets from the host's GPU, both into the checkout, with a margin of a quarter over what
+they measured.
 
 ## The trace
 

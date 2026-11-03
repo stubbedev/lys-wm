@@ -87,8 +87,11 @@ hardware:
     pace gles
     pace vulkan
     go build -o "$dir/lys-wm-pace" ./cmd/lys-wm-pace
-    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer gles -rounds {{pace_rounds}} -gate
-    "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer vulkan -rounds {{pace_rounds}} -gate
+    rc=0
+    for renderer in gles vulkan; do
+        "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer "$renderer" -rounds {{pace_rounds}} -gate || rc=1
+    done
+    exit "$rc"
 
 # How many times the gates play each animation: enough for a repeated step to
 # show RSS growth, as the baselines were measured.
@@ -108,6 +111,33 @@ pace-gate renderer="gles":
     trap 'rm -rf "$dir"' EXIT
     go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
     "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer {{quote(renderer)}} -rounds {{pace_rounds}} -allow-software -gate
+
+# Write cmd/lys-wm-pace/baseline.json's limits for gles and vulkan on a GPU, under
+# gles/gpu and vulkan/gpu: run it as `just docker pace-baseline`. The file lands in
+# the checkout, and a software driver is refused.
+pace-baseline:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -e /run/opengl-driver ]]; then
+        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    fi
+    just write-baselines
+
+# The same on the dev shell's software rasterisers, under gles/software and
+# vulkan/software.
+pace-baseline-software: (write-baselines "-allow-software")
+
+[private]
+write-baselines args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
+    for renderer in gles vulkan; do
+        # shellcheck disable=SC2086
+        "$dir/lys-wm-pace" -compositor "$dir/lys-wm" -renderer "$renderer" -rounds {{pace_rounds}} -write-baseline cmd/lys-wm-pace/baseline.json {{args}}
+    done
 
 # Run a recipe in a container that sees only the dev shell's store paths,
 # the checkout, its own Go caches, /dev/kvm, the GPUs' render nodes and

@@ -93,7 +93,15 @@ func derive(r *report) rendererBaseline {
 	return b
 }
 
-func updateBaseline(path, renderer string, r *report) error {
+func baselineKey(r *report) string {
+	class := "software"
+	if r.RealGPU {
+		class = "gpu"
+	}
+	return r.Header.Renderer + "/" + class
+}
+
+func updateBaseline(path string, r *report) error {
 	current := baseline{}
 	data, err := os.ReadFile(path) //nolint:gosec // the path comes from the command line
 	switch {
@@ -104,7 +112,7 @@ func updateBaseline(path, renderer string, r *report) error {
 	case !errors.Is(err, os.ErrNotExist):
 		return fmt.Errorf("read the baseline: %w", err)
 	}
-	current[renderer] = derive(r)
+	current[baselineKey(r)] = derive(r)
 	out, err := json.MarshalIndent(current, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode the baseline: %w", err)
@@ -119,10 +127,11 @@ func updateBaseline(path, renderer string, r *report) error {
 	return nil
 }
 
-func checkBaseline(b baseline, renderer string, r *report) error {
-	rb, ok := b[renderer]
+func checkBaseline(b baseline, r *report) error {
+	key := baselineKey(r)
+	rb, ok := b[key]
 	if !ok {
-		return fmt.Errorf("the baseline has no limits for the %s renderer: measure it with -write-baseline cmd/lys-wm-pace/baseline.json", renderer)
+		return fmt.Errorf("the baseline has no limits for %s: write them with `just docker pace-baseline` on a GPU, `just pace-baseline-software` otherwise", key)
 	}
 	var over []string
 	for i := range r.Steps {

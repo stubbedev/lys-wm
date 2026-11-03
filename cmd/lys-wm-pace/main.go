@@ -61,7 +61,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	flags.StringVar(&o.cpuProfile, "cpu-profile", "", "write a Go CPU profile of lys-wm to this file")
 	flags.IntVar(&o.rounds, "rounds", 10, "how many times to play each animation")
 	flags.BoolVar(&o.gate, "gate", false, "fail when a step's per-frame counts exceed the checked-in baseline")
-	flags.StringVar(&o.writeBaseline, "write-baseline", "", "write limits for this renderer, derived from this run, into the baseline file at this path")
+	flags.StringVar(&o.writeBaseline, "write-baseline", "", "write limits for this renderer and class of device, derived from this run, into the baseline file at this path")
 	flags.BoolVar(&o.allowSoftware, "allow-software", false, "accept a software rasteriser, for relative numbers only")
 	only := flags.String("scenarios", "", "comma-separated scenarios to run (default: all): "+strings.Join(scenarioNames(), ", "))
 	if err := flags.Parse(args); err != nil {
@@ -380,14 +380,14 @@ func measure(o options, stdout io.Writer, getenv func(string) string) error {
 		}
 	}
 	if o.writeBaseline != "" {
-		if err := updateBaseline(o.writeBaseline, o.renderer, &r); err != nil {
+		if err := updateBaseline(o.writeBaseline, &r); err != nil {
 			return err
 		}
 	}
 	if !o.gate {
 		return nil
 	}
-	return checkBaseline(checkedInBaseline, o.renderer, &r)
+	return checkBaseline(checkedInBaseline, &r)
 }
 
 func main() {

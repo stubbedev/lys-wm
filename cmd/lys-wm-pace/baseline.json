@@ -1,5 +1,5 @@
 {
-  "gles": {
+  "gles/software": {
     "steps": {
       "genie-minimize": {
         "allocs_per_frame": 44,
@@ -317,7 +317,7 @@
       "workspace": 16420
     }
   },
-  "vulkan": {
+  "vulkan/software": {
     "steps": {
       "genie-minimize": {
         "allocs_per_frame": 53,
