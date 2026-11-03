@@ -434,6 +434,61 @@ func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuSta
 	})
 }
 
+func TestANewWindowsBorderFadesWithTheOneLosingFocus(t *testing.T) {
+	t.Parallel()
+	onEachConfiguredRenderer(t, testANewWindowsBorderFadesWithTheOneLosingFocus)
+}
+
+func testANewWindowsBorderFadesWithTheOneLosingFocus(t *testing.T, start gpuStarter) {
+	now := time.Hour
+	d := time.Second
+	off, on := false, true
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
+		anim.Global: {Enabled: &off},
+		anim.Border: {Enabled: &on, Shape: anim.Linear, Duration: &d},
+	})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
+	h := start(t, func(cfg *compositor.Config) {
+		cfg.Animations = table
+		cfg.Clock = func() time.Duration { return now }
+		cfg.Decor = compositor.PlainDecor()
+		cfg.Decor.BorderWidth = 4
+		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(red), compositor.SolidBorder(blue)
+	}, tall)
+	at := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	borders := func(left, right [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(b *headless.Backend, _ *compositor.Compositor) bool {
+			buf := snapshot(b.Outputs()[0])
+			return near(pixel(buf, 1, 100), left) && near(pixel(buf, 158, 100), right)
+		}
+	}
+	redPixel, bluePixel := [3]byte{0xff, 0, 0}, [3]byte{0, 0, 0xff}
+	c := testclient.Connect(t, h.Socket())
+	l := c.Window("left", testclient.Fill(0x30, 0x30, 0x30))
+	c.DispatchUntil("left to map", l.Mapped)
+	at(2 * time.Hour)
+	h.Eventually("the lone window focused", showing(1, 100, redPixel))
+
+	at(3 * time.Hour)
+	r := c.Window("right", testclient.Fill(0x30, 0x30, 0x30))
+	c.DispatchUntil("right to map", r.Mapped)
+	c.Sync()
+	h.Eventually("the layout landed", landed)
+	h.Eventually("the fade starting: the old border still active, the new one still inactive", borders(redPixel, bluePixel))
+	at(3*time.Hour + 500*time.Millisecond)
+	h.Eventually("both borders halfway", borders([3]byte{0x7f, 0, 0x80}, [3]byte{0x80, 0, 0x7f}))
+	at(3*time.Hour + time.Second)
+	h.Eventually("the focus moved", borders(bluePixel, redPixel))
+}
+
 func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {
 	t.Parallel()
 	onEachConfiguredRenderer(t, testASpringDraggedWindowTrailsThePointer)

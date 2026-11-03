@@ -80,21 +80,22 @@ func (c *Compositor) borderTarget(w *window) Border {
 	return c.decor.InactiveBorder
 }
 
-func (c *Compositor) refreshBorder(w *window, now time.Duration, jump bool) {
-	to := c.borderTarget(w)
-	switch {
-	case jump:
-		w.borderFrom, w.borderTo = to, to
+func (c *Compositor) refreshBorder(w *window, now time.Duration, first bool) {
+	if first {
+		w.borderTo = c.decor.InactiveBorder
 		w.borderFade = anim.NewTween(1.0, anim.Lerp)
 		w.borderAngle = anim.NewTween(1.0, anim.Lerp)
-	case to != w.borderTo:
-		w.borderFrom, w.borderTo = w.borderTo, to
-		w.borderFade = anim.NewTween(0.0, anim.Lerp)
-		w.borderFade.Set(1, now, c.animations.Curve(anim.Border))
-		if to.n > 1 {
-			w.borderAngle = anim.NewTween(0.0, anim.Lerp)
-			w.borderAngle.Set(1, now, c.animations.Curve(anim.BorderAngle))
-		}
+	}
+	to := c.borderTarget(w)
+	if to == w.borderTo {
+		return
+	}
+	w.borderFrom, w.borderTo = w.borderTo, to
+	w.borderFade = anim.NewTween(0.0, anim.Lerp)
+	w.borderFade.Set(1, now, c.animations.Curve(anim.Border))
+	if to.n > 1 {
+		w.borderAngle = anim.NewTween(0.0, anim.Lerp)
+		w.borderAngle.Set(1, now, c.animations.Curve(anim.BorderAngle))
 	}
 }
 
