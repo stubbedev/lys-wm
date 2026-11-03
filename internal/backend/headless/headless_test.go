@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/fourcc"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -442,5 +443,110 @@ func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 				t.Fatalf("the client buffer was released %d times", released)
 			}
 		})
+	}
+}
+
+func fencedOutput(t *testing.T) (*Backend, *Output) {
+	t.Helper()
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	b := New(l)
+	o, err := b.AddOutput(backend.Mode{Size: image.Pt(16, 16), RefreshMHz: 60000, Preferred: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	return b, o
+}
+
+func (o *Output) fakeFence(t *testing.T) {
+	t.Helper()
+	fd, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.renderFence = fd
+}
+
+func TestAFrameEarnsItsBudgetFromWhenTheGPUFinished(t *testing.T) {
+	b, o := fencedOutput(t)
+	interval := o.state.Mode.Interval()
+	start := time.Second
+	gpu := 10 * time.Millisecond
+	b.fenceTime = func(int) (time.Duration, bool, error) { return start + gpu, true, nil }
+	for range 40 {
+		o.fakeFence(t)
+		o.fenceStart, o.aimedAt = start, start+interval
+		if err := o.timeFrame(start+interval, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := o.budget.Budget(interval); got < gpu {
+		t.Fatalf("a %v frame earned a budget of %v", gpu, got)
+	}
+}
+
+func TestAFrameTheGPUFinishesLateIsAMiss(t *testing.T) {
+	b, o := fencedOutput(t)
+	interval := o.state.Mode.Interval()
+	start := time.Second
+	settle := func(done time.Duration, signalled bool) {
+		t.Helper()
+		b.fenceTime = func(int) (time.Duration, bool, error) { return done, signalled, nil }
+		o.fakeFence(t)
+		o.fenceStart, o.aimedAt = start, start+interval
+		if err := o.timeFrame(start+interval, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settle(start+interval+time.Millisecond, true)
+	if got := o.budget.Budget(interval); got != interval {
+		t.Fatalf("after finishing past the vblank the budget is %v", got)
+	}
+	o.budget = backend.RenderBudget{}
+	settle(0, false)
+	if got := o.budget.Budget(interval); got != interval {
+		t.Fatalf("still rendering at the vblank the budget is %v", got)
+	}
+	if o.renderFence < 0 {
+		t.Fatal("an unsignalled fence was dropped before its time was read")
+	}
+	b.fenceTime = func(int) (time.Duration, bool, error) { return start + 2*interval, true, nil }
+	if err := o.timeFrame(start+2*interval, false); err != nil {
+		t.Fatal(err)
+	}
+	if o.renderFence >= 0 {
+		t.Fatal("a signalled fence stays open")
+	}
+}
+
+type noFences struct {
+	render.Renderer
+}
+
+func (noFences) NativeFences() bool     { return false }
+func (noFences) SyncFile() (int, error) { return -1, nil }
+
+func TestARendererWithoutFencesClaimsNoBudget(t *testing.T) {
+	b, o := fencedOutput(t)
+	var reports int
+	b.report = func(error) { reports++ }
+	b.renderer = noFences{b.renderer}
+	interval := o.state.Mode.Interval()
+	for range 40 {
+		o.frameStart = backend.Now() - time.Millisecond
+		o.fenceFrame()
+		if err := o.timeFrame(backend.Now(), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := o.budget.Budget(interval); got != interval/2 {
+		t.Fatalf("with no fences the budget is %v, not the half-refresh latch", got)
+	}
+	if reports != 1 {
+		t.Fatalf("reported %d times", reports)
 	}
 }

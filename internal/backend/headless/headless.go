@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"os"
 	"slices"
 	"time"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/edid"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -37,10 +40,17 @@ type Backend struct {
 	cursorSize image.Point
 	inherit    bool
 	closed     bool
+	fenceTime  func(fd int) (time.Duration, bool, error)
+	report     func(error)
+}
+
+type frameFencer interface {
+	NativeFences() bool
+	SyncFile() (int, error)
 }
 
 func New(l *loop.Loop) *Backend {
-	b := &Backend{loop: l, renderer: soft.New()}
+	b := &Backend{loop: l, renderer: soft.New(), fenceTime: kdrm.SyncFileSignalTime, report: func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) }}
 	b.keyboard = &Keyboard{device: device{b, "headless-keyboard", backend.Keyboard}}
 	b.pointer = &Pointer{device: device{b, "headless-pointer", backend.Pointer}}
 	b.touch = &Touch{device{b, "headless-touch", backend.Touch}}
@@ -181,12 +191,13 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 	}
 	b.next++
 	o := &Output{
-		backend:   b,
-		name:      name,
-		modes:     slices.Clone(modes),
-		state:     backend.OutputState{Power: backend.PoweredOn, Mode: current},
-		ctm:       backend.Identity,
-		inherited: b.inherit,
+		backend:     b,
+		name:        name,
+		modes:       slices.Clone(modes),
+		state:       backend.OutputState{Power: backend.PoweredOn, Mode: current},
+		ctm:         backend.Identity,
+		inherited:   b.inherit,
+		renderFence: -1,
 	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
@@ -229,7 +240,7 @@ func (b *Backend) RemoveOutput(o *Output) error {
 	if b.handler != nil {
 		errs = append(errs, b.handler.OutputRemoved(o))
 	}
-	errs = append(errs, o.releaseClientBuffers(), o.timer.Remove(), o.latch.Remove(), o.freeTarget())
+	errs = append(errs, o.releaseClientBuffers(), o.timer.Remove(), o.latch.Remove(), o.dropFence(), o.freeTarget())
 	if o.cursor != nil {
 		errs = append(errs, o.cursor.destroy())
 	}
@@ -257,6 +268,9 @@ type Output struct {
 	budget         backend.RenderBudget
 	frameStart     time.Duration
 	aimedAt        time.Duration
+	renderFence    int
+	fenceStart     time.Duration
+	untimed        bool
 	armed          bool
 	clock          *backend.FrameClock
 	presentPending bool
@@ -497,20 +511,79 @@ func (o *Output) Present(damage render.Region) error {
 	}
 	o.presentPending, o.queuedTorn = true, false
 	o.presents++
-	o.timeFrame()
+	o.fenceFrame()
 	return o.arm()
 }
 
-func (o *Output) timeFrame() {
-	if o.aimedAt == 0 {
+func (o *Output) noTiming(cause error) {
+	o.untimed = true
+	o.backend.report(fmt.Errorf("headless: %s renders on the half-refresh latch, its frames report no time: %w", o.name, cause))
+}
+
+func (o *Output) dropFence() error {
+	if o.renderFence < 0 {
+		return nil
+	}
+	fd := o.renderFence
+	o.renderFence = -1
+	return unix.Close(fd)
+}
+
+func (o *Output) fenceFrame() {
+	f, ok := o.backend.renderer.(frameFencer)
+	switch {
+	case !ok:
+		o.budget.Sample(backend.Now() - o.frameStart)
+		return
+	case o.untimed:
+		return
+	case !f.NativeFences():
+		o.noTiming(errors.New("the renderer has no native fences"))
 		return
 	}
-	now, interval := backend.Now(), o.state.Mode.Interval()
-	o.budget.Sample(now - o.frameStart)
-	if at, _ := backend.NextVblank(o.lastVblank, now, interval); at > o.aimedAt+interval/2 {
+	if err := o.dropFence(); err != nil {
+		o.backend.report(fmt.Errorf("headless: close the render fence of %s: %w", o.name, err))
+	}
+	fd, err := f.SyncFile()
+	switch {
+	case err != nil:
+		o.noTiming(err)
+	case fd < 0:
+		o.budget.Sample(backend.Now() - o.frameStart)
+	default:
+		o.renderFence, o.fenceStart = fd, o.frameStart
+	}
+}
+
+func (o *Output) timeFrame(flip time.Duration, flipped bool) error {
+	interval := o.state.Mode.Interval()
+	missed := flipped && o.aimedAt != 0 && flip > o.aimedAt+interval/2
+	if flipped {
+		o.aimedAt = 0
+	}
+	if o.renderFence >= 0 && !o.untimed {
+		done, ok, err := o.backend.fenceTime(o.renderFence)
+		switch {
+		case err != nil:
+			o.noTiming(err)
+		case !ok:
+			missed = missed || flipped
+		default:
+			if done > o.fenceStart {
+				o.budget.Sample(done - o.fenceStart)
+			}
+			missed = missed || flipped && done > flip
+		}
+		if ok || err != nil {
+			if err := o.dropFence(); err != nil {
+				return fmt.Errorf("headless: close the render fence of %s: %w", o.name, err)
+			}
+		}
+	}
+	if missed {
 		o.budget.Missed()
 	}
-	o.aimedAt = 0
+	return nil
 }
 
 func (o *Output) AllowScanout(t gpu.ScanoutTarget) {
@@ -609,6 +682,11 @@ func (o *Output) vblank() error {
 	o.lastVblank, o.seq = o.nextVblank, o.nextSeq
 	idle := o.empties > 0
 	o.empties = 0
+	if o.state.Enabled() {
+		if err := o.timeFrame(o.lastVblank, o.presentPending); err != nil {
+			return err
+		}
+	}
 	switch {
 	case o.presentPending:
 		if err := o.present(); err != nil {
