@@ -71,6 +71,8 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 			return errors.New("no config file to reload")
 		}
 		return c.hooks.Reload()
+	case wm.NextLayoutAction:
+		return c.seat.NextLayout()
 	case wm.ExitAction:
 		if c.hooks.Exit == nil {
 			return errors.New("nothing to exit to: this compositor was started without a way to stop")

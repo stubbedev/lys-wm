@@ -190,6 +190,17 @@ func (s *State) Key(evdev uint32, pressed bool) bool {
 	return s.state.UpdateKey(lxkb.Keycode(evdev+evdevOffset), dir)&reportedChanges != 0
 }
 
+// NextLayout locks the keymap's next layout, wrapping after the last, and
+// reports whether the layout changed: a keymap of one layout has no other.
+func (s *State) NextLayout() bool {
+	n := s.keymap.keymap.NumLayouts()
+	if n < 2 {
+		return false
+	}
+	locked := (s.state.SerializeLayout(lxkb.StateLayoutLocked) + 1) % n
+	return s.state.UpdateLatchedLocked(0, 0, false, 0, 0, 0, true, int32(locked))&reportedChanges != 0 //nolint:gosec // below the keymap's layout count
+}
+
 func (s *State) Keysym(evdev uint32) uint32 {
 	return uint32(s.state.KeyGetOneSym(lxkb.Keycode(evdev + evdevOffset)))
 }

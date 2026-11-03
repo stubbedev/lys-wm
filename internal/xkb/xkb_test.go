@@ -228,3 +228,44 @@ func TestNamesIgnoreTheEnvironment(t *testing.T) {
 		t.Errorf("layouts %v: the environment filled in names", got)
 	}
 }
+
+func TestNextLayoutCyclesAndWraps(t *testing.T) {
+	st := state(t)
+	var groups []uint32
+	for range 4 {
+		if !st.NextLayout() {
+			t.Fatalf("no change from group %d", st.Modifiers().Group)
+		}
+		groups = append(groups, st.Modifiers().Group)
+	}
+	if !slices.Equal(groups, []uint32{1, 2, 0, 1}) {
+		t.Fatalf("groups %v, want 1, 2, 0, 1", groups)
+	}
+}
+
+func TestNextLayoutFollowsTheToggleKey(t *testing.T) {
+	st := state(t)
+	st.Key(keyRightAlt, true)
+	st.Key(keyRightAlt, false)
+	st.NextLayout()
+	if got := st.Modifiers().Group; got != 2 {
+		t.Fatalf("after the toggle and a next layout the group is %d, want 2", got)
+	}
+	st.Key(keyRightAlt, true)
+	st.Key(keyRightAlt, false)
+	if got := st.Modifiers().Group; got != 0 {
+		t.Fatalf("the toggle after a next layout gives group %d, want 0", got)
+	}
+}
+
+func TestNextLayoutWithOneLayoutChangesNothing(t *testing.T) {
+	km, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "us"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = km.Close() })
+	st := km.NewState()
+	if st.NextLayout() || st.Modifiers().Group != 0 {
+		t.Fatalf("one layout moved to group %d", st.Modifiers().Group)
+	}
+}

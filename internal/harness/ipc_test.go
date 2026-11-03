@@ -209,6 +209,42 @@ func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
 	}
 }
 
+func TestNextLayoutCyclesThroughIPC(t *testing.T) {
+	t.Parallel()
+	two, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "us,dk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = two.Close() })
+	var comp *compositor.Compositor
+	h := StartWith(t, func(cfg *compositor.Config) {
+		next := compositor.PlainConfig(two, cfg.Font)
+		next.Report = cfg.Report
+		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
+	}, small)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		comp = c
+		return nil
+	})
+	dispatch := func(a string) {
+		t.Helper()
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err != nil {
+			t.Fatalf("%s: %v", a, err)
+		}
+	}
+	dispatch("nextlayout")
+	if got := query[ipc.Layout](h, ipc.KindLayout); got.Index != 0 {
+		t.Fatalf("a keymap of one layout moved to %+v", got)
+	}
+	dispatch("reload")
+	for _, want := range []ipc.Layout{{Index: 1, Name: "Danish"}, {Index: 0, Name: "English (US)"}} {
+		dispatch("nextlayout")
+		if got := query[ipc.Layout](h, ipc.KindLayout); got != want {
+			t.Fatalf("after nextlayout the layout is %+v, want %+v", got, want)
+		}
+	}
+}
+
 func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
 	t.Parallel()
 	h := Start(t, desktop)

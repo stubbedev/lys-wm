@@ -241,6 +241,25 @@ func (s *Seat) Layout() uint32 {
 	return s.state.Modifiers().Group
 }
 
+// NextLayout moves the seat to its next layout and tells whoever holds the
+// keyboard; a keymap of one layout changes nothing.
+func (s *Seat) NextLayout() error {
+	if !s.state.NextLayout() {
+		return nil
+	}
+	s.listener.KeyboardStateChanged()
+	var errs []error
+	if g := s.keyboard.grab; g != nil {
+		errs = append(errs, g.Modifiers(s.display.NextSerial(), s.state.Modifiers()))
+	}
+	if _, r := s.resourcesAt(s.keyboard.focus); r != nil {
+		for _, kb := range r.keyboards {
+			errs = append(errs, s.sendModifiers(kb))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (s *Seat) Locks() xkb.Locks {
 	return s.state.Locks()
 }

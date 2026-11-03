@@ -69,6 +69,7 @@ func (SubmapAction) isEffect()      {}
 func (DragAction) isEffect()        {}
 func (ReloadAction) isEffect()      {}
 func (ExitAction) isEffect()        {}
+func (NextLayoutAction) isEffect()  {}
 func (GlobalAction) isEffect()      {}
 func (DPMSAction) isEffect()        {}
 func (MinimizeAction) isEffect()    {}
@@ -138,6 +139,7 @@ type (
 	ResizeAction     struct{ DX, DY int }
 	ReloadAction     struct{}
 	ExitAction       struct{}
+	NextLayoutAction struct{}
 	GlobalAction     struct{ AppID, ID string }
 	DPMSAction       struct {
 		Mode   PowerMode
@@ -278,6 +280,12 @@ func (ReloadAction) String() string { return "reload" }
 func (ExitAction) String() string { return "exit" }
 
 func (a ExitAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (NextLayoutAction) String() string { return "nextlayout" }
+
+func (a NextLayoutAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
 }
 
@@ -623,6 +631,11 @@ var Actions = []ActionSpec{
 		Name:    "exit",
 		Summary: "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM.",
 		parse:   bare(ExitAction{}),
+	},
+	{
+		Name:    "nextlayout",
+		Summary: "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing.",
+		parse:   bare(NextLayoutAction{}),
 	},
 	{
 		Name: "global", Args: "<app_id>:<id>",

@@ -36,6 +36,7 @@ var everyAction = []Action{
 	CloseWindowAction{ID: 12},
 	ReloadAction{},
 	ExitAction{},
+	NextLayoutAction{},
 	DPMSAction{Mode: PowerOff},
 	ZoomAction{Mode: ZoomIn, Factor: 1.25},
 	ZoomAction{Mode: ZoomOut, Factor: 2},
@@ -144,6 +145,9 @@ func TestDispatch(t *testing.T) {
 	}
 	if effects := run("reload"); !slices.Equal(effects, []Effect{ReloadAction{}}) {
 		t.Fatalf("reload gave %v", effects)
+	}
+	if effects := run("nextlayout"); !slices.Equal(effects, []Effect{NextLayoutAction{}}) {
+		t.Fatalf("nextlayout gave %v", effects)
 	}
 	if effects := run("exit"); !slices.Equal(effects, []Effect{ExitAction{}}) {
 		t.Fatalf("exit gave %v", effects)

@@ -129,6 +129,7 @@ type keyboardEvents struct {
 	repeat  [2]int32
 	entered []uint32
 	mods    []uint32
+	groups  []uint32
 }
 
 func (k *keyboardEvents) Keymap(_ *cw.WlKeyboard, f cw.WlKeyboardKeymapFormat, fd int, size uint32) error {
@@ -166,6 +167,7 @@ func (k *keyboardEvents) Key(_ *cw.WlKeyboard, _, _ uint32, key uint32, state cw
 
 func (k *keyboardEvents) Modifiers(_ *cw.WlKeyboard, _, depressed, _, _, group uint32) error {
 	k.mods = append(k.mods, depressed)
+	k.groups = append(k.groups, group)
 	k.log = append(k.log, "modifiers")
 	return nil
 }
@@ -385,5 +387,51 @@ func TestPointerMotionAllocatesNothing(t *testing.T) {
 	})
 	if allocs != 0 {
 		t.Fatalf("a pointer motion allocated %v times", allocs)
+	}
+}
+
+func TestNextLayoutReachesTheFocusedClientOnly(t *testing.T) {
+	e := setup(t)
+	two, err := testenv.XKBCompiler(t).Compile(xkb.Names{Layout: "us,dk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = two.Close() })
+	a, b := e.connect(), e.connect()
+	ka, kb := a.keyboard(), b.keyboard()
+	a.surface()
+	b.surface()
+	e.focus(0)
+	a.roundtrip()
+	single := len(ka.groups)
+	e.on(func() {
+		if err := e.seat.NextLayout(); err != nil {
+			t.Error(err)
+		}
+	})
+	a.roundtrip()
+	if len(ka.groups) != single {
+		t.Fatalf("a keymap of one layout sent modifiers: %v", ka.groups)
+	}
+	e.on(func() {
+		p, err := Prepare(Config{Keymap: two, RepeatRate: DefaultRepeatRate, RepeatDelay: DefaultRepeatDelay})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err := e.seat.Reconfigure(p); err != nil {
+			t.Error(err)
+		}
+		if err := e.seat.NextLayout(); err != nil {
+			t.Error(err)
+		}
+	})
+	a.roundtrip()
+	b.roundtrip()
+	if got := ka.groups[len(ka.groups)-1]; got != 1 {
+		t.Fatalf("the focused client's groups are %v, want the last to be 1", ka.groups)
+	}
+	if len(kb.groups) != 0 {
+		t.Fatalf("a client without focus was told groups %v", kb.groups)
 	}
 }
