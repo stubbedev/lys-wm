@@ -56,7 +56,7 @@ connection set, and the process-wide tables in `gpu` and `session`.
 A shm pool can be mapped from any file, so reading one can block on a page fault for as
 long as its filesystem likes. A pool on tmpfs or hugetlbfs, which is what toolkits use,
 is read on the loop while the damage is small. Any other pool, and any commit damaging
-more than a million pixels, is copied by a goroutine first: the commit holds at the same
+more than a million pixels on a surface already showing a buffer, is copied by a goroutine first: the commit holds at the same
 gate as an implicit-sync dmabuf, and applies with the copy ready, so what it uploads on
 the loop is memory no client can stall. Toplevel icons from other pools are ignored.
 
@@ -72,7 +72,10 @@ checks it before every row, so at most the row in flight lands afterwards. The
 mapping is released off the loop too. On close, the compositor waits for these
 goroutines and releases what their posted closures would have.
 
-Everything else that waits on another process runs on a worker too. A hotplug's
+Everything else that waits on another process runs on a worker too. A bind's `exec`
+forks there, in order, and a reload reads the file, its font and compiles its keymap
+there and only applies the result on the loop; over IPC the connection's goroutine does
+that load, so its reply still says whether the config was taken. A hotplug's
 connector probe, which reads EDID over DDC, posts its result to the loop. An input
 device is taken from logind or the holder on one worker per session, in order, and
 added to libinput on the loop with its fd ready; a release, a VT switch, a completed

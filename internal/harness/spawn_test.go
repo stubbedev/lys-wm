@@ -50,7 +50,8 @@ func TestSpawnedCommandsWriteToTheCompositorsStderr(t *testing.T) {
 		return nil
 	})
 	h.dispatch("exec echo spawned-to-stderr >&2")
-	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		c.WaitForExecs()
 		os.Stderr = stderr
 		return write.Close()
 	})

@@ -19,6 +19,7 @@ func (h *Harness) dispatch(text string) {
 		h.t.Fatal(err)
 	}
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Dispatch(a) })
+	h.Eventually("the config to reload", func(_ *headless.Backend, c *compositor.Compositor) bool { return !c.ReloadPending() })
 }
 
 func TestDispatchedActions(t *testing.T) {

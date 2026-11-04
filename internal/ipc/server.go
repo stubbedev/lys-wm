@@ -40,7 +40,8 @@ func SocketPath(runtimeDir, display string) (string, error) {
 
 type Handler interface {
 	Snapshot() Snapshot
-	Dispatch(a wm.Action) error
+	DispatchPrepared(a wm.Action, loaded func() error) error
+	PrepareDispatch(a wm.Action) func() error
 	Icon(w wm.WindowID, size int) (*image.RGBA, int, error)
 }
 
@@ -360,9 +361,13 @@ func (s *Server) serve(conn *net.UnixConn) {
 		s.runUpgrade(conn, req.binary, req.dropX11)
 		return
 	}
+	var loaded func() error
+	if req.kind == KindDispatch {
+		loaded = s.handler.PrepareDispatch(req.action)
+	}
 	result, err := onLoop(s, func() (any, error) {
 		if req.kind == KindDispatch {
-			return nil, s.handler.Dispatch(req.action)
+			return nil, s.handler.DispatchPrepared(req.action, loaded)
 		}
 		return s.handler.Snapshot().answer(req.kind), nil
 	})

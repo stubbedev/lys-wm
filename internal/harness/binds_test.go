@@ -240,7 +240,7 @@ func TestVTSwitchingSurvivesConfigReloads(t *testing.T) {
 			switched = append(switched, vt)
 			return nil
 		}
-		cfg.Hooks.Reload = func() error { return comp.Reconfigure(next) }
+		cfg.Hooks.Reload = func() func() error { return func() error { return comp.Reconfigure(next) } }
 	}, small)
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		comp = c

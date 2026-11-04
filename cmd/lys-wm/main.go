@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -363,6 +364,7 @@ func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
 
 type reloader struct {
 	source
+	loading        sync.Mutex
 	cursor         compositor.CursorConfig
 	comp           *compositor.Compositor
 	exit           func() error
@@ -370,8 +372,14 @@ type reloader struct {
 	configureInput func(session.InputConfig) error
 }
 
-func (s *reloader) reload() error {
+func (s *reloader) reload() func() error {
+	s.loading.Lock()
 	next, err := s.load()
+	s.loading.Unlock()
+	return func() error { return s.apply(next, err) }
+}
+
+func (s *reloader) apply(next loaded, err error) error {
 	if err != nil {
 		s.comp.ShowConfigProblems(compositor.ConfigProblems{Rejected: true, Messages: errorLines(err)})
 		return err
@@ -567,9 +575,7 @@ func run(args []string) (err error) {
 			l.Stop()
 			return nil
 		}
-		if err := s.reload(); err != nil {
-			fmt.Fprintln(os.Stderr, "lys-wm: reload:", err)
-		}
+		s.comp.ReloadConfig()
 		return nil
 	}, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP); err != nil {
 		return err

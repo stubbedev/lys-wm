@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/exec"
 	"slices"
 	"sync"
 	"time"
@@ -82,7 +83,7 @@ type Config struct {
 }
 
 type Hooks struct {
-	Reload   func() error
+	Reload   func() (apply func() error)
 	Exit     func() error
 	SwitchVT func(vt uint32) error
 	Lid      LidPolicy
@@ -264,6 +265,10 @@ type Compositor struct {
 	cursorSessions  []*cursorSession
 	scannedOut      map[*dmabuf.Buffer]*scannedOut
 	scannedFree     []*scannedOut
+	lookPath        func(string) (string, error)
+	execs           loop.Serial
+	loadedConfig    func() error
+	reloading       int
 	lidBusy         bool
 	lidAgain        bool
 	filled          map[*output.Output]filling
@@ -397,6 +402,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		captures:       map[*output.Output][]*capture{},
 		reads:          map[*asyncRead]struct{}{},
 		scannedOut:     map[*dmabuf.Buffer]*scannedOut{},
+		lookPath:       exec.LookPath,
 		filled:         map[*output.Output]filling{},
 		constraints:    map[*surface.Surface]*constraint{},
 		keyInhibitors:  map[*surface.Surface]*shortcutsInhibitor{},

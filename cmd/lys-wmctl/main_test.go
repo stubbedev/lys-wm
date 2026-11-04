@@ -48,6 +48,10 @@ func (h *handler) Snapshot() ipc.Snapshot {
 	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize", ConfigProblems: ipc.ConfigProblems{Messages: []string{"c.yaml:3: colour: unknown key"}}}
 }
 
+func (h *handler) PrepareDispatch(wm.Action) func() error { return nil }
+
+func (h *handler) DispatchPrepared(a wm.Action, _ func() error) error { return h.Dispatch(a) }
+
 func (h *handler) Dispatch(a wm.Action) error {
 	h.dispatched = append(h.dispatched, a)
 	return nil

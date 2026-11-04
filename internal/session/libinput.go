@@ -184,7 +184,7 @@ func (d *InputDevice) SetLEDs(l xkb.Locks) {
 type Libinput struct {
 	fn      libinputFuncs
 	loop    *loop.Loop
-	work    Serial
+	work    loop.Serial
 	ready   map[string]takenDevice
 	adding  map[string]struct{}
 	resumes uint64

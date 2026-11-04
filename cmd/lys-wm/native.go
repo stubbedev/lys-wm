@@ -49,7 +49,7 @@ type gpuCard struct {
 }
 
 type native struct {
-	sessionWork session.Serial
+	sessionWork loop.Serial
 	l           *loop.Loop
 	paths       gpu.Paths
 	vendors     edid.Vendors

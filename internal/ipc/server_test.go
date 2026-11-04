@@ -44,6 +44,10 @@ func (f *fake) Snapshot() Snapshot {
 	return snap
 }
 
+func (f *fake) PrepareDispatch(wm.Action) func() error { return nil }
+
+func (f *fake) DispatchPrepared(a wm.Action, _ func() error) error { return f.Dispatch(a) }
+
 func (f *fake) Dispatch(a wm.Action) error {
 	if _, ok := a.(wm.KillAction); ok {
 		return errors.New("nothing to kill")
@@ -353,6 +357,8 @@ type stopping struct {
 	fake
 	loop *loop.Loop
 }
+
+func (s *stopping) DispatchPrepared(a wm.Action, _ func() error) error { return s.Dispatch(a) }
 
 func (s *stopping) Dispatch(wm.Action) error {
 	s.loop.Stop()

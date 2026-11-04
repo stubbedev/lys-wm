@@ -73,7 +73,12 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		if c.hooks.Reload == nil {
 			return errors.New("no config file to reload")
 		}
-		return c.hooks.Reload()
+		if apply := c.loadedConfig; apply != nil {
+			c.loadedConfig = nil
+			return apply()
+		}
+		c.ReloadConfig()
+		return nil
 	case wm.DismissConfigNoticeAction:
 		c.dismissConfigNotice()
 		return nil
@@ -97,19 +102,41 @@ func (c *Compositor) withWindow(id wm.WindowID, f func(*window) error) error {
 }
 
 func (c *Compositor) spawn(command string) error {
-	sh, err := exec.LookPath("sh")
+	c.spawnWith(command, append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path()))
+	return nil
+}
+
+func (c *Compositor) spawnWith(command string, env []string) {
+	stdout, stderr := os.Stdout, os.Stderr
+	c.execs.Run(func() {
+		cmd, err := c.startCommand(command, env, stdout, stderr)
+		if err == nil {
+			go c.reap(command, cmd)
+			return
+		}
+		if posted := c.loop.Post(func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+			panic(fmt.Sprintf("compositor: hand a failed exec back to the loop: %v", posted))
+		}
+	})
+}
+
+func (c *Compositor) WaitForExecs() {
+	c.execs.Wait()
+}
+
+func (c *Compositor) startCommand(command string, env []string, stdout, stderr *os.File) (*exec.Cmd, error) {
+	sh, err := c.lookPath("sh")
 	if err != nil {
-		return fmt.Errorf("exec %q: %w", command, err)
+		return nil, fmt.Errorf("exec %q: %w", command, err)
 	}
 	cmd := exec.CommandContext(context.Background(), sh, "-c", command) //nolint:gosec // binds and lys-wmctl dispatch run the user's own commands
-	cmd.Env = append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path())
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.Env = env
+	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("exec %q: %w", command, err)
+		return nil, fmt.Errorf("exec %q: %w", command, err)
 	}
-	go c.reap(command, cmd)
-	return nil
+	return cmd, nil
 }
 
 func (c *Compositor) reap(command string, cmd *exec.Cmd) {
@@ -137,4 +164,37 @@ func exitError(command string, err error) error {
 		return fmt.Errorf("compositor: %q was killed by signal %s", command, unix.SignalName(ws.Signal()))
 	}
 	return fmt.Errorf("compositor: %q exited with status %d", command, exit.ExitCode())
+}
+
+func (c *Compositor) ReloadConfig() {
+	var apply func() error
+	c.reloading++
+	c.offLoop(func() error {
+		apply = c.hooks.Reload()
+		return nil
+	}, func(error) error {
+		c.reloading--
+		if err := apply(); err != nil {
+			c.report(fmt.Errorf("compositor: reload: %w", err))
+		}
+		return nil
+	})
+}
+
+func (c *Compositor) ReloadPending() bool {
+	return c.reloading > 0
+}
+
+func (c *Compositor) PrepareDispatch(a wm.Action) func() error {
+	if _, reload := a.(wm.ReloadAction); !reload || c.hooks.Reload == nil {
+		return nil
+	}
+	return c.hooks.Reload()
+}
+
+func (c *Compositor) DispatchPrepared(a wm.Action, loaded func() error) error {
+	c.loadedConfig = loaded
+	err := c.Dispatch(a)
+	c.loadedConfig = nil
+	return err
 }

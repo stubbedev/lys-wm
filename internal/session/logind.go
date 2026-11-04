@@ -64,7 +64,7 @@ type Logind struct {
 	done       chan struct{}
 	active     bool
 	sleeping   atomic.Bool
-	work       Serial
+	work       loop.Serial
 	deferPause bool
 	seatID     string
 	owner      string
