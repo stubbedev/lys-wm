@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -203,18 +204,31 @@ func startCompositor(o options, binary, run string) (*compositor, error) {
 		}
 		if i := slices.IndexFunc(matches, func(m string) bool { return !strings.HasSuffix(m, ".lock") }); i >= 0 {
 			c.display = filepath.Base(matches[i])
-			c.socket, err = ipc.SocketPath(run, c.display)
-			return c, err
+			if c.socket, err = ipc.SocketPath(run, c.display); err != nil {
+				return c, err
+			}
+			if accepting(matches[i]) && accepting(c.socket) {
+				return c, nil
+			}
 		}
 		select {
 		case err := <-c.exited:
 			c.exited <- err
 			return c, fmt.Errorf("lys-wm -backend %s -renderer %s did not start (%w). If it found no GPU, check that /dev/dri holds a render node this user may open and that a driver for it is installed. Its log:\n%s", o.backend, o.renderer, err, tail(c.logPath))
 		case <-deadline:
-			return c, fmt.Errorf("lys-wm -backend %s -renderer %s opened no socket in %v. Its log:\n%s", o.backend, o.renderer, startTimeout, tail(c.logPath))
+			return c, fmt.Errorf("lys-wm -backend %s -renderer %s accepted no connection on its sockets in %v. Its log:\n%s", o.backend, o.renderer, startTimeout, tail(c.logPath))
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
+}
+
+func accepting(socket string) bool {
+	conn, err := net.DialTimeout("unix", socket, startTimeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func (c *compositor) stop(ask bool) error {
