@@ -613,3 +613,49 @@ func TestOnlyTheSwitchStartsAHolder(t *testing.T) {
 		t.Error("the worker a holder started became a holder too")
 	}
 }
+
+func TestALateExitNoticeLeavesTheConnectionOnTheReusedNumberAlone(t *testing.T) {
+	old, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(old[1])
+	number := old[0]
+	peer := &handoverPeer{fd: number}
+	peer.close()
+	next, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(next[1])
+	if next[0] != number {
+		if err := unix.Dup3(next[0], number, unix.O_CLOEXEC); err != nil {
+			t.Fatal(err)
+		}
+		defer unix.Close(next[0])
+	}
+	defer unix.Close(number)
+	peer.shutdown()
+	if _, err := unix.Write(next[1], []byte{1}); err != nil {
+		t.Fatalf("the notice shut down whatever took the number: %v", err)
+	}
+	if _, err := unix.Write(number, []byte{1}); err != nil {
+		t.Fatalf("the notice shut down whatever took the number: %v", err)
+	}
+}
+
+func TestAFailedUpgradeNeverClosesTheNextConnection(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	fake := script(t, `case "$1" in --handover-info) echo '{"format":1}'; exit 0;; esac`+"\nexit 3\n")
+	for i := range 10 {
+		if _, err := s.upgrade(fake); err == nil {
+			t.Fatal("a binary that exits at once took over")
+		}
+		for range 20 {
+			if _, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindWindows}); err != nil {
+				t.Fatalf("round %d: the session did not answer right after the failed upgrade: %v\n%s", i, err, s.log())
+			}
+		}
+	}
+}

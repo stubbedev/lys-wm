@@ -301,18 +301,41 @@ func (u *upgrader) spawn(binary string, conn *os.File, resume func(error)) {
 	go u.drive(pid, pair[0], st, t, logs, binary, resume)
 }
 
+type handoverPeer struct {
+	mu sync.Mutex
+	fd int
+}
+
+func (p *handoverPeer) shutdown() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.fd >= 0 {
+		_ = unix.Shutdown(p.fd, unix.SHUT_RDWR)
+	}
+}
+
+func (p *handoverPeer) close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.fd >= 0 {
+		_ = unix.Close(p.fd)
+		p.fd = -1
+	}
+}
+
 func (u *upgrader) drive(pid int, fd int, st *handoverState, t *handover.FDs, logs *tail, binary string, resume func(error)) {
+	peer := &handoverPeer{fd: fd}
 	fail := func(cause error) {
 		_ = unix.Kill(pid, unix.SIGKILL)
-		_ = unix.Close(fd)
+		peer.close()
 		why := logs.settled()
 		_ = u.loop.Post(func() error {
 			resume(fmt.Errorf("%s did not take over and this lys-wm keeps running: %w: %s", binary, cause, why))
 			return nil
 		})
 	}
-	u.holder.OnExit(pid, func() { _ = unix.Shutdown(fd, unix.SHUT_RDWR) })
-	timer := time.AfterFunc(restoreLimit, func() { _ = unix.Shutdown(fd, unix.SHUT_RDWR) })
+	u.holder.OnExit(pid, peer.shutdown)
+	timer := time.AfterFunc(restoreLimit, peer.shutdown)
 	defer timer.Stop()
 	err := handover.Send(fd, st, t)
 	t.CloseOwned()
