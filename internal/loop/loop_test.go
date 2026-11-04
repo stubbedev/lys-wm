@@ -669,3 +669,33 @@ func TestAnIdleThatKeepsRepostingDoesNotStarveSources(t *testing.T) {
 		t.Fatalf("a readable source went unserved through %d idle passes", passes)
 	}
 }
+
+func TestBeforeIdleRunsOnlyAheadOfIdleWork(t *testing.T) {
+	l := newLoop(t)
+	var got []string
+	l.BeforeIdle(func() error {
+		got = append(got, "flush")
+		return nil
+	})
+	l.Idle(func() error {
+		got = append(got, "idle")
+		return nil
+	})
+	l.BeforeWait(func() error {
+		got = append(got, "before")
+		if len(got) == 5 {
+			l.Stop()
+		}
+		return nil
+	})
+	if err := l.Post(func() error {
+		got = append(got, "posted")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	run(t, l)
+	if want := []string{"flush", "idle", "before", "posted", "before"}; !slices.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}

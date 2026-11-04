@@ -450,6 +450,7 @@ func Adopt(l *loop.Loop, opts Options, st *State, t *handover.FDs) (*Display, er
 		return nil, errors.Join(err, unix.Close(d.spare))
 	}
 	l.BeforeWait(d.flush)
+	l.BeforeIdle(d.flush)
 	d.parked = true
 	return d, nil
 }

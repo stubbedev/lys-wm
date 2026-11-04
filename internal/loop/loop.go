@@ -53,6 +53,7 @@ type Loop struct {
 	idle    []func() error
 	running []func() error
 	before  []func() error
+	flush   []func() error
 	stopped bool
 	closed  bool
 	wakeups int
@@ -330,6 +331,22 @@ func (l *Loop) BeforeWait(f func() error) {
 	l.before = append(l.before, f)
 }
 
+func (l *Loop) BeforeIdle(f func() error) {
+	l.flush = append(l.flush, f)
+}
+
+func (l *Loop) flushBeforeIdle() error {
+	if len(l.idle) == 0 || l.stopped {
+		return nil
+	}
+	for _, f := range l.flush {
+		if err := f(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (l *Loop) Wakeups() int {
 	return l.wakeups
 }
@@ -353,6 +370,9 @@ func (l *Loop) Run() error {
 		return err
 	}
 	for !l.stopped {
+		if err := l.flushBeforeIdle(); err != nil {
+			return err
+		}
 		if err := l.runIdle(); err != nil {
 			return err
 		}

@@ -754,3 +754,27 @@ func TestOnCloseRunsAfterClientsAreGone(t *testing.T) {
 		t.Fatalf("teardown ran %v", ran)
 	}
 }
+
+func TestQueuedEventsReachTheSocketBeforeIdleWorkRuns(t *testing.T) {
+	h := start(t)
+	d := h.connect()
+	if err := d.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	fd := d.Conn().FD()
+	waiting := -1
+	h.on(func() {
+		if err := h.disp.clients[0].wlDisplay.SendDeleteID(0xff000000); err != nil {
+			t.Error(err)
+		}
+		h.loop.Idle(func() error {
+			var err error
+			waiting, err = unix.IoctlGetInt(fd, unix.TIOCINQ)
+			return err
+		})
+	})
+	h.on(func() {})
+	if waiting <= 0 {
+		t.Fatalf("%d bytes on the client's socket when idle work ran, want the queued event", waiting)
+	}
+}

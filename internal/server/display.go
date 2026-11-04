@@ -83,6 +83,7 @@ func New(l *loop.Loop, opts Options) (*Display, error) {
 		return nil, err
 	}
 	l.BeforeWait(d.flush)
+	l.BeforeIdle(d.flush)
 	return d, nil
 }
 
