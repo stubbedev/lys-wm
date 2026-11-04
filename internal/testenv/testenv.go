@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,14 @@ func GPU(t testing.TB) *gpu.Library {
 	return l
 }
 
+var driverClose sync.Mutex
+
+func CloseDriver(closeDriver func() error) error {
+	driverClose.Lock()
+	defer driverClose.Unlock()
+	return closeDriver()
+}
+
 func Vulkan(t testing.TB) *vulkan.Renderer {
 	t.Helper()
 	r, err := vulkan.OpenDefault()
@@ -59,7 +68,7 @@ func Vulkan(t testing.TB) *vulkan.Renderer {
 		missing(t, "%v", err)
 	}
 	t.Cleanup(func() {
-		if err := r.Close(); err != nil {
+		if err := CloseDriver(r.Close); err != nil {
 			t.Error(err)
 		}
 	})

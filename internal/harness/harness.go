@@ -274,7 +274,7 @@ func (h *Harness) stop() {
 		errs = append(errs, h.display.Close())
 	}
 	if h.backend != nil {
-		errs = append(errs, h.backend.Close())
+		errs = append(errs, testenv.CloseDriver(h.backend.Close))
 	}
 	if h.loop != nil {
 		errs = append(errs, h.loop.Close())

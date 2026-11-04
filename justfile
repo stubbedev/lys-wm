@@ -47,7 +47,10 @@ hardware:
     unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
-    LYS_WM_HEADLESS=1 go test -count=1 -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/render/vulkan/ ./internal/backend/drm/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'
+    if ! LYS_WM_HEADLESS=1 go test -count=1 -timeout 5m -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/render/vulkan/ ./internal/backend/drm/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'; then
+        cat "$dir/tests.log" >&2
+        exit 1
+    fi
     if grep -E '^[[:space:]]*--- SKIP: |^testing: warning: no tests to run' "$dir/tests.log" > "$dir/not-run.log"; then
         echo "hardware: these tests did not run on this machine:" >&2
         cat "$dir/not-run.log" >&2
