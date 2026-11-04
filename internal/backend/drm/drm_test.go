@@ -593,9 +593,10 @@ func (r *rig) until(what string, done func() bool) {
 func (r *rig) runUntil(what string, done func() bool) error {
 	r.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
+	met := false
 	var check *loop.Timer
 	check, err := r.l.AddTimer(func() error {
-		if done() || time.Now().After(deadline) {
+		if met = done(); met || time.Now().After(deadline) {
 			r.l.Stop()
 			return nil
 		}
@@ -611,10 +612,22 @@ func (r *rig) runUntil(what string, done func() bool) error {
 	if err := r.l.Run(); err != nil {
 		return err
 	}
-	if !done() {
+	if !met {
 		r.t.Fatalf("waited 10 s for %s: %d commits, %d presents, reports %v, log %v", what, len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
 	}
 	return nil
+}
+
+func TestTheRigTakesTheAnswerAConditionGaveOnce(t *testing.T) {
+	r := start(t)
+	asked := 0
+	r.until("a condition that holds for one instant", func() bool {
+		asked++
+		return asked == 3
+	})
+	if asked != 3 {
+		t.Fatalf("the condition was asked %d times; a condition on the clock can be true only once", asked)
+	}
 }
 
 func TestOutputsPickACRTCAndPrimaryPlane(t *testing.T) {
