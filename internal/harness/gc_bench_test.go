@@ -68,3 +68,60 @@ func BenchmarkGCCountPerThousandFrames(b *testing.B) {
 		})
 	}
 }
+
+const mostMallocsPerAnimatedFrame = 8
+
+func TestAnimatedFramesAllocateAlmostNothing(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates on its own")
+	}
+	mode := backend.Mode{Size: image.Pt(320, 180), RefreshMHz: 60000, Preferred: true}
+	now := time.Second
+	h := start(t, setup{open: softBackend, configure: func(cfg *compositor.Config) {
+		cfg.WM = compositor.DefaultSettings()
+		cfg.Decor = compositor.DefaultDecor()
+		cfg.Animations = anim.MustResolve(anim.DefaultMotion())
+		cfg.Clock = func() time.Duration { return now }
+	}}, mode)
+	for i := range 6 {
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window(fmt.Sprintf("w%d", i), quadrants)
+		c.DispatchUntil("map", w.Mapped)
+		w.Stop()
+	}
+	actions := []string{"focus left", "move left", "workspace 2", "workspace 1"}
+	h.Do(func(bk *headless.Backend, comp *compositor.Compositor) error {
+		for range 4 {
+			now += time.Second
+			if err := comp.Frame(bk.Outputs()[0]); err != nil {
+				return err
+			}
+		}
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		frames := 0
+		for i := range 40 {
+			a, err := wm.ParseAction(actions[i%len(actions)])
+			if err != nil {
+				return err
+			}
+			if err := comp.Dispatch(a); err != nil {
+				return err
+			}
+			for range 25 {
+				now += 16 * time.Millisecond
+				if err := comp.Frame(bk.Outputs()[0]); err != nil {
+					return err
+				}
+				frames++
+			}
+		}
+		runtime.ReadMemStats(&after)
+		got := float64(after.Mallocs-before.Mallocs) / float64(frames)
+		t.Logf("%.2f mallocs a frame", got)
+		if got > mostMallocsPerAnimatedFrame {
+			t.Errorf("%.2f mallocs a frame through focus moves and workspace switches, want at most %d", got, mostMallocsPerAnimatedFrame)
+		}
+		return nil
+	})
+}
