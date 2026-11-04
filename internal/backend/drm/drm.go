@@ -3,6 +3,7 @@
 package drm
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -833,6 +834,9 @@ const (
 
 type Output struct {
 	spare         []*scanout
+	damageBlob    uint32
+	damageRects   render.Region
+	damageBytes   []byte
 	offDue        bool
 	b             *Backend
 	identity      edid.Info
@@ -1183,6 +1187,7 @@ func (o *Output) AbortFrame() {
 
 func (o *Output) Present(damage render.Region) error {
 	o.budget.Painted(damage.Area())
+	o.setDamageClips(damage)
 	s := o.drawing
 	if s == nil {
 		return backend.Broken("drm: present on %s without BeginFrame", o.Name())
@@ -1250,6 +1255,41 @@ func (o *Output) commitPresent(s *scanout) error {
 	return nil
 }
 
+func (o *Output) setDamageClips(damage render.Region) {
+	if _, ok := o.primary.props["FB_DAMAGE_CLIPS"]; !ok {
+		return
+	}
+	whole := image.Rectangle{Max: modeOf(o.mode).Size}
+	if len(damage) == 0 || len(damage) == 1 && whole.In(damage[0]) {
+		damage = nil
+	}
+	if slices.Equal(damage, o.damageRects) {
+		return
+	}
+	var blob uint32
+	if damage != nil {
+		o.damageBytes = o.damageBytes[:0]
+		for _, r := range damage {
+			o.damageBytes = binary.NativeEndian.AppendUint32(o.damageBytes, uint32(r.Min.X)) //nolint:gosec // damage lies inside the output
+			o.damageBytes = binary.NativeEndian.AppendUint32(o.damageBytes, uint32(r.Min.Y)) //nolint:gosec // as above
+			o.damageBytes = binary.NativeEndian.AppendUint32(o.damageBytes, uint32(r.Max.X)) //nolint:gosec // as above
+			o.damageBytes = binary.NativeEndian.AppendUint32(o.damageBytes, uint32(r.Max.Y)) //nolint:gosec // as above
+		}
+		var err error
+		if blob, err = o.b.dev.CreateBlob(o.damageBytes); err != nil {
+			o.b.report(fmt.Errorf("drm: damage clips on %s: %w; repainting the panel whole", o.Name(), err))
+			blob, damage = 0, nil
+		}
+	}
+	if o.damageBlob != 0 {
+		if err := o.b.dev.DestroyBlob(o.damageBlob); err != nil {
+			o.b.report(fmt.Errorf("drm: release the damage clips of %s: %w", o.Name(), err))
+		}
+	}
+	o.damageBlob = blob
+	o.damageRects = append(o.damageRects[:0], damage...)
+}
+
 func (o *Output) ScanoutFormats() gpu.ScanoutTarget {
 	return gpu.ScanoutTarget{Device: o.b.number, Formats: o.primary.clients}
 }
@@ -1263,6 +1303,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size {
 		return false, nil
 	}
+	o.setDamageClips(nil)
 	cf, err := o.b.clientFB(key, d)
 	if err != nil {
 		return false, nil
@@ -1396,6 +1437,9 @@ func (o *Output) frame(s *scanout, fence int) {
 	switch o.kms {
 	case kmsFlip:
 		o.primary.set(r, "FB_ID", uint64(s.fb))
+		if _, ok := o.primary.props["FB_DAMAGE_CLIPS"]; ok {
+			o.primary.set(r, "FB_DAMAGE_CLIPS", uint64(o.damageBlob))
+		}
 		if fence >= 0 {
 			o.primary.set(r, "IN_FENCE_FD", uint64(fence))
 		}
@@ -1640,6 +1684,7 @@ func (o *Output) leaveOnScreen() error {
 }
 
 func (o *Output) release() error {
+	o.setDamageClips(nil)
 	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))

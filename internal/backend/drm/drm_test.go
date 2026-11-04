@@ -42,6 +42,7 @@ const (
 	propModeID
 	propConnCRTC
 	propInFence
+	propDamageClips
 	propHotspotX
 	propHotspotY
 	propGammaLUT
@@ -91,6 +92,7 @@ type fakeDevice struct {
 	refuseAsync       bool
 	refusePowerOff    bool
 	busyNonblock      bool
+	damageClips       bool
 	probeGate         chan struct{}
 	probesOnLoop      syncatomic.Int64
 	loopGoroutine     string
@@ -217,6 +219,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 			"SRC_X": {ID: propSrcX}, "SRC_Y": {ID: propSrcY}, "SRC_W": {ID: propSrcW}, "SRC_H": {ID: propSrcH},
 			"CRTC_X": {ID: propCRTCX}, "CRTC_Y": {ID: propCRTCY}, "CRTC_W": {ID: propCRTCW}, "CRTC_H": {ID: propCRTCH},
 			"IN_FORMATS": {ID: propInFormats, Value: formats}, "IN_FENCE_FD": {ID: propInFence},
+		}
+		if f.damageClips {
+			props["FB_DAMAGE_CLIPS"] = kdrm.Property{ID: propDamageClips}
 		}
 		if object == 43 {
 			props["HOTSPOT_X"], props["HOTSPOT_Y"] = kdrm.Property{ID: propHotspotX}, kdrm.Property{ID: propHotspotY}
@@ -2523,5 +2528,38 @@ func TestACopiedFrameCommitsOnlyOnceTheReadFinishedOffTheLoop(t *testing.T) {
 	r.committedSince("the copied frame", o, n)
 	if got := r.b.SyncReads(); got != 0 {
 		t.Fatalf("%d synchronous reads on the loop", got)
+	}
+}
+
+func TestAFlipCarriesDamageClipsReusingTheBlobWhileTheyMatch(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.damageClips = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.lit()
+	present := func(clip render.Region) uint64 {
+		t.Helper()
+		if _, err := o.BeginFrame(); err != nil {
+			t.Fatal(err)
+		}
+		if err := o.Present(clip); err != nil {
+			t.Fatal(err)
+		}
+		c := r.dev.commits[len(r.dev.commits)-1]
+		r.dev.flip(t, 10, uint32(len(r.dev.commits)))
+		r.until("the flip", func() bool { return !o.flipping })
+		return c.values[[2]uint32{40, propDamageClips}]
+	}
+	clip := render.Region{image.Rect(10, 20, 30, 40)}
+	blob := present(clip)
+	if blob == 0 || len(r.dev.blobData[uint32(blob)]) != 16 {
+		t.Fatalf("a frame with one rect of damage set clips %d: %v", blob, r.dev.blobData[uint32(blob)])
+	}
+	created := r.dev.blobs
+	if again := present(clip); again != blob || r.dev.blobs != created {
+		t.Fatalf("the same damage made blob %d from %d, %d blobs from %d", again, blob, r.dev.blobs, created)
+	}
+	if whole := present(render.Region{image.Rect(0, 0, 1920, 1080)}); whole != 0 {
+		t.Fatalf("a whole repaint carried clips %d", whole)
 	}
 }
