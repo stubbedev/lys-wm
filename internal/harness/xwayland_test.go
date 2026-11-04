@@ -768,7 +768,7 @@ func TestAnXwaylandThatLostItsWindowManagerIsRestarted(t *testing.T) {
 	xproto.KillClient(c.x, xgb.Get32(owner.Value))
 	select {
 	case err := <-reports:
-		if !strings.Contains(err.Error(), "its X connection ended") {
+		if !strings.Contains(err.Error(), "killed because its window manager failed") {
 			t.Fatalf("reported %v", err)
 		}
 	case <-time.After(clientTimeout):
