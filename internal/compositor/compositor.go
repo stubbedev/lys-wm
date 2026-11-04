@@ -428,7 +428,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if c.surfaces, err = surface.New(display, c); err != nil {
 		return err
 	}
-	if c.shm, err = shm.New(display, c.renderer.Formats()); err != nil {
+	if c.shm, err = shm.New(display, l, c.renderer.Formats()); err != nil {
 		return err
 	}
 	if err := singlepixel.New(display); err != nil {

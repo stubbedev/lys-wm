@@ -137,7 +137,7 @@ func setup(t *testing.T, configure ...func(*recorder)) *env {
 	if _, err := surface.New(e.disp, noSurfaces{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := shm.New(e.disp, []render.Format{render.ARGB8888, render.XRGB8888}); err != nil {
+	if _, err := shm.New(e.disp, l, []render.Format{render.ARGB8888, render.XRGB8888}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.disp.AddGlobal(sw.WlSeatInterface, 1, func(c *server.Client, id wire.ObjectID, v uint32) error {

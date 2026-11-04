@@ -8,10 +8,13 @@ import (
 	"image"
 	"os"
 	"runtime/debug"
+	"slices"
+	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/loop"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -33,12 +36,59 @@ var wireFormats = map[render.Format]sw.WlShmFormat{
 }
 
 type Manager struct {
-	formats map[sw.WlShmFormat]render.Format
-	order   []sw.WlShmFormat
+	formats     map[sw.WlShmFormat]render.Format
+	order       []sw.WlShmFormat
+	loop        *loop.Loop
+	localMemory func(fd int) bool
+	loopTouches uint64
+	stagingMu   sync.Mutex
+	stagingFree [][]byte
 }
 
-func New(d *server.Display, formats []render.Format) (*Manager, error) {
-	m := &Manager{formats: map[sw.WlShmFormat]render.Format{}}
+const (
+	stagedPixels    = 1 << 20
+	maxFreeStagings = 2
+)
+
+func isLocalMemory(fd int) bool {
+	var st unix.Statfs_t
+	if err := unix.Fstatfs(fd, &st); err != nil {
+		return false
+	}
+	switch uint32(st.Type) { //nolint:gosec // filesystem magics fit 32 bits
+	case unix.TMPFS_MAGIC, unix.HUGETLBFS_MAGIC:
+		return true
+	}
+	return false
+}
+
+func (m *Manager) LoopTouches() uint64 {
+	return m.loopTouches
+}
+
+func (m *Manager) takeStaging(n int) []byte {
+	m.stagingMu.Lock()
+	for i, free := range m.stagingFree {
+		if cap(free) >= n {
+			m.stagingFree = slices.Delete(m.stagingFree, i, i+1)
+			m.stagingMu.Unlock()
+			return free[:n]
+		}
+	}
+	m.stagingMu.Unlock()
+	return make([]byte, n)
+}
+
+func (m *Manager) recycleStaging(pix []byte) {
+	m.stagingMu.Lock()
+	defer m.stagingMu.Unlock()
+	if len(m.stagingFree) < maxFreeStagings {
+		m.stagingFree = append(m.stagingFree, pix)
+	}
+}
+
+func New(d *server.Display, l *loop.Loop, formats []render.Format) (*Manager, error) {
+	m := &Manager{formats: map[sw.WlShmFormat]render.Format{}, loop: l, localMemory: isLocalMemory}
 	for _, f := range formats {
 		wf, ok := wireFormats[f]
 		if !ok {
@@ -92,7 +142,7 @@ func (r shmRequests) CreatePool(obj *sw.WlShm, res *sw.WlShmPool, fd int, size i
 		_ = unix.Close(fd)
 		return nil, obj.ProtocolError(sw.WlShmErrorInvalidFD, "cannot map pool fd: %v", err)
 	}
-	p := &pool{m: r.m, c: r.c, resource: res, fd: fd, mapping: mapping, refs: 1}
+	p := &pool{m: r.m, c: r.c, resource: res, fd: fd, mapping: mapping, refs: 1, local: r.m.localMemory(fd)}
 	server.OnDestroy(res, p.unref)
 	return p, nil
 }
@@ -109,6 +159,9 @@ type pool struct {
 	mapping  []byte
 	writable []byte
 	refs     int
+	local    bool
+	copying  int
+	retired  [][]byte
 }
 
 func (p *pool) unref() error {
@@ -157,6 +210,11 @@ func (p *pool) Resize(obj *sw.WlShmPool, size int32) error {
 	if err != nil {
 		return shmError(obj, sw.WlShmErrorInvalidFD, "cannot map the pool at %d bytes: %v", size, err)
 	}
+	if p.copying > 0 {
+		p.retired = append(p.retired, p.mapping)
+		p.mapping = mapping
+		return p.dropWritable()
+	}
 	if err := errors.Join(unix.Munmap(p.mapping), p.dropWritable()); err != nil {
 		return fmt.Errorf("shm: unmap the old pool mapping: %w", err)
 	}
@@ -194,6 +252,13 @@ type Buffer struct {
 	stride   int
 	format   render.Format
 	writer   *Mapping
+	stages   []*staged
+}
+
+type staged struct {
+	pix  []byte
+	err  error
+	done bool
 }
 
 func (b *Buffer) Size() image.Point {
@@ -221,7 +286,80 @@ func (b *Buffer) Write(f func(data []byte, stride int) error) (err error) {
 }
 
 func (b *Buffer) Read(f func(data []byte, stride int) error) (err error) {
+	if s := b.takeStaged(); s != nil {
+		if s.err != nil {
+			return s.err
+		}
+		defer b.pool.m.recycleStaging(s.pix)
+		return f(s.pix, b.stride)
+	}
+	if !b.pool.local {
+		b.pool.m.loopTouches++
+	}
 	return b.guard(b.within(b.pool.mapping, 0), f)
+}
+
+func (b *Buffer) LocalMemory() bool {
+	return b.pool.local
+}
+
+func (b *Buffer) takeStaged() *staged {
+	var newest *staged
+	kept := b.stages[:0]
+	for _, s := range b.stages {
+		switch {
+		case !s.done:
+			kept = append(kept, s)
+		case newest == nil:
+			newest = s
+		default:
+			b.pool.m.recycleStaging(newest.pix)
+			newest = s
+		}
+	}
+	clear(b.stages[len(kept):])
+	b.stages = kept
+	return newest
+}
+
+func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
+	p := b.pool
+	if p.local && c.DamagedPixels() < stagedPixels {
+		return nil
+	}
+	release := c.Await()
+	s := &staged{}
+	b.stages = append(b.stages, s)
+	p.refs++
+	p.copying++
+	from := b.within(p.mapping, 0)
+	go func() {
+		s.pix = p.m.takeStaging(len(from))
+		s.err = b.guard(from, func(data []byte, _ int) error {
+			copy(s.pix, data)
+			return nil
+		})
+		err := p.m.loop.Post(func() error {
+			s.done = true
+			return errors.Join(p.copied(), release())
+		})
+		if err != nil && !errors.Is(err, loop.ErrClosed) {
+			panic(fmt.Sprintf("shm: hand a staged buffer back to the loop: %v", err))
+		}
+	}()
+	return nil
+}
+
+func (p *pool) copied() error {
+	p.copying--
+	var errs []error
+	if p.copying == 0 {
+		for _, m := range p.retired {
+			errs = append(errs, unix.Munmap(m))
+		}
+		p.retired = nil
+	}
+	return errors.Join(append(errs, p.unref())...)
 }
 
 func (b *Buffer) within(mapping []byte, at int) []byte {

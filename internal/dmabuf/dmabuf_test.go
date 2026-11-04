@@ -517,6 +517,8 @@ func TestTightlyPackedYUVIsInBoundsForEveryFormat(t *testing.T) {
 
 type awaiter func() func() error
 
+func (awaiter) DamagedPixels() int { return 0 }
+
 func (a awaiter) Await() func() error { return a() }
 
 // A commit of a buffer whose writer is still at work waits for it, as

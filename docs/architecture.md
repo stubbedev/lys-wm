@@ -53,6 +53,13 @@ themselves. The compositor's state takes no lock, with one exception below.
 Packages under it keep their own: the loop's mailbox, the IPC server's
 connection set, and the process-wide tables in `gpu` and `session`.
 
+A shm pool can be mapped from any file, so reading one can block on a page fault for as
+long as its filesystem likes. A pool on tmpfs or hugetlbfs, which is what toolkits use,
+is read on the loop while the damage is small. Any other pool, and any commit damaging
+more than a million pixels, is copied by a goroutine first: the commit holds at the same
+gate as an implicit-sync dmabuf, and applies with the copy ready, so what it uploads on
+the loop is memory no client can stall. Toplevel icons from other pools are ignored.
+
 Screen capture into shared memory is one such edge (#131). The loop draws
 the capture, starts an asynchronous read into a pixel buffer and maps the
 client's buffer privately; a goroutine waits on the GPU fence, the loop maps

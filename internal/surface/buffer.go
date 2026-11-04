@@ -25,6 +25,7 @@ type Awaited interface {
 // it until the returned func is called.
 type Awaiter interface {
 	Await() (release func() error)
+	DamagedPixels() int
 }
 
 type Backing struct {

@@ -162,6 +162,9 @@ func (b *iconBuilder) seal(serial *uint64) (*Icon, error) {
 	kept := keptIconBuffers(b.buffers)
 	icon := &Icon{Serial: *serial, Name: b.name, Images: make([]IconImage, 0, len(kept))}
 	for _, ib := range kept {
+		if !ib.buffer.LocalMemory() {
+			continue
+		}
 		img, err := copyIcon(ib.buffer)
 		if err != nil {
 			return nil, fmt.Errorf("shell: read icon buffer: %w", err)

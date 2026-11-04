@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -44,6 +45,7 @@ type env struct {
 	disp   *server.Display
 	dir    string
 	reader *reader
+	m      *Manager
 	done   chan error
 }
 
@@ -85,7 +87,7 @@ func setup(t *testing.T) *env {
 	if _, err := surface.New(e.disp, e.reader); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(e.disp, []render.Format{render.ARGB8888, render.XRGB8888}); err != nil {
+	if e.m, err = New(e.disp, l, []render.Format{render.ARGB8888, render.XRGB8888}); err != nil {
 		t.Fatal(err)
 	}
 	go func() { e.done <- l.Run() }()
@@ -207,7 +209,7 @@ func TestFormatsComeFromTheRenderer(t *testing.T) {
 	if !slices.Equal(c.formats.got, []cw.WlShmFormat{cw.WlShmFormatArgb8888, cw.WlShmFormatXrgb8888}) {
 		t.Fatalf("formats = %v", c.formats.got)
 	}
-	if _, err := New(nil, []render.Format{render.XRGB8888}); err == nil {
+	if _, err := New(nil, nil, []render.Format{render.XRGB8888}); err == nil {
 		t.Fatal("a renderer without ARGB8888 was accepted")
 	}
 }
@@ -372,5 +374,51 @@ func TestTruncatedPoolDisconnectsOnlyThatClient(t *testing.T) {
 		e.done <- err
 		t.Fatalf("the compositor loop ended: %v", err)
 	default:
+	}
+}
+
+func TestAnUntrustedPoolIsCopiedOffTheLoop(t *testing.T) {
+	e := setup(t)
+	e.m.localMemory = func(int) bool { return false }
+	c := e.connect()
+	m := newMemfd(t, 4*16)
+	for i := range m.mapping {
+		m.mapping[i] = 0x5a
+	}
+	c.show(c.buffer(c.pool(m), 0, 4, 4, 16, cw.WlShmFormatArgb8888))
+	c.roundtrip()
+	var pixels [][]byte
+	var touches uint64
+	deadline := time.Now().Add(30 * time.Second)
+	for len(pixels) == 0 {
+		done := make(chan struct{})
+		if err := e.loop.Post(func() error {
+			pixels, touches = e.reader.pixels, e.m.LoopTouches()
+			close(done)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+		if time.Now().After(deadline) {
+			t.Fatal("the commit never applied once its copy finished")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if touches != 0 {
+		t.Fatalf("%d reads touched an untrusted pool on the loop", touches)
+	}
+	if !slices.Equal(pixels[0], []byte{0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a}) {
+		t.Fatalf("staged pixels %v", pixels[0])
+	}
+}
+
+func TestAMemfdIsLocalMemoryAndARegularFileIsNot(t *testing.T) {
+	m := newMemfd(t, 4096)
+	if !isLocalMemory(m.fd) {
+		t.Fatal("a memfd does not count as local memory")
+	}
+	if isLocalMemory(-1) {
+		t.Fatal("an fd that cannot be classified counts as local memory")
 	}
 }

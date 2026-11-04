@@ -272,6 +272,14 @@ func (u *Update) Await() func() error {
 	return u.Hold().Release
 }
 
+func (u *Update) DamagedPixels() int {
+	if u.s.current.buffer == nil {
+		return 0
+	}
+	scale := max(u.s.pending.scale, 1)
+	return u.s.pending.bufferDamage.Area() + u.s.pending.damage.Area()*int(scale)*int(scale)
+}
+
 func (u *Update) OnApply(f func() error) {
 	u.applied = append(u.applied, f)
 }
