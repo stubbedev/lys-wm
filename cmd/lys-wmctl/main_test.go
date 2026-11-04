@@ -118,7 +118,7 @@ func TestRunAgainstASocket(t *testing.T) {
 }
 
 func TestNoRunningCompositorHasItsOwnExitStatus(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "no-such.sock")
+	missing := filepath.Join(testenv.SocketDir(t), "no-such.sock")
 	err := run([]string{"--socket", missing, "reload"}, func(string) string { return "" }, io.Discard, io.Discard)
 	if code := exitCode(err); code != exitNotRunning {
 		t.Fatalf("a socket that is not there: %v, status %d", err, code)
@@ -127,7 +127,7 @@ func TestNoRunningCompositorHasItsOwnExitStatus(t *testing.T) {
 	if code := exitCode(err); code != exitNotRunning {
 		t.Fatalf("no socket to find: %v, status %d", err, code)
 	}
-	stale := filepath.Join(t.TempDir(), "stale.sock")
+	stale := filepath.Join(testenv.SocketDir(t), "stale.sock")
 	l, err := net.Listen("unix", stale)
 	if err != nil {
 		t.Fatal(err)
