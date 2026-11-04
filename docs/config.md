@@ -642,6 +642,8 @@ Minimized windows sit in a row along the bottom, and a click there brings one ba
 
 Layer surfaces: `background` and `bottom` stay, and blur and dim. `top`, so bars,
 fade out as the overview opens and back as it closes, keeping their frame callbacks.
+They stay in the thumbnails, under fullscreen windows as on screen, and a thumbnail
+redraws when they commit, so each shows its workspace as it looks.
 `overlay`, so notifications and launchers, stays on top and takes its own input,
 and one with exclusive or clicked keyboard focus keeps the keyboard. X11
 override-redirect windows fade out and take no input.

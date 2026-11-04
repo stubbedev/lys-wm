@@ -107,6 +107,7 @@ func (c *Compositor) rearrange(o *output.Output) (bool, error) {
 }
 
 func (c *Compositor) layersChanged(o *output.Output) error {
+	c.overviewLayersChanged(o)
 	var err error
 	if o != nil {
 		_, err = c.rearrange(o)

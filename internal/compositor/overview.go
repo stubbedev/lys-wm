@@ -93,8 +93,9 @@ type overviewItem struct {
 }
 
 type thumbMember struct {
-	w    *window
-	rect image.Rectangle
+	w          *window
+	rect       image.Rectangle
+	fullscreen bool
 }
 
 type overviewThumb struct {
@@ -602,7 +603,7 @@ func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.W
 		members := make([]thumbMember, 0, len(places))
 		for _, p := range places {
 			if w := c.windowByID(p.ID); w != nil && p.Visible && !p.Minimized {
-				members = append(members, thumbMember{w, p.Rect})
+				members = append(members, thumbMember{w, p.Rect, p.Layer == wm.LayerFullscreen})
 			}
 		}
 		if !slices.Equal(t.members, members) {
@@ -633,16 +634,27 @@ func (c *Compositor) backdropCommitted(root *surface.Surface) error {
 }
 
 func (c *Compositor) overviewCommitted(root *surface.Surface) {
+	e := c.layerWithSurface(root)
 	for o, v := range c.overview.views {
-		wallpaper := false
-		if e := c.layerWithSurface(root); e != nil && e.output == o && slices.Contains(belowWindows, e.surface.Current().Layer) {
-			wallpaper = true
-		}
+		inThumbnails := e != nil && e.output == o && !isOverlay(e.surface)
 		for _, t := range v.spaces {
-			if wallpaper || slices.ContainsFunc(t.members, func(m thumbMember) bool { return m.w.top.Surface() == root }) {
+			if inThumbnails || slices.ContainsFunc(t.members, func(m thumbMember) bool { return m.w.top.Surface() == root }) {
 				t.dirty, t.touched = true, c.clock()
 			}
 		}
+	}
+}
+
+func (c *Compositor) overviewLayersChanged(o *output.Output) {
+	if c.overview == nil {
+		return
+	}
+	v, ok := c.overview.views[o]
+	if !ok {
+		return
+	}
+	for _, t := range v.spaces {
+		t.dirty = true
 	}
 }
 

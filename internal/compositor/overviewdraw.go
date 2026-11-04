@@ -303,6 +303,15 @@ func (c *Compositor) thumbFilter(o *output.Output, v *overviewView, size image.P
 	return nil
 }
 
+func (c *Compositor) drawThumbMembers(f *frame, o *output.Output, members []thumbMember, fullscreen bool, shown []*surface.Surface) []*surface.Surface {
+	for _, m := range members {
+		if m.fullscreen == fullscreen {
+			shown = c.drawClippedTree(f, o, m.w.top.Surface(), c.windowOrigin(m.w), shown, c.windowMask(o, m.w), c.opacity(m.w))
+		}
+	}
+	return shown
+}
+
 func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb, filtered bool) error {
 	started := c.clock()
 	size := deviceRect(o, t.rect).Size()
@@ -325,11 +334,11 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 	for e := range c.layersAt(o, belowWindows) {
 		c.drawTree(f, o, e.surface.Surface(), flat(e.bounds().Min), nil)
 	}
-	shown := t.surfaces[:0]
-	for _, m := range t.members {
-		shown = c.drawClippedTree(f, o, m.w.top.Surface(), c.windowOrigin(m.w), shown, c.windowMask(o, m.w), c.opacity(m.w))
+	shown := c.drawThumbMembers(f, o, t.members, false, t.surfaces[:0])
+	for e := range c.layersAt(o, aboveWindows) {
+		c.drawTree(f, o, e.surface.Surface(), flat(e.bounds().Min), nil)
 	}
-	t.surfaces = shown
+	t.surfaces = c.drawThumbMembers(f, o, t.members, true, shown)
 	draw, chain := t.target, []render.TextureTarget(nil)
 	if filtered {
 		if err := c.thumbFilter(o, v, size); err != nil {

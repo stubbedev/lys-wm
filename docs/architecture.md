@@ -492,13 +492,17 @@ The overview draws the windows it moves as they are: their ops, remapped from ti
 to slot as any window animation does, because a live window is already a texture
 and a screenshot of it would be one more texture drawn just as often. 30 floating
 1000x700 windows moving cost the same draws either way. What it does cache is
-thumbnails: one target per workspace, redrawn only when a window in it commits, so
-a thumbnail is one op in the frame. A redraw draws the workspace at full size and
+thumbnails: one target per workspace, holding the workspace as it looks on screen
+(the `background`, `bottom` and `top` layers and its windows, fullscreen ones above
+`top`, but not `overlay`, which the overview draws live above everything). A
+thumbnail redraws only when a window in it or one of those layers commits damage, so
+it is one op in the frame. A redraw draws the workspace at full size and
 halves it with the blur chains' Kawase step down to the thumbnail, the one filter
 every renderer has, because a straight draw at a seventh of the size turns fine
 lines into moire on all of them. That costs a full-size draw per redraw, so an output
 redraws one thumbnail a frame, and a thumbnail waits four times its last redraw, at
-most half a second, before the next. All windows blur over one shared chain of the
+most half a second, before the next. A bar that commits often dirties all of its
+output's thumbnails and they take turns within those limits; an idle one costs nothing. All windows blur over one shared chain of the
 layers below them while it is open, since their own chains would redraw whenever
 any window moved.
 

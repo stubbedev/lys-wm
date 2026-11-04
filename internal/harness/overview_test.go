@@ -1852,3 +1852,152 @@ func TestAThumbnailIsFilteredAfterTheFrameThatFoundItCalm(t *testing.T) {
 		return nil
 	})
 }
+
+func thumbnailBand(strip image.Rectangle) image.Point {
+	return image.Pt(centre(strip).X, strip.Min.Y+strip.Dy()/10)
+}
+
+func tallBar() testclient.LayerSpec {
+	spec := topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone)
+	spec.Size.Y, spec.ExclusiveZone = 100, 100
+	return spec
+}
+
+func thumbnailsShow(strip []image.Rectangle, want ...[3]byte) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(b *headless.Backend, comp *compositor.Compositor) bool {
+		if comp.OverviewProgress(comp.Now()) < 1 || comp.OverviewThumbsRough() {
+			return false
+		}
+		px := snapshot(b.Outputs()[0])
+		for i, c := range want {
+			at := thumbnailBand(strip[i])
+			if !within(pixel(px, at.X, at.Y), c, 4) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func stillWindowOnEachOfTwoWorkspaces(h *Harness, c *testclient.Client) {
+	h.t.Helper()
+	for i, title := range []string{"first", "second"} {
+		if i > 0 {
+			h.dispatch("workspace 2")
+		}
+		w := c.Window(title, testclient.Fill(0xff, 0, 0))
+		c.DispatchUntil(title+" to map", w.Mapped)
+		w.Stop()
+	}
+}
+
+func TestThumbnailsShowATopBarAndItsCommits(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, plainOverview, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		colour := barColor
+		bar := c.Layer(tallBar(), func(pix []byte, stride int, size image.Point, frame int) {
+			testclient.Fill(colour[2], colour[1], colour[0])(pix, stride, size, frame)
+		})
+		c.DispatchUntil("the bar to map", bar.Mapped)
+		bar.Stop()
+		stillWindowOnEachOfTwoWorkspaces(h, c)
+		h.Rendered(0)
+		h.dispatch("overview show")
+		strip := planOf(h, 0).Strip
+		h.Eventually("the bar in the thumbnails of the active and the other workspace", thumbnailsShow(strip, barColor, barColor))
+
+		colour = [3]byte{0xe0, 0xe0, 0x10}
+		if err := bar.Redraw(); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+		h.Eventually("the bar's commit in both thumbnails", thumbnailsShow(strip, colour, colour))
+
+		if err := bar.Destroy(); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+		h.Eventually("the bar gone from both thumbnails", func(b *headless.Backend, comp *compositor.Compositor) bool {
+			px := snapshot(b.Outputs()[0])
+			for _, r := range strip[:2] {
+				at := thumbnailBand(r)
+				if within(pixel(px, at.X, at.Y), colour, 40) {
+					return false
+				}
+			}
+			return !comp.OverviewThumbsRough()
+		})
+	})
+}
+
+func TestAFullscreenWindowCoversTheBarInItsThumbnail(t *testing.T) {
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, plainOverview, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		bar := c.Layer(tallBar(), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+		c.DispatchUntil("the bar to map", bar.Mapped)
+		bar.Stop()
+		full := c.Window("full", testclient.Fill(0xff, 0, 0))
+		c.DispatchUntil("full to map", full.Mapped)
+		h.dispatch("fullscreen")
+		c.DispatchUntil("full at the whole output", func() bool { return full.Logical == overviewMode.Size })
+		full.Stop()
+		h.dispatch("workspace 2")
+		other := c.Window("other", testclient.Fill(0xff, 0, 0))
+		c.DispatchUntil("other to map", other.Mapped)
+		other.Stop()
+		h.Rendered(0)
+		h.dispatch("overview show")
+		h.Eventually("the fullscreen window over the bar in its thumbnail, the bar in the other", thumbnailsShow(planOf(h, 0).Strip, [3]byte{0, 0, 0xff}, barColor))
+	})
+}
+
+func TestABarCommittingNoDamageRedrawsNoThumbnail(t *testing.T) {
+	h := Start(t, overviewMode)
+	c := testclient.Connect(t, h.Socket())
+	bar := c.Layer(tallBar(), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	bar.Stop()
+	stillWindowOnEachOfTwoWorkspaces(h, c)
+	h.Rendered(0)
+	h.dispatch("overview show")
+	h.Rendered(0)
+	h.Eventually("both thumbnails drawn and filtered", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsRough()
+	})
+	redraws := func() uint64 {
+		var n uint64
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+			n = comp.OverviewThumbRedraws()
+			return nil
+		})
+		return n
+	}
+	first := redraws()
+	idle := func() {
+		h.t.Helper()
+		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+			for range 5 {
+				if err := comp.Frame(b.Outputs()[0]); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	idle()
+	if got := redraws(); got != first {
+		t.Fatalf("idle frames under an idle bar redrew %d thumbnails", got-first)
+	}
+	for range 3 {
+		if err := errors.Join(bar.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+		idle()
+	}
+	if got := redraws(); got != first {
+		t.Fatalf("commits without damage redrew %d thumbnails", got-first)
+	}
+}

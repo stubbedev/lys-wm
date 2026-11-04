@@ -76,7 +76,7 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 	reach := c.footprintMoved(s, root) || drawable != stillDrawable
 	err := errors.Join(c.noteCommit(s), c.updateCursorSessions())
 	d := s.Damage()
-	if c.overview != nil {
+	if c.overview != nil && (len(d) > 0 || reach) {
 		c.overviewCommitted(root)
 	}
 	if c.keptBackdrop && c.overview == nil {
