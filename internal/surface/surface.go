@@ -231,9 +231,10 @@ type Surface struct {
 }
 
 type Hooks struct {
-	Commit    func(u *Update) error
-	Applied   func() error
-	Destroyed func() error
+	Commit     func(u *Update) error
+	Applied    func() error
+	Destroying func() error
+	Destroyed  func() error
 }
 
 type Update struct {
@@ -727,8 +728,13 @@ func (s *Surface) mapDamage(st *state) {
 }
 
 func (s *Surface) destroy() error {
-	s.destroyed = true
 	var errs []error
+	for _, h := range slices.Clone(s.hooks) {
+		if h.Destroying != nil {
+			errs = append(errs, h.Destroying())
+		}
+	}
+	s.destroyed = true
 	var feedbacks []*spt.WpPresentationFeedback
 	for _, st := range s.unapplied() {
 		errs = append(errs, unlock(st.buffer))

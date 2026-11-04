@@ -558,8 +558,9 @@ func (m *wm) associated(serial uint64, s *surface.Surface) error {
 func (m *wm) dissociated(serial uint64) error {
 	for _, w := range m.windows {
 		if w.serial == serial {
+			err := m.hide(w)
 			w.surface = nil
-			return m.hide(w)
+			return err
 		}
 	}
 	return nil

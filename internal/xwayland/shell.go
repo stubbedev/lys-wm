@@ -64,7 +64,7 @@ func (r shellRequests) GetXwaylandSurface(obj *sxs.XwaylandShellV1, _ *sxs.Xwayl
 	if err := s.SetRole(x); err != nil {
 		return nil, obj.ProtocolError(sxs.XwaylandShellV1ErrorRole, "%v", err)
 	}
-	server.OnDestroy(wl, x.forget)
+	s.AddHooks(&surface.Hooks{Destroying: x.forget})
 	return x, nil
 }
 
