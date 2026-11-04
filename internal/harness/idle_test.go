@@ -15,6 +15,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
+const heldTimeout = 10 * time.Millisecond
+
 type idleLog struct{ log testclient.Log }
 
 func (l *idleLog) Idled(*cei.ExtIdleNotificationV1) error {
@@ -59,46 +61,20 @@ func (i *idler) watch(timeout time.Duration, input bool) *idleLog {
 	return l
 }
 
-func (i *idler) quiet(l *idleLog, d time.Duration) {
+func (i *idler) stillHeldOnceInputIdles(held *idleLog) {
 	i.t.Helper()
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		if err := i.c.Display.Roundtrip(); err != nil {
-			i.t.Fatal(err)
-		}
-		if len(l.log) > 0 {
-			i.t.Fatalf("idle events %v during %v", l.log, d)
-		}
-		time.Sleep(10 * time.Millisecond)
+	input := i.watch(4*heldTimeout, true)
+	i.c.DispatchUntil("input idle despite the inhibitor", func() bool { return slices.Equal(input.log, []string{"idled"}) })
+	if err := i.c.Display.Roundtrip(); err != nil {
+		i.t.Fatal(err)
+	}
+	if len(held.log) > 0 {
+		i.t.Fatalf("idle events %v with an inhibitor on screen", held.log)
 	}
 }
 
-func move(h *Harness) {
-	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-		return errors.Join(b.Pointer().Move(1, 0), b.Pointer().Frame())
-	})
-}
-
-func TestIdleNotificationsFireAndResume(t *testing.T) {
-	t.Parallel()
-	h := Start(t, small)
-	i := newIdler(t, h)
-	l := i.watch(60*time.Millisecond, false)
-	i.c.DispatchUntil("idled", func() bool { return slices.Equal(l.log, []string{"idled"}) })
-	move(h)
-	i.c.DispatchUntil("resumed", func() bool { return slices.Equal(l.log, []string{"idled", "resumed"}) })
-	for range 10 {
-		time.Sleep(20 * time.Millisecond)
-		move(h)
-	}
-	if !slices.Equal(l.log, []string{"idled", "resumed"}) {
-		t.Fatalf("idle while input kept coming: %v", l.log)
-	}
-	i.c.DispatchUntil("idled again", func() bool { return len(l.log) == 3 && l.log[2] == "idled" })
-}
-
-func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
-	t.Parallel()
+func inhibitableWindow(t *testing.T) (*Harness, *testclient.Client, *testclient.Window, *cii.ZwpIdleInhibitManagerV1) {
+	t.Helper()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("video", quadrants)
@@ -111,15 +87,58 @@ func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Bind(mgr)
+	return h, c, w, mgr
+}
+
+func move(h *Harness) {
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return errors.Join(b.Pointer().Move(1, 0), b.Pointer().Frame())
+	})
+}
+
+func TestIdleNotificationsFireAndResume(t *testing.T) {
+	t.Parallel()
+	const timeout = 60 * time.Millisecond
+	now := time.Hour
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.Clock = func() time.Duration { return now } }, small)
+	advance := func(d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now += d
+			return nil
+		})
+	}
+	i := newIdler(t, h)
+	l := i.watch(timeout, false)
+	advance(timeout)
+	i.c.DispatchUntil("idled", func() bool { return slices.Equal(l.log, []string{"idled"}) })
+	move(h)
+	i.c.DispatchUntil("resumed", func() bool { return slices.Equal(l.log, []string{"idled", "resumed"}) })
+	for range 10 {
+		advance(timeout / 3)
+		move(h)
+	}
+	advance(timeout - time.Millisecond)
+	time.Sleep(2 * timeout)
+	if err := i.c.Display.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(l.log, []string{"idled", "resumed"}) {
+		t.Fatalf("idle while input kept coming: %v", l.log)
+	}
+	advance(time.Millisecond)
+	i.c.DispatchUntil("idled again", func() bool { return slices.Equal(l.log, []string{"idled", "resumed", "idled"}) })
+}
+
+func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
+	t.Parallel()
+	h, c, w, mgr := inhibitableWindow(t)
 	inhibitor, err := mgr.CreateInhibitor(w.Surface)
 	if err != nil || c.Display.Roundtrip() != nil {
 		t.Fatal(err)
 	}
 	i := newIdler(t, h)
-	held := i.watch(40*time.Millisecond, false)
-	input := i.watch(40*time.Millisecond, true)
-	i.c.DispatchUntil("input idle despite the inhibitor", func() bool { return slices.Equal(input.log, []string{"idled"}) })
-	i.quiet(held, 150*time.Millisecond)
+	held := i.watch(heldTimeout, false)
+	i.stillHeldOnceInputIdles(held)
 
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 		a, err := wm.ParseAction("workspace 2")
@@ -145,15 +164,7 @@ func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
 
 func TestAnInhibitorStopsHoldingWhenItsSurfaceIsDestroyed(t *testing.T) {
 	t.Parallel()
-	h := Start(t, small)
-	c := testclient.Connect(t, h.Socket())
-	w := c.Window("video", quadrants)
-	c.DispatchUntil("the window to map", w.Mapped)
-	mgr, err := cii.NewZwpIdleInhibitManagerV1(c.Display, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Bind(mgr)
+	h, c, w, mgr := inhibitableWindow(t)
 	for range 20 {
 		toggled, err := mgr.CreateInhibitor(w.Surface)
 		if err != nil {
@@ -170,8 +181,8 @@ func TestAnInhibitorStopsHoldingWhenItsSurfaceIsDestroyed(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := newIdler(t, h)
-	held := i.watch(40*time.Millisecond, false)
-	i.quiet(held, 120*time.Millisecond)
+	held := i.watch(heldTimeout, false)
+	i.stillHeldOnceInputIdles(held)
 	if err := errors.Join(w.Destroy(), c.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}

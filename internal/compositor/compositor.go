@@ -474,7 +474,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.explicitSync(l, display); err != nil {
 		return err
 	}
-	if c.idle, err = idle.New(display, l, backend.Now, c.updateInhibition); err != nil {
+	if c.idle, err = idle.New(display, l, c.clock, c.updateInhibition); err != nil {
 		return err
 	}
 	if err := c.addVirtualInput(display); err != nil {
