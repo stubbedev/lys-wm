@@ -250,6 +250,14 @@ func CheckGlass(texture image.Point, src FRect, alpha float32, m Mask, g Glass) 
 
 type Region []image.Rectangle
 
+func (g Region) Area() int {
+	n := 0
+	for _, r := range g {
+		n += r.Dx() * r.Dy()
+	}
+	return n
+}
+
 func (g Region) ClipInto(dst *region.Set, bounds image.Rectangle) {
 	dst.Reset()
 	for _, r := range g {

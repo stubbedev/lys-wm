@@ -387,3 +387,43 @@ func TestAStartupFrameSlowerThanARefreshLeavesTheColdBudgetAtHalf(t *testing.T) 
 		t.Fatalf("after one slow startup frame the budget is %v", got)
 	}
 }
+
+func TestAHintedFrameLatchesEarlierInProportionToItsWork(t *testing.T) {
+	const interval = 16 * time.Millisecond
+	var b RenderBudget
+	for range renderSamples {
+		b.Painted(1 << 18)
+		b.Sample(time.Millisecond)
+	}
+	last, now := time.Second, time.Second+time.Millisecond
+	calm := b.Latch(last, now, interval)
+	var woke []time.Duration
+	var f *FrameClock
+	clock := now
+	f = NewFrameClock(func(func() error) {}, func() bool { return true }, func() error { return nil }, &Latch{
+		Wait: func() time.Duration { return b.Deadline(last, clock, interval) - clock },
+		Wake: func(after time.Duration) error { woke = append(woke, after); return nil },
+	})
+	if err := f.Request(); err != nil {
+		t.Fatal(err)
+	}
+	f.Cancel()
+	if err := f.Woke(); err != nil {
+		t.Fatal(err)
+	}
+	b.Expect(2 << 20)
+	hinted := b.Latch(last, now, interval)
+	if hinted >= calm {
+		t.Fatalf("a frame expected to paint 8 times the last one latches at %v, the calm one at %v", hinted, calm)
+	}
+	if err := f.Request(); err != nil {
+		t.Fatal(err)
+	}
+	if len(woke) != 2 || woke[1] >= woke[0] {
+		t.Fatalf("the clock armed its wakes after %v, want the hinted one sooner", woke)
+	}
+	b.Started()
+	if got := b.Latch(last, now, interval); got != calm {
+		t.Fatalf("after its frame started the hint still moves the latch: %v, want %v", got, calm)
+	}
+}

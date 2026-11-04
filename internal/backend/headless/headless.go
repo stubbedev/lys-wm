@@ -459,6 +459,7 @@ func (o *Output) frameReady() bool {
 
 func (o *Output) runFrame() error {
 	o.frames++
+	o.budget.Started()
 	o.frameStart = backend.Now()
 	o.aimedAt, _ = backend.NextVblank(o.lastVblank, o.frameStart, o.state.Mode.Interval())
 	if err := o.backend.handler.Frame(o); err != nil {
@@ -491,7 +492,12 @@ func (o *Output) AbortFrame() {
 	o.inFrame = false
 }
 
+func (o *Output) ExpectFrameWork(pixels int) {
+	o.budget.Expect(pixels)
+}
+
 func (o *Output) Present(damage render.Region) error {
+	o.budget.Painted(damage.Area())
 	if !o.inFrame {
 		return backend.Broken("headless: present on %s without BeginFrame", o.name)
 	}

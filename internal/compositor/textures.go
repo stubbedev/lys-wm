@@ -87,6 +87,7 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 		shows := showsTree(c.shown[o], root)
 		if shows && len(d) > 0 {
 			c.sceneOf(o).damaged(s, d)
+			hintDamage(o, d)
 		}
 		if !shows && !reach {
 			continue

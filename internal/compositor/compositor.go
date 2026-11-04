@@ -657,8 +657,30 @@ func (c *Compositor) scheduleAll() error {
 }
 
 func (c *Compositor) schedule(o *output.Output) error {
+	c.hintAnimationStart(o)
 	if err := o.Backend().ScheduleFrame(); err != nil {
 		return fmt.Errorf("compositor: schedule a frame on %s: %w", o.Backend().Name(), err)
 	}
 	return nil
+}
+
+func (c *Compositor) hintAnimationStart(o *output.Output) {
+	hint, ok := o.Backend().(backend.WorkHinter)
+	if !ok || c.sceneOf(o).animated || !c.animating(o, c.clock()) {
+		return
+	}
+	size := o.Backend().State().Mode.Size
+	hint.ExpectFrameWork(size.X * size.Y)
+}
+
+func hintDamage(o *output.Output, d []image.Rectangle) {
+	hint, ok := o.Backend().(backend.WorkHinter)
+	if !ok {
+		return
+	}
+	pixels := 0
+	for _, r := range d {
+		pixels += r.Dx() * r.Dy()
+	}
+	hint.ExpectFrameWork(pixels * o.Scale().ToDevice(1) * o.Scale().ToDevice(1))
 }

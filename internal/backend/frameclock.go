@@ -78,6 +78,31 @@ type RenderBudget struct {
 	samples  [renderSamples]time.Duration
 	n, next  int
 	deferred bool
+	painted  int
+	perPixel float64
+	expected int
+}
+
+const leastPixelsForARatio = 1 << 16
+
+type WorkHinter interface {
+	ExpectFrameWork(pixels int)
+}
+
+func (b *RenderBudget) Painted(pixels int) {
+	b.painted = pixels
+}
+
+func (b *RenderBudget) Expect(pixels int) {
+	b.expected = max(b.expected, pixels)
+}
+
+func (b *RenderBudget) Started() {
+	b.expected = 0
+}
+
+func (b *RenderBudget) expectedBudget() time.Duration {
+	return time.Duration(b.perPixel*float64(b.expected)) + renderMargin
 }
 
 func (b *RenderBudget) Latch(last, now, interval time.Duration) time.Duration {
@@ -113,6 +138,10 @@ func (b *RenderBudget) leastToStart() time.Duration {
 }
 
 func (b *RenderBudget) Sample(took time.Duration) {
+	if b.painted >= leastPixelsForARatio {
+		b.perPixel = float64(took) / float64(b.painted)
+	}
+	b.painted = 0
 	b.samples[b.next] = took
 	b.next = (b.next + 1) % renderSamples
 	b.n = min(b.n+1, renderSamples)
@@ -137,6 +166,9 @@ func (b *RenderBudget) Budget(interval time.Duration) time.Duration {
 	budget := slowest + renderMargin
 	if b.n < renderSamples {
 		budget = max(budget, interval/2)
+	}
+	if b.expected > 0 && b.perPixel > 0 {
+		budget = max(budget, b.expectedBudget())
 	}
 	return min(budget, interval)
 }

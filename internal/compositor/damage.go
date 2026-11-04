@@ -467,6 +467,7 @@ type scene struct {
 	drawn       bool
 	stale       bool
 	targetStale bool
+	animated    bool
 	last        backend.Presentation
 	blurs       blurCaches
 	shader      *screenShader

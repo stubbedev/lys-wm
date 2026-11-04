@@ -76,7 +76,9 @@ func (c *Compositor) frame(o *output.Output) error {
 	if err := c.settleWobbles(); err != nil {
 		return err
 	}
-	if c.animating(o, c.frameTime) {
+	animated := c.animating(o, c.frameTime)
+	c.sceneOf(o).animated = animated
+	if animated {
 		if err := c.schedule(o); err != nil {
 			return err
 		}

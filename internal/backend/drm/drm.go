@@ -1105,7 +1105,12 @@ func (o *Output) frameReady() bool {
 	return o.enabled && !o.flipping && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
 }
 
+func (o *Output) ExpectFrameWork(pixels int) {
+	o.budget.Expect(pixels)
+}
+
 func (o *Output) runFrame() error {
+	o.budget.Started()
 	o.frameStart = o.b.now()
 	o.framing = true
 	err := o.b.handler.Frame(o)
@@ -1163,7 +1168,8 @@ func (o *Output) AbortFrame() {
 	o.drawing = nil
 }
 
-func (o *Output) Present(render.Region) error {
+func (o *Output) Present(damage render.Region) error {
+	o.budget.Painted(damage.Area())
 	s := o.drawing
 	if s == nil {
 		return backend.Broken("drm: present on %s without BeginFrame", o.Name())
