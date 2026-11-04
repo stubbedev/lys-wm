@@ -89,6 +89,7 @@ func (c *cursor) SetCursor(hotspot image.Point) error {
 	}
 	c.drawing = false
 	b := c.idle()
+	c.o.b.syncReads++
 	if err := c.target.Read(b.dumb.Pix, int(b.dumb.Pitch)); err != nil {
 		return fmt.Errorf("drm: copy the cursor image of %s: %w", c.o.Name(), err)
 	}

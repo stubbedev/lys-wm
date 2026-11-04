@@ -16,10 +16,23 @@ import (
 type copyAllocator struct {
 	dev     device
 	primary render.Renderer
+	loop    *loop.Loop
+}
+
+func (a *copyAllocator) asyncReader() (render.AsyncReader, bool) {
+	r, ok := a.primary.(render.AsyncReader)
+	return r, ok && r.AsyncReads() && a.loop != nil
 }
 
 func (a *copyAllocator) renderer() render.Renderer {
 	return a.primary
+}
+
+func (a *copyAllocator) named(how string) string {
+	if r, ok := a.primary.(render.AsyncReader); ok && r.AsyncReads() {
+		return how
+	}
+	return how + "; this renderer reads frames back synchronously, which holds up every output"
 }
 
 func (a *copyAllocator) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
@@ -27,7 +40,14 @@ func (a *copyAllocator) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
 }
 
 func (a *copyAllocator) allocate(size image.Point, format fourcc.Format, _ []fourcc.Modifier) (*scanout, error) {
-	target, err := a.primary.NewTarget(size)
+	async, isAsync := a.asyncReader()
+	var target render.ReadTarget
+	var err error
+	if isAsync {
+		target, err = async.NewAsyncTarget(size)
+	} else {
+		target, err = a.primary.NewTarget(size)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("drm: a %v target on the primary GPU: %w", size, err)
 	}
@@ -39,12 +59,79 @@ func (a *copyAllocator) allocate(size image.Point, format fourcc.Format, _ []fou
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: a %v framebuffer: %w", size, err), a.dev.DestroyDumb(dumb), target.Destroy())
 	}
+	release := func() error { return errors.Join(a.dev.DestroyDumb(dumb), target.Destroy()) }
+	if t, ok := target.(render.AsyncReadTarget); ok && isAsync {
+		c := &offLoopCopy{loop: a.loop, target: t, dumb: dumb, release: release}
+		return &scanout{target: target, fb: fb, prepareLater: c.start, release: c.releaseWhenIdle}, nil
+	}
 	return &scanout{
-		target:  target,
-		fb:      fb,
-		prepare: func() error { return target.Read(dumb.Pix, int(dumb.Pitch)) },
-		release: func() error { return errors.Join(a.dev.DestroyDumb(dumb), target.Destroy()) },
+		target:   target,
+		fb:       fb,
+		syncRead: true,
+		prepare:  func() error { return target.Read(dumb.Pix, int(dumb.Pitch)) },
+		release:  release,
 	}, nil
+}
+
+type offLoopCopy struct {
+	loop     *loop.Loop
+	target   render.AsyncReadTarget
+	dumb     kdrm.Dumb
+	release  func() error
+	copying  bool
+	released bool
+}
+
+func (c *offLoopCopy) releaseWhenIdle() error {
+	if c.copying {
+		c.released = true
+		return nil
+	}
+	return c.release()
+}
+
+func (c *offLoopCopy) post(f func() error) {
+	if err := c.loop.Post(f); err != nil && !errors.Is(err, loop.ErrClosed) {
+		panic(fmt.Sprintf("drm: hand a frame copy back to the loop: %v", err))
+	}
+}
+
+func (c *offLoopCopy) finished(done func(error) error, err error) error {
+	c.copying = false
+	if c.released {
+		return errors.Join(err, c.release())
+	}
+	return done(err)
+}
+
+func (c *offLoopCopy) start(done func(error) error) error {
+	pending, err := c.target.ReadAsync()
+	if err != nil {
+		return done(fmt.Errorf("start the read of a frame: %w", err))
+	}
+	c.copying = true
+	go func() {
+		err := pending.Wait()
+		c.post(func() error {
+			if err != nil {
+				return c.finished(done, errors.Join(err, pending.Release()))
+			}
+			pix, stride, err := pending.Map()
+			if err != nil {
+				return c.finished(done, errors.Join(err, pending.Release()))
+			}
+			go func() {
+				size := c.target.Size()
+				row, pitch := size.X*4, int(c.dumb.Pitch)
+				for y := range size.Y {
+					copy(c.dumb.Pix[y*pitch:y*pitch+row], pix[y*stride:])
+				}
+				c.post(func() error { return c.finished(done, pending.Release()) })
+			}()
+			return nil
+		})
+	}()
+	return nil
 }
 
 func (a *copyAllocator) fence() (int, error) {
@@ -96,15 +183,15 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack,
 	cpu := &copyAllocator{dev: dev, primary: primary.Renderer()}
 	name := filepath.Base(dev.Path())
 	if !canRender {
-		return cpu, "a CPU copy, since " + name + " has no render node"
+		return cpu, cpu.named("a CPU copy, since " + name + " has no render node")
 	}
 	p, ok := primary.alloc.(*gbmAllocator)
 	if !ok {
-		return cpu, fmt.Sprintf("a CPU copy, since the primary renders with %T, which shares no buffers", primary.alloc)
+		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the primary renders with %T, which shares no buffers", primary.alloc))
 	}
 	local, stack, err := openLocal(dev, stacks)
 	if err != nil {
-		return cpu, fmt.Sprintf("a CPU copy, since %s cannot render: %v", name, err)
+		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since %s cannot render: %v", name, err))
 	}
 	a := &blitAllocator{primary: p, local: local}
 	direct := a.probe()
@@ -112,7 +199,7 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack,
 		return a, "a GPU blit with " + stack + " on " + name
 	}
 	if err := a.copyThroughVulkan(); err != nil {
-		return cpu, fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close()))
+		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close())))
 	}
 	return a, "a GPU blit with " + stack + " on " + name + ", from a linear copy of each frame that Vulkan makes on the primary GPU"
 }

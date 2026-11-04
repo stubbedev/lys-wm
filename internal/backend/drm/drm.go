@@ -62,12 +62,14 @@ type device interface {
 }
 
 type scanout struct {
-	target    render.Target
-	client    *clientFB
-	fb        uint32
-	prepare   func() error
-	release   func() error
-	presented uint64
+	target       render.Target
+	client       *clientFB
+	fb           uint32
+	prepare      func() error
+	prepareLater func(done func(error) error) error
+	syncRead     bool
+	release      func() error
+	presented    uint64
 }
 
 func (s *scanout) free(dev device) error {
@@ -160,6 +162,7 @@ type Backend struct {
 	closed     bool
 	clientFBs  map[backend.ScanoutKey]*clientFB
 	probes     sync.WaitGroup
+	syncReads  uint64
 	probing    bool
 	probeAgain bool
 	fenceTime  func(fd int) (time.Duration, bool, error)
@@ -229,6 +232,12 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, errors.New("drm: Options.Report is required")
 	}
 	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
+	if a, ok := alloc.(*copyAllocator); ok {
+		a.loop = l
+	}
+	if a, ok := alloc.(*gbmAllocator); ok && !a.gpu.NativeFences() {
+		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor in glFinish until the GPU is done", a.gpu))
+	}
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support: %w", err)
@@ -517,6 +526,10 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 		errs = append(errs, b.add(c))
 	}
 	return errors.Join(errs...)
+}
+
+func (b *Backend) SyncReads() uint64 {
+	return b.syncReads
 }
 
 func (b *Backend) Hotplug() error {
@@ -1178,11 +1191,40 @@ func (o *Output) Present(damage render.Region) error {
 	if o.b.paused {
 		return nil
 	}
+	if s.prepareLater != nil {
+		o.flipping = true
+		return s.prepareLater(func(err error) error { return o.prepared(s, err) })
+	}
 	if s.prepare != nil {
+		if s.syncRead {
+			o.b.syncReads++
+		}
 		if err := s.prepare(); err != nil {
 			return fmt.Errorf("drm: copy the frame of %s to its device: %w", o.Name(), err)
 		}
 	}
+	return o.commitPresent(s)
+}
+
+func (o *Output) prepared(s *scanout, err error) error {
+	o.flipping = false
+	if !o.enabled || o.off || o.b.paused || !slices.Contains(o.buffers, s) {
+		return err
+	}
+	if err == nil {
+		err = o.commitPresent(s)
+	}
+	if err == nil {
+		return nil
+	}
+	if backend.Fatal(err) {
+		return err
+	}
+	o.b.report(fmt.Errorf("drm: present the copied frame of %s: %w", o.Name(), err))
+	return o.b.handler.OutputDamaged(o)
+}
+
+func (o *Output) commitPresent(s *scanout) error {
 	fence, err := o.b.alloc.fence()
 	if err != nil {
 		return err

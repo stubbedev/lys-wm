@@ -2452,3 +2452,76 @@ func TestAHotplugProbesOffTheLoopAndAppliesTheResultOnIt(t *testing.T) {
 		t.Fatalf("log %v", r.rec.log)
 	}
 }
+
+type asyncPrimary struct {
+	*soft.Renderer
+	reads   int
+	waiting chan struct{}
+}
+
+func (p *asyncPrimary) AsyncReads() bool { return true }
+
+func (p *asyncPrimary) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	if t, ok := target.(*asyncTarget); ok {
+		target = t.ReadTarget
+	}
+	return p.Renderer.Begin(target, damage)
+}
+
+func (p *asyncPrimary) NewAsyncTarget(size image.Point) (render.AsyncReadTarget, error) {
+	t, err := p.NewTarget(size)
+	if err != nil {
+		return nil, err
+	}
+	return &asyncTarget{ReadTarget: t, p: p}, nil
+}
+
+type asyncTarget struct {
+	render.ReadTarget
+	p *asyncPrimary
+}
+
+func (t *asyncTarget) ReadAsync() (render.PendingRead, error) {
+	t.p.reads++
+	size := t.Size()
+	pix := make([]byte, size.X*size.Y*4)
+	if err := t.Read(pix, size.X*4); err != nil {
+		return nil, err
+	}
+	return &pendingCopy{pix: pix, stride: size.X * 4, waiting: t.p.waiting}, nil
+}
+
+type pendingCopy struct {
+	pix     []byte
+	stride  int
+	waiting chan struct{}
+}
+
+func (p *pendingCopy) Wait() error {
+	<-p.waiting
+	return nil
+}
+
+func (p *pendingCopy) Map() ([]byte, int, error) { return p.pix, p.stride, nil }
+
+func (p *pendingCopy) Release() error { return nil }
+
+func TestACopiedFrameCommitsOnlyOnceTheReadFinishedOffTheLoop(t *testing.T) {
+	primary := &asyncPrimary{Renderer: soft.New(), waiting: make(chan struct{})}
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	o := r.b.Outputs()[0]
+	n := len(r.dev.commits)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the frame's read to start", func() bool { return primary.reads > 0 })
+	r.settle()
+	if len(r.dev.commits) != n {
+		t.Fatalf("%d commits while the copy was still waiting on the GPU", len(r.dev.commits)-n)
+	}
+	close(primary.waiting)
+	r.committedSince("the copied frame", o, n)
+	if got := r.b.SyncReads(); got != 0 {
+		t.Fatalf("%d synchronous reads on the loop", got)
+	}
+}
