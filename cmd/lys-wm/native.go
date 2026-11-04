@@ -441,7 +441,7 @@ func (n *native) syncCards() error {
 		before := len(n.cards)
 		n.addSecondary(g)
 		if len(n.cards) > before {
-			errs = append(errs, n.cards[len(n.cards)-1].backend.Start(n))
+			errs = append(errs, n.cards[len(n.cards)-1].backend.Attach(n))
 		}
 	}
 	for _, c := range n.cards {

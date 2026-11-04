@@ -1,13 +1,16 @@
 package drm
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
 	"maps"
+	"runtime"
 	"slices"
 	"strings"
+	syncatomic "sync/atomic"
 	"testing"
 	"time"
 
@@ -88,6 +91,9 @@ type fakeDevice struct {
 	refuseAsync       bool
 	refusePowerOff    bool
 	busyNonblock      bool
+	probeGate         chan struct{}
+	probesOnLoop      syncatomic.Int64
+	loopGoroutine     string
 	refuseModesets    bool
 	asyncFlips        bool
 	failCommits       error
@@ -164,6 +170,10 @@ func (f *fakeDevice) Resources() (kdrm.Resources, error) {
 }
 
 func (f *fakeDevice) Connector(id uint32) (kdrm.Connector, error) {
+	if f.probeGate != nil {
+		f.probesOnLoop.Add(probeOn(f.loopGoroutine))
+		<-f.probeGate
+	}
 	if f.unplugged {
 		return kdrm.Connector{}, unix.ENOENT
 	}
@@ -562,6 +572,15 @@ func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	return r
 }
 
+func (r *rig) hotplug() error {
+	r.t.Helper()
+	if err := r.b.Hotplug(); err != nil {
+		return err
+	}
+	r.until("the connector probe", func() bool { return !r.b.probing })
+	return nil
+}
+
 func (r *rig) settle() {
 	r.t.Helper()
 	timer, err := r.l.AddTimer(func() error {
@@ -927,7 +946,7 @@ func TestModeChangesAndDisabling(t *testing.T) {
 func TestAConnectorThatVanishesIsAnUnplug(t *testing.T) {
 	r := start(t)
 	r.dev.unplugged = true
-	if err := r.b.Hotplug(); err != nil {
+	if err := r.hotplug(); err != nil {
 		t.Fatalf("an MST connector going away: %v", err)
 	}
 	if !slices.Equal(r.rec.log, []string{"added DP-1", "removed DP-1"}) {
@@ -951,11 +970,11 @@ func TestAnUnreadableEDIDStillLightsTheOutput(t *testing.T) {
 func TestHotplugAndSessionPause(t *testing.T) {
 	r := start(t)
 	r.dev.connected = false
-	if err := r.b.Hotplug(); err != nil {
+	if err := r.hotplug(); err != nil {
 		t.Fatal(err)
 	}
 	r.dev.connected = true
-	if err := r.b.Hotplug(); err != nil {
+	if err := r.hotplug(); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(r.rec.log, []string{"added DP-1", "removed DP-1", "added DP-1"}) {
@@ -1286,7 +1305,7 @@ func TestCursorPlanesBelongToOneCRTC(t *testing.T) {
 		t.Fatalf("%d dumb buffers for the cursor: %v", len(r.dev.live), err)
 	}
 	r.dev.connected = false
-	if err := r.b.Hotplug(); err != nil {
+	if err := r.hotplug(); err != nil {
 		t.Fatal(err)
 	}
 	if i := slices.IndexFunc(r.b.planes, func(p *plane) bool { return p.id == 43 }); r.b.planes[i].taken {
@@ -2390,5 +2409,46 @@ func TestDisableFallsBackToWaitingOnlyWhenTheKernelIsBusy(t *testing.T) {
 	}
 	if got := r.dev.commits[n:]; len(got) != 2 || got[0].flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || got[1].flags != kdrm.AtomicAllowModeset {
 		t.Fatalf("disable during a flip committed %+v", got)
+	}
+}
+
+func goroutineID() string {
+	var buf [64]byte
+	return string(bytes.Fields(buf[:runtime.Stack(buf[:], false)])[1])
+}
+
+func probeOn(loopGoroutine string) int64 {
+	if goroutineID() == loopGoroutine {
+		return 1
+	}
+	return 0
+}
+
+func TestAHotplugProbesOffTheLoopAndAppliesTheResultOnIt(t *testing.T) {
+	r := start(t)
+	r.dev.connected = false
+	gate := make(chan struct{})
+	r.dev.probeGate, r.dev.loopGoroutine = gate, goroutineID()
+	if err := r.b.Hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	ticks := 0
+	if err := r.l.Post(func() error { ticks++; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	r.until("a posted tick while the probe is stuck in the kernel", func() bool { return ticks == 1 })
+	if !slices.Equal(r.rec.log, []string{"added DP-1"}) {
+		t.Fatalf("the output changed before its probe returned: %v", r.rec.log)
+	}
+	if err := r.b.Hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	close(gate)
+	r.until("the second probe a hotplug during the first asks for", func() bool { return !r.b.probing && !r.b.probeAgain })
+	if n := r.dev.probesOnLoop.Load(); n != 0 {
+		t.Fatalf("%d connector probes ran on the loop goroutine", n)
+	}
+	if !slices.Equal(r.rec.log, []string{"added DP-1", "removed DP-1"}) {
+		t.Fatalf("log %v", r.rec.log)
 	}
 }

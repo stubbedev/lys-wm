@@ -8,6 +8,7 @@ import (
 	"image"
 	"iter"
 	"slices"
+	"sync"
 	"time"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
@@ -139,27 +140,30 @@ var (
 )
 
 type Backend struct {
-	loop      *loop.Loop
-	modifiers bool
-	async     bool
-	number    uint64
-	vendors   edid.Vendors
-	report    func(error)
-	dev       device
-	alloc     allocator
-	handler   backend.Handler
-	crtcs     []*crtc
-	planes    []*plane
-	outputs   []*Output
-	src       *loop.Source
-	req       kdrm.Request
-	events    []byte
-	cursor    image.Point
-	paused    bool
-	closed    bool
-	clientFBs map[backend.ScanoutKey]*clientFB
-	fenceTime func(fd int) (time.Duration, bool, error)
-	now       func() time.Duration
+	loop       *loop.Loop
+	modifiers  bool
+	async      bool
+	number     uint64
+	vendors    edid.Vendors
+	report     func(error)
+	dev        device
+	alloc      allocator
+	handler    backend.Handler
+	crtcs      []*crtc
+	planes     []*plane
+	outputs    []*Output
+	src        *loop.Source
+	req        kdrm.Request
+	events     []byte
+	cursor     image.Point
+	paused     bool
+	closed     bool
+	clientFBs  map[backend.ScanoutKey]*clientFB
+	probes     sync.WaitGroup
+	probing    bool
+	probeAgain bool
+	fenceTime  func(fd int) (time.Duration, bool, error)
+	now        func() time.Duration
 }
 
 type clientFB struct {
@@ -416,17 +420,75 @@ func (b *Backend) Start(h backend.Handler) error {
 }
 
 func (b *Backend) scan() error {
-	res, err := b.dev.Resources()
+	return b.applyProbe(probeConnectors(b.dev))
+}
+
+type probedConnector struct {
+	c   kdrm.Connector
+	err error
+}
+
+type connectorProbe struct {
+	ids        []uint32
+	connectors map[uint32]probedConnector
+	err        error
+}
+
+func probeConnectors(dev device) connectorProbe {
+	res, err := dev.Resources()
 	if err != nil {
-		return err
+		return connectorProbe{err: err}
+	}
+	p := connectorProbe{ids: res.Connectors, connectors: make(map[uint32]probedConnector, len(res.Connectors))}
+	for _, id := range res.Connectors {
+		c, err := dev.Connector(id)
+		p.connectors[id] = probedConnector{c: c, err: err}
+	}
+	return p
+}
+
+func (b *Backend) rescan() error {
+	if b.probing {
+		b.probeAgain = true
+		return nil
+	}
+	b.probing = true
+	b.probes.Go(func() {
+		p := probeConnectors(b.dev)
+		if err := b.loop.Post(func() error { return b.probed(p) }); err != nil && !errors.Is(err, loop.ErrClosed) {
+			panic(fmt.Sprintf("drm: hand a connector probe back to the loop: %v", err))
+		}
+	})
+	return nil
+}
+
+func (b *Backend) probed(p connectorProbe) error {
+	b.probing = false
+	if b.closed {
+		return nil
+	}
+	if b.probeAgain {
+		b.probeAgain = false
+		return b.rescan()
+	}
+	if b.paused {
+		return nil
+	}
+	return b.applyProbe(p)
+}
+
+func (b *Backend) applyProbe(p connectorProbe) error {
+	if p.err != nil {
+		return p.err
 	}
 	var errs []error
 	for _, o := range slices.Clone(b.outputs) {
-		if !slices.Contains(res.Connectors, o.conn.ID) {
+		if !slices.Contains(p.ids, o.conn.ID) {
 			errs = append(errs, b.remove(o))
 			continue
 		}
-		c, err := b.dev.Connector(o.conn.ID)
+		probed := p.connectors[o.conn.ID]
+		c, err := probed.c, probed.err
 		switch {
 		case errors.Is(err, unix.ENOENT):
 			errs = append(errs, b.remove(o))
@@ -436,11 +498,12 @@ func (b *Backend) scan() error {
 			errs = append(errs, b.remove(o))
 		}
 	}
-	for _, id := range res.Connectors {
+	for _, id := range p.ids {
 		if slices.ContainsFunc(b.outputs, func(o *Output) bool { return o.conn.ID == id }) {
 			continue
 		}
-		c, err := b.dev.Connector(id)
+		probed := p.connectors[id]
+		c, err := probed.c, probed.err
 		if errors.Is(err, unix.ENOENT) {
 			continue
 		}
@@ -460,7 +523,15 @@ func (b *Backend) Hotplug() error {
 	if b.paused {
 		return nil
 	}
-	return b.scan()
+	return b.rescan()
+}
+
+func (b *Backend) Attach(h backend.Handler) error {
+	if b.handler != nil {
+		return errors.New("drm: already started")
+	}
+	b.handler = h
+	return b.rescan()
 }
 
 func (b *Backend) frees(kind planeKind, cr *crtc) iter.Seq[*plane] {
@@ -694,7 +765,7 @@ func (b *Backend) Resume() error {
 		o.powerOffAfterFlip()
 		errs = append(errs, b.handler.OutputDamaged(o))
 	}
-	return errors.Join(append(errs, b.scan())...)
+	return errors.Join(append(errs, b.rescan())...)
 }
 
 func (b *Backend) Unplug() error {
@@ -702,6 +773,7 @@ func (b *Backend) Unplug() error {
 		return nil
 	}
 	b.closed = true
+	b.probes.Wait()
 	var errs []error
 	for len(b.outputs) > 0 {
 		o := b.outputs[0]
@@ -722,6 +794,7 @@ func (b *Backend) Close() error {
 		return nil
 	}
 	b.closed = true
+	b.probes.Wait()
 	var errs []error
 	for len(b.outputs) > 0 {
 		o := b.outputs[0]
