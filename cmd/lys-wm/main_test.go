@@ -301,6 +301,8 @@ func TestTheExitActionEndsTheSession(t *testing.T) {
 }
 
 func TestCheckConfigAcceptsWhatAReloadWouldAndRefusesTheRest(t *testing.T) {
+	testenv.Font(t)
+	testenv.XKBCompiler(t)
 	dir := t.TempDir()
 	getenv := func(name string) string {
 		if name == "XDG_CONFIG_HOME" {
