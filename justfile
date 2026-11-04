@@ -93,6 +93,18 @@ hardware:
     done
     exit "$rc"
 
+# Measure what can hold up the compositor thread between frames (#260): an shm
+# upload, a cursor theme miss, an X11 request and the snapshot behind an IPC
+# watcher. Run it as `just docker stalls` to measure the host's GPU. It gates
+# nothing: the numbers depend on the machine.
+stalls:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -e /run/opengl-driver ]]; then
+        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    fi
+    LYS_WM_HEADLESS=1 go test -run '^$' -bench '^BenchmarkStall' -benchtime 200x ./internal/compositor/ ./internal/harness/
+
 # How many times the gates play each animation: enough for RSS growth to repeat
 # over three rounds after the two that warm up, as the baselines were measured.
 pace_rounds := "5"
