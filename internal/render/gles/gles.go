@@ -157,6 +157,7 @@ func (r *Renderer) newProgram(id uint32) program {
 type Renderer struct {
 	counts       render.Counts
 	drawnOps     uint64
+	opaqueRuns   uint64
 	nativeFences bool
 	d            *gpu.Display
 	device       uint64
@@ -790,14 +791,15 @@ func (f *Framebuffer) Destroy() error {
 }
 
 type pass struct {
-	owner  *Renderer
-	active bool
-	fb     *Framebuffer
-	damage region.Set
-	err    error
-	prog   *program
-	color  *render.ColorTransform
-	corner int32
+	blending bool
+	owner    *Renderer
+	active   bool
+	fb       *Framebuffer
+	damage   region.Set
+	err      error
+	prog     *program
+	color    *render.ColorTransform
+	corner   int32
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
@@ -819,6 +821,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	}
 	p := &r.pass
 	p.active, p.fb, p.err, p.prog, p.color, p.corner = true, fb, nil, nil, nil, -1
+	p.blending = true
 	damage.ClipInto(&p.damage, image.Rectangle{Max: fb.size})
 	gl := r.gl
 	gl.BindFramebuffer(gpu.Framebuffer, fb.fbo)
@@ -850,6 +853,19 @@ func (p *pass) End() error {
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }
 
+func (p *pass) setBlending(on bool) {
+	if p.blending == on {
+		return
+	}
+	p.blending = on
+	if on {
+		p.owner.gl.Enable(gpu.Blend)
+		return
+	}
+	p.owner.opaqueRuns++
+	p.owner.gl.Disable(gpu.Blend)
+}
+
 func (p *pass) culled(r image.Rectangle) bool {
 	for _, d := range p.damage.Rects() {
 		if d.Overlaps(r) {
@@ -862,6 +878,7 @@ func (p *pass) culled(r image.Rectangle) bool {
 func (p *pass) use(prog *program) {
 	gl := p.owner.gl
 	p.owner.drawnOps++
+	p.setBlending(true)
 	if p.prog != prog {
 		p.prog = prog
 		gl.UseProgram(prog.id)
@@ -962,6 +979,7 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	}
 	prog := &p.owner.solid
 	p.use(prog)
+	p.setBlending(c.A != 0xff || m != (render.Mask{}))
 	p.setMask(prog, m)
 	prog.color.set4(p.owner.gl, p.fillColor(c))
 	p.draw(r)
@@ -1126,6 +1144,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	}
 	gl := p.owner.gl
 	p.use(prog)
+	p.setBlending(!tex.opaque || alpha != 1 || m != (render.Mask{}))
 	p.setTransform(prog)
 	p.setMask(prog, m)
 	prog.alpha.set1(gl, alpha)

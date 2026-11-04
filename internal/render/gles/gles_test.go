@@ -375,3 +375,34 @@ func TestOpsOutsideTheDamageTouchNoGLState(t *testing.T) {
 		t.Fatalf("33 ops with one inside the damage set GL state for %d", got)
 	}
 }
+
+func TestOpaqueOpsDrawWithoutBlendingAndTranslucentOnesWithIt(t *testing.T) {
+	r := renderer(t)
+	size := image.Pt(64, 64)
+	fb := framebuffer(t, r, size)
+	p, err := r.Begin(fb, render.Region{image.Rectangle{Max: size}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := gles.OpaqueRuns(r)
+	half := render.Color{R: 0x40, A: 0x80}
+	p.Clear(render.Color{B: 0xff, A: 0xff})
+	p.FillRect(image.Rect(0, 0, 32, 64), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+	p.FillRect(image.Rect(16, 0, 48, 64), half, render.Mask{})
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gles.OpaqueRuns(r) - before; got != 1 {
+		t.Fatalf("%d runs of opaque ops, want the one", got)
+	}
+	pix := make([]byte, 64*64*4)
+	if err := fb.Read(pix, 64*4); err != nil {
+		t.Fatal(err)
+	}
+	if got := pix[16*4+2]; got == 0xff {
+		t.Fatalf("the translucent fill over the opaque one did not blend: R = %#x", got)
+	}
+	if got := pix[60*4]; got != 0xff {
+		t.Fatalf("the background changed: B = %#x", got)
+	}
+}
