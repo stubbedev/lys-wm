@@ -143,6 +143,8 @@ func TestZoomSpringsAndSettlesThenCostsNoFrames(t *testing.T) {
 	if n := presents(h); n-before < 3 {
 		t.Errorf("the zoom took only %d frames, so it did not animate", n-before)
 	}
+	h.Eventually("the zoom spring at rest", func(_ *headless.Backend, comp *compositor.Compositor) bool { return !comp.Animating(comp.Outputs()[0]) })
+	settle(t, h)
 	settled := presents(h)
 	settle(t, h)
 	if n := presents(h); n != settled {

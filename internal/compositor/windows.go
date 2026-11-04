@@ -311,6 +311,10 @@ func (c *Compositor) springMoves() bool {
 	return ok
 }
 
+func (c *Compositor) Animating(o *output.Output) bool {
+	return c.animating(o, c.clock())
+}
+
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
