@@ -513,6 +513,7 @@ func TestTabbedAndFullscreenWindowsGetSlots(t *testing.T) {
 		c.DispatchUntil("blue to map", blue.Mapped)
 		green := c.Window("green", testclient.Fill(0, 0xff, 0))
 		c.DispatchUntil("green to map", green.Mapped)
+		h.Eventually("green focused in the layout", focusedIs("green"))
 		h.dispatch("fullscreen")
 		c.DispatchUntil("green fullscreen", func() bool { return green.Logical == overviewMode.Size })
 		h.Eventually("green over everything", showing(10, 10, greenPix))
@@ -2047,4 +2048,15 @@ func TestTheStripIsGlassOverTheBlurredLayers(t *testing.T) {
 			t.Errorf("the + tile is not its own pane: %v", plus)
 		}
 	})
+}
+
+func focusedIs(title string) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(_ *headless.Backend, c *compositor.Compositor) bool {
+		for _, w := range c.Snapshot().Windows {
+			if w.Focused {
+				return w.Title == title
+			}
+		}
+		return false
+	}
 }
