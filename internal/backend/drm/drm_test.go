@@ -2318,3 +2318,25 @@ func TestAResumedOutputSetsTheWholeCursorPlaneAgain(t *testing.T) {
 		t.Fatalf("the frame after resuming set %v of the cursor plane", cursorProps(last))
 	}
 }
+
+func TestScanoutFramesReuseTheirRecords(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
+	keys := []*fakeBuffer{{client}, {client}}
+	release := func() error { return nil }
+	records := map[*scanout]struct{}{}
+	for i := range 20 {
+		ok, err := o.Scanout(keys[i%2], client, release, false)
+		if err != nil || !ok {
+			t.Fatalf("frame %d: Scanout = %t, %v", i, ok, err)
+		}
+		records[o.queued] = struct{}{}
+		if err := o.flipped(kdrm.FlipEvent{Sec: uint32(i + 10)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(records) > 2 {
+		t.Fatalf("20 scanout frames used %d records, want the on-screen and the queued one reused", len(records))
+	}
+}

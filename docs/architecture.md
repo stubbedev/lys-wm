@@ -372,7 +372,9 @@ point, wait until a later flip takes the buffer off screen. While a surface
 fills an output this way, its dmabuf surface feedback leads with a scanout
 tranche (#64): the primary plane's opaque formats and modifiers that the
 renderer also imports, targeted at the plane's DRM device, so the client
-allocates buffers that plane can show.
+allocates buffers that plane can show. A scanned-out frame keeps the scene's diff
+base, so a commit that changes nothing commits nothing; only the composited
+targets count as stale, and the next composited frame repaints them whole.
 
 Composited frames are 8-bit XRGB8888 unless an output rule asks for
 `bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
@@ -404,6 +406,16 @@ frame rather than to lys-wm's empty background. If no client draws within
 `Config.InheritTimeout` (30 s), lys-wm logs it and draws over the inherited
 frame anyway, so a greeter that never starts cannot freeze the display. The splash leaves its framebuffer on screen by closing it with
 `DRM_IOCTL_MODE_CLOSEFB` (Linux 6.8) rather than removing it.
+
+A frame's damage is what differs from the last frame's ops. The two op lists are
+aligned, equal prefix and suffix first and then a bounded look ahead, and only ops
+outside the alignment damage their rectangle: any common subsequence is correct,
+as a pixel no unmatched op touches has the same stack of ops in both frames. An op
+split around what covers it is one group keyed by what it draws, so a group that
+matches damages only the difference of its coverage. Surface damage is clipped by
+the opaque ops above it, and an opaque region counts as opaque, so a commit nobody
+can see damages nothing. A damage set past 32 rectangles merges the pair that costs
+the least area rather than collapsing to their bounds.
 
 Every draw takes a coverage mask (#225): a rounded rectangle to keep and one to
 cut out, in target pixels, each antialiased by its signed distance at the pixel

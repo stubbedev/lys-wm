@@ -408,3 +408,17 @@ func TestABlurRedrawAllocatesNothingOnceItsChainExists(t *testing.T) {
 		t.Fatalf("%v allocations per blur redraw", allocs)
 	}
 }
+
+func TestAScanoutKeepsTheDiffBaseAndAComposedFrameAfterItRepaintsEverything(t *testing.T) {
+	bounds := image.Rect(0, 0, 100, 100)
+	bg := drawOp{fill: true, color: Background, dst: bounds}
+	sc := newScene()
+	sc.frameWith(bg)
+	sc.diff(bounds)
+	sc.presented()
+	sc.targetStale = true
+	sc.frameWith(bg)
+	if d := sc.diff(bounds); !d.Empty() {
+		t.Fatalf("an unchanged frame after a scanout damaged %v, so it would commit the same framebuffer again", d.Rects())
+	}
+}

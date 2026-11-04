@@ -243,3 +243,28 @@ func testAWindowWhoseBufferWasDestroyedIsDrawnAgainFromItsNextBuffer(t *testing.
 	settle(t, s.h)
 	s.show(t, "the next dmabuf", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0xff, 0)))
 }
+
+func TestACommitThatChangesNothingScansOutNothingAgain(t *testing.T) {
+	onEachDMABUFRenderer(t, testACommitThatChangesNothingScansOutNothingAgain)
+}
+
+func testACommitThatChangesNothingScansOutNothingAgain(t *testing.T, start gpuStarter) {
+	s := fullscreenScanout(t, start, func(*compositor.Config) {})
+	s.show(t, "the dmabuf", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0xff, 0, 0)))
+	settle(t, s.h)
+	before := scanouts(s.h)
+	for range 5 {
+		done := false
+		if _, err := s.w.Surface.Frame(frameDone{&done}); err != nil {
+			t.Fatal(err)
+		}
+		if err := errors.Join(s.w.Surface.Commit(), s.c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		s.c.DispatchUntil("the frame callback", func() bool { return done })
+	}
+	settle(t, s.h)
+	if n := scanouts(s.h); n != before {
+		t.Fatalf("%d commits that only asked for a frame callback flipped the same buffer %d times", 5, n-before)
+	}
+}

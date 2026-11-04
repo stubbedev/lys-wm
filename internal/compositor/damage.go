@@ -452,27 +452,28 @@ func (f *frame) bounds() image.Rectangle {
 }
 
 type scene struct {
-	prev, cur frame
-	covered   region.Set
-	shown     []*surface.Surface
-	content   map[*surface.Surface]*region.Set
-	damage    region.Set
-	occluded  region.Occluders
-	visible   []image.Rectangle
-	prevRects []image.Rectangle
-	curRects  []image.Rectangle
-	repaint   region.Set
-	history   [maxBufferAge]region.Set
-	head      int
-	drawn     bool
-	stale     bool
-	last      backend.Presentation
-	blurs     blurCaches
-	shader    *screenShader
-	image     render.TextureTarget
-	working   render.TextureTarget
-	zoom      *outputZoom
-	whole     [1]image.Rectangle
+	prev, cur   frame
+	covered     region.Set
+	shown       []*surface.Surface
+	content     map[*surface.Surface]*region.Set
+	damage      region.Set
+	occluded    region.Occluders
+	visible     []image.Rectangle
+	prevRects   []image.Rectangle
+	curRects    []image.Rectangle
+	repaint     region.Set
+	history     [maxBufferAge]region.Set
+	head        int
+	drawn       bool
+	stale       bool
+	targetStale bool
+	last        backend.Presentation
+	blurs       blurCaches
+	shader      *screenShader
+	image       render.TextureTarget
+	working     render.TextureTarget
+	zoom        *outputZoom
+	whole       [1]image.Rectangle
 }
 
 func newScene() *scene {

@@ -29,8 +29,9 @@ type uploaded struct {
 }
 
 type importedTexture struct {
-	tex render.Texture
-	yuv gpu.YUVEncoding
+	tex  render.Texture
+	yuv  gpu.YUVEncoding
+	left func() error
 }
 
 type imported struct {
@@ -168,7 +169,7 @@ func (c *Compositor) attach(s *surface.Surface) error {
 			if tex, err = c.importer.ImportTexture(d); err != nil {
 				return fmt.Errorf("compositor: import the dmabuf of wl_surface@%d: %w", s.Resource().Base().ID(), err)
 			}
-			c.imported[b] = importedTexture{tex: tex, yuv: d.YUV}
+			c.imported[b] = importedTexture{tex: tex, yuv: d.YUV, left: func() error { return c.leftScreen(b) }}
 		}
 		if err := c.dropTexture(s); err != nil {
 			return err

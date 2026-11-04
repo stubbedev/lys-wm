@@ -263,6 +263,7 @@ type Compositor struct {
 	captureSessions []*captureSession
 	cursorSessions  []*cursorSession
 	scannedOut      map[*dmabuf.Buffer]*scannedOut
+	scannedFree     []*scannedOut
 	filled          map[*output.Output]filling
 	constraints     map[*surface.Surface]*constraint
 	constraint      *constraint

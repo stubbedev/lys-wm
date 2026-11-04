@@ -52,17 +52,26 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	if d.Size != bounds.Size() || op.src != (render.FRect{W: float64(d.Size.X), H: float64(d.Size.Y)}) || !op.covers() || !slices.Contains(scanoutFormats, d.Format) {
 		return false, nil
 	}
-	shown, err := out.Scanout(b, d, func() error { return c.leftScreen(b) }, c.tears(op.surface))
+	shown, err := out.Scanout(b, d, c.imported[b].left, c.tears(op.surface))
 	if err != nil || !shown {
 		return false, err
 	}
 	held, ok := c.scannedOut[b]
 	if !ok {
-		held = &scannedOut{}
+		held = c.takeScannedOut()
 		c.scannedOut[b] = held
 	}
 	held.outputs++
 	return true, nil
+}
+
+func (c *Compositor) takeScannedOut() *scannedOut {
+	if n := len(c.scannedFree); n > 0 {
+		held := c.scannedFree[n-1]
+		c.scannedFree = c.scannedFree[:n-1]
+		return held
+	}
+	return &scannedOut{}
 }
 
 func (c *Compositor) scanoutTarget(o *output.Output) *colorspace.Target {
@@ -125,14 +134,17 @@ func (c *Compositor) leftScreen(b *dmabuf.Buffer) error {
 		return nil
 	}
 	delete(c.scannedOut, b)
-	errs := make([]error, 0, len(held.then)+1)
+	var err error
 	if held.released != nil {
-		errs = append(errs, b.Release())
+		err = b.Release()
 	}
-	for _, f := range held.then {
-		errs = append(errs, f())
+	for i, f := range held.then {
+		err = errors.Join(err, f())
+		held.then[i] = nil
 	}
-	return errors.Join(errs...)
+	*held = scannedOut{then: held.then[:0]}
+	c.scannedFree = append(c.scannedFree, held)
+	return err
 }
 
 func (c *Compositor) OffScreen(b *dmabuf.Buffer, f func() error) error {

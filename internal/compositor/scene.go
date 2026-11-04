@@ -197,8 +197,12 @@ func (c *Compositor) render(o *output.Output) error {
 		}
 		c.frames.Scanout(o.Backend().Name())
 		sc.presented()
-		sc.invalidate()
+		sc.targetStale = true
 		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
+	}
+	if sc.targetStale {
+		sc.targetStale = false
+		sc.damage.Add(bounds)
 	}
 	f, err := o.Backend().BeginFrame()
 	if err != nil {

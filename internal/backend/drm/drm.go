@@ -745,6 +745,7 @@ const (
 )
 
 type Output struct {
+	spare         []*scanout
 	b             *Backend
 	identity      edid.Info
 	conn          kdrm.Connector
@@ -1116,7 +1117,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if err != nil {
 		return false, nil
 	}
-	s := &scanout{client: cf, fb: cf.fb, release: release}
+	s := o.takeScanout(cf, release)
 	flags := planeFlags
 	torn := tear && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync)
 	if torn {
@@ -1124,11 +1125,13 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	} else {
 		o.frame(s, -1)
 		if o.verify(cf.fb, flags) != nil {
+			o.spare = append(o.spare, s)
 			return false, nil
 		}
 	}
 	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
 		clear(o.tested)
+		o.spare = append(o.spare, s)
 		if refused(err) {
 			return false, nil
 		}
@@ -1143,6 +1146,18 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 		return true, nil
 	}
 	return true, o.colorSent()
+}
+
+func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
+	var s *scanout
+	if n := len(o.spare); n > 0 {
+		s = o.spare[n-1]
+		o.spare = o.spare[:n-1]
+	} else {
+		s = &scanout{}
+	}
+	*s = scanout{client: cf, fb: cf.fb, release: release}
+	return s
 }
 
 func (o *Output) tearable(fb uint32, flags uint32) bool {
@@ -1415,15 +1430,16 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	if o.queued == nil {
 		return errors.Join(timing, o.clock.Kick(), o.flushPlanes())
 	}
-	var errs []error
+	var freed error
 	if old := o.front; old != nil && old.client != nil {
-		errs = append(errs, old.free(o.b.dev))
+		freed = old.free(o.b.dev)
+		o.spare = append(o.spare, old)
 	}
 	o.front, o.queued = o.queued, nil
 	o.presented++
 	o.front.presented = o.presented
-	errs = append(errs, o.b.handler.Presented(o, backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn}))
-	return errors.Join(append(errs, timing, o.clock.Kick(), o.flushPlanes())...)
+	presented := o.b.handler.Presented(o, backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn})
+	return errors.Join(freed, presented, timing, o.clock.Kick(), o.flushPlanes())
 }
 
 func (o *Output) dropScanout(s *scanout) error {
