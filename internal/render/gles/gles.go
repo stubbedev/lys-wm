@@ -22,13 +22,15 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
-const vertexShader = `attribute vec2 pos;
-attribute vec2 texcoord;
+const vertexShader = `attribute vec2 corner;
 uniform vec2 size;
+uniform vec4 quad;
+uniform vec2 uvOrigin;
+uniform vec4 uvAxes;
 varying vec2 v_texcoord;
 void main() {
-	gl_Position = vec4(pos / size * 2.0 - 1.0, 0.0, 1.0);
-	v_texcoord = texcoord;
+	gl_Position = vec4((quad.xy + corner * quad.zw) / size * 2.0 - 1.0, 0.0, 1.0);
+	v_texcoord = uvOrigin + corner.x * uvAxes.xy + corner.y * uvAxes.zw;
 }`
 
 const (
@@ -72,27 +74,84 @@ var (
 
 const float32Mantissa = 23
 
+var unitQuad = [8]float32{0, 0, 1, 0, 0, 1, 1, 1}
+
 var requiredGL = []string{"GL_EXT_read_format_bgra", "GL_EXT_texture_format_BGRA8888", "GL_NV_pack_subimage", "GL_OES_EGL_image"}
+
+type uniform struct {
+	loc   int32
+	value [4]float32
+}
+
+func (u *uniform) set1(gl *gpu.GL, a float32) {
+	if u.value[0] != a {
+		u.value[0] = a
+		gl.Uniform1f(u.loc, a)
+	}
+}
+
+func (u *uniform) set2(gl *gpu.GL, a, b float32) {
+	if u.value[0] != a || u.value[1] != b {
+		u.value[0], u.value[1] = a, b
+		gl.Uniform2f(u.loc, a, b)
+	}
+}
+
+func (u *uniform) set4(gl *gpu.GL, v [4]float32) {
+	if u.value != v {
+		u.value = v
+		gl.Uniform4f(u.loc, v[0], v[1], v[2], v[3])
+	}
+}
+
+func rectUniform(r image.Rectangle) [4]float32 {
+	return [4]float32{float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y)}
+}
 
 type program struct {
 	id                 uint32
-	pos, texcoord      int32
-	size, color, alpha int32
-	keep, cut, radii   int32
-	line, stops        int32
-	taps, up, merge    int32
-	smoothing          int32
-	time, resolution   int32
-	adjust, bend       int32
-	sized              image.Point
-	alphaSet           float32
-	colorSet           render.Color
-	colored            bool
-	maskSet            render.Mask
-	masked             bool
+	corner             int32
+	size, color, alpha uniform
+	quad               uniform
+	uvOrigin, uvAxes   uniform
+	keep, cut, radii   uniform
+	line, stops        uniform
+	taps, up, merge    uniform
+	smoothing          uniform
+	time, resolution   uniform
+	adjust, bend       uniform
 	cp                 [lgpu.ColorUniforms]int32
 	transform          render.ColorTransform
 	transformed        bool
+}
+
+func (r *Renderer) newProgram(id uint32) program {
+	at := func(name string) uniform {
+		return uniform{loc: r.gl.GetUniformLocation(id, name)}
+	}
+	return program{
+		id:         id,
+		corner:     r.gl.GetAttribLocation(id, "corner"),
+		size:       at("size"),
+		quad:       at("quad"),
+		uvOrigin:   at("uvOrigin"),
+		uvAxes:     at("uvAxes"),
+		color:      at("color"),
+		alpha:      at("alpha"),
+		keep:       at("keep"),
+		cut:        at("cut"),
+		radii:      at("radii"),
+		line:       at("line"),
+		stops:      at("stops"),
+		taps:       at("taps"),
+		up:         at("up"),
+		merge:      at("merge"),
+		smoothing:  at("smoothing"),
+		adjust:     at("adjust"),
+		bend:       at("bend"),
+		time:       at("time"),
+		resolution: at("resolution"),
+	}
 }
 
 type Renderer struct {
@@ -112,7 +171,6 @@ type Renderer struct {
 	colored      coloredPrograms
 	modifiers    map[fourcc.Format][]gpu.ModifierSupport
 	vbo          uint32
-	verts        [16]float32
 	pass         pass
 	closed       bool
 	es3          bool
@@ -189,6 +247,8 @@ func (r *Renderer) setup() error {
 		}
 	}
 	r.gl.GenBuffers(1, &r.vbo)
+	r.gl.BindBuffer(gpu.ArrayBuffer, r.vbo)
+	r.gl.BufferData(gpu.ArrayBuffer, unitQuad[:], gpu.StaticDraw)
 	r.es3 = esMajor(r.gl.Version()) >= 3
 	if r.es3 {
 		r.gl.GenBuffers(1, &r.unpack)
@@ -203,26 +263,7 @@ func (r *Renderer) link(p shader) error {
 	if err != nil {
 		return err
 	}
-	*p.prog = program{
-		id:        id,
-		pos:       r.gl.GetAttribLocation(id, "pos"),
-		texcoord:  r.gl.GetAttribLocation(id, "texcoord"),
-		size:      r.gl.GetUniformLocation(id, "size"),
-		color:     r.gl.GetUniformLocation(id, "color"),
-		alpha:     r.gl.GetUniformLocation(id, "alpha"),
-		keep:      r.gl.GetUniformLocation(id, "keep"),
-		cut:       r.gl.GetUniformLocation(id, "cut"),
-		radii:     r.gl.GetUniformLocation(id, "radii"),
-		line:      r.gl.GetUniformLocation(id, "line"),
-		stops:     r.gl.GetUniformLocation(id, "stops"),
-		taps:      r.gl.GetUniformLocation(id, "taps"),
-		up:        r.gl.GetUniformLocation(id, "up"),
-		merge:     r.gl.GetUniformLocation(id, "merge"),
-		smoothing: r.gl.GetUniformLocation(id, "smoothing"),
-		adjust:    r.gl.GetUniformLocation(id, "adjust"),
-		bend:      r.gl.GetUniformLocation(id, "bend"),
-		alphaSet:  -1,
-	}
+	*p.prog = r.newProgram(id)
 	if p.lazy {
 		for i := range p.prog.cp {
 			p.prog.cp[i] = r.gl.GetUniformLocation(id, "cp["+strconv.Itoa(i)+"]")
@@ -744,6 +785,7 @@ type pass struct {
 	err    error
 	prog   *program
 	color  *render.ColorTransform
+	corner int32
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
@@ -764,7 +806,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, err
 	}
 	p := &r.pass
-	p.active, p.fb, p.err, p.prog, p.color = true, fb, nil, nil, nil
+	p.active, p.fb, p.err, p.prog, p.color, p.corner = true, fb, nil, nil, nil, -1
 	damage.ClipInto(&p.damage, image.Rectangle{Max: fb.size})
 	gl := r.gl
 	gl.BindFramebuffer(gpu.Framebuffer, fb.fbo)
@@ -801,44 +843,55 @@ func (p *pass) use(prog *program) {
 	if p.prog != prog {
 		p.prog = prog
 		gl.UseProgram(prog.id)
-		for _, a := range [2]struct {
-			loc    int32
-			offset uintptr
-		}{{prog.pos, 0}, {prog.texcoord, 8}} {
-			if a.loc >= 0 {
-				gl.VertexAttribPointer(uint32(a.loc), 2, gpu.Float, 0, 16, a.offset)
-				gl.EnableVertexAttribArray(uint32(a.loc))
-			}
+		if p.corner != prog.corner {
+			p.corner = prog.corner
+			gl.VertexAttribPointer(uint32(prog.corner), 2, gpu.Float, 0, 0, 0) //nolint:gosec // the vertex shader reads corner, so its location is not -1
+			gl.EnableVertexAttribArray(uint32(prog.corner))                    //nolint:gosec // as above
 		}
 	}
-	if prog.sized != p.fb.size {
-		prog.sized = p.fb.size
-		gl.Uniform2f(prog.size, float32(p.fb.size.X), float32(p.fb.size.Y))
-	}
+	prog.size.set2(gl, float32(p.fb.size.X), float32(p.fb.size.Y))
 }
 
 func (p *pass) setMask(prog *program, m render.Mask) {
-	if prog.masked && prog.maskSet == m {
-		return
-	}
-	prog.masked, prog.maskSet = true, m
 	gl := p.owner.gl
-	for _, u := range [3]struct {
-		loc int32
-		r   image.Rectangle
-	}{{prog.keep, m.Keep.Rect}, {prog.cut, m.Cut.Rect}, {prog.merge, m.Merge}} {
-		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
+	prog.keep.set4(gl, rectUniform(m.Keep.Rect))
+	prog.cut.set4(gl, rectUniform(m.Cut.Rect))
+	prog.merge.set4(gl, rectUniform(m.Merge))
+	prog.radii.set4(gl, [4]float32{m.Keep.Radius, m.Cut.Radius, m.Falloff.Range, m.Falloff.Power})
+	prog.smoothing.set1(gl, m.Smooth)
+}
+
+type uvMap struct {
+	origin [2]float32
+	axes   [4]float32
+}
+
+var wholeTexture = uvMap{axes: [4]float32{1, 0, 0, 1}}
+
+func textureMap(size image.Point, src render.FRect, transform render.Transform) uvMap {
+	h, v := transform.Axes()
+	at := func(cx, cy float64) [2]float32 {
+		var s [2]float64
+		s[h.Source] = flip(cx, h.Reversed)
+		s[v.Source] = flip(cy, v.Reversed)
+		return [2]float32{
+			float32((src.X + float64(s[0]*src.W)) / float64(size.X)),
+			float32((src.Y + float64(s[1]*src.H)) / float64(size.Y)),
+		}
 	}
-	gl.Uniform4f(prog.radii, m.Keep.Radius, m.Cut.Radius, m.Falloff.Range, m.Falloff.Power)
-	gl.Uniform1f(prog.smoothing, m.Smooth)
+	o, x, y := at(0, 0), at(1, 0), at(0, 1)
+	return uvMap{origin: o, axes: [4]float32{x[0] - o[0], x[1] - o[1], y[0] - o[0], y[1] - o[1]}}
+}
+
+func (p *pass) setUV(m uvMap) {
+	gl := p.owner.gl
+	p.prog.uvOrigin.set2(gl, m.origin[0], m.origin[1])
+	p.prog.uvAxes.set4(gl, m.axes)
 }
 
 func (p *pass) draw(dst image.Rectangle) {
 	gl := p.owner.gl
-	v := &p.owner.verts
-	x0, y0, x1, y1 := float32(dst.Min.X), float32(dst.Min.Y), float32(dst.Max.X), float32(dst.Max.Y)
-	v[0], v[1], v[4], v[5], v[8], v[9], v[12], v[13] = x0, y0, x1, y0, x0, y1, x1, y1
-	gl.BufferData(gpu.ArrayBuffer, v[:], gpu.StreamDraw)
+	p.prog.quad.set4(gl, [4]float32{float32(dst.Min.X), float32(dst.Min.Y), float32(dst.Dx()), float32(dst.Dy())})
 	for _, d := range p.damage.Rects() {
 		clip := dst.Intersect(d)
 		if clip.Empty() {
@@ -885,14 +938,7 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	prog := &p.owner.solid
 	p.use(prog)
 	p.setMask(prog, m)
-	if p.color != nil {
-		prog.colored = false
-		v := p.fillColor(c)
-		p.owner.gl.Uniform4f(prog.color, v[0], v[1], v[2], v[3])
-	} else if !prog.colored || prog.colorSet != c {
-		prog.colored, prog.colorSet = true, c
-		p.owner.gl.Uniform4f(prog.color, float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
-	}
+	prog.color.set4(p.owner.gl, p.fillColor(c))
 	p.draw(r)
 }
 
@@ -913,16 +959,10 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 	prog := &p.owner.goo
 	gl := p.owner.gl
 	p.use(prog)
-	for _, u := range [2]struct {
-		loc int32
-		r   image.Rectangle
-	}{{prog.keep, g.A.Rect}, {prog.merge, g.B.Rect}} {
-		gl.Uniform4f(u.loc, float32(u.r.Min.X), float32(u.r.Min.Y), float32(u.r.Max.X), float32(u.r.Max.Y))
-	}
-	gl.Uniform4f(prog.radii, g.A.Radius, g.B.Radius, g.Smooth, 0)
-	v := p.fillColor(c)
-	gl.Uniform4f(prog.color, v[0], v[1], v[2], v[3])
-	prog.colored = false
+	prog.keep.set4(gl, rectUniform(g.A.Rect))
+	prog.merge.set4(gl, rectUniform(g.B.Rect))
+	prog.radii.set4(gl, [4]float32{g.A.Radius, g.B.Radius, g.Smooth, 0})
+	prog.color.set4(gl, p.fillColor(c))
 	p.draw(r)
 }
 
@@ -951,12 +991,12 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 	prog := &p.owner.kawase
 	gl := p.owner.gl
 	p.use(prog)
-	gl.Uniform2f(prog.taps, 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset)
+	prog.taps.set2(gl, 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset)
 	mode := float32(0)
 	if up {
 		mode = 1
 	}
-	gl.Uniform1f(prog.up, mode)
+	prog.up.set1(gl, mode)
 	p.bindLinear(tex)
 	p.drawWhole(dst)
 }
@@ -972,10 +1012,7 @@ func (p *pass) bindLinear(tex *texture) {
 }
 
 func (p *pass) drawWhole(dst image.Rectangle) {
-	verts := &p.owner.verts
-	for i, uv := range [4][2]float32{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
-		verts[i*4+2], verts[i*4+3] = uv[0], uv[1]
-	}
+	p.setUV(wholeTexture)
 	p.draw(dst)
 }
 
@@ -1009,12 +1046,9 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 	p.use(prog)
 	p.setTransform(prog)
 	p.setMask(prog, m)
-	gl.Uniform4f(prog.line, g.From[0], g.From[1], g.To[0], g.To[1])
-	gl.Uniform1f(prog.stops, float32(tex.size.X))
-	if prog.alphaSet != g.Alpha {
-		prog.alphaSet = g.Alpha
-		gl.Uniform1f(prog.alpha, g.Alpha)
-	}
+	prog.line.set4(gl, [4]float32{g.From[0], g.From[1], g.To[0], g.To[1]})
+	prog.stops.set1(gl, float32(tex.size.X))
+	prog.alpha.set1(gl, g.Alpha)
 	gl.BindTexture(tex.target, tex.id)
 	if tex.filter != gpu.Linear {
 		tex.filter = gpu.Linear
@@ -1063,10 +1097,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	p.use(prog)
 	p.setTransform(prog)
 	p.setMask(prog, m)
-	if prog.alphaSet != alpha {
-		prog.alphaSet = alpha
-		gl.Uniform1f(prog.alpha, alpha)
-	}
+	prog.alpha.set1(gl, alpha)
 	gl.BindTexture(tex.target, tex.id)
 	filter := int32(gpu.Linear)
 	if transform.Size(image.Pt(int(src.W), int(src.H))) == dst.Size() && src.W == float64(int(src.W)) && src.H == float64(int(src.H)) {
@@ -1077,15 +1108,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		gl.TexParameteri(tex.target, gpu.TextureMinFilter, filter)
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, filter)
 	}
-	h, v := transform.Axes()
-	verts := &p.owner.verts
-	for i, corner := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
-		var s [2]float64
-		s[h.Source] = flip(corner[0], h.Reversed)
-		s[v.Source] = flip(corner[1], v.Reversed)
-		verts[i*4+2] = float32((src.X + float64(s[0]*src.W)) / float64(tex.size.X))
-		verts[i*4+3] = float32((src.Y + float64(s[1]*src.H)) / float64(tex.size.Y))
-	}
+	p.setUV(textureMap(tex.size, src, transform))
 	p.draw(dst)
 }
 
@@ -1170,27 +1193,20 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 	p.use(prog)
 	p.setTransform(prog)
 	p.setMask(prog, g.Mask(m, dst))
-	if prog.alphaSet != alpha {
-		prog.alphaSet = alpha
-		gl.Uniform1f(prog.alpha, alpha)
-	}
+	prog.alpha.set1(gl, alpha)
 	var invBezel, amount float32
 	if g.Refracts() {
 		invBezel, amount = 1/g.Bezel, g.Amount
 	}
-	gl.Uniform4f(prog.adjust, g.Saturation, g.Brightness, g.Contrast, amount)
-	gl.Uniform4f(prog.bend, invBezel, float32(src.W)/float32(dst.Dx())/float32(tex.size.X), float32(src.H)/float32(dst.Dy())/float32(tex.size.Y), 0)
+	prog.adjust.set4(gl, [4]float32{g.Saturation, g.Brightness, g.Contrast, amount})
+	prog.bend.set4(gl, [4]float32{invBezel, float32(src.W) / float32(dst.Dx()) / float32(tex.size.X), float32(src.H) / float32(dst.Dy()) / float32(tex.size.Y), 0})
 	gl.BindTexture(tex.target, tex.id)
 	if tex.filter != gpu.Linear {
 		tex.filter = gpu.Linear
 		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
-	verts := &p.owner.verts
-	for i, corner := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
-		verts[i*4+2] = float32((src.X + float64(corner[0]*src.W)) / float64(tex.size.X))
-		verts[i*4+3] = float32((src.Y + float64(corner[1]*src.H)) / float64(tex.size.Y))
-	}
+	p.setUV(textureMap(tex.size, src, render.Normal))
 	p.draw(dst)
 }
 

@@ -14,12 +14,12 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
-func renderer(t *testing.T) *gles.Renderer {
+func renderer(t testing.TB) *gles.Renderer {
 	t.Helper()
 	return rendererOn(t, func(lib *gpu.Library) (*gpu.Display, error) { return lib.Surfaceless() })
 }
 
-func rendererOn(t *testing.T, open func(*gpu.Library) (*gpu.Display, error)) *gles.Renderer {
+func rendererOn(t testing.TB, open func(*gpu.Library) (*gpu.Display, error)) *gles.Renderer {
 	t.Helper()
 	d, err := open(testenv.GPU(t))
 	if err != nil {
@@ -42,7 +42,7 @@ func rendererOn(t *testing.T, open func(*gpu.Library) (*gpu.Display, error)) *gl
 	return r
 }
 
-func framebuffer(t *testing.T, r *gles.Renderer, size image.Point) *gles.Framebuffer {
+func framebuffer(t testing.TB, r *gles.Renderer, size image.Point) *gles.Framebuffer {
 	t.Helper()
 	f, err := r.NewFramebuffer(size)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestScreenShadersMatchTheSoftwareRenderer(t *testing.T) {
 	rendertest.ScreenShaders(t, r, framebuffer(t, r, rendertest.Size), rendertest.ExampleShaders(t)...)
 }
 
-func hardware(t *testing.T) (*gles.Renderer, string) {
+func hardware(t testing.TB) (*gles.Renderer, string) {
 	t.Helper()
 	var node string
 	r := rendererOn(t, func(lib *gpu.Library) (*gpu.Display, error) {

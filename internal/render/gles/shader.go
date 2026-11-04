@@ -23,15 +23,7 @@ func (r *Renderer) NewScreenShader(p *shaderlang.Program) (render.ScreenShader, 
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("gles: %w", err), r.leave("gles: a screen shader"))
 	}
-	s := &screenShader{r: r, prog: program{
-		id:         id,
-		pos:        r.gl.GetAttribLocation(id, "pos"),
-		texcoord:   r.gl.GetAttribLocation(id, "texcoord"),
-		size:       r.gl.GetUniformLocation(id, "size"),
-		time:       r.gl.GetUniformLocation(id, "time"),
-		resolution: r.gl.GetUniformLocation(id, "resolution"),
-		alphaSet:   -1,
-	}}
+	s := &screenShader{r: r, prog: r.newProgram(id)}
 	r.gl.UseProgram(id)
 	r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
 	if err := r.leave("gles: a screen shader"); err != nil {
@@ -78,8 +70,8 @@ func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst ima
 	}
 	gl := p.owner.gl
 	p.use(&sh.prog)
-	gl.Uniform1f(sh.prog.time, seconds)
-	gl.Uniform2f(sh.prog.resolution, float32(dst.Dx()), float32(dst.Dy()))
+	sh.prog.time.set1(gl, seconds)
+	sh.prog.resolution.set2(gl, float32(dst.Dx()), float32(dst.Dy()))
 	p.bindLinear(tex)
 	gl.Disable(gpu.Blend)
 	gl.ColorMask(1, 1, 1, 0)
