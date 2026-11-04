@@ -299,3 +299,45 @@ func TestTheExitActionEndsTheSession(t *testing.T) {
 	}
 	expectCleanExit(t, socket, done, "exit")
 }
+
+func TestCheckConfigAcceptsWhatAReloadWouldAndRefusesTheRest(t *testing.T) {
+	dir := t.TempDir()
+	getenv := func(name string) string {
+		if name == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return os.Getenv(name)
+	}
+	good := filepath.Join(dir, "good.yaml")
+	if err := os.WriteFile(good, []byte("gaps: {inner: 3}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkConfigFile(good, getenv); err != nil {
+		t.Fatalf("a good file: %v", err)
+	}
+	if err := checkConfigFile("", getenv); err != nil {
+		t.Fatalf("no file falls back to the built-in config: %v", err)
+	}
+	for name, content := range map[string]string{
+		"unknown key": "no_such_key: 1\n",
+		"bad value":   "gaps: {inner: -1}\n",
+		"bad layout":  "input: {keyboard: {layout: no-such-layout}}\n",
+		"not yaml":    "gaps: [\n",
+	} {
+		bad := filepath.Join(dir, "bad.yaml")
+		if err := os.WriteFile(bad, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := checkConfigFile(bad, getenv)
+		if err == nil {
+			t.Errorf("%s was accepted", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "bad.yaml") && name != "bad layout" {
+			t.Errorf("%s: the error names no file: %v", name, err)
+		}
+	}
+	if err := checkConfigFile(filepath.Join(dir, "absent.yaml"), getenv); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a named file that is not there: %v", err)
+	}
+}

@@ -215,6 +215,10 @@ race:
 # Run every release gate in order: vet, lint, test, build.
 check: vet lint no-fused test build
 
+# Write the config's published JSON schema, which a test holds to the parser.
+schema:
+    go run ./cmd/lys-wm --config-schema > schema/lys-wm-config.schema.json
+
 # Static analysis of every package with go vet.
 vet:
     go vet ./...

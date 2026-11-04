@@ -295,6 +295,21 @@ func (s source) load() (loaded, error) {
 	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}}, nil
 }
 
+func checkConfigFile(path string, getenv func(string) string) error {
+	s := source{path: path, explicit: path != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
+	if !s.explicit {
+		var err error
+		if s.path, err = configPath(getenv); err != nil {
+			return err
+		}
+	}
+	l, err := s.load()
+	if err != nil {
+		return err
+	}
+	return l.keymap.Close()
+}
+
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
 	out := slices.Clone(env)
 	for _, name := range []string{"PATH", "WAYLAND_DISPLAY", "DISPLAY", ipc.SocketEnv} {
@@ -402,8 +417,21 @@ func run(args []string) (err error) {
 	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
 	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")
 	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy> and end, for lys-wm-pace")
+	checkConfig := flags.Bool("check-config", false, "load the config as a reload would, and exit without starting: nothing printed and status 0 when it would be accepted")
+	defaultConfig := flags.Bool("default-config", false, "print the built-in config and exit")
+	configSchema := flags.Bool("config-schema", false, "print the config's JSON schema and exit")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	switch {
+	case *defaultConfig:
+		_, err := os.Stdout.Write(config.Default)
+		return err
+	case *configSchema:
+		_, err := os.Stdout.Write(config.Schema())
+		return err
+	case *checkConfig:
+		return checkConfigFile(*path, os.Getenv)
 	}
 	stopProfile, err := startCPUProfile(*cpuProfile)
 	if err != nil {

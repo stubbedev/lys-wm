@@ -1,0 +1,221 @@
+package config
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"math"
+	"reflect"
+	"slices"
+	"strconv"
+
+	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/seat"
+)
+
+const colorFormat = "lys-wm-color"
+
+type schemaNode struct {
+	Schema               string                 `json:"$schema,omitempty"`
+	ID                   string                 `json:"$id,omitempty"`
+	Type                 string                 `json:"type,omitempty"`
+	Format               string                 `json:"format,omitempty"`
+	Enum                 []string               `json:"enum,omitempty"`
+	Minimum              *float64               `json:"minimum,omitempty"`
+	ExclusiveMinimum     *float64               `json:"exclusiveMinimum,omitempty"`
+	Maximum              *float64               `json:"maximum,omitempty"`
+	Default              any                    `json:"default,omitempty"`
+	OneOf                []*schemaNode          `json:"oneOf,omitempty"`
+	Items                *schemaNode            `json:"items,omitempty"`
+	Properties           map[string]*schemaNode `json:"properties,omitempty"`
+	AdditionalProperties any                    `json:"additionalProperties,omitempty"`
+}
+
+type annotation struct {
+	format           string
+	enum             []string
+	minimum, maximum *float64
+	exclusiveMinimum *float64
+	def              any
+}
+
+func at(lo, hi float64, def any) annotation {
+	return annotation{minimum: new(lo), maximum: new(hi), def: def}
+}
+
+func above(lo, hi float64, def any) annotation {
+	return annotation{exclusiveMinimum: new(lo), maximum: new(hi), def: def}
+}
+
+func atLeastAnn(lo float64, def any) annotation {
+	return annotation{minimum: new(lo), def: def}
+}
+
+func colorAnn(def any) annotation { return annotation{format: colorFormat, def: def} }
+
+func hexColor(c render.Color) string {
+	if c.A == 0xff {
+		return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+	}
+	return fmt.Sprintf("#%02x%02x%02x%02x", c.R, c.G, c.B, c.A)
+}
+
+func short(v float32) float64 {
+	f, err := strconv.ParseFloat(strconv.FormatFloat(float64(v), 'g', -1, 32), 64)
+	if err != nil {
+		panic(fmt.Sprintf("config: a float32 did not format as a float: %v", err))
+	}
+	return f
+}
+
+func device(prefix string) map[string]annotation {
+	return map[string]annotation{
+		prefix + ".click_method":  {enum: slices.Sorted(maps.Keys(clickMethods))},
+		prefix + ".scroll_method": {enum: slices.Sorted(maps.Keys(scrollMethods))},
+		prefix + ".accel_profile": {enum: slices.Sorted(maps.Keys(accelProfiles))},
+		prefix + ".accel_speed":   at(-1, 1, nil),
+		prefix + ".scroll_factor": above(0, 100, nil),
+	}
+}
+
+func lookAnnotations(prefix string, saturation any) map[string]annotation {
+	return map[string]annotation{
+		prefix + ".tint":       colorAnn(nil),
+		prefix + ".saturation": at(0, 4, saturation),
+		prefix + ".brightness": at(0, 4, 1.0),
+		prefix + ".contrast":   at(0, 4, 1.0),
+		prefix + ".grain":      at(0, 1, 0.0),
+	}
+}
+
+func annotations() map[string]annotation {
+	look := compositor.DefaultLook(render.GPU)
+	d := look.Decor
+	s := compositor.DefaultSettings()
+	out := map[string]annotation{
+		"input.keyboard.repeat_rate":       at(0, math.MaxInt32, seat.DefaultRepeatRate),
+		"input.keyboard.repeat_delay":      at(0, math.MaxInt32, seat.DefaultRepeatDelay),
+		"borders.width":                    atLeastAnn(0, d.BorderWidth),
+		"gaps.inner":                       atLeastAnn(0, s.Gaps.Inner),
+		"decoration.rounding":              atLeastAnn(0, d.Rounding),
+		"decoration.active_opacity":        at(0, 1, short(d.Opacity.Active)),
+		"decoration.inactive_opacity":      at(0, 1, short(d.Opacity.Inactive)),
+		"decoration.fullscreen_opacity":    at(0, 1, short(d.Opacity.Fullscreen)),
+		"decoration.dim_inactive":          {def: d.Dim.Inactive},
+		"decoration.dim_strength":          at(0, 1, short(d.Dim.Strength)),
+		"decoration.shadow.enabled":        {def: d.Shadow.Enabled},
+		"decoration.shadow.range":          atLeastAnn(0, d.Shadow.Range),
+		"decoration.shadow.render_power":   at(1, 4, d.Shadow.Power),
+		"decoration.shadow.sharp":          {def: d.Shadow.Sharp},
+		"decoration.shadow.scale":          above(0, 1, d.Shadow.Scale),
+		"decoration.shadow.color":          colorAnn(hexColor(d.Shadow.Active)),
+		"decoration.shadow.color_inactive": colorAnn(hexColor(d.Shadow.Inactive)),
+		"decoration.blur.enabled":          {def: d.Blur.Enabled},
+		"decoration.blur.size":             atLeastAnn(1, d.Blur.Size),
+		"decoration.blur.passes":           at(1, 4, d.Blur.Passes),
+		"decoration.blur.xray":             {def: d.Blur.XRay},
+		"drag_preview.enabled":             {def: d.DragPreview.Enabled},
+		"drag_preview.opacity":             at(0, 1, short(d.DragPreview.Opacity)),
+		"drag_preview.blur":                {def: d.DragPreview.Blur},
+		"drag_preview.snap_distance":       atLeastAnn(1, d.DragPreview.SnapDistance),
+		"animations.enabled":               {def: true},
+		"animations.reduced_motion":        {def: false},
+		"overview.blur":                    {def: look.Overview.Blur},
+		"overview.dim":                     at(0, 1, short(look.Overview.Dim)),
+		"tabs.height":                      atLeastAnn(1, d.Tab.Height),
+		"tabs.padding":                     atLeastAnn(0, d.Tab.Padding),
+		"tabs.text_height":                 atLeastAnn(1, d.Tab.TextHeight),
+		"tabs.text_padding":                atLeastAnn(0, d.Tab.TextPadding),
+		"autotile.enabled":                 {def: s.Autotile.Enabled},
+		"autotile.ephemeral":               {def: s.Autotile.Ephemeral},
+		"autotile.min_trigger":             atLeastAnn(0, s.Autotile.MinTrigger),
+		"autotile.divisor":                 atLeastAnn(1, s.Autotile.Divisor),
+		"xwayland.enabled":                 {def: true},
+		"xwayland.zero_scaling":            {def: true},
+		"color_management":                 {def: false},
+		"tearing":                          {def: false},
+		"lid_suspend":                      {def: true},
+	}
+	saturation := short(d.Blur.Look.SaturationShift + 1)
+	for _, group := range []map[string]annotation{
+		device("input.pointer"),
+		device("input.touchpad"),
+		lookAnnotations("decoration.blur", saturation),
+	} {
+		maps.Copy(out, group)
+	}
+	return out
+}
+
+var (
+	sidesType  = reflect.TypeFor[sides]()
+	borderType = reflect.TypeFor[rawBorder]()
+)
+
+func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schemaNode {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if reflect.PointerTo(t).Implements(locatedType) {
+		t = t.Field(0).Type
+	}
+	n := &schemaNode{}
+	switch {
+	case t == sidesType:
+		n.OneOf = []*schemaNode{{Type: "integer"}, {Type: "array", Items: &schemaNode{Type: "integer"}}}
+	case t == borderType:
+		object := objectSchema(t, path, notes)
+		n.OneOf = []*schemaNode{{Type: "string", Format: colorFormat}, object}
+	case t.Kind() == reflect.Struct:
+		n = objectSchema(t, path, notes)
+	case t.Kind() == reflect.Map:
+		n.Type = "object"
+		n.AdditionalProperties = schemaFor(t.Elem(), path+".*", notes)
+	case t.Kind() == reflect.Slice:
+		n.Type = "array"
+		n.Items = schemaFor(t.Elem(), path+"[]", notes)
+	case t.Kind() == reflect.Bool:
+		n.Type = "boolean"
+	case t.Kind() == reflect.Int:
+		n.Type = "integer"
+	case t.Kind() == reflect.Float64:
+		n.Type = "number"
+	case t.Kind() == reflect.String:
+		n.Type = "string"
+	default:
+		panic(fmt.Sprintf("config: %s has a %s, which the schema does not describe", path, t))
+	}
+	if note, ok := notes[path]; ok {
+		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default = note.format, note.enum, note.minimum, note.maximum, note.exclusiveMinimum, note.def
+	}
+	return n
+}
+
+func objectSchema(t reflect.Type, path string, notes map[string]annotation) *schemaNode {
+	fields := fieldNames(t)
+	n := &schemaNode{Type: "object", AdditionalProperties: false, Properties: make(map[string]*schemaNode, len(fields))}
+	for name, ft := range fields {
+		child := name
+		if path != "" {
+			child = path + "." + name
+		}
+		n.Properties[name] = schemaFor(ft, child, notes)
+	}
+	return n
+}
+
+func Schema() []byte {
+	root := schemaFor(reflect.TypeFor[rawConfig](), "", annotations())
+	root.Schema = "https://json-schema.org/draft/2020-12/schema"
+	root.ID = "https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json"
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(root); err != nil {
+		panic(fmt.Sprintf("config: encode the schema: %v", err))
+	}
+	return out.Bytes()
+}

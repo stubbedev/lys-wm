@@ -750,7 +750,7 @@ func (p *parser) look(r rawLook, key string) wm.LookOverride {
 		if v == nil {
 			return nil
 		}
-		s := float32(*v) - 1
+		s := float32(*v - 1)
 		return &s
 	}
 	strength := func(a *At[float64], name string) *float32 {

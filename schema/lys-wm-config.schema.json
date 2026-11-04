@@ -1,0 +1,965 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json",
+  "type": "object",
+  "properties": {
+    "animations": {
+      "type": "object",
+      "properties": {
+        "curves": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "bezier": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "spring": {
+                "type": "object",
+                "properties": {
+                  "damping": {
+                    "type": "number"
+                  },
+                  "mass": {
+                    "type": "number"
+                  },
+                  "stiffness": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "events": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "curve": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "integer"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "style": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "reduced_motion": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "autostart": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "autotile": {
+      "type": "object",
+      "properties": {
+        "divisor": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "ephemeral": {
+          "type": "boolean",
+          "default": true
+        },
+        "min_trigger": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 400
+        }
+      },
+      "additionalProperties": false
+    },
+    "binds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "chord": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "borders": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "angle": {
+                  "type": "number"
+                },
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "inactive": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "angle": {
+                  "type": "number"
+                },
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "color_management": {
+      "type": "boolean",
+      "default": false
+    },
+    "decoration": {
+      "type": "object",
+      "properties": {
+        "active_opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "blur": {
+          "type": "object",
+          "properties": {
+            "brightness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 4,
+              "default": 1
+            },
+            "contrast": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 4,
+              "default": 1
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "grain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0
+            },
+            "layers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mica": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "passes": {
+                  "type": "integer"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "tint": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "passes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "refraction": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "integer"
+                },
+                "bezel": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false
+            },
+            "saturation": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 4,
+              "default": 1.3
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 6
+            },
+            "specular": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false
+            },
+            "tint": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "xray": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "dim_inactive": {
+          "type": "boolean",
+          "default": false
+        },
+        "dim_strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "fullscreen_opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "inactive_opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "rounding": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 8
+        },
+        "shadow": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "format": "lys-wm-color",
+              "default": "#00000060"
+            },
+            "color_inactive": {
+              "type": "string",
+              "format": "lys-wm-color",
+              "default": "#00000038"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "offset": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                }
+              ]
+            },
+            "range": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 24
+            },
+            "render_power": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "default": 1
+            },
+            "sharp": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "drag_preview": {
+      "type": "object",
+      "properties": {
+        "blur": {
+          "type": "boolean",
+          "default": false
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.25
+        },
+        "snap_distance": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 16
+        }
+      },
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "gaps": {
+      "type": "object",
+      "properties": {
+        "inner": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 8
+        },
+        "outer": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "gestures": {
+      "type": "object",
+      "properties": {
+        "distance": {
+          "type": "number"
+        },
+        "hold": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string"
+              },
+              "drive": {
+                "type": "string"
+              },
+              "fingers": {
+                "type": "integer"
+              },
+              "modifiers": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "pinch": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string"
+              },
+              "drive": {
+                "type": "string"
+              },
+              "fingers": {
+                "type": "integer"
+              },
+              "modifiers": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "swipe": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string"
+              },
+              "drive": {
+                "type": "string"
+              },
+              "fingers": {
+                "type": "integer"
+              },
+              "modifiers": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "gpu": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "accel_profile": {
+                "type": "string"
+              },
+              "accel_speed": {
+                "type": "number"
+              },
+              "click_method": {
+                "type": "string"
+              },
+              "disable_while_typing": {
+                "type": "boolean"
+              },
+              "drag_lock": {
+                "type": "boolean"
+              },
+              "middle_emulation": {
+                "type": "boolean"
+              },
+              "natural_scroll": {
+                "type": "boolean"
+              },
+              "scroll_factor": {
+                "type": "number"
+              },
+              "scroll_method": {
+                "type": "string"
+              },
+              "tap": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "keyboard": {
+          "type": "object",
+          "properties": {
+            "layout": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "options": {
+              "type": "string"
+            },
+            "repeat_delay": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 300
+            },
+            "repeat_rate": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 50
+            },
+            "rules": {
+              "type": "string"
+            },
+            "variant": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "pointer": {
+          "type": "object",
+          "properties": {
+            "accel_profile": {
+              "type": "string",
+              "enum": [
+                "adaptive",
+                "flat"
+              ]
+            },
+            "accel_speed": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "click_method": {
+              "type": "string",
+              "enum": [
+                "button_areas",
+                "clickfinger",
+                "none"
+              ]
+            },
+            "disable_while_typing": {
+              "type": "boolean"
+            },
+            "drag_lock": {
+              "type": "boolean"
+            },
+            "middle_emulation": {
+              "type": "boolean"
+            },
+            "natural_scroll": {
+              "type": "boolean"
+            },
+            "scroll_factor": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 100
+            },
+            "scroll_method": {
+              "type": "string",
+              "enum": [
+                "edge",
+                "none",
+                "on_button_down",
+                "two_finger"
+              ]
+            },
+            "tap": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "touchpad": {
+          "type": "object",
+          "properties": {
+            "accel_profile": {
+              "type": "string",
+              "enum": [
+                "adaptive",
+                "flat"
+              ]
+            },
+            "accel_speed": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "click_method": {
+              "type": "string",
+              "enum": [
+                "button_areas",
+                "clickfinger",
+                "none"
+              ]
+            },
+            "disable_while_typing": {
+              "type": "boolean"
+            },
+            "drag_lock": {
+              "type": "boolean"
+            },
+            "middle_emulation": {
+              "type": "boolean"
+            },
+            "natural_scroll": {
+              "type": "boolean"
+            },
+            "scroll_factor": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 100
+            },
+            "scroll_method": {
+              "type": "string",
+              "enum": [
+                "edge",
+                "none",
+                "on_button_down",
+                "two_finger"
+              ]
+            },
+            "tap": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "lid_suspend": {
+      "type": "boolean",
+      "default": true
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bitdepth": {
+            "type": "integer"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "hdr": {
+            "type": "boolean"
+          },
+          "hdr_peak": {
+            "type": "number"
+          },
+          "match": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "scale": {
+            "type": "number"
+          },
+          "sdr_brightness": {
+            "type": "number"
+          },
+          "shader": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "overview": {
+      "type": "object",
+      "properties": {
+        "blur": {
+          "type": "boolean",
+          "default": true
+        },
+        "dim": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.35
+        }
+      },
+      "additionalProperties": false
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string"
+          },
+          "blur": {
+            "type": "boolean"
+          },
+          "blur_look": {
+            "type": "object",
+            "properties": {
+              "brightness": {
+                "type": "number"
+              },
+              "contrast": {
+                "type": "number"
+              },
+              "grain": {
+                "type": "number"
+              },
+              "refraction": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "integer"
+                  },
+                  "bezel": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "saturation": {
+                "type": "number"
+              },
+              "specular": {
+                "type": "object",
+                "properties": {
+                  "strength": {
+                    "type": "number"
+                  },
+                  "width": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "tint": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "dim_around": {
+            "type": "boolean"
+          },
+          "float": {
+            "type": "boolean"
+          },
+          "mica": {
+            "type": "boolean"
+          },
+          "opacity": {
+            "type": "number"
+          },
+          "size": {
+            "type": "string"
+          },
+          "tearing": {
+            "type": "boolean"
+          },
+          "tile": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "submaps": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "chord": {
+              "type": "string"
+            },
+            "flags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "tabs": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "font": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 24
+        },
+        "icon_theme": {
+          "type": "string"
+        },
+        "inactive": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "text_height": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 11
+        },
+        "text_padding": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 8
+        },
+        "urgent": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "tearing": {
+      "type": "boolean",
+      "default": false
+    },
+    "xwayland": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "zero_scaling": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

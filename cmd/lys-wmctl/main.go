@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -35,13 +36,26 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
                                as JSON, the PNG base64-encoded
 
 The socket is --socket, else $LYS_WM_SOCKET, else the only socket in
-$XDG_RUNTIME_DIR/lys-wm.
+$XDG_RUNTIME_DIR/lys-wm. The exit status is 3 when no lys-wm answers there,
+and 1 for any other failure.
 `
+
+const (
+	exitFailed     = 1
+	exitNotRunning = 3
+)
+
+func exitCode(err error) int {
+	if errors.Is(err, ipc.ErrNoSocket) || errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+		return exitNotRunning
+	}
+	return exitFailed
+}
 
 func main() {
 	if err := run(os.Args[1:], os.Getenv, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "lys-wmctl:", err)
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
 }
 

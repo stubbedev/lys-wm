@@ -13,6 +13,17 @@ Unknown keys are errors. Every error gives the file, the line and the key:
 config.yaml:12: binds[3].action: bad action: unknown action "teleport"
 ```
 
+`lys-wm --check-config [--config <file>]` loads the file exactly as a reload
+does and exits without starting: status 0 and no output when it would be
+accepted, the error and status 1 when not. `lys-wm --default-config` prints the
+built-in config. `lys-wm --config-schema` prints a JSON schema of every key, the
+same as the committed
+[`schema/lys-wm-config.schema.json`](https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json),
+with the choices, bounds and defaults of the scalar keys, which tests hold to
+what the parser does. Defaults are the GPU renderers'. These flags are the
+contract other programs use, lys-settings among them, instead of the parser's
+Go package.
+
 `SIGHUP` and the `reload` action read the file again. A file that does not
 parse, or whose chords, layout or font do not load, is rejected whole and the
 running config stays. Nothing reloads when the file changes.

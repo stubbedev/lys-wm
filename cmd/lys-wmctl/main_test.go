@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"io"
+	"net"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -107,5 +109,44 @@ func TestRunAgainstASocket(t *testing.T) {
 	}
 	if err := run([]string{"--socket", filepath.Join(testenv.SocketDir(t), "none.sock"), "windows"}, getenv, &out); err == nil {
 		t.Fatal("a missing socket succeeded")
+	}
+}
+
+func TestNoRunningCompositorHasItsOwnExitStatus(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such.sock")
+	err := run([]string{"--socket", missing, "reload"}, func(string) string { return "" }, io.Discard)
+	if code := exitCode(err); code != exitNotRunning {
+		t.Fatalf("a socket that is not there: %v, status %d", err, code)
+	}
+	err = run([]string{"reload"}, func(string) string { return "" }, io.Discard)
+	if code := exitCode(err); code != exitNotRunning {
+		t.Fatalf("no socket to find: %v, status %d", err, code)
+	}
+	stale := filepath.Join(t.TempDir(), "stale.sock")
+	l, err := net.Listen("unix", stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ul, ok := l.(*net.UnixListener)
+	if !ok {
+		t.Fatalf("listener is a %T", l)
+	}
+	ul.SetUnlinkOnClose(false)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = run([]string{"--socket", stale, "reload"}, func(string) string { return "" }, io.Discard)
+	if code := exitCode(err); code != exitNotRunning {
+		t.Fatalf("a stale socket: %v, status %d", err, code)
+	}
+}
+
+func TestAnyOtherFailureIsNotReportedAsNotRunning(t *testing.T) {
+	if code := exitCode(errors.New("the compositor refused the action")); code != exitFailed {
+		t.Fatalf("status %d", code)
+	}
+	_, err := parseArgs([]string{"teleport"})
+	if code := exitCode(err); code != exitFailed {
+		t.Fatalf("a usage error: status %d", code)
 	}
 }
