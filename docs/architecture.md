@@ -103,7 +103,8 @@ recovered at the callback boundary:
 - **Planes between frames** (DRM page-flip, pacing and frame callbacks): a
   cursor or gamma commit the kernel rejects is reported once and the state
   stays dirty, so the next callback or cursor move commits it again. A
-  cursor its test commit refuses falls back to the frame (#143).
+  cursor refused with EINVAL or ERANGE falls back to the frame (#143): a move
+  is one atomic request, with no test commit ahead of it (#259).
 - **A client**: a failing request kills that client (`server.Client`),
   and a failed capture sends `failed`, as before.
 
@@ -333,7 +334,7 @@ linear modifier. Pointer motion then moves the plane in an atomic commit of
 its own, or in the next frame's commit, and repaints nothing. A cursor commit
 sets only what changed against what the last accepted commit left on the
 plane; a modeset, a resume or a cursor coming back from hidden sets it all. An image
-larger than the plane, or a plane whose test commit refuses it, puts the
+larger than the plane, or a plane that refuses it, puts the
 cursor back into the frame; a refusal is logged and lasts for the output's
 lifetime.
 
