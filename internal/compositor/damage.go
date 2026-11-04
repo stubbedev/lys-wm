@@ -394,12 +394,16 @@ func (f *frame) replay(p render.Pass, to colorOut) {
 }
 
 func (f *frame) replayFrom(p render.Pass, origin image.Point, to colorOut) {
+	replayOps(f.ops, p, origin, to)
+}
+
+func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut) {
 	var transform *render.ColorTransform
 	var last *colorspace.Description
 	settled := false
 	active := to.to != nil || to.working != nil
-	for i := range f.ops {
-		op := &f.ops[i]
+	for i := range ops {
+		op := &ops[i]
 		if active || op.space != last {
 			if src := to.source(op); !settled || src != last {
 				settled, last = true, src
@@ -494,13 +498,8 @@ func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {
 	if op.size.X <= 0 || op.size.Y <= 0 {
 		return
 	}
-	whole := op.mapped()
-	w, h := whole.Dx(), whole.Dy()
 	for _, r := range d.Rects() {
-		shown := image.Rect(
-			whole.Min.X+r.Min.X*w/op.size.X, whole.Min.Y+r.Min.Y*h/op.size.Y,
-			whole.Min.X+(r.Max.X*w+op.size.X-1)/op.size.X, whole.Min.Y+(r.Max.Y*h+op.size.Y-1)/op.size.Y,
-		).Intersect(op.dst)
+		shown := op.deviceDamage(r)
 		if shown.Empty() {
 			continue
 		}
@@ -511,14 +510,32 @@ func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {
 	}
 }
 
-func (sc *scene) contentChanged(ops []drawOp) bool {
-	return slices.ContainsFunc(ops, func(op drawOp) bool {
-		if op.surface == nil {
-			return false
+func (sc *scene) contentChanged(ops []drawOp, area image.Rectangle) bool {
+	for i := range ops {
+		op := &ops[i]
+		if op.surface == nil || op.size.X <= 0 || op.size.Y <= 0 {
+			continue
 		}
 		content, ok := sc.content[op.surface]
-		return ok && !content.Empty()
-	})
+		if !ok {
+			continue
+		}
+		for _, r := range content.Rects() {
+			if op.deviceDamage(r).Overlaps(area) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (op *drawOp) deviceDamage(r image.Rectangle) image.Rectangle {
+	whole := op.mapped()
+	w, h := whole.Dx(), whole.Dy()
+	return image.Rect(
+		whole.Min.X+r.Min.X*w/op.size.X, whole.Min.Y+r.Min.Y*h/op.size.Y,
+		whole.Min.X+(r.Max.X*w+op.size.X-1)/op.size.X, whole.Min.Y+(r.Max.Y*h+op.size.Y-1)/op.size.Y,
+	).Intersect(op.dst)
 }
 
 func (sc *scene) diff(bounds image.Rectangle) *region.Set {

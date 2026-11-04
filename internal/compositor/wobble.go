@@ -88,7 +88,7 @@ func (c *Compositor) renderJelly(pass *frame, o *output.Output, w *window, area 
 	}
 	c.resolveBlurs(o, pass, from)
 	ops, out := pass.ops[from:], c.sceneOut(o)
-	if w.jellyVersion != 0 && w.jellyArea == area && w.jellyOut == out && slices.Equal(w.jellyOps, ops) && !c.sceneOf(o).contentChanged(ops) {
+	if w.jellyVersion != 0 && w.jellyArea == area && w.jellyOut == out && slices.Equal(w.jellyOps, ops) && !c.sceneOf(o).contentChanged(ops, area) {
 		pass.ops = pass.ops[:from]
 		return nil
 	}

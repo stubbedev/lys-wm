@@ -52,6 +52,8 @@ type blurCache struct {
 	used    bool
 	to      colorOut
 	spec    chainSpec
+	sizes   []image.Point
+	whole   [1]image.Rectangle
 }
 
 func (b *blurCache) destroy() error {
@@ -229,7 +231,7 @@ func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectang
 	if cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
 		return true
 	}
-	return sc.contentChanged(below)
+	return sc.contentChanged(below, area)
 }
 
 func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look *wm.Look) {
@@ -436,7 +438,7 @@ func (f *frame) settle(ops []drawOp) []drawOp {
 
 func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarget, error), pb *pendingBlur, below []drawOp, to colorOut) error {
 	b, area := pb.cache, pb.area
-	sizes := []image.Point{area.Size()}
+	sizes := append(b.sizes[:0], area.Size())
 	for range pb.spec.passes {
 		last := sizes[len(sizes)-1]
 		sizes = append(sizes, image.Pt(max(last.X/2, 1), max(last.Y/2, 1)))
@@ -444,6 +446,7 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 	for i := len(sizes) - 2; i >= 0; i-- {
 		sizes = append(sizes, sizes[i])
 	}
+	b.sizes = sizes
 	if b.area.Size() != area.Size() || len(b.chain) != len(sizes) || b.to != to {
 		if err := b.destroy(); err != nil {
 			return err
@@ -456,18 +459,19 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 			b.chain = append(b.chain, t)
 		}
 	}
-	f := frame{ops: below}
-	p, err := c.renderer.Begin(b.chain[0], render.Region{{Max: sizes[0]}})
+	b.whole[0] = image.Rectangle{Max: sizes[0]}
+	p, err := c.renderer.Begin(b.chain[0], b.whole[:])
 	if err != nil {
 		return err
 	}
 	p.Clear(render.Color{})
-	f.replayFrom(p, area.Min, to)
+	replayOps(below, p, area.Min, to)
 	if err := p.End(); err != nil {
 		return err
 	}
 	for i := 1; i < len(sizes); i++ {
-		p, err := c.renderer.Begin(b.chain[i], render.Region{{Max: sizes[i]}})
+		b.whole[0] = image.Rectangle{Max: sizes[i]}
+		p, err := c.renderer.Begin(b.chain[i], b.whole[:])
 		if err != nil {
 			return err
 		}
@@ -478,6 +482,6 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 		}
 	}
 	c.blurGen++
-	b.area, b.below, b.version, b.to, b.spec = area, slices.Clone(below), c.blurGen, to, pb.spec
+	b.area, b.below, b.version, b.to, b.spec = area, append(b.below[:0], below...), c.blurGen, to, pb.spec
 	return nil
 }

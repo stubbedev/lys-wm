@@ -372,3 +372,39 @@ func TestACommitHiddenByAnOpaqueOpDamagesNothing(t *testing.T) {
 		t.Fatalf("a commit half under an opaque op damaged %v, want only the 100x100 outside it", d.Rects())
 	}
 }
+
+func TestABlurRedrawsOnlyForDamageItCanSee(t *testing.T) {
+	s := &surface.Surface{}
+	below := []drawOp{{surface: s, size: image.Pt(400, 300), dst: image.Rect(0, 0, 400, 300), alpha: 1}}
+	area := image.Rect(100, 100, 200, 200)
+	sc := newScene()
+	sc.damaged(s, []image.Rectangle{image.Rect(300, 0, 400, 50)})
+	if sc.contentChanged(below, area) {
+		t.Fatal("damage outside the blur's area redrew it")
+	}
+	sc.damaged(s, []image.Rectangle{image.Rect(150, 150, 151, 151)})
+	if !sc.contentChanged(below, area) {
+		t.Fatal("damage inside the blur's area did not redraw it")
+	}
+}
+
+func TestABlurRedrawAllocatesNothingOnceItsChainExists(t *testing.T) {
+	r := soft.New()
+	area := image.Rect(0, 0, 64, 48)
+	tex, err := r.NewTexture(render.XRGB8888, area.Size(), area.Dx()*4, make([]byte, area.Dx()*area.Dy()*4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Compositor{renderer: r}
+	pb := &pendingBlur{cache: &blurCache{}, spec: chainSpec{offset: 2, passes: 2}, area: area}
+	below := []drawOp{{tex: tex, src: render.FRect{W: 64, H: 48}, dst: area, alpha: 1}}
+	redraw := func() {
+		if err := c.renderBlur(r.NewTextureTarget, pb, below, colorOut{plans: &c.plans}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	redraw()
+	if allocs := testing.AllocsPerRun(50, redraw); allocs != 0 {
+		t.Fatalf("%v allocations per blur redraw", allocs)
+	}
+}
