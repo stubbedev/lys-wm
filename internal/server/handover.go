@@ -105,12 +105,12 @@ func (c *Client) Objects() []wire.Resource {
 	return out
 }
 
-func (c *Client) Index() (int, error) {
-	i := slices.Index(c.display.clients, c)
-	if i < 0 {
-		return 0, fmt.Errorf("server: the client of pid %d has left", c.creds.Pid)
-	}
-	return i, nil
+func (d *Display) RestoredClients() []*Client {
+	return d.restored.clients
+}
+
+func (c *Client) Gone() bool {
+	return c.gone
 }
 
 func (d *Display) Unkeepable(skip func(*Client) bool) []Unkeepable {
@@ -417,7 +417,8 @@ func (c *Client) snapshot(t *handover.FDs) (ClientState, error) {
 }
 
 type restoring struct {
-	failed error
+	failed  error
+	clients []*Client
 }
 
 func (d *Display) restoreFailed(c *Client, err error) {
@@ -487,7 +488,6 @@ func (d *Display) renameGlobals(old []GlobalState) ([]*Global, []uint32) {
 func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 	extra, removed := d.renameGlobals(st.Globals)
 	d.restored = &restoring{}
-	clients := make([]*Client, 0, len(st.Clients))
 	feeds := make([]func() error, 0, len(st.Clients))
 	for i := range st.Clients {
 		cs := &st.Clients[i]
@@ -499,6 +499,7 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 		if err != nil {
 			return nil, err
 		}
+		d.restored.clients = append(d.restored.clients, c)
 		c.conn.Mute()
 		c.restoring = true
 		c.lastID = wire.ObjectID(cs.LastID)
@@ -535,17 +536,26 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 		}
 		c.dropTemps(wire.ObjectID(cs.TempFirst), wire.ObjectID(cs.LastID))
 		c.restoring = false
-		clients = append(clients, c)
 		feeds = append(feeds, c.releaser(cs, t))
 	}
 	d.ackFloor = d.serial
 	return func() error {
 		var errs []error
-		for _, f := range feeds {
-			errs = append(errs, f())
+		clients := d.restored.clients
+		for i, f := range feeds {
+			if clients[i].gone {
+				continue
+			}
+			if err := f(); err != nil {
+				d.report(fmt.Errorf("server: release the client of pid %d: %w", clients[i].creds.Pid, err))
+				errs = append(errs, clients[i].destroy())
+			}
 		}
 		d.parked = false
 		for _, c := range clients {
+			if c.gone {
+				continue
+			}
 			for _, name := range removed {
 				for _, r := range c.registries {
 					errs = append(errs, r.SendGlobalRemove(name))
@@ -560,7 +570,9 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 			}
 		}
 		for _, c := range clients {
-			errs = append(errs, c.dispatch())
+			if !c.gone {
+				errs = append(errs, c.dispatch())
+			}
 		}
 		errs = append(errs, d.listener.Modify(loop.Readable), d.flush())
 		return errors.Join(errs...)

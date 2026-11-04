@@ -39,7 +39,7 @@ type planKey struct {
 type adoption struct {
 	plan       map[planKey]windowPlan
 	wm         json.RawMessage
-	next       wm.WindowID
+	windows    []windowPlan
 	cursor     image.Point
 	off        []string
 	animations anim.Table
@@ -121,7 +121,8 @@ func (c *Compositor) HandoverState(t *handover.FDs, skip func(*server.Client) bo
 }
 
 func (c *Compositor) AdoptHandover(st *HandoverState, t *handover.FDs) (func() error, error) {
-	c.adopting = &adoption{plan: make(map[planKey]windowPlan, len(st.Windows)), wm: st.WM, next: st.NextWindow, cursor: st.Cursor, off: st.Off, animations: c.animations, shown: map[*output.Output]bool{}}
+	c.nextWindow = st.NextWindow
+	c.adopting = &adoption{plan: make(map[planKey]windowPlan, len(st.Windows)), windows: st.Windows, wm: st.WM, cursor: st.Cursor, off: st.Off, animations: c.animations, shown: map[*output.Output]bool{}}
 	for _, p := range st.Windows {
 		c.adopting.plan[planKey{p.Client, p.Toplevel}] = p
 	}
@@ -138,8 +139,8 @@ func (c *Compositor) plannedWindow(t toplevel) (windowPlan, bool) {
 	if !ok {
 		return windowPlan{}, false
 	}
-	i, err := x.Surface().Client().Index()
-	if err != nil {
+	i := slices.Index(c.display.RestoredClients(), x.Surface().Client())
+	if i < 0 {
 		return windowPlan{}, false
 	}
 	p, ok := c.adopting.plan[planKey{i, x.ID()}]
@@ -158,6 +159,14 @@ func (c *Compositor) FinishAdoption() error {
 	s, err := wm.LoadState(a.wm)
 	if err != nil {
 		return err
+	}
+	restored := c.display.RestoredClients()
+	for _, p := range a.windows {
+		if restored[p.Client].Gone() && slices.Contains(s.Windows(), p.ID) {
+			if s, err = s.UnmapWindow(p.ID); err != nil {
+				return fmt.Errorf("compositor: leave out the window of a client that left: %w", err)
+			}
+		}
 	}
 	saved := s.Windows()
 	slices.Sort(mapped)
@@ -181,7 +190,11 @@ func (c *Compositor) FinishAdoption() error {
 			w.urgent, w.floated = p.Urgent, p.Floated
 		}
 	}
-	c.nextWindow = a.next
+	order := make(map[wm.WindowID]int, len(a.windows))
+	for i, p := range a.windows {
+		order[p.ID] = i
+	}
+	slices.SortFunc(c.windows, func(x, y *window) int { return order[x.id] - order[y.id] })
 	c.cursor = point{X: float64(a.cursor.X), Y: float64(a.cursor.Y)}
 	if err := c.update(s, nil); err != nil {
 		return err

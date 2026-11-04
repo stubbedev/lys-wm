@@ -20,6 +20,7 @@ import (
 	cel "github.com/stubbedev/lys-wm/internal/protocol/client/extforeigntoplevellist"
 	csl "github.com/stubbedev/lys-wm/internal/protocol/client/extsessionlock"
 	csc "github.com/stubbedev/lys-wm/internal/protocol/client/securitycontext"
+	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -611,6 +612,186 @@ func TestOnlyTheSwitchStartsAHolder(t *testing.T) {
 	}
 	if holds([]string{"--holder"}, inside) {
 		t.Error("the worker a holder started became a holder too")
+	}
+}
+
+func TestUpgradeKeepsWindowsWhoseObjectsAreNumberedOutOfOrder(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	c := testclient.Connect(t, s.waylandSocket())
+	spare := make([]*cw.WlRegion, 40)
+	for i := range spare {
+		region, err := c.Compositor.CreateRegion()
+		if err != nil {
+			t.Fatal(err)
+		}
+		spare[i] = region
+	}
+	first := c.WindowWith("first", testclient.Fill(0xff, 0, 0), func(w *testclient.Window) error {
+		w.Stop()
+		return nil
+	})
+	c.DispatchUntil("the first window's only frame", func() bool { return first.Frames > 0 })
+	for _, region := range spare {
+		if err := region.Destroy(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.Sync()
+	for {
+		probe, err := c.Compositor.CreateRegion()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if probe.Base().ID() < first.Surface.Base().ID() {
+			if err := probe.Destroy(); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	c.Sync()
+	second := c.Window("second", testclient.Fill(0, 0xff, 0))
+	c.DispatchUntil("the second window to map", second.Mapped)
+	if second.Surface.Base().ID() >= first.Surface.Base().ID() {
+		t.Fatalf("the later window's surface is %d, the first's %d; the test needs them out of order", second.Surface.Base().ID(), first.Surface.Base().ID())
+	}
+	before := stable(s.windows())
+	if _, err := s.upgrade(buildCopy(t, binary)); err != nil {
+		t.Fatalf("upgrade: %v\n%s", err, s.log())
+	}
+	after := stable(s.windows())
+	if len(after) != len(before) {
+		t.Fatalf("windows %+v, were %+v", after, before)
+	}
+	for i := range before {
+		if before[i].ID != after[i].ID || before[i].Title != after[i].Title || before[i].Rect != after[i].Rect {
+			t.Errorf("window %d is %+v, was %+v", i, after[i], before[i])
+		}
+	}
+	opened := c.Window("third", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("a new window to map", opened.Mapped)
+	for _, w := range s.windows() {
+		if w.Title == "third" && w.ID <= before[len(before)-1].ID {
+			t.Errorf("a new window took the used id %d", w.ID)
+		}
+	}
+}
+
+func TestUpgradeSurvivesAClientLeavingWhileTheNewBinaryStarts(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	stays := testclient.Connect(t, s.waylandSocket())
+	kept := stays.Window("stays", testclient.Fill(0xff, 0, 0))
+	stays.DispatchUntil("the kept window to map", kept.Mapped)
+	leaves := testclient.Connect(t, s.waylandSocket())
+	gone := leaves.Window("leaves", testclient.Fill(0, 0xff, 0))
+	leaves.DispatchUntil("the other window to map", gone.Mapped)
+	gate := t.TempDir()
+	next := buildCopy(t, binary)
+	wrapper := script(t, `case "$1" in --handover-info) exec `+next+` "$@";; esac
+touch `+gate+`/started
+while [ ! -e `+gate+`/go ]; do sleep 0.01; done
+exec `+next+` "$@"
+`)
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.upgrade(wrapper)
+		done <- err
+	}()
+	for {
+		if _, err := os.Stat(filepath.Join(gate, "started")); err == nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := leaves.Display.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gate, "go"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("upgrade: %v\n%s", err, s.log())
+	}
+	ws := s.windows()
+	if len(ws) != 1 || ws[0].Title != "stays" {
+		t.Fatalf("windows %+v\n%s", ws, s.log())
+	}
+	frames := kept.Frames
+	if err := kept.Redraw(); err != nil {
+		t.Fatal(err)
+	}
+	stays.DispatchUntil("a frame", func() bool { return kept.Frames > frames })
+}
+
+func TestANewBinaryFailingAfterItAdoptedLeavesTheSocketsInPlace(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	c := testclient.Connect(t, s.waylandSocket())
+	w := c.Window("kept", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("the window to map", w.Mapped)
+	next := buildCopy(t, binary)
+	wrapper := script(t, `case "$1" in --handover-info) exec `+next+` "$@";; esac
+XDG_RUNTIME_DIR= exec `+next+` "$@"
+`)
+	if _, err := s.upgrade(wrapper); err == nil || !strings.Contains(err.Error(), "keeps running") {
+		t.Fatalf("a binary that fails after adopting the display: %v\n%s", err, s.log())
+	}
+	later := testclient.Connect(t, s.waylandPath)
+	opened := later.Window("later", testclient.Fill(0, 0xff, 0))
+	later.DispatchUntil("a client that connects after the failure to map", opened.Mapped)
+	if ws := s.windows(); len(ws) != 2 {
+		t.Fatalf("windows %+v", ws)
+	}
+	if _, err := s.upgrade(next); err != nil {
+		t.Fatalf("an upgrade after the failure: %v\n%s", err, s.log())
+	}
+}
+
+func TestUpgradeUnderClientChurn(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	stays := testclient.Connect(t, s.waylandSocket())
+	kept := stays.Window("stays", testclient.Fill(0xff, 0, 0))
+	stays.DispatchUntil("the kept window to map", kept.Mapped)
+	for round := range 6 {
+		churn := make([]*testclient.Client, 6)
+		for i := range churn {
+			churn[i] = testclient.Connect(t, s.waylandSocket())
+			w := churn[i].Window("churn", testclient.Fill(0, 0xff, 0))
+			churn[i].DispatchUntil("a churn window to map", w.Mapped)
+		}
+		done := make(chan error, 1)
+		next := buildCopy(t, binary)
+		go func() {
+			_, err := s.upgrade(next)
+			done <- err
+		}()
+		for i, c := range churn {
+			if i%2 == 0 {
+				if err := c.Display.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			time.Sleep(time.Duration(round*i) * time.Millisecond)
+		}
+		if err := <-done; err != nil && !strings.Contains(err.Error(), "keeps running") {
+			t.Fatalf("round %d: %v\n%s", round, err, s.log())
+		}
+		frames := kept.Frames
+		if err := kept.Redraw(); err != nil {
+			t.Fatalf("round %d: %v\n%s", round, err, s.log())
+		}
+		stays.DispatchUntil("a frame", func() bool { return kept.Frames > frames })
+		for i, c := range churn {
+			if i%2 != 0 {
+				if err := c.Display.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		stays.Sync()
 	}
 }
 

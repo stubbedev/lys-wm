@@ -459,6 +459,15 @@ func openFrameTrace(path string, kind backendKind, renderer rendererKind, b back
 }
 
 func run(args []string) (err error) {
+	var incoming *adoption
+	committed := false
+	leave := func(release func() error) {
+		if incoming != nil && !committed {
+			fmt.Fprintln(os.Stderr, "lys-wm:", err)
+			os.Exit(1)
+		}
+		err = errors.Join(err, release())
+	}
 	flags := flag.NewFlagSet("lys-wm", flag.ContinueOnError)
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
@@ -493,7 +502,7 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, stopProfile()) }()
+	defer leave(func() error { return stopProfile() })
 	kind, err := chooseBackend(*requested, os.Getenv("WAYLAND_DISPLAY"))
 	if err != nil {
 		return err
@@ -516,7 +525,6 @@ func run(args []string) (err error) {
 			return err
 		}
 	}
-	var incoming *adoption
 	if *handoverFD >= 0 {
 		unix.CloseOnExec(*handoverFD)
 		if incoming, err = receiveHandover(*handoverFD); err != nil {
@@ -528,7 +536,7 @@ func run(args []string) (err error) {
 		return err
 	}
 	s.keymap = first.keymap
-	defer func() { err = errors.Join(err, s.keymap.Close()) }()
+	defer leave(func() error { return s.keymap.Close() })
 	if s.cursor, err = cursorConfig(withEnv(first.env, os.Getenv)); err != nil {
 		return err
 	}
@@ -544,7 +552,7 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, l.Close()) }()
+	defer leave(func() error { return l.Close() })
 	s.exit = func() error {
 		l.Stop()
 		return nil
@@ -572,12 +580,12 @@ func run(args []string) (err error) {
 		return err
 	}
 	cfg.Hooks.SwitchVT, cfg.Hooks.Lid, s.configureInput = b.switchVT, b.lid, b.configureInput
-	defer func() { err = errors.Join(err, b.Close()) }()
+	defer leave(func() error { return b.Close() })
 	frames, err := openFrameTrace(*framesPath, kind, renderer, b, cfg.Report)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, frames.Close()) }()
+	defer leave(func() error { return frames.Close() })
 	var display *server.Display
 	if incoming != nil {
 		display, err = server.Adopt(l, server.Options{Trace: trace, Report: cfg.Report}, incoming.state.Compositor.Display, incoming.fds)
@@ -590,11 +598,11 @@ func run(args []string) (err error) {
 	if hold != nil {
 		display.KeepHandoverJournal()
 	}
-	defer func() { err = errors.Join(err, display.Close()) }()
+	defer leave(func() error { return display.Close() })
 	if s.comp, err = compositor.New(l, display, b, cfg); err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, s.comp.Close()) }()
+	defer leave(func() error { return s.comp.Close() })
 	s.comp.TraceFrames(frames)
 	s.comp.ShowConfigProblems(compositor.ConfigProblems{Messages: errorLines(errors.Join(first.warnings...))})
 	if *swipes {
@@ -618,7 +626,7 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, srv.Close()) }()
+	defer leave(func() error { return srv.Close() })
 	s.comp.OnDispatch(srv.Dispatched)
 	s.comp.OnStateChange(srv.Changed)
 	if b.onPower != nil {
@@ -637,7 +645,7 @@ func run(args []string) (err error) {
 		if err != nil {
 			return fmt.Errorf("%w (or turn it off with xwayland.enabled: false)", err)
 		}
-		defer func() { err = errors.Join(err, xw.Close()) }()
+		defer leave(func() error { return xw.Close() })
 		xwRunning = xw
 		s.comp.WatchSelection(xw.SelectionChanged)
 		if first.zero {
@@ -657,7 +665,7 @@ func run(args []string) (err error) {
 		if startErr != nil {
 			cfg.Report(fmt.Errorf("start %s: %w", systemd.Target, startErr))
 		} else {
-			defer func() { err = errors.Join(err, sess.Close()) }()
+			defer leave(func() error { return sess.Close() })
 		}
 	}
 	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, holder: hold, opened: b}
@@ -669,7 +677,7 @@ func run(args []string) (err error) {
 			}
 		}
 	} else {
-		a := &adopted{a: incoming, loop: l, comp: s.comp, srv: srv, holder: hold, binary: os.Args[0], stop: func(cause error) {
+		a := &adopted{a: incoming, loop: l, comp: s.comp, srv: srv, holder: hold, binary: os.Args[0], committed: &committed, stop: func(cause error) {
 			fmt.Fprintln(os.Stderr, "lys-wm:", cause)
 			os.Exit(1)
 		}}

@@ -289,12 +289,14 @@ func (u *upgrader) spawn(binary string, conn *os.File, resume func(error)) {
 	t := &handover.FDs{}
 	st, err := u.state(conn, t)
 	if err != nil {
+		t.CloseOwned()
 		resume(errors.Join(fmt.Errorf("describe the session: %w", err), unix.Close(pair[0]), unix.Close(pair[1]), unix.Close(stderrPipe[1])))
 		return
 	}
 	pid, err := u.holder.Spawn(binary, u.args, pair[1], stderrPipe[1])
 	err = errors.Join(err, unix.Close(pair[1]), unix.Close(stderrPipe[1]))
 	if err != nil {
+		t.CloseOwned()
 		resume(errors.Join(fmt.Errorf("start %s: %w", binary, err), unix.Close(pair[0])))
 		return
 	}
@@ -432,15 +434,16 @@ func (a *adoption) file(i int, name string) (*os.File, error) {
 }
 
 type adopted struct {
-	a       *adoption
-	loop    *loop.Loop
-	comp    *compositor.Compositor
-	srv     *ipc.Server
-	holder  *session.Holder
-	release func() error
-	reply   *os.File
-	binary  string
-	stop    func(error)
+	a         *adoption
+	loop      *loop.Loop
+	comp      *compositor.Compositor
+	srv       *ipc.Server
+	holder    *session.Holder
+	release   func() error
+	reply     *os.File
+	binary    string
+	committed *bool
+	stop      func(error)
 }
 
 func (a *adopted) begin() error {
@@ -521,6 +524,7 @@ func (a *adopted) handshake() {
 }
 
 func (a *adopted) commit() error {
+	*a.committed = true
 	if err := a.release(); err != nil {
 		return fmt.Errorf("release the clients: %w", err)
 	}

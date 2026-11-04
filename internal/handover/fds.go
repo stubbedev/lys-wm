@@ -22,11 +22,17 @@ const (
 type FDs struct {
 	fds   []int
 	owned []int
+	err   error
 }
 
 func (t *FDs) AddOwned(fds []int) []int {
-	t.owned = append(t.owned, fds...)
-	return t.AddAll(fds)
+	out := make([]int, len(fds))
+	for i, fd := range fds {
+		t.owned = append(t.owned, fd)
+		t.fds = append(t.fds, fd)
+		out[i] = len(t.fds) - 1
+	}
+	return out
 }
 
 func (t *FDs) CloseOwned() {
@@ -37,7 +43,14 @@ func (t *FDs) CloseOwned() {
 }
 
 func (t *FDs) Add(fd int) int {
-	t.fds = append(t.fds, fd)
+	dup, err := unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)
+	if err != nil {
+		t.err = errors.Join(t.err, fmt.Errorf("handover: keep fd %d for the new process: %w", fd, err))
+		dup = fd
+	} else {
+		t.owned = append(t.owned, dup)
+	}
+	t.fds = append(t.fds, dup)
 	return len(t.fds) - 1
 }
 
@@ -87,6 +100,9 @@ func writeAll(fd int, data []byte, rights []int) error {
 }
 
 func Send(fd int, payload any, t *FDs) error {
+	if t != nil && t.err != nil {
+		return t.err
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("handover: encode the state: %w", err)
