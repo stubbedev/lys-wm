@@ -84,6 +84,7 @@ type fakeDevice struct {
 	noCTM             bool
 	deep              []fourcc.Format
 	refuseFrames      func(fb uint64) bool
+	refuseCursorAt    func(at image.Point) error
 	refuseAsync       bool
 	refusePowerOff    bool
 	refuseModesets    bool
@@ -381,6 +382,12 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	touchesCursor := slices.ContainsFunc(slices.Collect(maps.Keys(c.values)), func(k [2]uint32) bool { return k[0] == 43 })
 	if f.refuseCursor && touchesCursor && cursorFB != 0 || f.refuseGamma && c.values[[2]uint32{10, propGammaLUT}] != 0 || f.refuseAsync && flags&kdrm.AtomicPageFlipAsync != 0 || f.refusePowerOff && setsActive && active == 0 || f.refuseModesets && flags&kdrm.AtomicAllowModeset != 0 || f.refuseFrames != nil && f.refuseFrames(c.values[[2]uint32{40, propFB}]) {
 		return unix.EINVAL
+	}
+	if _, moves := c.values[[2]uint32{43, propCRTCX}]; moves && f.refuseCursorAt != nil {
+		_, at, _ := cursorAt(c)
+		if err := f.refuseCursorAt(at); err != nil {
+			return err
+		}
 	}
 	if flags&kdrm.AtomicTestOnly == 0 && f.failCommits != nil {
 		return f.failCommits
@@ -1062,10 +1069,10 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.until("the cursor's first commit", func() bool { return o.flipping })
-	if len(r.dev.commits) != 3 || r.dev.commits[0].flags != kdrm.AtomicTestOnly || r.dev.commits[2].flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent {
+	if len(r.dev.commits) != 2 || r.dev.commits[0].flags != kdrm.AtomicTestOnly || r.dev.commits[1].flags != kdrm.AtomicNonblock|kdrm.AtomicPageFlipEvent {
 		t.Fatalf("setting the cursor committed %+v", r.dev.commits)
 	}
-	shown := r.dev.commits[2]
+	shown := r.dev.commits[1]
 	if _, ok := shown.values[[2]uint32{40, propFB}]; ok {
 		t.Fatal("a cursor update touched the primary plane")
 	}
@@ -1081,15 +1088,15 @@ func TestCursorPlaneMovesWithoutFrames(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(r.dev.commits) != 3 {
+	if len(r.dev.commits) != 2 {
 		t.Fatal("the cursor moved while its last update was still flipping")
 	}
 	r.dev.flip(t, 10, 2)
-	r.until("the moved cursor's commit after the flip", func() bool { return len(r.dev.commits) >= 5 })
-	if len(r.dev.commits) != 5 || len(r.rec.presents) != 1 {
+	r.until("the moved cursor's commit after the flip", func() bool { return len(r.dev.commits) >= 3 })
+	if len(r.dev.commits) != 3 || len(r.rec.presents) != 1 {
 		t.Fatalf("%d commits and %d presents after the flip", len(r.dev.commits), len(r.rec.presents))
 	}
-	if _, at, _ := cursorAt(r.dev.commits[4]); at != image.Pt(116, 64) {
+	if _, at, _ := cursorAt(r.dev.commits[2]); at != image.Pt(116, 64) {
 		t.Fatalf("the cursor landed at %v", at)
 	}
 	r.dev.flip(t, 10, 3)

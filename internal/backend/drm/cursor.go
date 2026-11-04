@@ -191,6 +191,11 @@ func (c *cursor) settled() bool {
 	return c.o.kms == kmsFlip && c.wanted() == c.onPlane
 }
 
+func (c *cursor) clipped() bool {
+	at := c.wanted().at
+	return !image.Rectangle{Min: at, Max: at.Add(c.o.b.cursor)}.In(image.Rectangle{Max: modeOf(c.o.mode).Size})
+}
+
 func (c *cursor) add() {
 	o, p, want, was := c.o, c.plane, c.wanted(), c.onPlane
 	r := &o.b.req

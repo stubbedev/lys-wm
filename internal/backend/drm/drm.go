@@ -1078,7 +1078,7 @@ func (o *Output) Present(render.Region) error {
 	if err != nil {
 		return err
 	}
-	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
+	flags := planeFlags
 	if o.kms == kmsModeset {
 		flags |= kdrm.AtomicAllowModeset
 	}
@@ -1117,7 +1117,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 		return false, nil
 	}
 	s := &scanout{client: cf, fb: cf.fb, release: release}
-	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
+	flags := planeFlags
 	torn := tear && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync)
 	if torn {
 		flags |= kdrm.AtomicPageFlipAsync
@@ -1129,6 +1129,9 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	}
 	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
 		clear(o.tested)
+		if refused(err) {
+			return false, nil
+		}
 		return false, fmt.Errorf("drm: commit a client buffer on %s: %w", o.Name(), err)
 	}
 	cf.shown++
@@ -1154,7 +1157,7 @@ func (o *Output) tearable(fb uint32, flags uint32) bool {
 
 type planeKey struct {
 	primary, cursor uint32
-	cursorAt        image.Point
+	cursorClipped   bool
 	hotspot         image.Point
 	flags           uint32
 }
@@ -1164,7 +1167,7 @@ const testedPlaneStates = 16
 func (o *Output) planeKey(fb, flags uint32) planeKey {
 	k := planeKey{primary: fb, flags: flags}
 	if c := o.cursor; c != nil && c.visible {
-		k.cursor, k.cursorAt, k.hotspot = c.pending.fb, c.at, c.hotspot
+		k.cursor, k.cursorClipped, k.hotspot = c.pending.fb, c.clipped(), c.hotspot
 	}
 	return k
 }
@@ -1187,10 +1190,19 @@ func (o *Output) verify(fb, flags uint32) error {
 func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	o.frame(s, fence)
 	err := o.verify(s.fb, flags)
-	if c := o.cursor; err != nil && c != nil && c.visible {
+	cursorAtFault := err != nil
+	if err == nil {
+		err = o.commitFrame(flags)
+		cursorAtFault = refused(err) && o.cursor != nil && o.cursor.dirty
+	}
+	if c := o.cursor; cursorAtFault && c != nil && c.visible {
 		c.visible, c.dirty = false, true
 		o.frame(s, fence)
-		if o.test(flags) != nil {
+		retry := o.test(flags)
+		if retry == nil {
+			retry = o.commitFrame(flags)
+		}
+		if retry != nil {
 			c.visible = true
 			return err
 		}
@@ -1199,14 +1211,18 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	if err != nil {
 		return err
 	}
-	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
-		clear(o.tested)
-		return fmt.Errorf("drm: commit the frame for %s: %w", o.Name(), err)
-	}
 	if o.cursor != nil {
 		o.cursor.sent()
 	}
 	return o.colorSent()
+}
+
+func (o *Output) commitFrame(flags uint32) error {
+	if err := o.b.dev.Commit(&o.b.req, flags, uint64(o.crtc.id)); err != nil {
+		clear(o.tested)
+		return fmt.Errorf("drm: commit the frame for %s: %w", o.Name(), err)
+	}
+	return nil
 }
 
 func (o *Output) frame(s *scanout, fence int) {
@@ -1301,6 +1317,8 @@ func (o *Output) timeFrame(flip time.Duration) error {
 	return o.dropRenderFence()
 }
 
+const planeFlags = uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
+
 func (o *Output) planesDue() error {
 	o.planesWaiting = false
 	return o.flushPlanes()
@@ -1324,24 +1342,15 @@ func (o *Output) flushPlanes() error {
 			return o.planesLatch.Arm(wait)
 		}
 	}
-	r := &o.b.req
-	flags := uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
-	if cursor {
-		r.Reset()
-		c.add()
-		if err := o.test(flags); err != nil {
-			c.refused, c.visible, cursor = err, false, false
+	err := o.commitPlanes(cursor)
+	if cursor && err != nil && o.cursorRefused(err) {
+		c.refused, c.visible, cursor = fmt.Errorf("drm: the cursor plane of %s refuses the cursor at %v: %w", o.Name(), c.at, err), false, false
+		if !o.color.dirty() {
+			return nil
 		}
+		err = o.commitPlanes(false)
 	}
-	if !cursor && !o.color.dirty() {
-		return nil
-	}
-	r.Reset()
-	if cursor {
-		c.add()
-	}
-	o.addColor()
-	if err := o.b.dev.Commit(r, flags, uint64(o.crtc.id)); err != nil {
+	if err != nil {
 		return o.planesFailed(fmt.Errorf("drm: commit the cursor and colour of %s: %w", o.Name(), err))
 	}
 	o.planesFailing = false
@@ -1350,6 +1359,32 @@ func (o *Output) flushPlanes() error {
 		c.sent()
 	}
 	return o.colorSent()
+}
+
+func (o *Output) commitPlanes(cursor bool) error {
+	r := &o.b.req
+	r.Reset()
+	if cursor {
+		o.cursor.add()
+	}
+	o.addColor()
+	return o.b.dev.Commit(r, planeFlags, uint64(o.crtc.id))
+}
+
+func (o *Output) cursorRefused(err error) bool {
+	if !refused(err) {
+		return false
+	}
+	if !o.color.dirty() {
+		return true
+	}
+	o.b.req.Reset()
+	o.cursor.add()
+	return o.test(planeFlags) != nil
+}
+
+func refused(err error) bool {
+	return errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ERANGE)
 }
 
 func (o *Output) planesFailed(err error) error {
