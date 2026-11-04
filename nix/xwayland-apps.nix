@@ -43,6 +43,7 @@ in
     devices = ["virtio-gpu-pci"];
     outputs = ["Virtual-1"];
     lysWMConfig = ''
+      gaps: {inner: 0, outer: 0}
       outputs:
         - {match: Virtual-1, scale: 1.5}
       binds:
