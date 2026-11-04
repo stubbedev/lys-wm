@@ -27,10 +27,10 @@ replaces the module with. Upstream extension `Init` functions write the
 package-global event and error constructor maps while every connection's
 reader goroutine reads them (#120). The copy adds `xgb.RegisterExtension`,
 which writes them under a lock that the reader takes too, and routes every
-`Init` through it. `NewRequest` queues a request instead of waiting for the
-sender goroutine to write it, and a server that leaves a write or round trip
-unfinished for five seconds loses the connection, so a wedged Xwayland cannot
-hang the compositor thread (#260). Its licence, BSD-3-Clause, is kept verbatim in
+`Init` through it. `NewRequest` queues a request and never waits for the sender goroutine: past 4096
+queued requests the server has stopped reading and loses the connection, as does a
+server that leaves a write or round trip unfinished for five seconds, so a wedged
+Xwayland cannot hang the compositor thread (#260). Its licence, BSD-3-Clause, is kept verbatim in
 `third_party/xgb/LICENSE`.
 
 ## Ported code

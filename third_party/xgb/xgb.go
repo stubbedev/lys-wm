@@ -37,9 +37,10 @@ const (
 	// is not that expensive.
 	seqBuffer = 5
 
-	// reqBuffer represents the queue size of the number of requests that
-	// can be made until new ones block. This value seems OK.
-	reqBuffer = 100
+	// reqBuffer represents the queue size of the number of requests that can be
+	// made before the server has read them. A request never waits for room: past
+	// this bound the server has stopped reading and the connection is dropped.
+	reqBuffer = 4096
 
 	// eventBuffer represents the queue size of the number of events or errors
 	// that can be loaded off the wire and not grabbed with WaitForEvent
@@ -175,6 +176,8 @@ func (c *Conn) Close() {
 	select {
 	case c.reqChan <- nil:
 	case <-c.doneSend:
+	default:
+		_ = c.conn.Close()
 	}
 }
 
@@ -438,6 +441,9 @@ func (c *Conn) NewRequest(buf []byte, cookie *Cookie) {
 	case c.reqChan <- &request{buf: buf, cookie: cookie}:
 	case <-c.doneSend:
 		// c.sendRequests is down, nobody is listening to your requests
+	default:
+		Logger.Printf("%d requests queued behind a server that stopped reading; dropping the connection", reqBuffer)
+		_ = c.conn.Close()
 	}
 }
 

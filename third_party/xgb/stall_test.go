@@ -72,6 +72,20 @@ func TestARequestDoesNotWaitForAServerThatStoppedReading(t *testing.T) {
 	})
 }
 
+func TestRequestsPastTheQueueDropTheConnectionWithoutWaiting(t *testing.T) {
+	c := connectTo(t, time.Hour, wedged)
+	within(t, "more requests than the queue holds behind a wedged server", func() {
+		for range 2 * reqBuffer {
+			unchecked(c)
+		}
+		<-c.doneSend
+		<-c.doneRead
+	})
+	if ev, xerr := c.WaitForEvent(); ev != nil || xerr != nil {
+		t.Fatalf("a dropped connection delivered %v, %v", ev, xerr)
+	}
+}
+
 func TestAServerThatStopsReadingLosesTheConnection(t *testing.T) {
 	c := connectTo(t, time.Millisecond, wedged)
 	within(t, "requests to a wedged server", func() {
