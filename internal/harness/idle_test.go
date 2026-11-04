@@ -103,6 +103,9 @@ func TestVisibleInhibitorsHoldOffIdle(t *testing.T) {
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("video", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
+	h.Eventually("the window on screen", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return pixel(snapshot(b.Outputs()[0]), 10, 10) != [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	})
 	mgr, err := cii.NewZwpIdleInhibitManagerV1(c.Display, 1)
 	if err != nil {
 		t.Fatal(err)
