@@ -28,7 +28,6 @@ var (
 		LayersIn:        {Shape: layerInSpring, Style: &layerFade},
 		LayersOut:       {Shape: layerOutSpring, Style: &layerFade},
 		BorderAngle:     {Enabled: &off},
-		Overview:        {Shape: switchSpring},
 	}
 )
 

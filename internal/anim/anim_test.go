@@ -406,6 +406,18 @@ func TestReducedMotionHonoursAnEventTurnedOff(t *testing.T) {
 	}
 }
 
+func TestTheOverviewKeepsItsSpringWhenAConfigSetsTheGlobalCurve(t *testing.T) {
+	d := 250 * time.Millisecond
+	defaults := MustResolve(Over(nil, DefaultMotion()))
+	set := MustResolve(Over(map[Event]Setting{Global: {Shape: EaseOut, Duration: &d}}, DefaultMotion()))
+	if got, want := set.Curve(Overview).Duration(), defaults.Curve(Overview).Duration(); got != want {
+		t.Errorf("the overview lasts %v under a global curve, %v without one", got, want)
+	}
+	if got := defaults.Curve(Overview); got == Smooth {
+		t.Errorf("the default overview spring is the slow one: %v", got)
+	}
+}
+
 func TestTheOverviewIsOnASpringUnlessToldOtherwise(t *testing.T) {
 	d := 300 * time.Millisecond
 	table, errs := Resolve(true, map[Event]Setting{Global: {Shape: Linear, Duration: &d}})
