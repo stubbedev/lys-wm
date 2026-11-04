@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 )
@@ -17,6 +19,7 @@ type stepReport struct {
 	Continuous bool                 `json:"continuous"`
 	Summary    frametrace.Summary   `json:"summary"`
 	Runs       [][]frametrace.Frame `json:"runs"`
+	Motion     *overviewMotion      `json:"overview_motion,omitempty"`
 }
 
 type rssGrowth struct {
@@ -43,6 +46,7 @@ func repeatedGrowth(samples []int64) int64 {
 func buildReport(h frametrace.Header, rounds int, marks []mark, growth []rssGrowth, frames []frametrace.Frame) report {
 	r := report{Header: h, RealGPU: !h.Software, Rounds: rounds, Growth: growth}
 	index := map[string]int{}
+	acted := map[string][]time.Duration{}
 	for _, m := range marks {
 		if _, ok := index[m.step]; !ok {
 			index[m.step] = len(r.Steps)
@@ -50,9 +54,11 @@ func buildReport(h frametrace.Header, rounds int, marks []mark, growth []rssGrow
 		}
 		st := &r.Steps[index[m.step]]
 		st.Runs = append(st.Runs, framesIn(frames, m))
+		acted[m.step] = append(acted[m.step], m.from)
 	}
 	for i := range r.Steps {
 		r.Steps[i].Summary = frametrace.Summarize(r.Steps[i].Runs, r.Steps[i].Continuous)
+		r.Steps[i].Motion = motionOf(r.Steps[i].Runs, acted[r.Steps[i].Name])
 	}
 	return r
 }
@@ -94,6 +100,8 @@ func (r *report) write(out io.Writer) {
 	_ = w.Flush()
 	fmt.Fprintln(out)
 	r.writeCost(out)
+	fmt.Fprintln(out)
+	r.writeMotion(out)
 }
 
 func (r *report) writeCost(out io.Writer) {
@@ -130,4 +138,71 @@ func (r *report) save(path string) error {
 		return fmt.Errorf("write the report to %s: %w", path, err)
 	}
 	return nil
+}
+
+const overviewNearly = 0.05
+
+type overviewMotion struct {
+	Nearly  frametrace.Stat `json:"nearly"`
+	Settled frametrace.Stat `json:"settled"`
+}
+
+func overviewTarget(frames []frametrace.Frame) (float64, bool) {
+	if len(frames) == 0 {
+		return 0, false
+	}
+	from, to := frames[0].Cost.Overview, frames[len(frames)-1].Cost.Overview
+	target := math.Round(to)
+	return target, from != to && math.Abs(to-target) <= overviewNearly
+}
+
+func motionTimes(frames []frametrace.Frame, target float64, from time.Duration) (nearly, settled time.Duration) {
+	nearly, settled = -1, -1
+	for i := range frames {
+		f := &frames[i]
+		if f.Present == 0 {
+			continue
+		}
+		left := math.Abs(f.Cost.Overview - target)
+		if nearly < 0 && left <= overviewNearly {
+			nearly = f.Present - from
+		}
+		if left == 0 {
+			settled = f.Present - from
+			break
+		}
+	}
+	return nearly, settled
+}
+
+func motionOf(runs [][]frametrace.Frame, acted []time.Duration) *overviewMotion {
+	var nearly, settled []time.Duration
+	for i, run := range runs {
+		target, moved := overviewTarget(run)
+		if !moved {
+			continue
+		}
+		n, s := motionTimes(run, target, acted[i])
+		if n >= 0 {
+			nearly = append(nearly, n)
+		}
+		if s >= 0 {
+			settled = append(settled, s)
+		}
+	}
+	if len(nearly) == 0 {
+		return nil
+	}
+	return &overviewMotion{Nearly: frametrace.NewStat(nearly), Settled: frametrace.NewStat(settled)}
+}
+
+func (r *report) writeMotion(out io.Writer) {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "overview step\twithin 5%\tsettled")
+	for i := range r.Steps {
+		if m := r.Steps[i].Motion; m != nil {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", r.Steps[i].Name, spread(m.Nearly), spread(m.Settled))
+		}
+	}
+	_ = w.Flush()
 }

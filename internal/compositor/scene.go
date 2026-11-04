@@ -43,6 +43,7 @@ func (c *Compositor) frameCost(o *output.Output) frametrace.Cost {
 		Uploads:     now.Uploads - c.tracedCounts.Uploads,
 		Thumbs:      c.thumbRedraws - c.tracedThumbs,
 		DamageRects: uint64(max(len(sc.damage.Rects()), len(sc.repaint.Rects()))),
+		Overview:    c.OverviewProgress(c.frameTime),
 	}
 	c.tracedCounts, c.tracedThumbs = now, c.thumbRedraws
 	return cost

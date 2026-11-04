@@ -19,6 +19,12 @@ animation through a real client and the IPC socket, and reports per step:
 Times read p50 / p95 / p99 / worst, in milliseconds. `-json <file>` writes the
 same summaries with every frame.
 
+A last table gives each step that opens or closes the overview: from the action to
+the first frame on screen within 5% of where it is going, and to the first at rest,
+which a slow spring's tail may not reach before the step ends (`-`).
+The `frames` column cannot say this, since the clients in those steps keep drawing
+for the whole of the step. Like every time, it is reported and gates nothing.
+
 The steps cover opening and closing a window, moving one on a spring and
 interrupting that, switching workspaces, a three-finger swipe following the
 fingers and its release, the genie, and glass: over a client redrawing every

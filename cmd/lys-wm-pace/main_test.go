@@ -83,6 +83,34 @@ func TestStepsAreSummarizedPerRun(t *testing.T) {
 	}
 }
 
+func TestOverviewStepsReportHowLongTheMotionTakes(t *testing.T) {
+	frame := func(start time.Duration, p float64) frametrace.Frame {
+		return frametrace.Frame{Output: "A", Kind: frametrace.Composited, Start: start, Present: start + 10, Refresh: 10, Animating: true, Cost: frametrace.Cost{Overview: p}}
+	}
+	marks := []mark{{step: "open", from: 0, to: 100}, {step: "still", from: 100, to: 200}, {step: "close", from: 200, to: 300}}
+	r := buildReport(frametrace.Header{Device: "x"}, 1, marks, nil, []frametrace.Frame{
+		frame(10, 0.5), frame(20, 0.96), frame(30, 1), frame(40, 1),
+		frame(110, 1), frame(120, 1),
+		frame(210, 0.5), frame(220, 0.01), frame(230, 0), frame(240, 0),
+	})
+	for _, want := range []struct {
+		step            int
+		nearly, settled time.Duration
+	}{{0, 30, 40}, {2, 30, 40}} {
+		m := r.Steps[want.step].Motion
+		if m == nil || m.Nearly.P50 != want.nearly || m.Settled.P50 != want.settled {
+			t.Errorf("step %s: motion %+v, want within 5%% at %v and settled at %v", r.Steps[want.step].Name, m, want.nearly, want.settled)
+		}
+	}
+	if m := r.Steps[1].Motion; m != nil {
+		t.Errorf("an overview that did not move reports %+v", m)
+	}
+	tail := buildReport(frametrace.Header{Device: "x"}, 1, marks[:1], nil, []frametrace.Frame{frame(10, 0.5), frame(20, 0.96), frame(30, 0.999)})
+	if m := tail.Steps[0].Motion; m == nil || m.Nearly.P50 != 30 || m.Settled.Samples != 0 {
+		t.Errorf("a spring still in its tail when the step ends: %+v", m)
+	}
+}
+
 func buildCompositor(t *testing.T) string {
 	t.Helper()
 	testenv.Keymap(t)

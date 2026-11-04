@@ -60,14 +60,15 @@ type Frame struct {
 }
 
 type Cost struct {
-	Draws       uint64 `json:"draws"`
-	Passes      uint64 `json:"passes"`
-	Filters     uint64 `json:"filters"`
-	Uploads     uint64 `json:"uploads"`
-	Thumbs      uint64 `json:"thumbs"`
-	DamageRects uint64 `json:"damage_rects"`
-	Allocs      uint64 `json:"allocs"`
-	FileIO      uint64 `json:"file_io"`
+	Draws       uint64  `json:"draws"`
+	Passes      uint64  `json:"passes"`
+	Filters     uint64  `json:"filters"`
+	Uploads     uint64  `json:"uploads"`
+	Thumbs      uint64  `json:"thumbs"`
+	DamageRects uint64  `json:"damage_rects"`
+	Allocs      uint64  `json:"allocs"`
+	FileIO      uint64  `json:"file_io"`
+	Overview    float64 `json:"overview"`
 }
 
 type Sync interface {
