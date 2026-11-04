@@ -25,7 +25,7 @@ func testCommits(commits []commit) int {
 func (r *rig) shownCursor(o *Output, hotspot image.Point) *cursor {
 	r.t.Helper()
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, hotspot) })
-	r.until("the latch after the first cursor", func() bool { return o.latchWait() <= 0 })
+	r.until("the latch after the first cursor", func() bool { return o.planesWait() <= 0 })
 	return o.cursor
 }
 
@@ -44,7 +44,7 @@ func TestCursorMotionIssuesOneAtomicRequestPerRefresh(t *testing.T) {
 	const refreshes = 8
 	for i := range refreshes {
 		at := image.Pt(100+3*i, 50)
-		r.until("the latch", func() bool { return o.latchWait() <= 0 })
+		r.until("the latch", func() bool { return o.planesWait() <= 0 })
 		shown := r.cursorCommit("the move", o, func() error { return c.MoveCursor(at) })
 		if _, got, _ := cursorAt(shown); got != at.Sub(image.Pt(4, 6)) {
 			t.Fatalf("the move to %v put the plane at %v", at, got)

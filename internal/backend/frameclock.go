@@ -80,17 +80,20 @@ type RenderBudget struct {
 	deferred bool
 }
 
-func (b *RenderBudget) Deadline(last, now, interval time.Duration) time.Duration {
+func (b *RenderBudget) Latch(last, now, interval time.Duration) time.Duration {
 	if last == 0 || last > now {
 		return now
 	}
 	next, _ := NextVblank(last, now, interval)
-	budget := b.Budget(interval)
+	return next - b.Budget(interval)
+}
 
-	deadline := next - budget
-	if now < deadline {
+func (b *RenderBudget) Deadline(last, now, interval time.Duration) time.Duration {
+	deadline := b.Latch(last, now, interval)
+	if now < deadline || last == 0 || last > now {
 		return deadline
 	}
+	next, _ := NextVblank(last, now, interval)
 	if !b.deferred && next-now < b.leastToStart() {
 		b.deferred = true
 		return deadline + interval

@@ -207,6 +207,21 @@ func TestWhatIsTooLateToStartFollowsTheTypicalRender(t *testing.T) {
 	}
 }
 
+func TestALatchNeverDefersAndLeavesAFramesDeferralAlone(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	if got := b.Latch(100*ms, 115*ms, 16*ms); got != 108*ms {
+		t.Fatalf("1 ms before the vblank the latch is %v, want the one already past", got)
+	}
+	if got := b.Deadline(100*ms, 115*ms, 16*ms); got != 124*ms {
+		t.Fatalf("after a latch a frame's deadline is %v, want the next refresh's", got)
+	}
+	b.Latch(100*ms, 115*ms, 16*ms)
+	if got := b.Deadline(100*ms, 131*ms, 16*ms); got > 131*ms {
+		t.Fatalf("a latch between them made the deferred frame wait again, until %v", got)
+	}
+}
+
 func TestTheLatchDeadlineDoesNotAllocate(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget

@@ -1026,7 +1026,7 @@ func TestPowerAndWake(t *testing.T) {
 func (r *rig) lit() *Output {
 	r.t.Helper()
 	o := r.flipFirstFrame()
-	r.until("the first flip's latch", func() bool { return o.latchWait() <= 0 })
+	r.until("the first flip's latch", func() bool { return o.planesWait() <= 0 })
 	return o
 }
 
@@ -2178,6 +2178,26 @@ func cursorProps(c commit) []uint32 {
 func sortedProps(props ...uint32) []uint32 {
 	slices.Sort(props)
 	return props
+}
+
+func TestACursorMoveJustBeforeTheVblankStillCommits(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	interval := modeOf(o.mode).Interval()
+	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
+	o.lastFlip = o.b.now() - interval + time.Millisecond
+	if o.planesWait() > 0 {
+		t.Fatalf("1 ms before the vblank a cursor commit would wait %v", o.planesWait())
+	}
+	cp, _ := o.CursorPlane()
+	n := len(r.dev.commits)
+	if err := cp.MoveCursor(image.Pt(20, 30)); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the move", func() bool { return len(r.dev.commits) > n })
+	if o.frameWait() <= 0 {
+		t.Fatal("the cursor's commit took the deferral of the frame after it")
+	}
 }
 
 func TestACursorCommitCarriesOnlyWhatChanged(t *testing.T) {

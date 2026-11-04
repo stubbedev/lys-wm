@@ -574,7 +574,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 	}
 	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1, tested: map[planeKey]struct{}{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
-		Wait: o.latchWait,
+		Wait: o.frameWait,
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
 	o.colorErr = errNoEDID
@@ -1279,13 +1279,17 @@ func (o *Output) test(flags uint32) error {
 }
 
 func (o *Output) latchDeadline(now time.Duration) time.Duration {
-	interval := modeOf(o.mode).Interval()
-	return o.budget.Deadline(o.lastFlip, now, interval)
+	return o.budget.Latch(o.lastFlip, now, modeOf(o.mode).Interval())
 }
 
-func (o *Output) latchWait() time.Duration {
+func (o *Output) planesWait() time.Duration {
 	now := o.b.now()
 	return o.latchDeadline(now) - now
+}
+
+func (o *Output) frameWait() time.Duration {
+	now := o.b.now()
+	return o.budget.Deadline(o.lastFlip, now, modeOf(o.mode).Interval()) - now
 }
 
 func (o *Output) dropRenderFence() error {
@@ -1334,7 +1338,7 @@ func (o *Output) flushPlanes() error {
 		return nil
 	}
 	if !o.color.dirty() {
-		if wait := o.latchWait(); wait > 0 {
+		if wait := o.planesWait(); wait > 0 {
 			if o.planesWaiting {
 				return nil
 			}
