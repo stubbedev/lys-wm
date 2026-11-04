@@ -1,7 +1,9 @@
 package compositor
 
 import (
+	"bytes"
 	"image"
+	"math/rand/v2"
 	"slices"
 	"testing"
 
@@ -9,6 +11,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/soft"
+	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
 func (sc *scene) frameWith(ops ...drawOp) {
@@ -205,5 +209,145 @@ func TestManyDamageRectsStayAtTheCapWithoutCollapsing(t *testing.T) {
 		if d := sc.diff(bounds); len(d.Rects()) != tc.rects || d.Area() != tc.area {
 			t.Fatalf("%d boxes damaged %d rects of area %d, want %d of %d", tc.n, len(d.Rects()), d.Area(), tc.rects, tc.area)
 		}
+	}
+}
+
+func diffOf(prev, cur []drawOp, bounds image.Rectangle) *region.Set {
+	sc := newScene()
+	sc.prev.ops, sc.cur.ops = prev, cur
+	sc.prev.cursorFrom, sc.cur.cursorFrom = len(prev), len(cur)
+	sc.drawn = true
+	return sc.diff(bounds)
+}
+
+func TestAnInsertedOpDamagesOnlyItself(t *testing.T) {
+	bounds := image.Rect(0, 0, 3840, 2160)
+	prev := []drawOp{{fill: true, color: render.Color{A: 255}, dst: bounds, opaque: true}}
+	for i := range 8 {
+		x := 60 + i*460
+		prev = append(prev, drawOp{surface: &surface.Surface{}, size: image.Pt(400, 1800), dst: image.Rect(x, 100, x+400, 1900), alpha: 1})
+	}
+	box := image.Rect(70, 110, 170, 150)
+	cur := slices.Insert(slices.Clone(prev), 2, drawOp{fill: true, color: render.Color{R: 10, A: 255}, dst: box, opaque: true})
+	d := diffOf(prev, cur, bounds)
+	if got, want := d.Area(), box.Dx()*box.Dy(); got > 2*want {
+		t.Fatalf("inserting a %v op damaged %d px in %d rects, want at most %d", box, got, len(d.Rects()), 2*want)
+	}
+}
+
+func draggedFloat(windows []*surface.Surface, bounds, at image.Rectangle) []drawOp {
+	w := bounds.Dx() / len(windows)
+	ops := []drawOp{{fill: true, color: render.Color{A: 255}, dst: bounds, opaque: true}}
+	for i, s := range windows {
+		ops = append(ops, drawOp{
+			surface: s, size: image.Pt(w, bounds.Dy()), src: render.FRect{W: float64(w), H: float64(bounds.Dy())},
+			dst: image.Rect(i*w, 0, (i+1)*w, bounds.Dy()), alpha: 1, opaque: true, transform: render.Normal,
+		})
+	}
+	ops = append(ops, drawOp{fill: true, color: render.Color{R: 9, A: 255}, dst: at, opaque: true})
+	f := frame{ops: ops, cursorFrom: len(ops)}
+	f.clip()
+	return slices.Clone(f.ops)
+}
+
+func TestADraggedFloatDamagesWhatItCrossedWhateverTheOpsUnderItDo(t *testing.T) {
+	bounds := image.Rect(0, 0, 1920, 1080)
+	windows := []*surface.Surface{{}, {}, {}, {}}
+	base := image.Rect(0, 200, 300, 900)
+	crossed := 0
+	for x := 0; x < 1600; x += 2 {
+		a, b := base.Add(image.Pt(x, 0)), base.Add(image.Pt(x+2, 0))
+		prev, cur := draggedFloat(windows, bounds, a), draggedFloat(windows, bounds, b)
+		if len(prev) != len(cur) {
+			crossed++
+		}
+		var truth region.Set
+		truth.Add(a)
+		truth.Add(b)
+		d := diffOf(prev, cur, bounds)
+		if d.Area() > 2*truth.Area() {
+			t.Fatalf("x=%d: ops %d->%d damaged %d px in %d rects, true %d", x, len(prev), len(cur), d.Area(), len(d.Rects()), truth.Area())
+		}
+	}
+	if crossed == 0 {
+		t.Fatal("the drag never crossed the point where a window stops being worth splitting")
+	}
+}
+
+func TestPartialRepaintsOfSplitOpsMatchAFullRepaint(t *testing.T) {
+	bounds := image.Rect(0, 0, 640, 480)
+	r := soft.New()
+	for seed := range uint64(12) {
+		rng := rand.New(rand.NewPCG(seed, 2))
+		sc := newScene()
+		size := bounds.Size()
+		pixels := func() render.Texture {
+			pix := make([]byte, size.X*size.Y*4)
+			for i := range pix {
+				pix[i] = byte(i*7 + i>>11)
+				if i%4 == 3 {
+					pix[i] = 0xff
+				}
+			}
+			tex, err := r.NewTexture(render.XRGB8888, size, size.X*4, pix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return tex
+		}
+		under := &surface.Surface{}
+		tex := pixels()
+		target := soft.NewBuffer(size.X, size.Y)
+		at := image.Rect(100, 100, 400, 350)
+		for step := range 40 {
+			at = at.Add(image.Pt(rng.IntN(120)-60, rng.IntN(120)-60))
+			f := sc.begin()
+			f.FillRect(bounds, Background)
+			f.ops = append(f.ops, drawOp{
+				tex: tex, surface: under, size: size, src: render.FRect{W: float64(size.X), H: float64(size.Y)},
+				dst: bounds, alpha: 1, opaque: true, transform: render.Normal,
+			})
+			f.FillRect(at, render.Color{R: byte(step), G: 40, B: 90, A: 0xff})
+			f.cursorFrom = len(f.ops)
+			full := slices.Clone(f.ops)
+			want := soft.NewBuffer(size.X, size.Y)
+			p, err := r.Begin(want, render.Region{bounds})
+			if err != nil {
+				t.Fatal(err)
+			}
+			(&frame{ops: full}).replay(p, colorOut{})
+			if err := p.End(); err != nil {
+				t.Fatal(err)
+			}
+			sc.cur.clip()
+			if !sc.diff(bounds).Empty() {
+				p, err := r.Begin(target, render.Region(sc.repaintFor(backend.Frame{Age: 1}, bounds).Rects()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				sc.cur.replay(p, colorOut{})
+				if err := p.End(); err != nil {
+					t.Fatal(err)
+				}
+				sc.presented()
+			}
+			if !bytes.Equal(target.Pix, want.Pix) {
+				t.Fatalf("seed %d step %d: the screen differs from a full repaint", seed, step)
+			}
+		}
+	}
+}
+
+func TestADiffOfAnInsertAllocatesNothingOnceWarm(t *testing.T) {
+	bounds := image.Rect(0, 0, 1920, 1080)
+	windows := []*surface.Surface{{}, {}, {}, {}}
+	a := draggedFloat(windows, bounds, image.Rect(100, 100, 500, 500))
+	b := draggedFloat(windows, bounds, image.Rect(104, 100, 504, 500))
+	sc := newScene()
+	sc.prev.ops, sc.cur.ops = a, b
+	sc.drawn = true
+	sc.diff(bounds)
+	if allocs := testing.AllocsPerRun(100, func() { sc.diff(bounds) }); allocs != 0 {
+		t.Fatalf("%v allocations per diff", allocs)
 	}
 }
