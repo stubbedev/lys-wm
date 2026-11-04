@@ -25,6 +25,14 @@ func (g Region) Rects() []image.Rectangle {
 	return slices.Clone(g.rects)
 }
 
+func (g Region) Len() int {
+	return len(g.rects)
+}
+
+func (g Region) At(i int) image.Rectangle {
+	return g.rects[i]
+}
+
 func (g Region) Bounds() image.Rectangle {
 	return bounds(g.rects)
 }

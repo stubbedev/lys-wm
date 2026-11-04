@@ -111,15 +111,40 @@ func (op drawOp) covers() bool {
 }
 
 func (op drawOp) solid(add func(image.Rectangle)) {
-	switch {
-	case op.covers():
-		add(op.dst)
-	case op.opaque && op.mask.Cut.Rect.Empty() && !op.mask.Keep.Rect.Empty():
-		k := op.mask.Keep
-		r := int(math.Ceil(float64(k.Radius)))
-		add(image.Rect(k.Rect.Min.X+r, k.Rect.Min.Y, k.Rect.Max.X-r, k.Rect.Max.Y).Intersect(op.dst))
-		add(image.Rect(k.Rect.Min.X, k.Rect.Min.Y+r, k.Rect.Max.X, k.Rect.Max.Y-r).Intersect(op.dst))
+	if op.opaque {
+		op.addUnmasked(op.dst, add)
+		return
 	}
+	if op.surface == nil || op.alpha != 1 || op.size.X <= 0 || op.size.Y <= 0 {
+		return
+	}
+	g := op.surface.Opaque()
+	if g.Empty() {
+		return
+	}
+	whole := op.mapped()
+	w, h := whole.Dx(), whole.Dy()
+	for i := range g.Len() {
+		r := g.At(i)
+		op.addUnmasked(image.Rect(
+			whole.Min.X+(r.Min.X*w+op.size.X-1)/op.size.X, whole.Min.Y+(r.Min.Y*h+op.size.Y-1)/op.size.Y,
+			whole.Min.X+r.Max.X*w/op.size.X, whole.Min.Y+r.Max.Y*h/op.size.Y,
+		).Intersect(op.dst), add)
+	}
+}
+
+func (op drawOp) addUnmasked(r image.Rectangle, add func(image.Rectangle)) {
+	if op.mask == (render.Mask{}) {
+		add(r)
+		return
+	}
+	if !op.mask.Cut.Rect.Empty() || op.mask.Keep.Rect.Empty() {
+		return
+	}
+	k := op.mask.Keep
+	radius := int(math.Ceil(float64(k.Radius)))
+	add(image.Rect(k.Rect.Min.X+radius, k.Rect.Min.Y, k.Rect.Max.X-radius, k.Rect.Max.Y).Intersect(r))
+	add(image.Rect(k.Rect.Min.X, k.Rect.Min.Y+radius, k.Rect.Max.X, k.Rect.Max.Y-radius).Intersect(r))
 }
 
 func mapGradient(g render.Gradient, at func([2]float32) [2]float32) render.Gradient {

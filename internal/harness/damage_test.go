@@ -261,3 +261,44 @@ func TestUndamagedFrameCallbacksArePacedByRefresh(t *testing.T) {
 		t.Fatalf("%d frame callbacks in %v without damage, want at most %d at %d mHz", callbacks, span, limit, small.RefreshMHz)
 	}
 }
+
+func TestAPartlyOpaqueLayerHidesWhatItsOpaqueRegionCovers(t *testing.T) {
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.WM = compositor.DefaultSettings()
+	}, backend.Mode{Size: image.Pt(800, 600), RefreshMHz: 60000, Preferred: true})
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("under", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	w.Stop()
+	layer := c.Layer(testclient.LayerSpec{
+		Layer:  cwlr.ZwlrLayerShellV1LayerOverlay,
+		Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorBottom | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight,
+		Size:   image.Pt(800, 600),
+	}, testclient.Fill(0x10, 0x20, 0x30))
+	layer.Translucent = true
+	c.DispatchUntil("the layer to map", layer.Mapped)
+	layer.Stop()
+	settle(t, h)
+	cost := func() (draws, pixels int) {
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+			draws, pixels = comp.FrameCost(comp.Outputs()[0])
+			return nil
+		})
+		return draws, pixels
+	}
+	beforeDraws, beforePixels := cost()
+	region, err := c.Compositor.CreateRegion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(region.Add(0, 1, 800, 599), layer.Surface.SetOpaqueRegion(region), region.Destroy(), layer.Redraw()); err != nil {
+		t.Fatal(err)
+	}
+	c.Sync()
+	settle(t, h)
+	draws, pixels := cost()
+	t.Logf("draws %d -> %d, pixels %d -> %d", beforeDraws, draws, beforePixels, pixels)
+	if layerPixels := 800 * 600; pixels > layerPixels+3*800 {
+		t.Fatalf("the frame draws %d px with all but one row of the layer opaque, want at most the layer's %d and a row of each op below", pixels, layerPixels)
+	}
+}

@@ -351,3 +351,24 @@ func TestADiffOfAnInsertAllocatesNothingOnceWarm(t *testing.T) {
 		t.Fatalf("%v allocations per diff", allocs)
 	}
 }
+
+func TestACommitHiddenByAnOpaqueOpDamagesNothing(t *testing.T) {
+	bounds := image.Rect(0, 0, 1920, 1080)
+	s := &surface.Surface{}
+	f := frame{ops: []drawOp{
+		{surface: s, size: bounds.Size(), dst: bounds, alpha: 1, transform: render.Normal},
+		{fill: true, color: render.Color{A: 255}, dst: image.Rect(200, 200, 700, 600), opaque: true},
+	}, cursorFrom: 2}
+	f.clip()
+	sc := newScene()
+	sc.prev.ops, sc.cur.ops = slices.Clone(f.ops), slices.Clone(f.ops)
+	sc.drawn = true
+	sc.damaged(s, []image.Rectangle{image.Rect(300, 300, 400, 400)})
+	if d := sc.diff(bounds); !d.Empty() {
+		t.Fatalf("a commit under an opaque op damaged %v", d.Rects())
+	}
+	sc.damaged(s, []image.Rectangle{image.Rect(100, 300, 400, 400)})
+	if d := sc.diff(bounds); d.Area() != 100*100 {
+		t.Fatalf("a commit half under an opaque op damaged %v, want only the 100x100 outside it", d.Rects())
+	}
+}
