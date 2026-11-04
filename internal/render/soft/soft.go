@@ -136,6 +136,13 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	return t, nil
 }
 
+func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (render.Texture, error) {
+	if !slices.Contains(r.Formats(), format) {
+		return nil, fmt.Errorf("soft: unsupported texture format %d", format)
+	}
+	return &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format}, nil
+}
+
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("soft: cannot make a %v target", size)

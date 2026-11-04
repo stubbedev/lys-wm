@@ -359,11 +359,30 @@ type texture struct {
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
 	r.counts.Uploads++
-	if !slices.Contains(r.Formats(), format) {
-		return nil, fmt.Errorf("gles: unsupported texture format %d", format)
-	}
 	if err := render.CheckPixels(size, stride, len(data)); err != nil {
 		return nil, err
+	}
+	blank, err := r.newBlank(format, size)
+	if err != nil {
+		return nil, err
+	}
+	t, ok := blank.(*texture)
+	if !ok {
+		return nil, fmt.Errorf("gles: a new texture is a %T", blank)
+	}
+	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
+		return nil, errors.Join(err, t.Destroy())
+	}
+	return t, nil
+}
+
+func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (render.Texture, error) {
+	return r.newBlank(format, size)
+}
+
+func (r *Renderer) newBlank(format render.Format, size image.Point) (render.Texture, error) {
+	if !slices.Contains(r.Formats(), format) {
+		return nil, fmt.Errorf("gles: unsupported texture format %d", format)
 	}
 	if err := r.enter(); err != nil {
 		return nil, err
@@ -382,16 +401,6 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := r.leave("gles: new texture"); err != nil {
 		return nil, errors.Join(err, t.Destroy())
 	}
-	uploaded := false
-	defer func() {
-		if !uploaded {
-			_ = t.Destroy()
-		}
-	}()
-	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
-		return nil, err
-	}
-	uploaded = true
 	return t, nil
 }
 

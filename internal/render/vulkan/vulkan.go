@@ -139,6 +139,18 @@ func (t *texture) Destroy() error {
 	return nil
 }
 
+func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (render.Texture, error) {
+	f, err := fourccOf(format)
+	if err != nil {
+		return nil, err
+	}
+	t, err := r.d.NewTexture(f, size.X, size.Y)
+	if err != nil {
+		return nil, err
+	}
+	return &texture{r: r, t: t}, nil
+}
+
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
 	r.counts.Uploads++
 	f, err := fourccOf(format)

@@ -50,6 +50,16 @@ func (r *spyRenderer) NewTexture(f render.Format, size image.Point, stride int, 
 	return spy, nil
 }
 
+func (r *spyRenderer) NewBlankTexture(f render.Format, size image.Point) (render.Texture, error) {
+	tex, err := r.Renderer.NewBlankTexture(f, size)
+	if err != nil {
+		return nil, err
+	}
+	spy := &spyTexture{Texture: tex}
+	r.textures = append(r.textures, spy)
+	return spy, nil
+}
+
 type fakeBackend struct{ r *spyRenderer }
 
 func (b fakeBackend) Start(backend.Handler) error { return nil }
@@ -249,7 +259,7 @@ func TestCommitUploadsDamageOnceAndReleases(t *testing.T) {
 	must(t, s.Attach(big, 0, 0), s.Commit())
 	r.roundtrip()
 	r.on(func() {
-		if len(r.renderer.textures) != 2 || !r.renderer.textures[0].destroyed || r.renderer.textures[1].Size() != image.Pt(4, 8) {
+		if len(r.renderer.textures) != 2 || !r.renderer.textures[0].destroyed || r.renderer.textures[1].Size() != image.Pt(textureRoundUp, textureRoundUp) {
 			t.Error("a new buffer size did not replace the texture")
 		}
 	})
@@ -296,4 +306,35 @@ func TestAFailedStartReturnsItsError(t *testing.T) {
 	if c != nil || err == nil || !strings.Contains(err.Error(), "no render node") {
 		t.Fatalf("New = %v, %v; want the render node error", c, err)
 	}
+}
+
+func TestAResizeWithinATexturesRoomMakesNoNewTexture(t *testing.T) {
+	r := setup(t)
+	mem, pool := r.pool(256 * 256 * 4)
+	_ = mem
+	rel := &releases{}
+	s, err := r.wlComp.CreateSurface(struct{ cw.WlSurfaceHandler }{})
+	must(t, err)
+	commit := func(w, h int32) {
+		t.Helper()
+		b, err := pool.CreateBuffer(rel, 0, w, h, 256*4, cw.WlShmFormatXrgb8888)
+		must(t, err)
+		must(t, s.Attach(b, 0, 0), s.DamageBuffer(0, 0, w, h), s.Commit())
+		r.roundtrip()
+	}
+	commit(60, 60)
+	commit(70, 70)
+	made := 0
+	r.on(func() { made = len(r.renderer.textures) })
+	for step := range int32(40) {
+		commit(70+step, 72+step)
+	}
+	r.on(func() {
+		if got := len(r.renderer.textures); got != made {
+			t.Errorf("40 resize steps made %d textures", got-made)
+		}
+		if got := r.renderer.textures[made-1].Size(); got != image.Pt(textureRoundUp, textureRoundUp) {
+			t.Errorf("the roomy texture is %v", got)
+		}
+	})
 }

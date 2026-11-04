@@ -26,6 +26,7 @@ type texture interface {
 type uploaded struct {
 	tex    render.Texture
 	format render.Format
+	size   image.Point
 }
 
 type importedTexture struct {
@@ -185,19 +186,33 @@ func (c *Compositor) attach(s *surface.Surface) error {
 		if err := c.dropTexture(s); err != nil {
 			return errors.Join(err, tex.Destroy())
 		}
-		c.textures[s] = uploaded{tex, render.ARGB8888}
+		c.textures[s] = uploaded{tex, render.ARGB8888, b.Size()}
 		return b.Release()
 	default:
 		return fmt.Errorf("compositor: no upload path for buffers of type %T", b)
 	}
 }
 
+const (
+	textureRoundUp    = 128
+	textureMostUnused = 4
+)
+
+func textureHolds(tex, size image.Point) bool {
+	return size.In(image.Rectangle{Max: tex.Add(image.Pt(1, 1))}) && tex.X*tex.Y <= textureMostUnused*size.X*size.Y
+}
+
+func roomyTextureSize(size image.Point) image.Point {
+	return image.Pt((size.X+textureRoundUp-1)/textureRoundUp*textureRoundUp, (size.Y+textureRoundUp-1)/textureRoundUp*textureRoundUp)
+}
+
 func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 	full := image.Rectangle{Max: b.Size()}
 	t, ok := c.textures[s].(uploaded)
-	update := ok && t.format == b.Format() && t.tex.Size() == b.Size()
+	reusable := ok && t.format == b.Format() && textureHolds(t.tex.Size(), b.Size())
+	damageOnly := reusable && t.size == b.Size()
 	c.uploadRects = append(c.uploadRects[:0], full)
-	if update {
+	if damageOnly {
 		c.uploadRects = c.uploadRects[:0]
 		for _, r := range s.BufferDamage() {
 			if r = r.Intersect(full); !r.Empty() {
@@ -209,24 +224,56 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 		if seat.IsCursorSurface(s) {
 			c.keepCursorPixels(s, b.Format(), b.Size(), data, stride)
 		}
-		if update {
-			for _, r := range c.uploadRects {
-				if err := t.tex.Update(r, stride, data[r.Min.Y*stride+r.Min.X*4:]); err != nil {
-					return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
-				}
-			}
-			return nil
+		if reusable {
+			t.size = b.Size()
+			c.textures[s] = t
+			return c.updateTexture(t, s, data, stride)
 		}
-		tex, err := c.renderer.NewTexture(b.Format(), b.Size(), stride, data)
+		var tex render.Texture
+		var err error
+		if ok {
+			if tex, err = c.renderer.NewBlankTexture(b.Format(), roomyTextureSize(b.Size())); err == nil {
+				err = updateRects(tex, b.Size(), c.uploadRects, data, stride)
+			}
+		} else {
+			tex, err = c.renderer.NewTexture(b.Format(), b.Size(), stride, data)
+		}
 		if err != nil {
 			return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
 		}
 		if err := c.dropTexture(s); err != nil {
 			return errors.Join(err, tex.Destroy())
 		}
-		c.textures[s] = uploaded{tex, b.Format()}
+		c.textures[s] = uploaded{tex, b.Format(), b.Size()}
 		return nil
 	})
+}
+
+func (c *Compositor) updateTexture(t uploaded, s *surface.Surface, data []byte, stride int) error {
+	if err := updateRects(t.tex, t.size, c.uploadRects, data, stride); err != nil {
+		return fmt.Errorf("compositor: upload wl_surface@%d: %w", s.Resource().Base().ID(), err)
+	}
+	return nil
+}
+
+func updateRects(tex render.Texture, size image.Point, rects []image.Rectangle, data []byte, stride int) error {
+	room := tex.Size()
+	for _, r := range rects {
+		if err := tex.Update(r, stride, data[r.Min.Y*stride+r.Min.X*4:]); err != nil {
+			return err
+		}
+		if r.Max.X == size.X && room.X > size.X {
+			if err := tex.Update(image.Rect(size.X, r.Min.Y, size.X+1, r.Max.Y), stride, data[r.Min.Y*stride+(size.X-1)*4:]); err != nil {
+				return err
+			}
+		}
+		if r.Max.Y == size.Y && room.Y > size.Y {
+			if err := tex.Update(image.Rect(r.Min.X, size.Y, r.Max.X, size.Y+1), stride, data[(size.Y-1)*stride+r.Min.X*4:]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, size image.Point, data []byte, stride int) {

@@ -356,6 +356,7 @@ type Renderer interface {
 	Counts() Counts
 	Formats() []Format
 	NewTexture(format Format, size image.Point, stride int, data []byte) (Texture, error)
+	NewBlankTexture(format Format, size image.Point) (Texture, error)
 	NewTarget(size image.Point) (ReadTarget, error)
 	NewTextureTarget(size image.Point) (TextureTarget, error)
 	NewScreenShader(p *shader.Program) (ScreenShader, error)
