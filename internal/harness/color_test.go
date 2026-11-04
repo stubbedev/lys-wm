@@ -603,6 +603,14 @@ func TestScreencopyOfAnHDROutputIsSDR(t *testing.T) {
 		level := pqByte(1000)
 		hdr := c.WindowWith("hdr", testclient.Fill(level, level, level), tagWith(m, hdr10Description(t, c, m, 1000)))
 		c.DispatchUntil("the HDR window to map", hdr.Mapped)
+		var sdrThere [3]byte
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			sdrThere = pixel(snapshot(b.Outputs()[0]), 120, 50)
+			return nil
+		})
+		h.Eventually("the HDR window in the layout, past the hold for its neighbour", func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return pixel(snapshot(b.Outputs()[0]), 120, 50) != sdrThere
+		})
 		settle(t, h)
 		g, _, pix := screenshot(t, c, mgr, image.Rectangle{}, false)
 		c.DispatchUntil("the second capture", func() bool { return g.ready || g.failed })
