@@ -38,9 +38,7 @@ type window struct {
 	appeared     bool
 	look         focusLook
 	looked       bool
-	borderFrom   Border
-	borderTo     Border
-	borderFade   anim.Tween[float64]
+	border       Border
 	borderAngle  anim.Tween[float64]
 	snapshot     render.TextureTarget
 	frost        *frost

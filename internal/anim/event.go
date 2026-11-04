@@ -29,7 +29,6 @@ const (
 	FadeSwitch
 	FadeDim
 	FadeShadow
-	Border
 	BorderAngle
 	WindowsMinimize
 	Zoom
@@ -130,7 +129,6 @@ var events = [eventCount]struct {
 	FadeSwitch:      {name: "fade_switch", parent: Fade, reduced: fades},
 	FadeDim:         {name: "fade_dim", parent: Fade, reduced: fades},
 	FadeShadow:      {name: "fade_shadow", parent: Fade, reduced: fades},
-	Border:          {name: "border", parent: Global, reduced: fades},
 	BorderAngle:     {name: "borderangle", parent: Global, styles: []StyleKind{Once, Loop}, style: Style{Kind: Once}},
 	WindowsMinimize: {name: "windows_minimize", parent: Windows, styles: []StyleKind{Genie, FadeStyle}, style: Style{Kind: Genie}, reduced: crossFades},
 	Zoom:            {name: "zoom", parent: Global, shape: Smooth},

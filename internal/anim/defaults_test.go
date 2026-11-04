@@ -33,7 +33,6 @@ func TestDefaultMotionIsTunedPerEvent(t *testing.T) {
 		{LayersIn, 0.002, 200 * time.Millisecond},
 		{LayersOut, 0.002, 170 * time.Millisecond},
 		{Fade, 0.001, 240 * time.Millisecond},
-		{Border, 0.001, 240 * time.Millisecond},
 	} {
 		overshoot, nearly, settled := progressOf(table, tc.event)
 		if overshoot > tc.maxOvershoot {

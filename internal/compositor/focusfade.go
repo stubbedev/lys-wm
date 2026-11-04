@@ -82,17 +82,14 @@ func (c *Compositor) borderTarget(w *window) Border {
 
 func (c *Compositor) refreshBorder(w *window, now time.Duration, first bool) {
 	if first {
-		w.borderTo = c.decor.InactiveBorder
-		w.borderFade = anim.NewTween(1.0, anim.Lerp)
+		w.border = c.decor.InactiveBorder
 		w.borderAngle = anim.NewTween(1.0, anim.Lerp)
 	}
 	to := c.borderTarget(w)
-	if to == w.borderTo {
+	if to == w.border {
 		return
 	}
-	w.borderFrom, w.borderTo = w.borderTo, to
-	w.borderFade = anim.NewTween(0.0, anim.Lerp)
-	w.borderFade.Set(1, now, c.animations.Curve(anim.Border))
+	w.border = to
 	if to.n > 1 {
 		w.borderAngle = anim.NewTween(0.0, anim.Lerp)
 		w.borderAngle.Set(1, now, c.animations.Curve(anim.BorderAngle))
@@ -113,5 +110,5 @@ func (c *Compositor) borderTurn(w *window) float64 {
 }
 
 func (c *Compositor) borderMoving(w *window, now time.Duration) bool {
-	return !w.borderFade.Done(now) || !w.borderAngle.Done(now) || (c.loopingBorders() && w.borderTo.n > 1 && w.layer != wm.LayerFullscreen)
+	return !w.borderAngle.Done(now) || (c.loopingBorders() && w.border.n > 1 && w.layer != wm.LayerFullscreen)
 }

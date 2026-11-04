@@ -383,7 +383,7 @@ func TestReducedMotionKeepsFadesAndDropsMotion(t *testing.T) {
 			t.Errorf("%s still animates", e)
 		}
 	}
-	for _, e := range []Event{FadeIn, FadeOut, FadeSwitch, FadeDim, FadeShadow, Border, Workspaces, LayersIn, LayersOut, WindowsMinimize} {
+	for _, e := range []Event{FadeIn, FadeOut, FadeSwitch, FadeDim, FadeShadow, Workspaces, LayersIn, LayersOut, WindowsMinimize} {
 		if table.Curve(e).Duration() != d {
 			t.Errorf("%s lasts %v, want the configured %v", e, table.Curve(e).Duration(), d)
 		}

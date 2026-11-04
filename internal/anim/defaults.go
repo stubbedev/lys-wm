@@ -27,7 +27,6 @@ var (
 		Workspaces:      {Shape: switchSpring},
 		LayersIn:        {Shape: layerInSpring, Style: &layerFade},
 		LayersOut:       {Shape: layerOutSpring, Style: &layerFade},
-		Border:          {Shape: fadeSpring},
 		BorderAngle:     {Enabled: &off},
 		Overview:        {Shape: switchSpring},
 	}

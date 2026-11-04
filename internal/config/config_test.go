@@ -211,7 +211,8 @@ func TestUnknownKeysWarnAndTheRestOfTheFileApplies(t *testing.T) {
 		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":              "t.yaml:3: submaps.r[0].x: unknown key",
 		"rules:\n  - {app_id: a, floating: true}\n":                           "t.yaml:2: rules[0].floating: unknown key",
 		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n": "t.yaml:3: animations.curves.a.tension: unknown key",
-		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
+		"animations:\n  events:\n    border: {curve: linear}\n":               "t.yaml:3: animations.events.border: unknown event",
+		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
 		"borders:\n  active: {colors: [red, blue], angel: 4}\n":               "t.yaml:2: borders.active.angel: unknown key",
 		"input:\n  touchpad:\n    tapping: true\n":                            "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
 		"input:\n  devices:\n    mouse:\n      speed: 1\n":                    "t.yaml:4: input.devices.mouse.speed: unknown key",
@@ -613,7 +614,7 @@ func TestAnEmptyConfigGetsTheDefaultLook(t *testing.T) {
 	if cfg.Decor.Blur.Withhold {
 		t.Error("a GPU is refused blur")
 	}
-	for _, e := range []anim.Event{anim.WindowsMove, anim.WindowsIn, anim.WindowsOut, anim.WindowsMinimize, anim.Workspaces, anim.LayersIn, anim.LayersOut, anim.Border} {
+	for _, e := range []anim.Event{anim.WindowsMove, anim.WindowsIn, anim.WindowsOut, anim.WindowsMinimize, anim.Workspaces, anim.LayersIn, anim.LayersOut} {
 		if cfg.Animations.Curve(e) == anim.Instant {
 			t.Errorf("%s does not animate", e)
 		}

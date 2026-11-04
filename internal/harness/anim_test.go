@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"regexp"
 	"testing"
 	"time"
 
@@ -356,19 +357,18 @@ func testAFocusChangeFadesTheOpacityOfBothWindows(t *testing.T, start gpuStarter
 	h.Eventually("left focused, right inactive", look(1, 0.5))
 }
 
-func TestBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T) {
+func TestBorderColoursChangeAtOnceAndGradientsTurnOnlyTheRing(t *testing.T) {
 	t.Parallel()
-	onEachConfiguredRenderer(t, testBorderColoursFadeAndGradientsTurnOnlyTheRing)
+	onEachConfiguredRenderer(t, testBorderColoursChangeAtOnceAndGradientsTurnOnlyTheRing)
 }
 
-func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuStarter) {
+func testBorderColoursChangeAtOnceAndGradientsTurnOnlyTheRing(t *testing.T, start gpuStarter) {
 	now := time.Hour
 	d := time.Second
 	off, on := false, true
 	loop := anim.Style{Kind: anim.Loop}
 	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
 		anim.Global:      {Enabled: &off},
-		anim.Border:      {Enabled: &on, Shape: anim.Linear, Duration: &d},
 		anim.BorderAngle: {Enabled: &on, Shape: anim.Linear, Duration: &d, Style: &loop},
 	})
 	if len(errs) != 0 {
@@ -406,11 +406,6 @@ func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuSta
 	h.Eventually("the left border inactive", showing(1, 100, [3]byte{0, 0, 0xff}))
 	at(3 * time.Hour)
 	h.dispatch("focus left")
-	at(3*time.Hour + 500*time.Millisecond)
-	h.Eventually("the left border halfway from blue to red", func(b *headless.Backend, _ *compositor.Compositor) bool {
-		return near(pixel(snapshot(b.Outputs()[0]), 1, 100), [3]byte{0x80, 0, 0x7f})
-	})
-	at(4 * time.Hour)
 	h.Eventually("the left border red", showing(1, 100, [3]byte{0xff, 0, 0}))
 
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(next) })
@@ -434,59 +429,139 @@ func testBorderColoursFadeAndGradientsTurnOnlyTheRing(t *testing.T, start gpuSta
 	})
 }
 
-func TestANewWindowsBorderFadesWithTheOneLosingFocus(t *testing.T) {
-	t.Parallel()
-	onEachConfiguredRenderer(t, testANewWindowsBorderFadesWithTheOneLosingFocus)
+type borderScene struct {
+	*Harness
+	client *testclient.Client
+	at     func(time.Duration)
 }
 
-func testANewWindowsBorderFadesWithTheOneLosingFocus(t *testing.T, start gpuStarter) {
+var (
+	borderActive   = [3]byte{0xff, 0, 0}
+	borderInactive = [3]byte{0, 0, 0xff}
+)
+
+func startBorderScene(t *testing.T, start gpuStarter, motion map[anim.Event]anim.Setting, rules ...wm.Rule) borderScene {
+	t.Helper()
 	now := time.Hour
-	d := time.Second
-	off, on := false, true
-	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{
-		anim.Global: {Enabled: &off},
-		anim.Border: {Enabled: &on, Shape: anim.Linear, Duration: &d},
-	})
+	table, errs := anim.Resolve(true, motion)
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Animations = table
 		cfg.Clock = func() time.Duration { return now }
+		cfg.Rules = rules
 		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
-		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(red), compositor.SolidBorder(blue)
+		cfg.Decor.ActiveBorder = compositor.SolidBorder(render.Color{R: 0xff, A: 0xff})
+		cfg.Decor.InactiveBorder = compositor.SolidBorder(render.Color{B: 0xff, A: 0xff})
 	}, tall)
-	at := func(d time.Duration) {
+	return borderScene{Harness: h, client: testclient.Connect(t, h.Socket()), at: func(d time.Duration) {
 		h.Do(func(*headless.Backend, *compositor.Compositor) error {
 			now = d
 			return nil
 		})
-	}
-	borders := func(left, right [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
-		return func(b *headless.Backend, _ *compositor.Compositor) bool {
-			buf := snapshot(b.Outputs()[0])
-			return near(pixel(buf, 1, 100), left) && near(pixel(buf, 158, 100), right)
-		}
-	}
-	redPixel, bluePixel := [3]byte{0xff, 0, 0}, [3]byte{0, 0, 0xff}
-	c := testclient.Connect(t, h.Socket())
-	l := c.Window("left", testclient.Fill(0x30, 0x30, 0x30))
-	c.DispatchUntil("left to map", l.Mapped)
-	at(2 * time.Hour)
-	h.Eventually("the lone window focused", showing(1, 100, redPixel))
+	}}
+}
 
-	at(3 * time.Hour)
-	r := c.Window("right", testclient.Fill(0x30, 0x30, 0x30))
-	c.DispatchUntil("right to map", r.Mapped)
-	c.Sync()
-	h.Eventually("the layout landed", landed)
-	h.Eventually("the fade starting: the old border still active, the new one still inactive", borders(redPixel, bluePixel))
-	at(3*time.Hour + 500*time.Millisecond)
-	h.Eventually("both borders halfway", borders([3]byte{0x7f, 0, 0x80}, [3]byte{0x80, 0, 0x7f}))
-	at(3*time.Hour + time.Second)
-	h.Eventually("the focus moved", borders(bluePixel, redPixel))
+func (s borderScene) open(title string) *testclient.Window {
+	w := s.client.Window(title, testclient.Fill(0x30, 0x30, 0x30))
+	s.client.DispatchUntil(title+" to map", w.Mapped)
+	return w
+}
+
+func slowMotion() map[anim.Event]anim.Setting {
+	on, d := true, time.Second
+	return map[anim.Event]anim.Setting{anim.Global: {Enabled: &on, Shape: anim.Linear, Duration: &d}}
+}
+
+func placedAtOnce(motion map[anim.Event]anim.Setting) map[anim.Event]anim.Setting {
+	off := false
+	motion[anim.WindowsIn] = anim.Setting{Enabled: &off}
+	motion[anim.WindowsMove] = anim.Setting{Enabled: &off}
+	return motion
+}
+
+func halfOverTheWallpaper(c [3]byte) [3]byte {
+	return [3]byte{c[0]/2 + 0x1e/2, c[1]/2 + 0x1e/2, c[2]/2 + 0x2e/2}
+}
+
+func bordersShowing(left, right [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(b *headless.Backend, _ *compositor.Compositor) bool {
+		buf := snapshot(b.Outputs()[0])
+		return pixel(buf, 1, 100) == left && pixel(buf, 158, 100) == right
+	}
+}
+
+func TestBorderColoursChangeOnTheNextFrameWhenFocusMoves(t *testing.T) {
+	t.Parallel()
+	onEachConfiguredRenderer(t, testBorderColoursChangeOnTheNextFrameWhenFocusMoves)
+}
+
+func testBorderColoursChangeOnTheNextFrameWhenFocusMoves(t *testing.T, start gpuStarter) {
+	s := startBorderScene(t, start, slowMotion())
+	s.open("left")
+	s.open("right")
+	s.client.Sync()
+	s.Eventually("the layout landed", landed)
+	s.at(2 * time.Hour)
+	s.Eventually("the newest window focused", bordersShowing(borderInactive, borderActive))
+
+	s.at(3 * time.Hour)
+	s.dispatch("focus left")
+	s.Eventually("both borders changed with the clock still at the change", bordersShowing(borderActive, borderInactive))
+	s.dispatch("focus right")
+	s.Eventually("and back, in both directions", bordersShowing(borderInactive, borderActive))
+}
+
+func TestBorderColoursChangeOnTheNextFrameWhenANewWindowTakesFocus(t *testing.T) {
+	t.Parallel()
+	onEachConfiguredRenderer(t, testBorderColoursChangeOnTheNextFrameWhenANewWindowTakesFocus)
+}
+
+func testBorderColoursChangeOnTheNextFrameWhenANewWindowTakesFocus(t *testing.T, start gpuStarter) {
+	s := startBorderScene(t, start, placedAtOnce(slowMotion()))
+	s.open("left")
+	s.at(2 * time.Hour)
+	s.Eventually("the lone window focused", showing(1, 100, borderActive))
+
+	s.at(3 * time.Hour)
+	s.open("right")
+	s.client.Sync()
+	s.Eventually("the layout landed", landed)
+	s.Eventually("the old window inactive with the clock still at the opening", showing(1, 100, borderInactive))
+	s.at(3*time.Hour + 500*time.Millisecond)
+	s.Eventually("the new window's border all active colour, only its own fade_in showing", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		buf := snapshot(b.Outputs()[0])
+		return pixel(buf, 1, 100) == borderInactive && near(pixel(buf, 158, 100), halfOverTheWallpaper(borderActive))
+	})
+	s.at(3*time.Hour + time.Second)
+	s.Eventually("the new window in full", bordersShowing(borderInactive, borderActive))
+}
+
+func TestBorderColoursOfAWindowOpeningUnfocusedAreInactiveAtOnce(t *testing.T) {
+	t.Parallel()
+	onEachConfiguredRenderer(t, testBorderColoursOfAWindowOpeningUnfocusedAreInactiveAtOnce)
+}
+
+func testBorderColoursOfAWindowOpeningUnfocusedAreInactiveAtOnce(t *testing.T, start gpuStarter) {
+	s := startBorderScene(t, start, placedAtOnce(slowMotion()), wm.Rule{Title: regexp.MustCompile(`^floating$`), Mode: wm.RuleFloat, Size: image.Pt(40, 40)})
+	s.open("floating")
+	s.at(2 * time.Hour)
+	floatingEdge := showing(70, 38, borderActive)
+	s.Eventually("the floating window focused", floatingEdge)
+
+	s.at(3 * time.Hour)
+	s.open("tiled")
+	s.client.Sync()
+	s.Eventually("the layout landed", landed)
+	s.at(3*time.Hour + 500*time.Millisecond)
+	s.Eventually("the tiled window all inactive colour, only its own fade_in showing", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return near(pixel(snapshot(b.Outputs()[0]), 1, 100), halfOverTheWallpaper(borderInactive))
+	})
+	s.Eventually("focus still on the floating window", floatingEdge)
+	s.at(3*time.Hour + time.Second)
+	s.Eventually("the tiled window in full, never active", showing(1, 100, borderInactive))
 }
 
 func TestASpringDraggedWindowTrailsThePointer(t *testing.T) {

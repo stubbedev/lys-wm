@@ -492,7 +492,7 @@ and how much attention they should draw:
 | `overview` | 300, 34 | none | 266 ms | |
 | `layers_in` | 500, 42 | none | 192 ms | `fade` |
 | `layers_out` | 700, 50 | none | 164 ms | `fade` |
-| `fade`, `border` | 600, 49 | none | 194 ms | |
+| `fade` | 600, 49 | none | 194 ms | |
 
 `fade_out` shares `windows_out`'s spring, and `borderangle` is off. A fade keeps
 its opacity at 1 when a spring passes its target.
@@ -514,7 +514,6 @@ The events:
 | `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | | fade |
 | `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | | fade |
 | `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | | fade |
-| `border` | `global` | A border changing between `borders.active` and `borders.inactive` as focus moves: the new border fades in over the old one | | fade |
 | `borderangle` | `global` | A gradient border's angle turning | `once` (the default): one full turn whenever the window gains or loses focus; `loop`: a full turn per `duration` for as long as the window is shown, which keeps its output drawing, but only the border | still |
 | `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out; `goo`: they cross-fade while each window of the old workspace flows into the nearest window of the new one as a liquid blob in its border colour | cross-fade |
 | `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |

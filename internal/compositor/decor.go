@@ -421,13 +421,7 @@ func (c *Compositor) drawBorderIn(pass *frame, o *output.Output, w *window, oute
 	if c.rounded(w) {
 		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.decor.Rounding)
 	}
-	turn := c.borderTurn(w)
-	if p := w.borderFade.At(c.frameTime); p < 1 {
-		c.paintBorder(pass, w.borderFrom, outer, inner, ring, 1, turn)
-		c.paintBorder(pass, w.borderTo, outer, inner, ring, float32(max(p, 0)), turn)
-		return
-	}
-	c.paintBorder(pass, w.borderTo, outer, inner, ring, 1, turn)
+	c.paintBorder(pass, w.border, outer, inner, ring, 1, c.borderTurn(w))
 }
 
 func (c *Compositor) paintBorder(pass *frame, border Border, outer, inner image.Rectangle, ring render.Mask, alpha float32, turn float64) {
