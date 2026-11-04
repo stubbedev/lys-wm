@@ -28,7 +28,7 @@ def background_only(output):
 
 
 for output in ["Virtual-1", "Virtual-2"]:
-    machine.wait_until_succeeds(f"journalctl -b --no-pager -t lys-wm | grep -q 'no client drew on {output} within 10s'", timeout=timedelta(seconds=60))
+    machine.wait_until_succeeds(f"journalctl -b --no-pager -t lys-wm | grep -q 'no client drew on {output} within 30s'", timeout=timedelta(seconds=60))
 vkms = vkms_after_marker()
 print("\n".join(vkms[:80]))
 commits = [line for line in vkms if "] committing " in line]
