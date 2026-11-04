@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 // Where to log error-messages. Defaults to stderr.
@@ -14,6 +15,12 @@ import (
 var Logger = log.New(os.Stderr, "XGB: ", log.Lshortfile)
 
 const (
+	// defaultServerLimit is how long a server may leave a write or a round
+	// trip unfinished before the connection is dropped. A caller's request
+	// only waits for this when reqBuffer requests are already queued behind
+	// a server that stopped reading.
+	defaultServerLimit = 5 * time.Second
+
 	// cookieBuffer represents the queue size of cookies existing at any
 	// point in time. The size of the buffer is really only important when
 	// there are many requests without replies made in sequence. Once the
@@ -49,6 +56,8 @@ type Conn struct {
 	DisplayNumber int
 	DefaultScreen int
 	SetupBytes    []byte
+
+	serverLimit time.Duration
 
 	setupResourceIdBase uint32
 	setupResourceIdMask uint32
@@ -140,6 +149,9 @@ func NewConnNetWithCookieHex(netConn net.Conn, cookieHex string) (*Conn, error) 
 
 func postNewConn(c *Conn) (*Conn, error) {
 	c.Extensions = make(map[string]byte)
+	if c.serverLimit == 0 {
+		c.serverLimit = defaultServerLimit
+	}
 
 	c.cookieChan = make(chan *Cookie, cookieBuffer)
 	c.xidChan = make(chan xid, xidBuffer)
@@ -401,9 +413,6 @@ func (c *Conn) generateSeqIds() {
 type request struct {
 	buf    []byte
 	cookie *Cookie
-
-	// seq is closed when the request (cookie) has been sequenced by the Conn.
-	seq chan struct{}
 }
 
 // NewRequest takes the bytes and a cookie of a particular request, constructs
@@ -425,17 +434,8 @@ type request struct {
 // In all likelihood, you should be able to copy and paste with some minor
 // edits the generated code for the request you want to issue.
 func (c *Conn) NewRequest(buf []byte, cookie *Cookie) {
-	seq := make(chan struct{})
 	select {
-	case c.reqChan <- &request{buf: buf, cookie: cookie, seq: seq}:
-		// request is in buffer
-		// wait until request is processed or connection is closed
-		select {
-		case <-seq:
-			// request was successfully sent to X server
-		case <-c.doneSend:
-			// c.sendRequests is down, your request was not handled
-		}
+	case c.reqChan <- &request{buf: buf, cookie: cookie}:
 	case <-c.doneSend:
 		// c.sendRequests is down, nobody is listening to your requests
 	}
@@ -480,7 +480,6 @@ func (c *Conn) sendRequests() {
 				<-c.doneRead
 				return
 			}
-			close(req.seq)
 		case <-c.doneRead:
 			return
 		}
@@ -496,12 +495,18 @@ func (c *Conn) noop() error {
 	if err := c.writeBuffer(c.getInputFocusRequest()); err != nil {
 		return err
 	}
-	cookie.Reply() // wait for the buffer to clear
-	return nil
+	watchdog := time.AfterFunc(c.serverLimit, func() { _ = c.conn.Close() })
+	defer watchdog.Stop()
+	_, err := cookie.Reply() // wait for the buffer to clear
+	return err
 }
 
 // writeBuffer is a convenience function for writing a byte slice to the wire.
 func (c *Conn) writeBuffer(buf []byte) error {
+	if err := c.conn.SetWriteDeadline(time.Now().Add(c.serverLimit)); err != nil {
+		Logger.Printf("A write deadline is unrecoverable: %s", err)
+		return err
+	}
 	if _, err := c.conn.Write(buf); err != nil {
 		Logger.Printf("A write error is unrecoverable: %s", err)
 		return err

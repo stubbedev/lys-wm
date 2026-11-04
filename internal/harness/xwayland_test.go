@@ -744,3 +744,37 @@ func TestABadNetWMStateActionIsReportedNotFatal(t *testing.T) {
 	})
 	survives(t, h)
 }
+
+func TestAnXwaylandThatLostItsWindowManagerIsRestarted(t *testing.T) {
+	t.Parallel()
+	reports := make(chan error, 4)
+	h := StartXwayland(t, func(err error) { reports <- err }, small)
+	c := xDial(t, h)
+	var pid int
+	h.Eventually("Xwayland ready", func(*headless.Backend, *compositor.Compositor) bool {
+		pid = h.xwayland.Pid()
+		return h.xwayland.Running()
+	})
+	check, err := xproto.InternAtom(c.x, false, uint16(len("_NET_SUPPORTING_WM_CHECK")), "_NET_SUPPORTING_WM_CHECK").Reply()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var owner *xproto.GetPropertyReply
+	h.Eventually("the window manager to claim the display", func(*headless.Backend, *compositor.Compositor) bool {
+		owner, err = xproto.GetProperty(c.x, false, c.root, check.Atom, xproto.AtomWindow, 0, 1).Reply()
+		return err == nil && owner.ValueLen == 1
+	})
+	xproto.KillClient(c.x, xgb.Get32(owner.Value))
+	select {
+	case err := <-reports:
+		if !strings.Contains(err.Error(), "its X connection ended") {
+			t.Fatalf("reported %v", err)
+		}
+	case <-time.After(clientTimeout):
+		t.Fatal("Xwayland kept running without its window manager")
+	}
+	xConnect(t, h)
+	h.Eventually("Xwayland restarted", func(*headless.Backend, *compositor.Compositor) bool {
+		return h.xwayland.Running() && h.xwayland.Pid() != pid
+	})
+}

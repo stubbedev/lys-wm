@@ -69,7 +69,7 @@ func (c *Conn) NewCookie(checked, reply bool) *Cookie {
 //
 // Unless you're building requests from bytes by hand, this method should
 // not be used.
-func (c Cookie) Reply() ([]byte, error) {
+func (c *Cookie) Reply() ([]byte, error) {
 	// checked
 	if c.errorChan != nil {
 		return c.replyChecked()
@@ -85,7 +85,7 @@ func (c Cookie) Reply() ([]byte, error) {
 //
 // Unless you're building requests from bytes by hand, this method should
 // not be used.
-func (c Cookie) replyChecked() ([]byte, error) {
+func (c *Cookie) replyChecked() ([]byte, error) {
 	if c.replyChan == nil {
 		return nil, errors.New("Cannot call 'replyChecked' on a cookie that " +
 			"is not expecting a *reply* or an error.")
@@ -116,7 +116,7 @@ func (c Cookie) replyChecked() ([]byte, error) {
 //
 // Unless you're building requests from bytes by hand, this method should
 // not be used.
-func (c Cookie) replyUnchecked() ([]byte, error) {
+func (c *Cookie) replyUnchecked() ([]byte, error) {
 	if c.replyChan == nil {
 		return nil, errors.New("Cannot call 'replyUnchecked' on a cookie " +
 			"that is not expecting a *reply*.")
@@ -145,7 +145,7 @@ func (c Cookie) replyUnchecked() ([]byte, error) {
 //
 // Unless you're building requests from bytes by hand, this method should
 // not be used.
-func (c Cookie) Check() error {
+func (c *Cookie) Check() error {
 	if c.replyChan != nil {
 		return errors.New("Cannot call 'Check' on a cookie that is " +
 			"expecting a *reply*. Use 'Reply' instead.")

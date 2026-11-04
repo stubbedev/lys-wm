@@ -370,6 +370,13 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		return errors.Join(errs...)
 	})
 	c.run()
+	_ = s.loop.Post(func() error {
+		if s.proc != p || s.closed {
+			return nil
+		}
+		p.failed = errors.New("its X connection ended")
+		return s.kill(p)
+	})
 }
 
 func (s *Server) SelectionChanged(k data.Kind, src data.Source) error {
