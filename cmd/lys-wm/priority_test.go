@@ -11,6 +11,7 @@ func TestTheCompositorThreadReadsBackThePriorityItTook(t *testing.T) {
 	type outcome struct {
 		how    string
 		err    error
+		before uint32
 		policy uint32
 		flags  uint64
 		nice   int32
@@ -20,6 +21,13 @@ func TestTheCompositorThreadReadsBackThePriorityItTook(t *testing.T) {
 	go func() {
 		runtime.LockOSThread()
 		var o outcome
+		before, err := unix.SchedGetAttr(0, 0)
+		if err != nil {
+			o.attr = err
+			done <- o
+			return
+		}
+		o.before = before.Policy
 		o.how, o.err = raiseThreadPriority()
 		attr, err := unix.SchedGetAttr(0, 0)
 		o.attr = err
@@ -35,8 +43,8 @@ func TestTheCompositorThreadReadsBackThePriorityItTook(t *testing.T) {
 	switch {
 	case o.err != nil:
 		t.Logf("refused here: %v", o.err)
-		if o.policy != unix.SCHED_NORMAL {
-			t.Fatalf("a refused raise left policy %d", o.policy)
+		if o.policy != o.before {
+			t.Fatalf("a refused raise moved the thread from policy %d to %d", o.before, o.policy)
 		}
 	case o.how == "SCHED_RR":
 		if o.policy != unix.SCHED_RR || o.flags&unix.SCHED_FLAG_RESET_ON_FORK == 0 {
