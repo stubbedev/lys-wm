@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"slices"
 	"strconv"
 	"time"
 
@@ -113,8 +114,21 @@ func (s *session) pump(d time.Duration) {
 func (s *session) window(title string, paint testclient.Painter) *testclient.Window {
 	w := s.client.Window(title, paint)
 	s.client.DispatchUntil("window "+title+" to map", w.Mapped)
+	s.client.DispatchUntil("window "+title+" to reach the layout", func() bool { return s.placed(title) })
 	s.windows = append(s.windows, w)
 	return w
+}
+
+func (s *session) placed(title string) bool {
+	data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindWindows})
+	if err != nil {
+		panic(fatal{fmt.Errorf("list the windows: %w", err)})
+	}
+	var windows []ipc.Window
+	if err := json.Unmarshal(data, &windows); err != nil {
+		panic(fatal{fmt.Errorf("read the windows %s: %w", data, err)})
+	}
+	return slices.ContainsFunc(windows, func(w ipc.Window) bool { return w.Title == title })
 }
 
 func (s *session) still(title string, b, g, r byte) {
