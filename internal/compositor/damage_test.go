@@ -180,7 +180,7 @@ func BenchmarkSDRReplayOf100Ops(b *testing.B) {
 	}
 }
 
-func TestManyDamageRectsBecomeTheirBounds(t *testing.T) {
+func TestManyDamageRectsStayAtTheCapWithoutCollapsing(t *testing.T) {
 	bounds := image.Rect(0, 0, 4000, 100)
 	bg := drawOp{fill: true, color: Background, dst: bounds}
 	boxes := func(n int) []drawOp {
@@ -195,7 +195,7 @@ func TestManyDamageRectsBecomeTheirBounds(t *testing.T) {
 		area     int
 	}{
 		{n: maxDamageRects, rects: maxDamageRects, area: maxDamageRects * 100},
-		{n: maxDamageRects + 1, rects: 1, area: (maxDamageRects*20 + 10) * 10},
+		{n: maxDamageRects + 1, rects: maxDamageRects, area: (maxDamageRects + 2) * 100},
 	} {
 		sc := newScene()
 		sc.frameWith(bg)
