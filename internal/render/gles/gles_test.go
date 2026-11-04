@@ -355,3 +355,23 @@ func TestColorParityWithTheSoftwareRenderer(t *testing.T) {
 	g := renderer(t)
 	rendertest.ColorParity(t, g, framebuffer(t, g, rendertest.Size))
 }
+
+func TestOpsOutsideTheDamageTouchNoGLState(t *testing.T) {
+	r := renderer(t)
+	fb := framebuffer(t, r, image.Pt(256, 256))
+	p, err := r.Begin(fb, render.Region{image.Rect(0, 0, 8, 8)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := gles.DrawnOps(r)
+	for i := range 32 {
+		p.FillRect(image.Rect(16, i*7, 32, i*7+6), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+	}
+	p.FillRect(image.Rect(0, 0, 4, 4), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+	if err := p.End(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gles.DrawnOps(r) - before; got != 1 {
+		t.Fatalf("33 ops with one inside the damage set GL state for %d", got)
+	}
+}

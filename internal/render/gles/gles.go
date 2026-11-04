@@ -156,6 +156,7 @@ func (r *Renderer) newProgram(id uint32) program {
 
 type Renderer struct {
 	counts       render.Counts
+	drawnOps     uint64
 	d            *gpu.Display
 	device       uint64
 	gl           *gpu.GL
@@ -838,8 +839,18 @@ func (p *pass) End() error {
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }
 
+func (p *pass) culled(r image.Rectangle) bool {
+	for _, d := range p.damage.Rects() {
+		if d.Overlaps(r) {
+			return false
+		}
+	}
+	return true
+}
+
 func (p *pass) use(prog *program) {
 	gl := p.owner.gl
+	p.owner.drawnOps++
 	if p.prog != prog {
 		p.prog = prog
 		gl.UseProgram(prog.id)
@@ -935,6 +946,9 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		p.fail(err)
 		return
 	}
+	if p.culled(r) {
+		return
+	}
 	prog := &p.owner.solid
 	p.use(prog)
 	p.setMask(prog, m)
@@ -954,6 +968,9 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 		p.fail(fmt.Errorf("gles: goo %+v is not two rounded rectangles with a smoothing of zero or more", g))
 		return
 	case r.Empty():
+		return
+	}
+	if p.culled(r) {
 		return
 	}
 	prog := &p.owner.goo
@@ -1038,6 +1055,9 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 		p.fail(err)
 		return
 	}
+	if p.culled(r) {
+		return
+	}
 	prog := p.textureProgram(&p.owner.gradient, shader{prog: &p.owner.colored.gradient, fragment: gradientColorShader, lazy: true})
 	if prog == nil {
 		return
@@ -1080,7 +1100,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		p.fail(err)
 		return
 	}
-	if alpha == 0 {
+	if alpha == 0 || p.culled(dst) {
 		return
 	}
 	prog := p.textureProgram(&p.owner.rgba, shader{prog: &p.owner.colored.rgba, fragment: rgbaColorShader, lazy: true})
@@ -1175,7 +1195,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 		p.fail(err)
 		return
 	}
-	if alpha == 0 {
+	if alpha == 0 || p.culled(dst) {
 		return
 	}
 	s := shader{prog: &p.owner.glass, fragment: glassShader, lazy: true}
