@@ -821,3 +821,73 @@ func TestAnXWindowWhoseSurfaceGoesBeforeItsUnmapNotifyStillCloses(t *testing.T) 
 		return len(windowsOf(c)) == 1
 	})
 }
+
+func TestAFloatingXWindowWhoseMinimumArrivesAfterItsMapStaysCentred(t *testing.T) {
+	t.Parallel()
+	hints := make([]uint32, 18)
+	hints[0], hints[5], hints[6] = 1<<4, 60, 45
+	var raw []byte
+	for _, v := range hints {
+		raw = binary.LittleEndian.AppendUint32(raw, v)
+	}
+	dialog := func(xc *xclient, class string) xproto.Window {
+		xc.intern("WM_NORMAL_HINTS")
+		return xc.window(image.Rect(0, 0, 1, 1), 0xff0000, false, map[string][]byte{
+			"WM_CLASS":            []byte(class + "\x00XTest\x00"),
+			"_NET_WM_WINDOW_TYPE": xc.atom("_NET_WM_WINDOW_TYPE_DIALOG"),
+		})
+	}
+	setMinimum := func(xc *xclient, win xproto.Window) {
+		t.Helper()
+		if err := xproto.ChangePropertyChecked(xc.x, xproto.PropModeReplace, win, xc.atoms["WM_NORMAL_HINTS"], xproto.AtomWmSizeHints, 32, uint32(len(hints)), raw).Check(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sized := func(want image.Point) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(_ *headless.Backend, c *compositor.Compositor) bool {
+			ws := windowsOf(c)
+			return len(ws) == 1 && ws[0].Floating && ws[0].Rect.Width >= want.X && ws[0].Rect.Height >= want.Y
+		}
+	}
+	t.Run("placed by lys-wm", func(t *testing.T) {
+		h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+		xc := xDial(t, h)
+		win := dialog(xc, "tour")
+		h.Eventually("the dialog floating", sized(image.Point{}))
+		setMinimum(xc, win)
+		h.Eventually("the dialog at its minimum", sized(image.Pt(60, 45)))
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			r := windowsOf(c)[0].Rect
+			if r.X != (small.Size.X-r.Width)/2 || r.Y != (small.Size.Y-r.Height)/2 {
+				t.Errorf("the grown dialog at %+v is not centred on a %v output", r, small.Size)
+			}
+			return nil
+		})
+	})
+	t.Run("resized by the user", func(t *testing.T) {
+		h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+		xc := xDial(t, h)
+		win := dialog(xc, "moved")
+		h.Eventually("the dialog floating", sized(image.Point{}))
+		var moved ipc.Rect
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			a, err := wm.ParseAction("resizeactive 8 4")
+			if err != nil {
+				return err
+			}
+			return c.Dispatch(a)
+		})
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			moved = windowsOf(c)[0].Rect
+			return nil
+		})
+		setMinimum(xc, win)
+		h.Eventually("the dialog at its minimum", sized(image.Pt(60, 45)))
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			if r := windowsOf(c)[0].Rect; r.X != moved.X || r.Y != moved.Y {
+				t.Errorf("the dialog the user resized moved from %+v to %+v", moved, r)
+			}
+			return nil
+		})
+	})
+}

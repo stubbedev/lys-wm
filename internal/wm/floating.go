@@ -59,7 +59,19 @@ func (s State) SetLimits(id WindowID, l Limits) (State, error) {
 	return s, nil
 }
 
-func centered(area image.Rectangle, size image.Point) image.Rectangle {
+func (s State) FloatingRect(id WindowID) (image.Rectangle, bool) {
+	w := s.windowWorkspace(id)
+	if w == nil {
+		return image.Rectangle{}, false
+	}
+	i := w.floatingIndex(id)
+	if i < 0 {
+		return image.Rectangle{}, false
+	}
+	return w.Floating[i].Rect, true
+}
+
+func Centered(area image.Rectangle, size image.Point) image.Rectangle {
 	corner := area.Min.Add(area.Size().Sub(size).Div(2))
 	return image.Rectangle{Min: corner, Max: corner.Add(size)}
 }
@@ -91,7 +103,7 @@ func (s State) ToggleFloating(at Autotile) (State, error) {
 		return s.Tile(id, at)
 	}
 	area := s.output(s.windowWorkspace(id).Output).Area
-	return s.Float(id, centered(area, s.limits[id].floored().Fit(area.Size().Div(2))))
+	return s.Float(id, Centered(area, s.limits[id].floored().Fit(area.Size().Div(2))))
 }
 
 func (s State) Float(id WindowID, rect image.Rectangle) (State, error) {

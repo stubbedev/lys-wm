@@ -381,14 +381,17 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
 
 func (c *Compositor) floatRect(t toplevel, size image.Point) image.Rectangle {
 	size = floatSize(t, size).Add(image.Pt(2*c.decor.BorderWidth, 2*c.decor.BorderWidth))
-	over := image.Rectangle{}
+	return wm.Centered(c.floatArea(t), size)
+}
+
+func (c *Compositor) floatArea(t toplevel) image.Rectangle {
 	if p := c.windowOf(t.parent()); p != nil {
-		over = p.tile
-	} else if o := c.outputAt(c.cursor); o != nil {
-		over = c.usable[o].Add(o.Position())
+		return p.tile
 	}
-	corner := over.Min.Add(over.Size().Sub(size).Div(2))
-	return image.Rectangle{Min: corner, Max: corner.Add(size)}
+	if o := c.outputAt(c.cursor); o != nil {
+		return c.usable[o].Add(o.Position())
+	}
+	return image.Rectangle{}
 }
 
 func floatSize(t toplevel, ruled image.Point) image.Point {
@@ -420,7 +423,16 @@ func (c *Compositor) refreshLimits(t toplevel) error {
 	if w == nil {
 		return nil
 	}
-	return c.update(c.wm.SetLimits(w.id, c.frameLimits(t)))
+	s, err := c.wm.SetLimits(w.id, c.frameLimits(t))
+	if err != nil {
+		return err
+	}
+	was, floating := c.wm.FloatingRect(w.id)
+	now, _ := s.FloatingRect(w.id)
+	if over := c.floatArea(t); floating && now != was && was == wm.Centered(over, was.Size()) {
+		s, err = s.SetFloatingRect(w.id, wm.Centered(over, now.Size()))
+	}
+	return c.update(s, err)
 }
 
 func (c *Compositor) redecide(t toplevel) error {
