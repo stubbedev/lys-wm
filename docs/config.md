@@ -640,6 +640,8 @@ every tab of a tab group and windows a fullscreen one covers, on Wayland or X11.
 Dialogs stay with their parent as one tile, and popups scale with their window.
 Minimized windows sit in a row along the bottom, and a click there brings one back.
 
+The strip sits on a pane of the same glass as a lys-shell panel: a tint of `tabs.inactive`'s background and a hairline of its text colour over the blurred layers, and so does the `+` tile. A thumbnail has that hairline too. The workspace shown and the window under the ring carry a ring in `borders.active`, set off by a small gap.
+
 Layer surfaces: `background` and `bottom` stay, and blur and dim. `top`, so bars,
 fade out as the overview opens and back as it closes, keeping their frame callbacks.
 They stay in the thumbnails, under fullscreen windows as on screen, and a thumbnail

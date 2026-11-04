@@ -16,12 +16,17 @@ import (
 )
 
 const (
-	overviewRadius      = 8
-	overviewRing        = 3
+	overviewRadius      = lookUnit + 4
+	overviewRingWidth   = 2
+	overviewRingGap     = 2
+	overviewTrayPad     = 12
 	overviewLabelPx     = 12
 	overviewLabelHeight = 22
 	overviewLabelGap    = 6
 	overviewPlusArm     = 2
+	overviewGlassTint   = 0.55
+	overviewRimStrength = 0.12
+	overviewHoverInk    = 0.1
 )
 
 var overviewGlass wm.Look
@@ -56,6 +61,7 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 	if c.switches[o] == nil {
 		v.leaving = nil
 	}
+	c.drawOverviewPane(pass, o, v, p, in)
 	shown = c.drawOverviewEntries(pass, o, v, p, shown)
 	if err := c.drawOverviewStrip(pass, o, v, p, in); err != nil {
 		return shown, err
@@ -185,14 +191,23 @@ func (c *Compositor) drawOverviewDragged(pass *frame, o *output.Output, p float6
 	return shown
 }
 
+func stripSlide(o *output.Output, r image.Rectangle, p float64) image.Rectangle {
+	return anim.LerpRect(r.Sub(image.Pt(0, r.Max.Y-o.Logical().Min.Y)), r, p)
+}
+
+func (c *Compositor) drawOverviewPane(pass *frame, o *output.Output, v *overviewView, p float64, in float32) {
+	if in <= 0 || v.plus.Empty() || len(v.spaces) == 0 {
+		return
+	}
+	pane := stripSlide(o, v.spaces[0].rect.Union(v.plus).Inset(-overviewTrayPad), p)
+	c.drawOverviewGlass(pass, o, deviceRect(o, pane), deviceLength(o, overviewRadius+overviewTrayPad), in)
+}
+
 func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overviewView, p float64, in float32) error {
 	if in <= 0 {
 		return nil
 	}
-	top := o.Logical().Min.Y
-	slide := func(r image.Rectangle) image.Rectangle {
-		return anim.LerpRect(r.Sub(image.Pt(0, r.Max.Y-top)), r, p)
-	}
+	slide := func(r image.Rectangle) image.Rectangle { return stripSlide(o, r, p) }
 	radius := deviceLength(o, overviewRadius)
 	redrawn := false
 	settled := c.overview.progress.Done(c.frameTime)
@@ -222,17 +237,18 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 			tex: t.target.Texture(), src: render.FRect{W: float64(drawn.X), H: float64(drawn.Y)}, dst: dst, alpha: in, version: t.version,
 			mask: render.Mask{Keep: render.RoundRect{Rect: dst, Radius: radius}},
 		})
+		c.drawOverviewRim(pass, o, dst, radius, in)
 		if t.id == v.workspace {
-			c.drawOverviewRing(pass, o, slide(t.rect), in)
+			c.drawOverviewRing(pass, o, slide(t.rect), radius, in)
 		}
 	}
 	if v.plus.Empty() {
 		return nil
 	}
 	dst := deviceRect(o, slide(v.plus))
-	pass.fillMasked(dst, scaleColor(c.decor.Tab.Inactive.Background, in), render.Mask{Keep: render.RoundRect{Rect: dst, Radius: radius}})
+	c.drawOverviewGlass(pass, o, dst, radius, in)
 	arm := max(o.Scale().ToDevice(overviewPlusArm), 1)
-	span := min(dst.Dx(), dst.Dy()) / 3
+	span := min(dst.Dx(), dst.Dy()) / 4
 	mid := dst.Min.Add(dst.Size().Div(2))
 	ink := scaleColor(c.decor.Tab.Inactive.Text, in)
 	pass.FillRect(image.Rect(mid.X-span/2, mid.Y-arm/2, mid.X+span/2, mid.Y-arm/2+arm), ink)
@@ -240,11 +256,26 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 	return nil
 }
 
-func (c *Compositor) drawOverviewRing(pass *frame, o *output.Output, r image.Rectangle, a float32) {
-	inner := deviceRect(o, r)
-	outer := inner.Inset(-o.Scale().ToDevice(overviewRing))
-	radius := deviceLength(o, overviewRadius)
-	ring := render.Mask{Keep: render.RoundRect{Rect: outer, Radius: radius + float32(inner.Min.X-outer.Min.X)}, Cut: render.RoundRect{Rect: inner, Radius: radius}}
+func (c *Compositor) overviewInk(strength, in float32) render.Color {
+	return scaleColor(c.decor.Tab.Inactive.Text.Premultiply(), strength*in)
+}
+
+func (c *Compositor) drawOverviewGlass(pass *frame, o *output.Output, r image.Rectangle, radius, in float32) {
+	pass.fillMasked(r, scaleColor(c.decor.Tab.Inactive.Background.Premultiply(), overviewGlassTint*in), render.Mask{Keep: render.RoundRect{Rect: r, Radius: radius}})
+	c.drawOverviewRim(pass, o, r, radius, in)
+}
+
+func (c *Compositor) drawOverviewRim(pass *frame, o *output.Output, r image.Rectangle, radius, in float32) {
+	inner := r.Inset(max(o.Scale().ToDevice(1), 1))
+	pass.fillMasked(r, c.overviewInk(overviewRimStrength, in), render.Mask{Keep: render.RoundRect{Rect: r, Radius: radius}, Cut: render.RoundRect{Rect: inner, Radius: max(radius-float32(inner.Min.X-r.Min.X), 0)}})
+}
+
+func (c *Compositor) drawOverviewRing(pass *frame, o *output.Output, r image.Rectangle, radius, a float32) {
+	gap, width := o.Scale().ToDevice(overviewRingGap), o.Scale().ToDevice(overviewRingWidth)
+	inner := deviceRect(o, r).Inset(-gap)
+	outer := inner.Inset(-width)
+	cut := radius + float32(gap)
+	ring := render.Mask{Keep: render.RoundRect{Rect: outer, Radius: cut + float32(width)}, Cut: render.RoundRect{Rect: inner, Radius: cut}}
 	c.paintBorder(pass, c.decor.ActiveBorder, outer, inner, ring, a, 0)
 }
 
@@ -394,7 +425,7 @@ func (c *Compositor) drawOverviewSelection(pass *frame, o *output.Output, v *ove
 				continue
 			}
 			r := e.rect(o, p, c.frameTime)
-			c.drawOverviewRing(pass, o, r, in)
+			c.drawOverviewRing(pass, o, r, deviceLength(o, c.decor.Rounding), in)
 			dev := deviceRect(o, r)
 			return c.drawOverviewLabel(pass, o, t.w.top.Title(), t.w.top.Icon(), dev.Max.Y-o.Scale().ToDevice(overviewLabelHeight+overviewLabelGap), dev, in)
 		}
@@ -412,7 +443,7 @@ func (c *Compositor) drawOverviewSelection(pass *frame, o *output.Output, v *ove
 
 func (c *Compositor) drawOverviewHover(pass *frame, o *output.Output, r image.Rectangle, text string, in float32) error {
 	dev := deviceRect(o, r)
-	pass.fillMasked(dev, scaleColor(render.Color{R: 0x30, G: 0x30, B: 0x30, A: 0x30}, in), render.Mask{Keep: render.RoundRect{Rect: dev, Radius: deviceLength(o, overviewRadius)}})
+	pass.fillMasked(dev, c.overviewInk(overviewHoverInk, in), render.Mask{Keep: render.RoundRect{Rect: dev, Radius: deviceLength(o, overviewRadius)}})
 	return c.drawOverviewLabel(pass, o, text, nil, dev.Max.Y+o.Scale().ToDevice(overviewLabelGap), dev, in)
 }
 

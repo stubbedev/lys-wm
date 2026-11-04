@@ -2001,3 +2001,50 @@ func TestABarCommittingNoDamageRedrawsNoThumbnail(t *testing.T) {
 		t.Fatalf("commits without damage redrew %d thumbnails", got-first)
 	}
 }
+
+func TestTheStripIsGlassOverTheBlurredLayers(t *testing.T) {
+	magenta := render.Color{R: 0xff, B: 0xff, A: 0xff}
+	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
+		h := start(t, func(cfg *compositor.Config) {
+			plainOverview(cfg)
+			cfg.Decor.ActiveBorder = compositor.SolidBorder(magenta)
+		}, overviewMode)
+		c := testclient.Connect(t, h.Socket())
+		wallpaper := c.Layer(testclient.LayerSpec{
+			Layer:  cwlr.ZwlrLayerShellV1LayerBackground,
+			Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorBottom | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight,
+		}, testclient.Fill(0, 0xff, 0))
+		c.DispatchUntil("the wallpaper to map", wallpaper.Mapped)
+		wallpaper.Stop()
+		w := c.Window("window", testclient.Fill(0xff, 0, 0))
+		c.DispatchUntil("the window to map", w.Mapped)
+		w.Stop()
+		h.Rendered(0)
+		h.dispatch("overview show")
+		plan := planOf(h, 0)
+		thumb := plan.Strip[0]
+		mid := centre(thumb).Y
+		h.Eventually("the overview at rest", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+			return comp.OverviewProgress(comp.Now()) >= 1 && !comp.OverviewThumbsRough()
+		})
+		px := h.Rendered(0)
+		backdrop := pixel(px, 2, overviewMode.Size.Y-2)
+		if got := pixel(px, thumb.Min.X-4, mid); got != [3]byte{0xff, 0, 0xff} {
+			t.Errorf("the ring of the workspace shown: %v", got)
+		}
+		if got := pixel(px, thumb.Min.X-2, mid); got == [3]byte{0xff, 0, 0xff} {
+			t.Error("no gap between the ring and its thumbnail")
+		}
+		pane := pixel(px, thumb.Max.X+(plan.Plus.Min.X-thumb.Max.X)/2, mid)
+		if pane == backdrop {
+			t.Errorf("no pane behind the strip: %v", pane)
+		}
+		plus := pixel(px, plan.Plus.Min.X+6, mid)
+		if plus[1] <= plus[0] || plus[1] <= plus[2] {
+			t.Errorf("the + tile hides the layers behind it: %v", plus)
+		}
+		if plus == pane {
+			t.Errorf("the + tile is not its own pane: %v", plus)
+		}
+	})
+}
