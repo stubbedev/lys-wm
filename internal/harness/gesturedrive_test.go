@@ -320,7 +320,8 @@ func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
 		for range 6 {
 			r.swipe(20, 0)
 		}
-		r.h.Eventually("the fingers bringing the first workspace back", showing(40, 30, swipeRed))
+		r.h.Rendered(0)
+		r.h.Eventually("the fingers bringing the first workspace back past its rest", both(showing(40, 30, swipeRed), showing(100, 30, swipeRed)))
 		r.rest()
 		r.end(false)
 		if got := r.active(); got != 1 {
@@ -330,6 +331,32 @@ func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
 		r.h.Eventually("the first workspace in place", showing(155, 30, swipeRed))
 		r.expectNoMoreFrames()
 	})
+}
+
+func TestASwipeGrabbedBackPastWhereItCameFromHidesWhereItWasGoing(t *testing.T) {
+	t.Parallel()
+	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, nil)
+	r.redBlue()
+	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
+	r.h.dispatch("workspace 2")
+	r.settle()
+	r.h.Eventually("blue", showing(80, 30, swipeBlue))
+	r.begin()
+	r.swipe(-100, 0)
+	r.rest()
+	r.end(false)
+	if got := r.active(); got != 3 {
+		t.Fatalf("committed to workspace %d", got)
+	}
+	r.at(*r.now + 50*time.Millisecond)
+	r.h.Eventually("the settle under way", both(showing(5, 30, swipeBlue), showing(100, 30, swipeGreen)))
+	r.begin()
+	r.swipe(160, 0)
+	r.h.Rendered(0)
+	r.h.Eventually("the first and second workspaces, the third gone", both(showing(30, 30, swipeRed), showing(100, 30, swipeBlue)))
+	if got := r.active(); got != 2 {
+		t.Fatalf("swiping past where it came from left %d active", got)
+	}
 }
 
 func TestASwipeThatGrabsThenGoesNowhereSettlesWhereItWasGoing(t *testing.T) {

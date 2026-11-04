@@ -236,17 +236,19 @@ func (d *workspaceDrive) moved(delta float64, at time.Duration) error {
 	}
 	sw, name := d.sw, d.o.Backend().Name()
 	step := d.c.wm.SwipeWorkspace(name, sw.from, sw.pos.At(0), delta)
-	var err error
 	if step.Shift != 0 {
 		sw.pos.Shift(step.Shift)
 		sw.from = step.From
-		err = d.c.showWorkspace(name, step.From)
 	}
 	if step.Shift != 0 || step.To == 0 || sw.to == 0 || (sw.to > sw.from) != (step.At >= 0) {
 		sw.to = step.To
 	}
 	sw.forward = step.At >= 0
 	sw.pos.Track(step.At, at)
+	var err error
+	if active, ok := d.c.wm.ActiveOn(name); !ok || (active != sw.from && active != sw.to) {
+		err = d.c.showWorkspace(name, sw.from)
+	}
 	return errors.Join(err, d.c.schedule(d.o))
 }
 
