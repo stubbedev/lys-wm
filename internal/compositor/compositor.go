@@ -298,6 +298,8 @@ type Compositor struct {
 	shownWorkspace  map[string]wm.WorkspaceID
 	shaders         map[string]*screenShader
 	configProblems  ConfigProblems
+	parked          bool
+	adopting        *adoption
 	noticeDismissed bool
 }
 
@@ -520,6 +522,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 }
 
 func (c *Compositor) Reconfigure(cfg Config) error {
+	if c.parked {
+		return errors.New("compositor: the session is moving to another binary")
+	}
 	m, err := validate(cfg)
 	if err != nil {
 		return err

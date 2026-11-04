@@ -72,6 +72,7 @@
       vm-screencast = screencast "wlr";
       vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
+      vm-upgrade = import ./upgrade.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
       vm-lid = import ./lid.nix {inherit pkgs module;};
       vm-splash-handover = import ./splash-handover.nix {inherit pkgs module;};

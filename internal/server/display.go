@@ -52,6 +52,15 @@ type Display struct {
 	nextGlobal uint32
 	serial     uint32
 	closed     bool
+	policies   map[*wire.Interface]*objectPolicy
+	handover   []func(c *Client, s *Stream) error
+	prepare    []func(c *Client, s *Stream) error
+	checks     []func(c *Client) string
+	retire     []func(c *Client, out *wire.Conn) error
+	parked     bool
+	restored   *restoring
+	ackFloor   uint32
+	journaling bool
 }
 
 func New(l *loop.Loop, opts Options) (*Display, error) {
@@ -61,7 +70,7 @@ func New(l *loop.Loop, opts Options) (*Display, error) {
 	if opts.Report == nil {
 		return nil, errors.New("server: Options.Report is required")
 	}
-	d := &Display{loop: l, trace: opts.Trace, report: opts.Report, start: time.Now(), listenFD: -1, lockFD: -1, spare: -1}
+	d := &Display{loop: l, trace: opts.Trace, report: opts.Report, start: time.Now(), listenFD: -1, lockFD: -1, spare: -1, policies: map[*wire.Interface]*objectPolicy{}}
 	if err := d.bind(opts.RuntimeDir); err != nil {
 		return nil, err
 	}
@@ -236,6 +245,9 @@ func (d *Display) shed(listenFD int) {
 }
 
 func (d *Display) flush() error {
+	if d.parked {
+		return nil
+	}
 	for _, c := range d.clients {
 		if err := c.flush(); err != nil {
 			d.dead = append(d.dead, c)
@@ -266,6 +278,7 @@ type Global struct {
 	bind    BindFunc
 	visible func(*Client) bool
 	removed bool
+	key     string
 }
 
 func everyone(*Client) bool { return true }

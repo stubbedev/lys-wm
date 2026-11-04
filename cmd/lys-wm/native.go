@@ -30,6 +30,16 @@ type card struct {
 	backend *drmbackend.Backend
 }
 
+type broker interface {
+	Seat() string
+	TakeDevice(path string) (int, session.Device, error)
+	ReleaseDevice(d session.Device) error
+	InhibitLidSwitch() (*os.File, error)
+	Suspend() error
+	SwitchTo(vt uint32) error
+	Close() error
+}
+
 type gpuCard struct {
 	udev    session.UdevDevice
 	name    string
@@ -42,7 +52,7 @@ type native struct {
 	l       *loop.Loop
 	paths   gpu.Paths
 	vendors edid.Vendors
-	logind  *session.Logind
+	logind  broker
 	monitor *session.Monitor
 	input   *session.Libinput
 	handler backend.Handler
@@ -62,6 +72,7 @@ type nativeOptions struct {
 	gpu        string
 	lidSuspend bool
 	vulkan     bool
+	holder     *session.Holder
 }
 
 func choosePrimary(cards []gpuCard, configured string) (int, string, error) {
@@ -126,7 +137,12 @@ func (n *native) gpuCards() ([]gpuCard, error) {
 
 func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, report func(error)) (_ *native, err error) {
 	n := &native{l: l, paths: gpu.PathsFromEnv(getenv), report: report, vulkan: opts.vulkan}
-	if n.logind, err = session.Open(l, session.SystemBus(getenv), getenv, n); err != nil {
+	if opts.holder != nil {
+		n.logind, err = opts.holder, opts.holder.Open(n)
+	} else {
+		n.logind, err = session.Open(l, session.SystemBus(getenv), getenv, n)
+	}
+	if err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -444,6 +460,49 @@ func (n *native) remove(c *card) error {
 		n.report(fmt.Errorf("drm: let go of %s: %w", c.name, err))
 	}
 	return nil
+}
+
+func (n *native) retire() error {
+	var errs []error
+	for _, c := range slices.Backward(n.cards) {
+		errs = append(errs, c.backend.Close())
+	}
+	return errors.Join(errs...)
+}
+
+func (n *native) park() error {
+	var errs []error
+	if n.input != nil {
+		errs = append(errs, n.input.Park())
+	}
+	for _, c := range n.cards {
+		errs = append(errs, c.backend.Park())
+	}
+	return errors.Join(errs...)
+}
+
+func (n *native) unpark() error {
+	var errs []error
+	for _, c := range n.cards {
+		errs = append(errs, c.backend.Unpark())
+	}
+	if n.input != nil {
+		errs = append(errs, n.input.Unpark())
+	}
+	return errors.Join(errs...)
+}
+
+func (n *native) paused() bool {
+	return slices.ContainsFunc(n.cards, func(c *card) bool { return c.backend.Paused() })
+}
+
+func (n *native) busy() string {
+	for _, c := range n.cards {
+		if why := c.backend.Flipping(); why != "" {
+			return why
+		}
+	}
+	return ""
 }
 
 func (n *native) Close() error {

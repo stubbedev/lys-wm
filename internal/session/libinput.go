@@ -649,3 +649,11 @@ func (in *Libinput) Close() error {
 	}
 	return errors.Join(append(errs, in.forget(), purego.Dlclose(in.lib))...)
 }
+
+func (in *Libinput) Park() error {
+	return in.src.Modify(0)
+}
+
+func (in *Libinput) Unpark() error {
+	return in.src.Modify(loop.Readable)
+}

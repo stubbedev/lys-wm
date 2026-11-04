@@ -489,6 +489,9 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 func (c *Compositor) mapToplevel(t toplevel) error {
 	w := &window{id: c.nextWindow, top: t, motion: anim.NewRectMotion(image.Rectangle{}), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
 	c.nextWindow++
+	if p, ok := c.plannedWindow(t); ok {
+		w.id = p.ID
+	}
 	w.floated, _ = c.floats(t)
 	s, err := c.mapped(t, w.id)
 	if err != nil {

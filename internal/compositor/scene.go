@@ -21,6 +21,9 @@ func (c *Compositor) Frame(b backend.Output) error {
 	if o == nil {
 		return backend.Broken("compositor: frame on unknown output %s", b.Name())
 	}
+	if c.parked {
+		return nil
+	}
 	if c.frames == nil {
 		return c.frame(o)
 	}
@@ -467,6 +470,9 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		return nil
 	}
 	c.frames.Presented(b.Name(), p)
+	if c.adopting != nil {
+		c.adopting.shown[o] = true
+	}
 	sc := c.sceneOf(o)
 	kind, refresh, seq := spt.WpPresentationFeedbackKindVsync, p.Refresh, p.Seq
 	switch {

@@ -56,6 +56,7 @@ func New(d *server.Display, formats []render.Format) (*Manager, error) {
 	if _, err := d.AddGlobal(sw.WlShmInterface, shmVersion, m.bind); err != nil {
 		return nil, err
 	}
+	d.OnPrepareHandover(m.emit)
 	return m, nil
 }
 
@@ -284,4 +285,77 @@ func (b *Buffer) guard(data []byte, f func(data []byte, stride int) error) (err 
 		}
 	}()
 	return f(data, b.stride)
+}
+
+func (m *Manager) emit(c *server.Client, st *server.Stream) error {
+	pools := map[*pool]wire.ObjectID{}
+	emitPool := func(p *pool, id wire.ObjectID) (wire.ObjectID, error) {
+		if got, ok := pools[p]; ok {
+			return got, nil
+		}
+		shm, err := st.Global(sw.WlShmInterface)
+		if err != nil {
+			return 0, err
+		}
+		if id == 0 {
+			id = st.Temp()
+		}
+		e, err := st.Request(shm, sw.WlShmInterface, "create_pool")
+		if err != nil {
+			return 0, err
+		}
+		e.Object(id)
+		e.FD(p.fd)
+		e.Int(int32(len(p.mapping))) //nolint:gosec // a pool's size came from an int32 argument
+		if err := e.End(); err != nil {
+			return 0, err
+		}
+		pools[p] = id
+		return id, nil
+	}
+	objects := c.Objects()
+	for _, r := range objects {
+		if res, ok := r.(*sw.WlShmPool); ok {
+			p, ok := res.Handler().(*pool)
+			if !ok {
+				return fmt.Errorf("shm: wl_shm_pool@%d has handler %T", res.Base().ID(), res.Handler())
+			}
+			if _, err := emitPool(p, res.Base().ID()); err != nil {
+				return err
+			}
+		}
+	}
+	for _, r := range objects {
+		res, ok := r.(*sw.WlBuffer)
+		if !ok {
+			continue
+		}
+		b, ok := res.Handler().(*Buffer)
+		if !ok {
+			continue
+		}
+		id, err := emitPool(b.pool, 0)
+		if err != nil {
+			return err
+		}
+		wf := sw.WlShmFormatArgb8888
+		if w, ok := wireFormats[b.format]; ok {
+			wf = w
+		}
+		e, err := st.Request(id, sw.WlShmPoolInterface, "create_buffer")
+		if err != nil {
+			return err
+		}
+		e.Object(res.Base().ID())
+		e.Int(int32(b.offset)) //nolint:gosec // these came from int32 arguments
+		e.Int(int32(b.size.X)) //nolint:gosec // these came from int32 arguments
+		e.Int(int32(b.size.Y)) //nolint:gosec // these came from int32 arguments
+		e.Int(int32(b.stride)) //nolint:gosec // these came from int32 arguments
+		e.Uint(uint32(wf))
+		if err := e.End(); err != nil {
+			return err
+		}
+		st.Emitted(res)
+	}
+	return nil
 }

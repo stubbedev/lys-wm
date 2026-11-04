@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +24,7 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
 
   dispatch <action> [args...]  run an action, as a keybind would (see docs/actions.md)
   reload                       read the config file again; prints what it did not apply
+  upgrade [--drop-x11] <path>  move this session to the lys-wm at path, keeping its clients; refused and unchanged if any client cannot be kept
   configproblems               print what the last load of the config did not apply as JSON
   outputs                      print the outputs as JSON
   workspaces                   print the open workspaces as JSON
@@ -78,6 +81,8 @@ func parseArgs(args []string) (ipc.Request, error) {
 		return ipc.Request{Request: ipc.KindDispatch, Action: strings.Join(rest, " ")}, nil
 	case kind == ipc.KindIcon:
 		return parseIcon(rest)
+	case kind == ipc.KindUpgrade:
+		return parseUpgrade(rest)
 	case cmd == "reload":
 		req = ipc.Request{Request: ipc.KindDispatch, Action: wm.ReloadAction{}.String()}
 	case slices.Contains(queries, kind):
@@ -87,6 +92,25 @@ func parseArgs(args []string) (ipc.Request, error) {
 	}
 	if len(rest) != 0 {
 		return ipc.Request{}, fmt.Errorf("%w: %s takes no arguments", errUsage, cmd)
+	}
+	return req, nil
+}
+
+func parseUpgrade(args []string) (ipc.Request, error) {
+	req := ipc.Request{Request: ipc.KindUpgrade}
+	if len(args) > 0 && args[0] == "--drop-x11" {
+		req.DropX11 = true
+		args = args[1:]
+	}
+	if len(args) != 1 {
+		return ipc.Request{}, fmt.Errorf("%w: upgrade takes the path of the new lys-wm", errUsage)
+	}
+	path, err := exec.LookPath(args[0])
+	if err != nil {
+		return ipc.Request{}, fmt.Errorf("find the new lys-wm: %w", err)
+	}
+	if req.Binary, err = filepath.Abs(path); err != nil {
+		return ipc.Request{}, fmt.Errorf("find the new lys-wm: %w", err)
 	}
 	return req, nil
 }

@@ -79,6 +79,7 @@ func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
 	if _, err := d.AddGlobal(sw.WlSeatInterface, seatVersion, s.bind); err != nil {
 		return nil, err
 	}
+	d.OnRetire(s.retire)
 	if _, err := d.AddGlobal(scs.WpCursorShapeManagerV1Interface, cursorShapeVersion, s.bindCursorShape); err != nil {
 		return nil, err
 	}
@@ -241,5 +242,38 @@ func missing(obj *sw.WlSeat, what string) error {
 }
 
 func (r seatRequests) Release(*sw.WlSeat) error {
+	return nil
+}
+
+func (s *Seat) retire(c *server.Client, out *wire.Conn) error {
+	r := s.lookup(c)
+	if r == nil {
+		return nil
+	}
+	serial := s.display.Serial()
+	if f := s.keyboard.focus; f != nil && f.Client() == c {
+		for _, kb := range r.keyboards {
+			if err := server.Event(out, kb, "leave", func(e *wire.Encoder) { e.Uint(serial); e.Object(f.Resource().Base().ID()) }); err != nil {
+				return err
+			}
+		}
+	}
+	if f := s.pointer.focus; f != nil && f.Client() == c {
+		for _, p := range r.pointers {
+			if err := server.Event(out, p, "leave", func(e *wire.Encoder) { e.Uint(serial); e.Object(f.Resource().Base().ID()) }); err != nil {
+				return err
+			}
+			if p.Base().Version() >= 5 {
+				if err := server.Event(out, p, "frame", nil); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	for _, t := range r.touches {
+		if err := server.Event(out, t, "cancel", nil); err != nil {
+			return err
+		}
+	}
 	return nil
 }

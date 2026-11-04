@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-lib/xdg"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -29,6 +31,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/handover"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -42,6 +45,16 @@ import (
 )
 
 func main() {
+	if holds(os.Args[1:], os.Getenv) {
+		status, err := runHolder(os.Args[1:])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "lys-wm:", err)
+			if status == 0 {
+				status = 1
+			}
+		}
+		os.Exit(status)
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "lys-wm:", err)
 		os.Exit(1)
@@ -156,6 +169,7 @@ type opened struct {
 	configureInput func(session.InputConfig) error
 	lid            compositor.LidPolicy
 	onPower        func(changed func())
+	native         *native
 }
 
 func hostInput(session.InputConfig) error { return nil }
@@ -167,7 +181,7 @@ func openBackend(kind backendKind, renderer rendererKind, l *loop.Loop, opts nat
 		if err != nil {
 			return opened{}, err
 		}
-		return opened{Backend: n, switchVT: n.logind.SwitchTo, configureInput: n.input.Reconfigure, lid: n.lidPolicy(), onPower: n.onPower}, nil
+		return opened{Backend: n, switchVT: n.logind.SwitchTo, configureInput: n.input.Reconfigure, lid: n.lidPolicy(), onPower: n.onPower, native: n}, nil
 	}
 	b, err := openOther(kind, renderer, l)
 	return opened{Backend: b, configureInput: hostInput}, err
@@ -294,6 +308,29 @@ func (s source) load() (loaded, error) {
 		return loaded{}, errors.Join(err, keymap.Close())
 	}
 	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}, warnings: file.Warnings}, nil
+}
+
+func printHandoverInfo(path string, getenv func(string) string, out io.Writer) error {
+	info := preflightInfo{Format: handover.Format}
+	s := source{path: path, explicit: path != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
+	if !s.explicit {
+		var err error
+		if s.path, err = configPath(getenv); err != nil {
+			return err
+		}
+	}
+	l, err := s.load()
+	if err != nil {
+		info.Config = err.Error()
+	} else {
+		for _, w := range l.warnings {
+			info.Warnings = append(info.Warnings, w.Error())
+		}
+		if err := l.keymap.Close(); err != nil {
+			return err
+		}
+	}
+	return json.NewEncoder(out).Encode(info)
 }
 
 func checkConfigFile(path string, getenv func(string) string) error {
@@ -429,6 +466,9 @@ func run(args []string) (err error) {
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
 	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")
+	flags.Bool("holder", false, "run the compositor under a small process that holds the session, so that lys-wmctl upgrade can replace the compositor; see docs/guide/upgrade.md")
+	handoverFD := flags.Int("handover-fd", -1, "take over a running session from the lys-wm that started this process and passed this descriptor")
+	handoverInfo := flags.Bool("handover-info", false, "print what this binary needs to take over a running session, the config's problems included, as JSON, and exit")
 	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy> and end, for lys-wm-pace")
 	checkConfig := flags.Bool("check-config", false, "load the config as a reload would, and exit without starting: nothing printed and status 0 when it would be accepted")
 	defaultConfig := flags.Bool("default-config", false, "print the built-in config and exit")
@@ -445,6 +485,9 @@ func run(args []string) (err error) {
 		return err
 	case *checkConfig:
 		return checkConfigFile(*path, os.Getenv)
+	}
+	if *handoverInfo {
+		return printHandoverInfo(*path, os.Getenv, os.Stdout)
 	}
 	stopProfile, err := startCPUProfile(*cpuProfile)
 	if err != nil {
@@ -470,6 +513,13 @@ func run(args []string) (err error) {
 	s := &reloader{path: *path, explicit: *path != "", keymaps: xkb.NewCompiler(os.Getenv), getenv: os.Getenv}
 	if !s.explicit {
 		if s.path, err = configPath(os.Getenv); err != nil {
+			return err
+		}
+	}
+	var incoming *adoption
+	if *handoverFD >= 0 {
+		unix.CloseOnExec(*handoverFD)
+		if incoming, err = receiveHandover(*handoverFD); err != nil {
 			return err
 		}
 	}
@@ -499,6 +549,10 @@ func run(args []string) (err error) {
 		l.Stop()
 		return nil
 	}
+	hold, err := dialHolder(l)
+	if err != nil {
+		return err
+	}
 	cfg.Hooks.Exit = s.exit
 	if _, err := l.AddSignals(func(sig os.Signal) error {
 		if sig != syscall.SIGHUP {
@@ -512,6 +566,7 @@ func run(args []string) (err error) {
 	}, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP); err != nil {
 		return err
 	}
+	first.native.holder = hold
 	b, err := openBackend(kind, renderer, l, first.native, cfg.Report)
 	if err != nil {
 		return err
@@ -523,9 +578,17 @@ func run(args []string) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, frames.Close()) }()
-	display, err := server.New(l, server.Options{RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"), Trace: trace, Report: cfg.Report})
+	var display *server.Display
+	if incoming != nil {
+		display, err = server.Adopt(l, server.Options{Trace: trace, Report: cfg.Report}, incoming.state.Compositor.Display, incoming.fds)
+	} else {
+		display, err = server.New(l, server.Options{RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"), Trace: trace, Report: cfg.Report})
+	}
 	if err != nil {
 		return err
+	}
+	if hold != nil {
+		display.KeepHandoverJournal()
 	}
 	defer func() { err = errors.Join(err, display.Close()) }()
 	if s.comp, err = compositor.New(l, display, b, cfg); err != nil {
@@ -543,7 +606,15 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	srv, err := ipc.Listen(l, socket, s.comp, cfg.Report)
+	var srv *ipc.Server
+	if incoming != nil {
+		var ln *os.File
+		if ln, err = incoming.file(incoming.state.IPC, "ipc"); err == nil {
+			srv, err = ipc.Adopt(l, ln, s.comp, cfg.Report)
+		}
+	} else {
+		srv, err = ipc.Listen(l, socket, s.comp, cfg.Report)
+	}
 	if err != nil {
 		return err
 	}
@@ -554,13 +625,20 @@ func run(args []string) (err error) {
 		b.onPower(s.comp.PowerChanged)
 	}
 	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {ipc.SocketEnv, socket}}
+	var xwRunning *xwayland.Server
 	if first.xwayland {
 		var xw *xwayland.Server
-		xw, err = xwayland.Listen(l, display, xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second})
+		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second}
+		if incoming != nil && incoming.state.X != nil {
+			xw, err = xwayland.Adopt(l, display, opts, *incoming.state.X, incoming.fds)
+		} else {
+			xw, err = xwayland.Listen(l, display, opts)
+		}
 		if err != nil {
 			return fmt.Errorf("%w (or turn it off with xwayland.enabled: false)", err)
 		}
 		defer func() { err = errors.Join(err, xw.Close()) }()
+		xwRunning = xw
 		s.comp.WatchSelection(xw.SelectionChanged)
 		if first.zero {
 			if err := s.comp.ScaleXwayland(xw.IsClient); err != nil {
@@ -582,9 +660,21 @@ func run(args []string) (err error) {
 			defer func() { err = errors.Join(err, sess.Close()) }()
 		}
 	}
-	for _, command := range first.autostart {
-		if err := s.comp.Dispatch(wm.ExecAction{Command: command}); err != nil {
-			cfg.Report(fmt.Errorf("autostart: %w", err))
+	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, holder: hold, opened: b}
+	srv.OnUpgrade(u.start)
+	if incoming == nil {
+		for _, command := range first.autostart {
+			if err := s.comp.Dispatch(wm.ExecAction{Command: command}); err != nil {
+				cfg.Report(fmt.Errorf("autostart: %w", err))
+			}
+		}
+	} else {
+		a := &adopted{a: incoming, loop: l, comp: s.comp, srv: srv, holder: hold, binary: os.Args[0], stop: func(cause error) {
+			fmt.Fprintln(os.Stderr, "lys-wm:", cause)
+			os.Exit(1)
+		}}
+		if err := a.begin(); err != nil {
+			return fmt.Errorf("take over the session: %w", err)
 		}
 	}
 	listening := display.Name()

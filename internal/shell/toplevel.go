@@ -186,6 +186,14 @@ func (t *Toplevel) ack(serial uint32) bool {
 	return t.configures.ack(serial)
 }
 
+func (t *Toplevel) ackAny() {
+	t.configures.ackAny()
+}
+
+func (t *Toplevel) ID() uint32 {
+	return uint32(t.resource.Base().ID())
+}
+
 func (t *Toplevel) initialCommit() error {
 	if err := t.xs.base.shell.listener.ToplevelInitialCommit(t); err != nil {
 		return err

@@ -80,6 +80,7 @@ func (t *timeline) unref() error {
 type point struct {
 	t     *timeline
 	value uint64
+	res   *sls.WpLinuxDrmSyncobjTimelineV1
 }
 
 func newPoint(res *sls.WpLinuxDrmSyncobjTimelineV1, hi, lo uint32) (*point, error) {
@@ -87,7 +88,7 @@ func newPoint(res *sls.WpLinuxDrmSyncobjTimelineV1, hi, lo uint32) (*point, erro
 	if !ok {
 		return nil, fmt.Errorf("syncobj: timeline@%d has handler %T", res.Base().ID(), res.Handler())
 	}
-	return &point{t: h.t.ref(), value: wire.Join(hi, lo)}, nil
+	return &point{t: h.t.ref(), value: wire.Join(hi, lo), res: res}, nil
 }
 
 func (p *point) drop() error {
@@ -157,7 +158,7 @@ func (r requests) GetSurface(obj *sls.WpLinuxDrmSyncobjManagerV1, res *sls.WpLin
 	ss, ok := r.m.surfaces[s]
 	if !ok {
 		ss = &syncSurface{m: r.m, s: s}
-		ss.hooks = &surface.Hooks{Commit: ss.commit, Destroyed: ss.surfaceGone}
+		ss.hooks = &surface.Hooks{Commit: ss.commit, Destroyed: ss.surfaceGone, Handover: ss.handover}
 		s.AddHooks(ss.hooks)
 		r.m.surfaces[s] = ss
 	}
@@ -192,6 +193,30 @@ type syncSurface struct {
 type latch struct {
 	release *point
 	buffer  *dmabuf.Buffer
+	acquire *sls.WpLinuxDrmSyncobjTimelineV1
+	value   uint64
+}
+
+func (ss *syncSurface) handover(st *server.Stream) error {
+	if ss.res == nil || ss.current.buffer == nil {
+		return nil
+	}
+	l := ss.current
+	if l.acquire == nil || l.acquire.Base().Removed() || l.release == nil || l.release.res.Base().Removed() {
+		return fmt.Errorf("syncobj: wl_surface@%d is on screen under a timeline its client destroyed", ss.s.Resource().Base().ID())
+	}
+	point := func(name string, res *sls.WpLinuxDrmSyncobjTimelineV1, value uint64) error {
+		e, err := st.Request(ss.res.Base().ID(), sls.WpLinuxDrmSyncobjSurfaceV1Interface, name)
+		if err != nil {
+			return err
+		}
+		hi, lo := wire.Halves(value)
+		e.Object(res.Base().ID())
+		e.Uint(hi)
+		e.Uint(lo)
+		return e.End()
+	}
+	return errors.Join(point("set_acquire_point", l.acquire, l.value), point("set_release_point", l.release.res, l.release.value))
 }
 
 func (ss *syncSurface) retire(l latch) error {
@@ -264,7 +289,11 @@ func (ss *syncSurface) commit(u *surface.Update) error {
 	}
 	acquire, release := ss.acquire, ss.release
 	ss.acquire, ss.release = nil, nil
-	ss.latched = append(ss.latched, latch{release: release, buffer: explicit})
+	l := latch{release: release, buffer: explicit}
+	if acquire != nil {
+		l.acquire, l.value = acquire.res, acquire.value
+	}
+	ss.latched = append(ss.latched, l)
 	u.OnApply(ss.applied)
 	if acquire == nil {
 		return nil

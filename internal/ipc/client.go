@@ -30,9 +30,12 @@ func FindSocket(getenv func(string) string) (string, error) {
 	return matches[0], nil
 }
 
+const upgradeTimeout = 2 * time.Minute
+
 type conn struct {
-	c *net.UnixConn
-	r *bufio.Reader
+	wait time.Duration
+	c    *net.UnixConn
+	r    *bufio.Reader
 }
 
 func send(path string, req Request) (*conn, error) {
@@ -57,7 +60,11 @@ func send(path string, req Request) (*conn, error) {
 }
 
 func (cn *conn) response() (json.RawMessage, error) {
-	if err := cn.c.SetReadDeadline(time.Now().Add(ioTimeout)); err != nil {
+	wait := ioTimeout
+	if cn.wait > 0 {
+		wait = cn.wait
+	}
+	if err := cn.c.SetReadDeadline(time.Now().Add(wait)); err != nil {
 		return nil, err
 	}
 	line, err := cn.r.ReadBytes('\n')
@@ -93,6 +100,9 @@ func Do(path string, req Request) (result json.RawMessage, err error) {
 		return nil, err
 	}
 	defer func() { err = errors.Join(err, cn.close()) }()
+	if req.Request == KindUpgrade {
+		cn.wait = upgradeTimeout
+	}
 	return cn.response()
 }
 

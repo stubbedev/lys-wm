@@ -16,6 +16,9 @@ import (
 )
 
 func (c *Compositor) Dispatch(a wm.Action) error {
+	if c.parked {
+		return errors.New("compositor: the session is moving to another binary")
+	}
 	return c.dispatch(a, nil)
 }
 

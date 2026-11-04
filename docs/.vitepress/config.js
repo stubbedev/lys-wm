@@ -15,6 +15,7 @@ export default lysConfig({
         { text: 'Getting started', link: '/guide/getting-started' },
         { text: 'Install', link: '/guide/install' },
         { text: 'Scope', link: '/guide/scope' },
+        { text: 'Upgrading in place', link: '/guide/upgrade' },
       ],
     },
     {

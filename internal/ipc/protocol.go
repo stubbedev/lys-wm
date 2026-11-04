@@ -33,15 +33,25 @@ const (
 	KindIcon           Kind = "icon"
 	KindOverview       Kind = "overview"
 	KindConfigProblems Kind = "configproblems"
+	KindUpgrade        Kind = "upgrade"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade}
 
 type Request struct {
 	Request Kind        `json:"request"`
 	Action  string      `json:"action,omitempty"`
 	Window  wm.WindowID `json:"window,omitempty"`
 	Size    int         `json:"size,omitempty"`
+	Binary  string      `json:"binary,omitempty"`
+	DropX11 bool        `json:"drop_x11,omitempty"`
+}
+
+type UpgradeResult struct {
+	PID     int    `json:"pid"`
+	Binary  string `json:"binary"`
+	Clients int    `json:"clients"`
+	Windows int    `json:"windows"`
 }
 
 type Response struct {
@@ -58,9 +68,11 @@ type iconRequest struct {
 }
 
 type request struct {
-	kind   Kind
-	action wm.Action
-	icon   iconRequest
+	kind    Kind
+	action  wm.Action
+	icon    iconRequest
+	binary  string
+	dropX11 bool
 }
 
 func parseRequest(line []byte) (request, error) {
@@ -80,7 +92,10 @@ func parseRequest(line []byte) (request, error) {
 	if raw.Request == KindIcon && !icon || raw.Request != KindIcon && (raw.Window != 0 || raw.Size != 0) {
 		return request{}, fmt.Errorf("%w: only icon takes a window and a size, and it needs both, the size above 0", ErrBadRequest)
 	}
-	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}}
+	if (raw.Request == KindUpgrade) != (raw.Binary != "") {
+		return request{}, fmt.Errorf("%w: only upgrade takes a binary, and it needs one", ErrBadRequest)
+	}
+	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}, binary: raw.Binary, dropX11: raw.DropX11}
 	if raw.Request == KindDispatch {
 		a, err := wm.ParseAction(raw.Action)
 		if err != nil {

@@ -118,6 +118,10 @@ func track[T interface {
 	})
 }
 
+func (m *Manager) Dragging() bool {
+	return m.drag != nil
+}
+
 func (m *Manager) Selection(k Kind) Source {
 	return m.selection[k]
 }

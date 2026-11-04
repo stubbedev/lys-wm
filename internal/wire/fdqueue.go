@@ -40,3 +40,15 @@ func (q *fdQueue) closeFirst(k int) {
 	}
 	q.drop(k)
 }
+
+func (q *fdQueue) list() []int {
+	return q.first(q.n)
+}
+
+func (q *fdQueue) first(n int) []int {
+	out := make([]int, n)
+	for i := range out {
+		out[i] = q.buf[(q.head+i)%len(q.buf)]
+	}
+	return out
+}

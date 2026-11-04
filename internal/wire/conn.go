@@ -27,6 +27,7 @@ type Conn struct {
 	tracer Tracer
 	closed bool
 	defers bool
+	muted  bool
 }
 
 type Tracer func(incoming bool, id ObjectID, opcode Opcode, body []byte)
@@ -198,6 +199,9 @@ func (c *Conn) Flush() error {
 }
 
 func (c *Conn) send(limit, fdLimit int) error {
+	if c.muted {
+		return nil
+	}
 	sent := 0
 	defer func() { c.consume(sent) }()
 	for sent < limit {

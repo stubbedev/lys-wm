@@ -7,6 +7,7 @@
   kernelModules ? [],
   unplug ? null,
   lysWMConfig ? null,
+  lysWMArgs ? "",
   rendersOn ? "card0",
   framedCursors ? [],
   backgroundOnly ? true,
@@ -60,7 +61,7 @@ in
         enable = true;
         settings = let
           session = {
-            command = "${pkgs.bash}/bin/bash -c '${config.programs.lys-wm.package}/bin/lys-wm --systemd 2>&1 | ${pkgs.systemd}/bin/systemd-cat -t lys-wm'";
+            command = "${pkgs.bash}/bin/bash -c '${config.programs.lys-wm.package}/bin/lys-wm --systemd ${lysWMArgs} 2>&1 | ${pkgs.systemd}/bin/systemd-cat -t lys-wm'";
             inherit user;
           };
         in {
@@ -92,6 +93,12 @@ in
         assert framed == sorted(${builtins.toJSON framedCursors}), f"the cursor is drawn in the frame on {framed}"
         machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'rendering on ${rendersOn},'")
         machine.fail("journalctl -b --no-pager -t lys-wm | grep CREATE_DUMB")
+        if ${if lysWMArgs == "" then "True" else "False"}:
+            compositor = machine.succeed("pgrep -x lys-wm").split()
+            assert len(compositor) == 1, f"a session without --holder runs {compositor}"
+            machine.succeed(f"ls -l /proc/{compositor[0]}/fd | grep -q /dev/dri/card")
+            status, refusal = machine.execute("${run "lys-wmctl upgrade /run/current-system/sw/bin/lys-wm"} 2>&1")
+            assert status != 0 and "--holder" in refusal, f"an upgrade without a holder: {refusal}"
         got = sorted(machine.succeed("${run "lys-wmctl outputs"} | jq -r '.[].name'").split())
         assert got == sorted(want), f"outputs {got}, want {want}"
         display = machine.succeed("ls ${runtime} | grep -m1 '^wayland-[0-9]*$'").strip()

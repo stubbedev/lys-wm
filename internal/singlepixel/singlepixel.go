@@ -14,6 +14,7 @@ import (
 const version = 1
 
 func New(d *server.Display) error {
+	d.OnPrepareHandover(emit)
 	_, err := d.AddGlobal(sspb.WpSinglePixelBufferManagerV1Interface, version, bind)
 	return err
 }
@@ -62,4 +63,39 @@ func (b *Buffer) Unlock() error {
 
 func (b *Buffer) Release() error {
 	return b.resource.SendRelease()
+}
+
+func emit(c *server.Client, st *server.Stream) error {
+	for _, r := range c.Objects() {
+		res, ok := r.(*sw.WlBuffer)
+		if !ok {
+			continue
+		}
+		b, ok := res.Handler().(*Buffer)
+		if !ok {
+			continue
+		}
+		manager, err := st.Global(sspb.WpSinglePixelBufferManagerV1Interface)
+		if err != nil {
+			return err
+		}
+		e, err := st.Request(manager, sspb.WpSinglePixelBufferManagerV1Interface, "create_u32_rgba_buffer")
+		if err != nil {
+			return err
+		}
+		e.Object(res.Base().ID())
+		e.Uint(uint32(b.pixel[2]) * 0x01010101)
+		e.Uint(uint32(b.pixel[1]) * 0x01010101)
+		e.Uint(uint32(b.pixel[0]) * 0x01010101)
+		e.Uint(uint32(b.pixel[3]) * 0x01010101)
+		if err := e.End(); err != nil {
+			return err
+		}
+		st.Emitted(res)
+	}
+	return nil
+}
+
+func (b *Buffer) ResourceID() (wire.ObjectID, bool) {
+	return b.resource.Base().ID(), !b.resource.Base().Removed()
 }

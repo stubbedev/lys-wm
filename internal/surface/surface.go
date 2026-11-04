@@ -36,10 +36,11 @@ type Listener interface {
 
 type Manager struct {
 	listener Listener
+	display  *server.Display
 }
 
 func New(d *server.Display, l Listener) (*Manager, error) {
-	m := &Manager{listener: l}
+	m := &Manager{listener: l, display: d}
 	if _, err := d.AddGlobal(sw.WlCompositorInterface, compositorVersion, m.bindCompositor); err != nil {
 		return nil, err
 	}
@@ -55,6 +56,8 @@ func New(d *server.Display, l Listener) (*Manager, error) {
 	if _, err := d.AddGlobal(spt.WpPresentationInterface, presentationVersion, bindPresentation); err != nil {
 		return nil, err
 	}
+	d.OnHandover(m.emit)
+	d.CheckKeepable(m.keepable)
 	return m, nil
 }
 
@@ -235,6 +238,7 @@ type Hooks struct {
 	Applied    func() error
 	Destroying func() error
 	Destroyed  func() error
+	Handover   func(st *server.Stream) error
 }
 
 type Update struct {

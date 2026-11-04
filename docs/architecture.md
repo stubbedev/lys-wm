@@ -860,3 +860,58 @@ Licences decide how they may be used:
 - KDE's `server-decoration` protocol XML is LGPL-2.1-or-later. It is vendored
   unchanged with its licence header and only describes the wire interface,
   as wlroots, sway and Hyprland ship it; no KDE code is ported.
+
+## Upgrading a running session
+
+`lys-wmctl upgrade <path>` moves a session started with `--holder` to another
+lys-wm binary without logging out (#254). The switch is off by default, and
+without it nothing below runs: one process, logind in-process, no journal. It
+stays off until the path has run on hardware other than a VM's. Two decisions
+carry it.
+
+**The session runs as a holder and a worker.** With `--holder`, the `lys-wm`
+process a display manager starts stays small and never changes: it holds the logind session and
+the devices it took, forwards signals, and exits with its worker's status. The
+compositor is a child of it, and asks it for devices over a socket
+(`internal/session/remote.go`). logind ties a session's devices to one D-Bus
+connection, so the process that holds that connection cannot be replaced; a
+worker can. The holder speaks a small versioned protocol, and a worker that
+cannot speak it refuses the upgrade.
+
+**The state between binaries is Wayland requests.** A dump of Go structs would
+tie a new binary to the old one's internals, and every field added later would
+be a chance to forget one. Instead the old compositor writes, for each client,
+the requests that rebuild its objects, and the new one runs them through its
+ordinary handlers while nothing reaches the client. The protocol is the only
+schema two binaries are certain to share, and the new binary's state is what
+its own handlers made of them.
+
+- `server/journal.go` keeps what each object needs, by `server/policy.go`: the
+  request that created it, the latest of each setter, every `wl_region` edit.
+  `server/testdata/handover-policy.txt` records the reviewed class of every
+  request of every protocol, and a test fails when a new one has none.
+- Surfaces and buffers are written from their state (`surface/handover.go`),
+  since a surface's history is unbounded and only its result matters.
+- What cannot be rebuilt is retired with a legal event: popups are dismissed,
+  foreign toplevel and output heads close and come back under new ids, clipboard
+  sources are cancelled, captures fail, focus leaves. The client sees what any
+  compositor may do at any time, and its stale objects stay inert until it
+  destroys them.
+- What cannot be retired refuses the upgrade before anything changes, and the
+  refusal names the client and the reason: a session lock, a sandbox listener,
+  an exported window, color management. Xwayland is refused too unless
+  `--drop-x11` says to end it, as its window manager's X connection and every X
+  client's state have no equivalent of the above.
+
+The old compositor stays alive and parked, not reading its clients, until the
+new one has rebuilt every client, restored the layout, presented a frame on
+every lit output and said it is ready. Only then does it commit and exit. A new
+binary that fails, crashes or hangs at any point before that leaves the old one
+to resume with nothing changed, as the new one has sent nothing to any client.
+Both share the one DRM file description the holder took, so master never moves;
+the parked one does not read its flip events, and frees its framebuffers as it
+leaves.
+
+Clients keep their connection because the file descriptors are passed; the
+Wayland and IPC listening sockets, and the X sockets, move the same way, so
+`WAYLAND_DISPLAY` and `DISPLAY` stay valid.

@@ -29,6 +29,9 @@ type registryRequests struct{ c *Client }
 
 func (r registryRequests) Bind(registry *sw.WlRegistry, name uint32, iface string, version uint32, id wire.ObjectID) error {
 	g := r.c.display.global(name)
+	if g == nil && r.c.restoring {
+		return r.c.inertBound(iface, version, id)
+	}
 	switch {
 	case g == nil || !g.visible(r.c):
 		return invalidObject(registry, "invalid global %s (%d)", iface, name)

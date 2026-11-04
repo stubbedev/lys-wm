@@ -53,18 +53,19 @@ type Listener interface {
 }
 
 type Logind struct {
-	conn     *dbus.Conn
-	manager  dbus.BusObject
-	session  dbus.BusObject
-	seat     dbus.BusObject
-	listener Listener
-	loop     *loop.Loop
-	signals  chan *dbus.Signal
-	done     chan struct{}
-	active   bool
-	sleeping bool
-	seatID   string
-	owner    string
+	conn       *dbus.Conn
+	manager    dbus.BusObject
+	session    dbus.BusObject
+	seat       dbus.BusObject
+	listener   Listener
+	loop       *loop.Loop
+	signals    chan *dbus.Signal
+	done       chan struct{}
+	active     bool
+	sleeping   bool
+	deferPause bool
+	seatID     string
+	owner      string
 }
 
 func SystemBus(getenv func(string) string) string {
@@ -190,8 +191,8 @@ func (lg *Logind) handle(sig *dbus.Signal) error {
 			return fmt.Errorf("session: PauseDevice: %w", err)
 		}
 		err := lg.listener.DevicePaused(d)
-		if kind == "pause" {
-			err = errors.Join(err, call(lg.session, sessionIface+".PauseDeviceComplete", d.Major, d.Minor).Err)
+		if kind == "pause" && !lg.deferPause {
+			err = errors.Join(err, lg.CompletePause(d))
 		}
 		return err
 	case sessionIface + ".ResumeDevice":
@@ -238,6 +239,17 @@ func (lg *Logind) TakeDevice(path string) (int, Device, error) {
 		return -1, Device{}, fmt.Errorf("session: take %s: %w", path, err)
 	}
 	return int(fd), d, nil
+}
+
+func (lg *Logind) DeferPauses() {
+	lg.deferPause = true
+}
+
+func (lg *Logind) CompletePause(d Device) error {
+	if err := call(lg.session, sessionIface+".PauseDeviceComplete", d.Major, d.Minor).Err; err != nil {
+		return fmt.Errorf("session: complete the pause of device %d:%d: %w", d.Major, d.Minor, err)
+	}
+	return nil
 }
 
 func (lg *Logind) ReleaseDevice(d Device) error {

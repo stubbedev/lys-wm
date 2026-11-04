@@ -69,6 +69,7 @@ func New(d *server.Display, lp *loop.Loop, imp Importer, l Listener) (*Manager, 
 		return nil, fmt.Errorf("dmabuf: the renderer imports %d format and modifier pairs", len(formats))
 	}
 	m := &Manager{loop: lp, importer: imp, listener: l, formats: formats, table: -1, version: legacyVersion, surfaces: map[*surface.Surface][]surfaceFeedback{}}
+	d.OnPrepareHandover(m.emit)
 	m.index = make(map[gpu.FormatModifier]uint16, len(formats))
 	for i, f := range formats {
 		m.index[f] = uint16(i)
@@ -452,4 +453,67 @@ func (b *Buffer) Destroy(*sw.WlBuffer) error {
 
 func (b *Buffer) destroyed() error {
 	return errors.Join(b.m.listener.BufferDestroyed(b), closeAll(b.dmabuf))
+}
+
+func (m *Manager) emit(c *server.Client, st *server.Stream) error {
+	for _, r := range c.Objects() {
+		res, ok := r.(*sw.WlBuffer)
+		if !ok {
+			continue
+		}
+		b, ok := res.Handler().(*Buffer)
+		if !ok {
+			continue
+		}
+		manager, err := st.Global(sld.ZwpLinuxDmabufV1Interface)
+		if err != nil {
+			return err
+		}
+		params := st.Temp()
+		e, err := st.Request(manager, sld.ZwpLinuxDmabufV1Interface, "create_params")
+		if err != nil {
+			return err
+		}
+		e.Object(params)
+		if err := e.End(); err != nil {
+			return err
+		}
+		hi, lo := wire.Halves(uint64(b.dmabuf.Modifier))
+		for i, p := range b.dmabuf.Planes {
+			e, err := st.Request(params, sld.ZwpLinuxBufferParamsV1Interface, "add")
+			if err != nil {
+				return err
+			}
+			e.FD(p.FD)
+			e.Uint(uint32(i))
+			e.Uint(p.Offset)
+			e.Uint(p.Stride)
+			e.Uint(hi)
+			e.Uint(lo)
+			if err := e.End(); err != nil {
+				return err
+			}
+		}
+		e, err = st.Request(params, sld.ZwpLinuxBufferParamsV1Interface, "create_immed")
+		if err != nil {
+			return err
+		}
+		e.Object(res.Base().ID())
+		e.Int(int32(b.dmabuf.Size.X)) //nolint:gosec // these came from int32 arguments
+		e.Int(int32(b.dmabuf.Size.Y)) //nolint:gosec // these came from int32 arguments
+		e.Uint(uint32(b.dmabuf.Format))
+		e.Uint(0)
+		if err := e.End(); err != nil {
+			return err
+		}
+		e, err = st.Request(params, sld.ZwpLinuxBufferParamsV1Interface, "destroy")
+		if err != nil {
+			return err
+		}
+		if err := e.End(); err != nil {
+			return err
+		}
+		st.Emitted(res)
+	}
+	return nil
 }

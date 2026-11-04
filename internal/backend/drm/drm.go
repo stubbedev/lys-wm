@@ -1496,3 +1496,26 @@ func (o *Output) release() error {
 	}
 	return err
 }
+
+func (b *Backend) Park() error {
+	if b.src == nil {
+		return nil
+	}
+	return b.src.Modify(0)
+}
+
+func (b *Backend) Unpark() error {
+	if b.src == nil {
+		return nil
+	}
+	return b.src.Modify(loop.Readable)
+}
+
+func (b *Backend) Flipping() string {
+	for _, o := range b.outputs {
+		if o.flipping {
+			return fmt.Sprintf("output %s has a flip on its way", o.Name())
+		}
+	}
+	return ""
+}

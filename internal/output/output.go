@@ -118,6 +118,7 @@ func (m *Manager) Add(b backend.Output, position image.Point, scale Scale) (*Out
 	if o.global, err = m.display.AddGlobal(sw.WlOutputInterface, outputVersion, o.bind); err != nil {
 		return nil, err
 	}
+	o.global.SetKey(b.Name())
 	before := m.xScale()
 	m.outputs = append(m.outputs, o)
 	return o, m.rescaled(before, o)

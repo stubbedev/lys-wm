@@ -44,6 +44,8 @@ type Handler interface {
 	Icon(w wm.WindowID, size int) (*image.RGBA, int, error)
 }
 
+type Upgrader func(binary string, dropX11 bool, conn *os.File, done func(UpgradeResult, error))
+
 type watcher struct {
 	lines chan []byte
 }
@@ -57,9 +59,12 @@ type Server struct {
 	closing sync.Once
 	wg      sync.WaitGroup
 
-	mu    sync.Mutex
-	conns map[*net.UnixConn]struct{}
+	mu       sync.Mutex
+	conns    map[*net.UnixConn]struct{}
+	watching map[*net.UnixConn]struct{}
 
+	upgrade  Upgrader
+	resume   chan struct{}
 	watchers []*watcher
 	last     Snapshot
 	pending  []Event
@@ -78,9 +83,9 @@ func Listen(l *loop.Loop, path string, h Handler, report func(error)) (*Server, 
 		return nil, fmt.Errorf("ipc: listen: %w", err)
 	}
 	ln.SetUnlinkOnClose(true)
-	s := &Server{loop: l, handler: h, report: report, ln: ln, done: make(chan struct{}), conns: map[*net.UnixConn]struct{}{}}
+	s := &Server{loop: l, handler: h, report: report, ln: ln, done: make(chan struct{}), conns: map[*net.UnixConn]struct{}{}, watching: map[*net.UnixConn]struct{}{}}
 	l.BeforeWait(s.publish)
-	s.wg.Go(s.accept)
+	s.Start()
 	return s, nil
 }
 
@@ -121,6 +126,10 @@ func (s *Server) post(f func()) {
 func (s *Server) accept() {
 	for {
 		conn, err := s.ln.AcceptUnix()
+		if err != nil && errors.Is(err, os.ErrDeadlineExceeded) {
+			s.waitResume()
+			continue
+		}
 		if s.shut() {
 			if conn != nil {
 				_ = conn.Close()
@@ -137,6 +146,116 @@ func (s *Server) accept() {
 		s.mu.Unlock()
 		s.wg.Go(func() { s.serve(conn) })
 	}
+}
+
+func (s *Server) PauseAccept() error {
+	s.mu.Lock()
+	s.resume = make(chan struct{})
+	s.mu.Unlock()
+	if err := s.ln.SetDeadline(time.Now()); err != nil {
+		return fmt.Errorf("ipc: stop accepting: %w", err)
+	}
+	return nil
+}
+
+func (s *Server) ResumeAccept() error {
+	err := s.ln.SetDeadline(time.Time{})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.resume != nil {
+		close(s.resume)
+		s.resume = nil
+	}
+	if err != nil {
+		return fmt.Errorf("ipc: accept again: %w", err)
+	}
+	return nil
+}
+
+func (s *Server) waitResume() {
+	s.mu.Lock()
+	resume := s.resume
+	s.mu.Unlock()
+	if resume == nil {
+		return
+	}
+	select {
+	case <-resume:
+	case <-s.done:
+	}
+}
+
+func (s *Server) OnUpgrade(u Upgrader) {
+	s.upgrade = u
+}
+
+func (s *Server) runUpgrade(conn *net.UnixConn, binary string, dropX11 bool) {
+	file, err := conn.File()
+	if err != nil {
+		s.reply(conn, nil, fmt.Errorf("ipc: keep the upgrade's connection: %w", err))
+		return
+	}
+	defer file.Close()
+	type outcome struct {
+		result UpgradeResult
+		err    error
+	}
+	ch := make(chan outcome, 1)
+	if _, err := onLoop(s, func() (struct{}, error) {
+		if s.upgrade == nil {
+			return struct{}{}, errors.New("this lys-wm cannot upgrade")
+		}
+		s.upgrade(binary, dropX11, file, func(r UpgradeResult, err error) { ch <- outcome{r, err} })
+		return struct{}{}, nil
+	}); err != nil {
+		s.reply(conn, nil, err)
+		return
+	}
+	select {
+	case o := <-ch:
+		s.reply(conn, o.result, o.err)
+	case <-s.done:
+	}
+}
+
+func ReplyUpgrade(file *os.File, result UpgradeResult) error {
+	body, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("ipc: encode the upgrade's result: %w", err)
+	}
+	line, err := json.Marshal(Response{Version: Version, Result: body})
+	if err != nil {
+		return fmt.Errorf("ipc: encode the upgrade's response: %w", err)
+	}
+	_, err = file.Write(append(line, '\n'))
+	return err
+}
+
+func (s *Server) ListenerFD() (*os.File, error) {
+	return s.ln.File()
+}
+
+func (s *Server) Path() string {
+	return s.ln.Addr().String()
+}
+
+func Adopt(l *loop.Loop, file *os.File, h Handler, report func(error)) (*Server, error) {
+	fl, err := net.FileListener(file)
+	if err != nil {
+		return nil, fmt.Errorf("ipc: adopt the listener: %w", err)
+	}
+	ln, ok := fl.(*net.UnixListener)
+	if !ok {
+		return nil, errors.Join(fmt.Errorf("ipc: adopted a %T listener", fl), fl.Close())
+	}
+	ln.SetUnlinkOnClose(true)
+	s := &Server{loop: l, handler: h, report: report, ln: ln, done: make(chan struct{}), conns: map[*net.UnixConn]struct{}{}, watching: map[*net.UnixConn]struct{}{}}
+	l.BeforeWait(s.publish)
+	return s, nil
+}
+
+func (s *Server) Start() {
+	s.wg.Go(s.accept)
 }
 
 func (s *Server) forget(conn *net.UnixConn) {
@@ -229,12 +348,16 @@ func (s *Server) serve(conn *net.UnixConn) {
 		return
 	}
 	if req.kind == KindWatch {
-		s.watch(conn)
+		s.watch(conn, true)
 		return
 	}
 	if req.kind == KindIcon {
 		result, err := s.icon(req.icon)
 		s.reply(conn, result, err)
+		return
+	}
+	if req.kind == KindUpgrade {
+		s.runUpgrade(conn, req.binary, req.dropX11)
 		return
 	}
 	result, err := onLoop(s, func() (any, error) {
@@ -266,7 +389,48 @@ func (s *Server) icon(req iconRequest) (any, error) {
 	return IconImage{Size: px.img.Bounds().Dx(), Scale: px.scale, PNG: buf.Bytes()}, nil
 }
 
-func (s *Server) watch(conn *net.UnixConn) {
+func (s *Server) WatcherFiles() ([]*os.File, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	files := make([]*os.File, 0, len(s.watching))
+	for conn := range s.watching {
+		f, err := conn.File()
+		if err != nil {
+			return nil, fmt.Errorf("ipc: keep a watcher: %w", err)
+		}
+		files = append(files, f)
+	}
+	return files, nil
+}
+
+func (s *Server) AdoptWatcher(file *os.File) error {
+	fc, err := net.FileConn(file)
+	if err != nil {
+		return fmt.Errorf("ipc: adopt a watcher: %w", err)
+	}
+	conn, ok := fc.(*net.UnixConn)
+	if !ok {
+		return errors.Join(fmt.Errorf("ipc: adopted a %T watcher", fc), fc.Close())
+	}
+	s.mu.Lock()
+	s.conns[conn] = struct{}{}
+	s.mu.Unlock()
+	s.wg.Go(func() {
+		defer s.forget(conn)
+		s.watch(conn, false)
+	})
+	return nil
+}
+
+func (s *Server) watch(conn *net.UnixConn, greet bool) {
+	s.mu.Lock()
+	s.watching[conn] = struct{}{}
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.watching, conn)
+		s.mu.Unlock()
+	}()
 	w := &watcher{lines: make(chan []byte, watchBacklog)}
 	if _, err := onLoop(s, func() (struct{}, error) {
 		if len(s.watchers) == 0 {
@@ -279,7 +443,9 @@ func (s *Server) watch(conn *net.UnixConn) {
 		return
 	}
 	defer s.post(func() { s.drop(w) })
-	s.reply(conn, nil, nil)
+	if greet {
+		s.reply(conn, nil, nil)
+	}
 	for {
 		select {
 		case line, ok := <-w.lines:

@@ -29,6 +29,9 @@ type Client struct {
 	dropping   bool
 	gone       bool
 	context    *SecurityContext
+	journal    journal
+	inerts     int
+	restoring  bool
 }
 
 func (d *Display) AddClient(fd int) (*Client, error) {
@@ -51,6 +54,7 @@ func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
 		hooks:   map[wire.ObjectID][]func() error{},
 		lastID:  wire.FirstServerID - 1,
 		context: context,
+		journal: journal{policies: d.policies, records: map[wire.ObjectID]*record{}},
 	}
 	c.conn.DeferSendErrors()
 	if d.trace != nil {
@@ -124,7 +128,7 @@ func (c *Client) Add(r wire.Resource) error {
 	switch {
 	case id == 0:
 		return fmt.Errorf("server: new %s with id 0: %w", r.Base().Interface().Name, wire.ErrInvalidNewID)
-	case id.ServerSide():
+	case id.ServerSide() && !c.restoring:
 		if _, ok := c.reserved[id]; !ok {
 			return fmt.Errorf("server: new %s with server id %d that lys-wm did not hand out: %w", r.Base().Interface().Name, id, wire.ErrInvalidNewID)
 		}
@@ -145,6 +149,7 @@ func (c *Client) Remove(id wire.ObjectID) error {
 	r.Base().MarkRemoved()
 	hooks := c.runHooks(id)
 	delete(c.objects, id)
+	c.journal.removed(id)
 	if !id.ServerSide() && !c.gone {
 		return errors.Join(hooks, c.wlDisplay.SendDeleteID(uint32(id)))
 	}
@@ -198,6 +203,17 @@ func (c *Client) dispatch() error {
 			_ = m.Finish()
 			return c.fail(invalidObject(c.wlDisplay, "invalid object %d", m.ID))
 		}
+		if c.inerts > 0 && c.namesInert(r, m) {
+			if err := c.ignore(r, m); err != nil {
+				return c.fail(err)
+			}
+			continue
+		}
+		if c.display.journaling {
+			if err := c.journal.observe(r, m); err != nil {
+				return c.fail(err)
+			}
+		}
 		if err := r.Dispatch(m); err != nil {
 			return c.fail(err)
 		}
@@ -206,6 +222,9 @@ func (c *Client) dispatch() error {
 }
 
 func (c *Client) fail(err error) error {
+	if c.restoring {
+		c.display.restoreFailed(c, err)
+	}
 	object, code := wire.Resource(c.wlDisplay), sw.WlDisplayErrorImplementation
 	var pe *wire.ProtocolError
 	var me *wire.MessageError
@@ -269,6 +288,7 @@ func (c *Client) destroy() error {
 		errs = append(errs, c.runHooks(id))
 	}
 	_ = c.conn.Flush()
+	c.journal.close()
 	errs = append(errs, c.source.Remove(), c.conn.Close())
 	c.display.removeClient(c)
 	if err := errors.Join(errs...); err != nil {

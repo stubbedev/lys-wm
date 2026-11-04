@@ -257,7 +257,14 @@ func (l *LayerSurface) GetPopup(_ *swlr.ZwlrLayerSurfaceV1, res *sxdg.XdgPopup) 
 }
 
 func (l *LayerSurface) AckConfigure(obj *swlr.ZwlrLayerSurfaceV1, serial uint32) error {
+	if l.client.Restoring() {
+		l.configures.ackAny()
+		return nil
+	}
 	if !l.configures.ack(serial) {
+		if l.shell.display.StaleAck(serial) {
+			return nil
+		}
 		return obj.ProtocolError(swlr.ZwlrLayerSurfaceV1ErrorInvalidSurfaceState, "serial %d was never sent or is already acked", serial)
 	}
 	return nil
@@ -281,4 +288,11 @@ func (l *LayerSurface) SetExclusiveEdge(obj *swlr.ZwlrLayerSurfaceV1, edge Edges
 	}
 	l.pending.ExclusiveEdge = edge
 	return nil
+}
+
+func (l *LayerSurface) HandoverPrelude(st *server.Stream, res *sw.WlSurface) (bool, error) {
+	if l.closed || !l.life.initialSent() {
+		return false, nil
+	}
+	return true, emitInitial(st, res, l.resource.Base().ID(), swlr.ZwlrLayerSurfaceV1Interface)
 }

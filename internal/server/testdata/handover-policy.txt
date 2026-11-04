@@ -1,0 +1,646 @@
+ext_background_effect_manager_v1 = journal retire=
+ext_background_effect_manager_v1.destroy = destructor
+ext_background_effect_manager_v1.get_background_effect = create
+ext_background_effect_surface_v1 = journal retire=
+ext_background_effect_surface_v1.destroy = destructor
+ext_background_effect_surface_v1.set_blur_region = latest
+ext_data_control_device_v1 = journal retire=selection,primary_selection
+ext_data_control_device_v1.set_selection = dropped
+ext_data_control_device_v1.destroy = destructor
+ext_data_control_device_v1.set_primary_selection = dropped
+ext_data_control_manager_v1 = journal retire=
+ext_data_control_manager_v1.create_data_source = dropped
+ext_data_control_manager_v1.get_data_device = create
+ext_data_control_manager_v1.destroy = destructor
+ext_data_control_offer_v1 = inert retire=
+ext_data_control_offer_v1.receive = latest
+ext_data_control_offer_v1.destroy = destructor
+ext_data_control_source_v1 = inert retire=cancelled
+ext_data_control_source_v1.offer = latest
+ext_data_control_source_v1.destroy = destructor
+ext_foreign_toplevel_handle_v1 = inert retire=closed
+ext_foreign_toplevel_handle_v1.destroy = destructor
+ext_foreign_toplevel_image_capture_source_manager_v1 = journal retire=
+ext_foreign_toplevel_image_capture_source_manager_v1.create_source = create
+ext_foreign_toplevel_image_capture_source_manager_v1.destroy = destructor
+ext_foreign_toplevel_list_v1 = journal retire=
+ext_foreign_toplevel_list_v1.stop = dropped
+ext_foreign_toplevel_list_v1.destroy = destructor
+ext_idle_notification_v1 = journal retire=
+ext_idle_notification_v1.destroy = destructor
+ext_idle_notifier_v1 = journal retire=
+ext_idle_notifier_v1.destroy = destructor
+ext_idle_notifier_v1.get_idle_notification = create
+ext_idle_notifier_v1.get_input_idle_notification = create
+ext_image_capture_source_v1 = journal retire=
+ext_image_capture_source_v1.destroy = destructor
+ext_image_copy_capture_cursor_session_v1 = inert retire=
+ext_image_copy_capture_cursor_session_v1.destroy = destructor
+ext_image_copy_capture_cursor_session_v1.get_capture_session = dropped
+ext_image_copy_capture_frame_v1 = inert retire=failed
+ext_image_copy_capture_frame_v1.destroy = destructor
+ext_image_copy_capture_frame_v1.attach_buffer = latest
+ext_image_copy_capture_frame_v1.damage_buffer = latest
+ext_image_copy_capture_frame_v1.capture = latest
+ext_image_copy_capture_manager_v1 = journal retire=
+ext_image_copy_capture_manager_v1.create_session = dropped
+ext_image_copy_capture_manager_v1.create_pointer_cursor_session = dropped
+ext_image_copy_capture_manager_v1.destroy = destructor
+ext_image_copy_capture_session_v1 = inert retire=stopped
+ext_image_copy_capture_session_v1.create_frame = dropped
+ext_image_copy_capture_session_v1.destroy = destructor
+ext_output_image_capture_source_manager_v1 = journal retire=
+ext_output_image_capture_source_manager_v1.create_source = create
+ext_output_image_capture_source_manager_v1.destroy = destructor
+ext_session_lock_manager_v1 = journal retire=
+ext_session_lock_manager_v1.destroy = destructor
+ext_session_lock_manager_v1.lock = create
+ext_session_lock_surface_v1 = refused retire=
+ext_session_lock_surface_v1.destroy = destructor
+ext_session_lock_surface_v1.ack_configure = latest
+ext_session_lock_v1 = refused retire=
+ext_session_lock_v1.destroy = destructor
+ext_session_lock_v1.get_lock_surface = create
+ext_session_lock_v1.unlock_and_destroy = destructor
+ext_workspace_group_handle_v1 = inert retire=removed
+ext_workspace_group_handle_v1.create_workspace = dropped
+ext_workspace_group_handle_v1.destroy = destructor
+ext_workspace_handle_v1 = inert retire=removed
+ext_workspace_handle_v1.destroy = destructor
+ext_workspace_handle_v1.activate = latest
+ext_workspace_handle_v1.deactivate = latest
+ext_workspace_handle_v1.assign = latest
+ext_workspace_handle_v1.remove = latest
+ext_workspace_manager_v1 = journal retire=
+ext_workspace_manager_v1.commit = dropped
+ext_workspace_manager_v1.stop = dropped
+hyprland_ctm_control_manager_v1 = journal retire=
+hyprland_ctm_control_manager_v1.set_ctm_for_output = latest-keyed
+hyprland_ctm_control_manager_v1.commit = latest
+hyprland_ctm_control_manager_v1.destroy = destructor
+hyprland_global_shortcut_v1 = journal retire=
+hyprland_global_shortcut_v1.destroy = destructor
+hyprland_global_shortcuts_manager_v1 = journal retire=
+hyprland_global_shortcuts_manager_v1.register_shortcut = create
+hyprland_global_shortcuts_manager_v1.destroy = destructor
+lys_escape_arm_v1 = journal retire=
+lys_escape_arm_v1.destroy = destructor
+lys_escape_manager_v1 = journal retire=
+lys_escape_manager_v1.destroy = destructor
+lys_escape_manager_v1.arm = create
+org_kde_kwin_server_decoration = journal retire=
+org_kde_kwin_server_decoration.release = destructor
+org_kde_kwin_server_decoration.request_mode = latest
+org_kde_kwin_server_decoration_manager = journal retire=
+org_kde_kwin_server_decoration_manager.create = create
+wl_buffer = journal retire=
+wl_buffer.destroy = destructor
+wl_callback = gone retire=done
+wl_compositor = journal retire=
+wl_compositor.create_surface = create
+wl_compositor.create_region = create
+wl_compositor.release = destructor
+wl_data_device = journal retire=selection
+wl_data_device.start_drag = dropped
+wl_data_device.set_selection = dropped
+wl_data_device.release = destructor
+wl_data_device_manager = journal retire=
+wl_data_device_manager.create_data_source = dropped
+wl_data_device_manager.get_data_device = create
+wl_data_device_manager.release = destructor
+wl_data_offer = inert retire=
+wl_data_offer.accept = latest
+wl_data_offer.receive = latest
+wl_data_offer.destroy = destructor
+wl_data_offer.finish = latest
+wl_data_offer.set_actions = latest
+wl_data_source = inert retire=cancelled
+wl_data_source.offer = latest
+wl_data_source.destroy = destructor
+wl_data_source.set_actions = latest
+wl_display = journal retire=
+wl_display.sync = dropped
+wl_display.get_registry = create
+wl_fixes = journal retire=
+wl_fixes.destroy = destructor
+wl_fixes.destroy_registry = dropped
+wl_fixes.ack_global_remove = dropped
+wl_keyboard = journal retire=
+wl_keyboard.release = destructor
+wl_output = journal retire=
+wl_output.release = destructor
+wl_pointer = journal retire=
+wl_pointer.set_cursor = dropped
+wl_pointer.release = destructor
+wl_region = journal retire=
+wl_region.destroy = destructor
+wl_region.add = append
+wl_region.subtract = append
+wl_registry = journal retire=
+wl_registry.bind = create
+wl_seat = journal retire=
+wl_seat.get_pointer = create
+wl_seat.get_keyboard = create
+wl_seat.get_touch = create
+wl_seat.release = destructor
+wl_shell = journal retire=
+wl_shell.get_shell_surface = create
+wl_shell_surface = refused retire=
+wl_shell_surface.pong = latest
+wl_shell_surface.move = latest
+wl_shell_surface.resize = latest
+wl_shell_surface.set_toplevel = latest
+wl_shell_surface.set_transient = latest
+wl_shell_surface.set_fullscreen = latest
+wl_shell_surface.set_popup = latest
+wl_shell_surface.set_maximized = latest
+wl_shell_surface.set_title = latest
+wl_shell_surface.set_class = latest
+wl_shm = journal retire=
+wl_shm.create_pool = dropped
+wl_shm.release = destructor
+wl_shm_pool = journal retire=
+wl_shm_pool.create_buffer = dropped
+wl_shm_pool.destroy = destructor
+wl_shm_pool.resize = dropped
+wl_subcompositor = journal retire=
+wl_subcompositor.destroy = destructor
+wl_subcompositor.get_subsurface = create
+wl_subsurface = journal retire=
+wl_subsurface.destroy = destructor
+wl_subsurface.set_position = latest
+wl_subsurface.place_above = dropped
+wl_subsurface.place_below = dropped
+wl_subsurface.set_sync = latest
+wl_subsurface.set_desync = latest
+wl_surface = journal retire=
+wl_surface.destroy = destructor
+wl_surface.attach = dropped
+wl_surface.damage = dropped
+wl_surface.frame = dropped
+wl_surface.set_opaque_region = dropped
+wl_surface.set_input_region = dropped
+wl_surface.commit = dropped
+wl_surface.set_buffer_transform = dropped
+wl_surface.set_buffer_scale = dropped
+wl_surface.damage_buffer = dropped
+wl_surface.offset = dropped
+wl_surface.get_release = dropped
+wl_touch = journal retire=
+wl_touch.release = destructor
+wp_alpha_modifier_surface_v1 = journal retire=
+wp_alpha_modifier_surface_v1.destroy = destructor
+wp_alpha_modifier_surface_v1.set_multiplier = latest
+wp_alpha_modifier_v1 = journal retire=
+wp_alpha_modifier_v1.destroy = destructor
+wp_alpha_modifier_v1.get_surface = create
+wp_color_management_output_v1 = refused retire=
+wp_color_management_output_v1.destroy = destructor
+wp_color_management_output_v1.get_image_description = create
+wp_color_management_surface_feedback_v1 = refused retire=
+wp_color_management_surface_feedback_v1.destroy = destructor
+wp_color_management_surface_feedback_v1.get_preferred = create
+wp_color_management_surface_feedback_v1.get_preferred_parametric = create
+wp_color_management_surface_v1 = refused retire=
+wp_color_management_surface_v1.destroy = destructor
+wp_color_management_surface_v1.set_image_description = latest
+wp_color_management_surface_v1.unset_image_description = latest
+wp_color_manager_v1 = journal retire=
+wp_color_manager_v1.destroy = destructor
+wp_color_manager_v1.get_output = create
+wp_color_manager_v1.get_surface = create
+wp_color_manager_v1.get_surface_feedback = create
+wp_color_manager_v1.create_icc_creator = create
+wp_color_manager_v1.create_parametric_creator = create
+wp_color_manager_v1.create_windows_scrgb = create
+wp_color_manager_v1.get_image_description = create
+wp_color_manager_v1.create_windows_bt2100 = create
+wp_color_representation_manager_v1 = journal retire=
+wp_color_representation_manager_v1.destroy = destructor
+wp_color_representation_manager_v1.get_surface = create
+wp_color_representation_surface_v1 = journal retire=
+wp_color_representation_surface_v1.destroy = destructor
+wp_color_representation_surface_v1.set_alpha_mode = latest
+wp_color_representation_surface_v1.set_coefficients_and_range = latest
+wp_color_representation_surface_v1.set_chroma_location = latest
+wp_commit_timer_v1 = journal retire=
+wp_commit_timer_v1.set_timestamp = dropped
+wp_commit_timer_v1.destroy = destructor
+wp_commit_timing_manager_v1 = journal retire=
+wp_commit_timing_manager_v1.destroy = destructor
+wp_commit_timing_manager_v1.get_timer = create
+wp_content_type_manager_v1 = journal retire=
+wp_content_type_manager_v1.destroy = destructor
+wp_content_type_manager_v1.get_surface_content_type = create
+wp_content_type_v1 = journal retire=
+wp_content_type_v1.destroy = destructor
+wp_content_type_v1.set_content_type = latest
+wp_cursor_shape_device_v1 = journal retire=
+wp_cursor_shape_device_v1.destroy = destructor
+wp_cursor_shape_device_v1.set_shape = dropped
+wp_cursor_shape_manager_v1 = journal retire=
+wp_cursor_shape_manager_v1.destroy = destructor
+wp_cursor_shape_manager_v1.get_pointer = create
+wp_cursor_shape_manager_v1.get_tablet_tool_v2 = create
+wp_fifo_manager_v1 = journal retire=
+wp_fifo_manager_v1.destroy = destructor
+wp_fifo_manager_v1.get_fifo = create
+wp_fifo_v1 = journal retire=
+wp_fifo_v1.set_barrier = dropped
+wp_fifo_v1.wait_barrier = dropped
+wp_fifo_v1.destroy = destructor
+wp_fractional_scale_manager_v1 = journal retire=
+wp_fractional_scale_manager_v1.destroy = destructor
+wp_fractional_scale_manager_v1.get_fractional_scale = create
+wp_fractional_scale_v1 = journal retire=
+wp_fractional_scale_v1.destroy = destructor
+wp_image_description_creator_icc_v1 = refused retire=
+wp_image_description_creator_icc_v1.create = destructor
+wp_image_description_creator_icc_v1.set_icc_file = latest
+wp_image_description_creator_params_v1 = refused retire=
+wp_image_description_creator_params_v1.create = destructor
+wp_image_description_creator_params_v1.set_tf_named = latest
+wp_image_description_creator_params_v1.set_tf_power = latest
+wp_image_description_creator_params_v1.set_primaries_named = latest
+wp_image_description_creator_params_v1.set_primaries = latest
+wp_image_description_creator_params_v1.set_luminances = latest
+wp_image_description_creator_params_v1.set_mastering_display_primaries = latest
+wp_image_description_creator_params_v1.set_mastering_luminance = latest
+wp_image_description_creator_params_v1.set_max_cll = latest
+wp_image_description_creator_params_v1.set_max_fall = latest
+wp_image_description_info_v1 = refused retire=
+wp_image_description_reference_v1 = refused retire=
+wp_image_description_reference_v1.destroy = destructor
+wp_image_description_v1 = refused retire=
+wp_image_description_v1.destroy = destructor
+wp_image_description_v1.get_information = create
+wp_linux_drm_syncobj_manager_v1 = journal retire=
+wp_linux_drm_syncobj_manager_v1.destroy = destructor
+wp_linux_drm_syncobj_manager_v1.get_surface = create
+wp_linux_drm_syncobj_manager_v1.import_timeline = create
+wp_linux_drm_syncobj_surface_v1 = journal retire=
+wp_linux_drm_syncobj_surface_v1.destroy = destructor
+wp_linux_drm_syncobj_surface_v1.set_acquire_point = dropped
+wp_linux_drm_syncobj_surface_v1.set_release_point = dropped
+wp_linux_drm_syncobj_timeline_v1 = journal retire=
+wp_linux_drm_syncobj_timeline_v1.destroy = destructor
+wp_pointer_warp_v1 = journal retire=
+wp_pointer_warp_v1.destroy = destructor
+wp_pointer_warp_v1.warp_pointer = dropped
+wp_presentation = journal retire=
+wp_presentation.destroy = destructor
+wp_presentation.feedback = dropped
+wp_presentation_feedback = gone retire=discarded
+wp_security_context_manager_v1 = journal retire=
+wp_security_context_manager_v1.destroy = destructor
+wp_security_context_manager_v1.create_listener = dropped
+wp_security_context_v1 = refused retire=
+wp_security_context_v1.destroy = destructor
+wp_security_context_v1.set_sandbox_engine = latest
+wp_security_context_v1.set_app_id = latest
+wp_security_context_v1.set_instance_id = latest
+wp_security_context_v1.commit = latest
+wp_single_pixel_buffer_manager_v1 = journal retire=
+wp_single_pixel_buffer_manager_v1.destroy = destructor
+wp_single_pixel_buffer_manager_v1.create_u32_rgba_buffer = dropped
+wp_tearing_control_manager_v1 = journal retire=
+wp_tearing_control_manager_v1.destroy = destructor
+wp_tearing_control_manager_v1.get_tearing_control = create
+wp_tearing_control_v1 = journal retire=
+wp_tearing_control_v1.set_presentation_hint = latest
+wp_tearing_control_v1.destroy = destructor
+wp_viewport = journal retire=
+wp_viewport.destroy = destructor
+wp_viewport.set_source = latest
+wp_viewport.set_destination = latest
+wp_viewporter = journal retire=
+wp_viewporter.destroy = destructor
+wp_viewporter.get_viewport = create
+xdg_activation_token_v1 = inert retire=
+xdg_activation_token_v1.set_serial = latest
+xdg_activation_token_v1.set_app_id = latest
+xdg_activation_token_v1.set_surface = latest
+xdg_activation_token_v1.commit = latest
+xdg_activation_token_v1.destroy = destructor
+xdg_activation_v1 = journal retire=
+xdg_activation_v1.destroy = destructor
+xdg_activation_v1.get_activation_token = dropped
+xdg_activation_v1.activate = dropped
+xdg_dialog_v1 = journal retire=
+xdg_dialog_v1.destroy = destructor
+xdg_dialog_v1.set_modal = latest
+xdg_dialog_v1.unset_modal = latest
+xdg_popup = inert retire=popup_done
+xdg_popup.destroy = destructor
+xdg_popup.grab = latest
+xdg_popup.reposition = latest
+xdg_positioner = journal retire=
+xdg_positioner.destroy = destructor
+xdg_positioner.set_size = latest
+xdg_positioner.set_anchor_rect = latest
+xdg_positioner.set_anchor = latest
+xdg_positioner.set_gravity = latest
+xdg_positioner.set_constraint_adjustment = latest
+xdg_positioner.set_offset = latest
+xdg_positioner.set_reactive = latest
+xdg_positioner.set_parent_size = latest
+xdg_positioner.set_parent_configure = latest
+xdg_surface = journal retire=
+xdg_surface.destroy = destructor
+xdg_surface.get_toplevel = create
+xdg_surface.get_popup = dropped
+xdg_surface.set_window_geometry = latest
+xdg_surface.ack_configure = dropped
+xdg_system_bell_v1 = journal retire=
+xdg_system_bell_v1.destroy = destructor
+xdg_system_bell_v1.ring = dropped
+xdg_toplevel = journal retire=
+xdg_toplevel.destroy = destructor
+xdg_toplevel.set_parent = latest
+xdg_toplevel.set_title = latest
+xdg_toplevel.set_app_id = latest
+xdg_toplevel.show_window_menu = dropped
+xdg_toplevel.move = dropped
+xdg_toplevel.resize = dropped
+xdg_toplevel.set_max_size = latest
+xdg_toplevel.set_min_size = latest
+xdg_toplevel.set_maximized = latest
+xdg_toplevel.unset_maximized = latest
+xdg_toplevel.set_fullscreen = latest
+xdg_toplevel.unset_fullscreen = latest
+xdg_toplevel.set_minimized = dropped
+xdg_toplevel_icon_manager_v1 = journal retire=
+xdg_toplevel_icon_manager_v1.destroy = destructor
+xdg_toplevel_icon_manager_v1.create_icon = create
+xdg_toplevel_icon_manager_v1.set_icon = latest-keyed
+xdg_toplevel_icon_v1 = journal retire=
+xdg_toplevel_icon_v1.destroy = destructor
+xdg_toplevel_icon_v1.set_name = latest
+xdg_toplevel_icon_v1.add_buffer = append
+xdg_wm_base = journal retire=
+xdg_wm_base.destroy = destructor
+xdg_wm_base.create_positioner = create
+xdg_wm_base.get_xdg_surface = create
+xdg_wm_base.pong = dropped
+xdg_wm_dialog_v1 = journal retire=
+xdg_wm_dialog_v1.destroy = destructor
+xdg_wm_dialog_v1.get_xdg_dialog = create
+xwayland_shell_v1 = journal retire=
+xwayland_shell_v1.destroy = destructor
+xwayland_shell_v1.get_xwayland_surface = create
+xwayland_surface_v1 = refused retire=
+xwayland_surface_v1.set_serial = latest
+xwayland_surface_v1.destroy = destructor
+zwlr_data_control_device_v1 = journal retire=selection,primary_selection
+zwlr_data_control_device_v1.set_selection = dropped
+zwlr_data_control_device_v1.destroy = destructor
+zwlr_data_control_device_v1.set_primary_selection = dropped
+zwlr_data_control_manager_v1 = journal retire=
+zwlr_data_control_manager_v1.create_data_source = dropped
+zwlr_data_control_manager_v1.get_data_device = create
+zwlr_data_control_manager_v1.destroy = destructor
+zwlr_data_control_offer_v1 = inert retire=
+zwlr_data_control_offer_v1.receive = latest
+zwlr_data_control_offer_v1.destroy = destructor
+zwlr_data_control_source_v1 = inert retire=cancelled
+zwlr_data_control_source_v1.offer = latest
+zwlr_data_control_source_v1.destroy = destructor
+zwlr_foreign_toplevel_handle_v1 = inert retire=closed
+zwlr_foreign_toplevel_handle_v1.set_maximized = latest
+zwlr_foreign_toplevel_handle_v1.unset_maximized = latest
+zwlr_foreign_toplevel_handle_v1.set_minimized = latest
+zwlr_foreign_toplevel_handle_v1.unset_minimized = latest
+zwlr_foreign_toplevel_handle_v1.activate = latest
+zwlr_foreign_toplevel_handle_v1.close = latest
+zwlr_foreign_toplevel_handle_v1.set_rectangle = latest
+zwlr_foreign_toplevel_handle_v1.destroy = destructor
+zwlr_foreign_toplevel_handle_v1.set_fullscreen = latest
+zwlr_foreign_toplevel_handle_v1.unset_fullscreen = latest
+zwlr_foreign_toplevel_manager_v1 = journal retire=
+zwlr_foreign_toplevel_manager_v1.stop = dropped
+zwlr_gamma_control_manager_v1 = journal retire=
+zwlr_gamma_control_manager_v1.get_gamma_control = dropped
+zwlr_gamma_control_manager_v1.destroy = destructor
+zwlr_gamma_control_v1 = inert retire=failed
+zwlr_gamma_control_v1.set_gamma = latest
+zwlr_gamma_control_v1.destroy = destructor
+zwlr_layer_shell_v1 = journal retire=
+zwlr_layer_shell_v1.get_layer_surface = create
+zwlr_layer_shell_v1.destroy = destructor
+zwlr_layer_surface_v1 = journal retire=
+zwlr_layer_surface_v1.set_size = latest
+zwlr_layer_surface_v1.set_anchor = latest
+zwlr_layer_surface_v1.set_exclusive_zone = latest
+zwlr_layer_surface_v1.set_margin = latest
+zwlr_layer_surface_v1.set_keyboard_interactivity = latest
+zwlr_layer_surface_v1.get_popup = dropped
+zwlr_layer_surface_v1.ack_configure = dropped
+zwlr_layer_surface_v1.destroy = destructor
+zwlr_layer_surface_v1.set_layer = latest
+zwlr_layer_surface_v1.set_exclusive_edge = latest
+zwlr_output_configuration_head_v1 = inert retire=
+zwlr_output_configuration_head_v1.set_mode = latest
+zwlr_output_configuration_head_v1.set_custom_mode = latest
+zwlr_output_configuration_head_v1.set_position = latest
+zwlr_output_configuration_head_v1.set_transform = latest
+zwlr_output_configuration_head_v1.set_scale = latest
+zwlr_output_configuration_head_v1.set_adaptive_sync = latest
+zwlr_output_configuration_v1 = inert retire=cancelled
+zwlr_output_configuration_v1.enable_head = dropped
+zwlr_output_configuration_v1.disable_head = dropped
+zwlr_output_configuration_v1.apply = dropped
+zwlr_output_configuration_v1.test = dropped
+zwlr_output_configuration_v1.destroy = destructor
+zwlr_output_head_v1 = inert retire=finished
+zwlr_output_head_v1.release = destructor
+zwlr_output_manager_v1 = journal retire=
+zwlr_output_manager_v1.create_configuration = dropped
+zwlr_output_manager_v1.stop = dropped
+zwlr_output_mode_v1 = inert retire=finished
+zwlr_output_mode_v1.release = destructor
+zwlr_output_power_manager_v1 = journal retire=
+zwlr_output_power_manager_v1.get_output_power = dropped
+zwlr_output_power_manager_v1.destroy = destructor
+zwlr_output_power_v1 = inert retire=failed
+zwlr_output_power_v1.set_mode = latest
+zwlr_output_power_v1.destroy = destructor
+zwlr_screencopy_frame_v1 = inert retire=failed
+zwlr_screencopy_frame_v1.copy = latest
+zwlr_screencopy_frame_v1.destroy = destructor
+zwlr_screencopy_frame_v1.copy_with_damage = latest
+zwlr_screencopy_manager_v1 = journal retire=
+zwlr_screencopy_manager_v1.capture_output = dropped
+zwlr_screencopy_manager_v1.capture_output_region = dropped
+zwlr_screencopy_manager_v1.destroy = destructor
+zwlr_virtual_pointer_manager_v1 = journal retire=
+zwlr_virtual_pointer_manager_v1.create_virtual_pointer = create
+zwlr_virtual_pointer_manager_v1.destroy = destructor
+zwlr_virtual_pointer_manager_v1.create_virtual_pointer_with_output = create
+zwlr_virtual_pointer_v1 = journal retire=
+zwlr_virtual_pointer_v1.motion = dropped
+zwlr_virtual_pointer_v1.motion_absolute = dropped
+zwlr_virtual_pointer_v1.button = dropped
+zwlr_virtual_pointer_v1.axis = dropped
+zwlr_virtual_pointer_v1.frame = dropped
+zwlr_virtual_pointer_v1.axis_source = dropped
+zwlr_virtual_pointer_v1.axis_stop = dropped
+zwlr_virtual_pointer_v1.axis_discrete = dropped
+zwlr_virtual_pointer_v1.destroy = destructor
+zwp_confined_pointer_v1 = journal retire=
+zwp_confined_pointer_v1.destroy = destructor
+zwp_confined_pointer_v1.set_region = latest
+zwp_idle_inhibit_manager_v1 = journal retire=
+zwp_idle_inhibit_manager_v1.destroy = destructor
+zwp_idle_inhibit_manager_v1.create_inhibitor = create
+zwp_idle_inhibitor_v1 = journal retire=
+zwp_idle_inhibitor_v1.destroy = destructor
+zwp_input_method_keyboard_grab_v2 = inert retire=
+zwp_input_method_keyboard_grab_v2.release = destructor
+zwp_input_method_manager_v2 = journal retire=
+zwp_input_method_manager_v2.get_input_method = dropped
+zwp_input_method_manager_v2.destroy = destructor
+zwp_input_method_v2 = inert retire=unavailable
+zwp_input_method_v2.commit_string = latest
+zwp_input_method_v2.set_preedit_string = latest
+zwp_input_method_v2.delete_surrounding_text = latest
+zwp_input_method_v2.commit = latest
+zwp_input_method_v2.get_input_popup_surface = create
+zwp_input_method_v2.grab_keyboard = create
+zwp_input_method_v2.destroy = destructor
+zwp_input_popup_surface_v2 = inert retire=
+zwp_input_popup_surface_v2.destroy = destructor
+zwp_keyboard_shortcuts_inhibit_manager_v1 = journal retire=
+zwp_keyboard_shortcuts_inhibit_manager_v1.destroy = destructor
+zwp_keyboard_shortcuts_inhibit_manager_v1.inhibit_shortcuts = create
+zwp_keyboard_shortcuts_inhibitor_v1 = journal retire=
+zwp_keyboard_shortcuts_inhibitor_v1.destroy = destructor
+zwp_linux_buffer_params_v1 = inert retire=failed
+zwp_linux_buffer_params_v1.destroy = destructor
+zwp_linux_buffer_params_v1.add = latest
+zwp_linux_buffer_params_v1.create = latest
+zwp_linux_buffer_params_v1.create_immed = create
+zwp_linux_buffer_params_v1.set_sampling_device = latest
+zwp_linux_dmabuf_feedback_v1 = journal retire=
+zwp_linux_dmabuf_feedback_v1.destroy = destructor
+zwp_linux_dmabuf_v1 = journal retire=
+zwp_linux_dmabuf_v1.destroy = destructor
+zwp_linux_dmabuf_v1.create_params = dropped
+zwp_linux_dmabuf_v1.get_default_feedback = create
+zwp_linux_dmabuf_v1.get_surface_feedback = create
+zwp_locked_pointer_v1 = journal retire=
+zwp_locked_pointer_v1.destroy = destructor
+zwp_locked_pointer_v1.set_cursor_position_hint = latest
+zwp_locked_pointer_v1.set_region = latest
+zwp_pointer_constraints_v1 = journal retire=
+zwp_pointer_constraints_v1.destroy = destructor
+zwp_pointer_constraints_v1.lock_pointer = create
+zwp_pointer_constraints_v1.confine_pointer = create
+zwp_pointer_gesture_hold_v1 = journal retire=
+zwp_pointer_gesture_hold_v1.destroy = destructor
+zwp_pointer_gesture_pinch_v1 = journal retire=
+zwp_pointer_gesture_pinch_v1.destroy = destructor
+zwp_pointer_gesture_swipe_v1 = journal retire=
+zwp_pointer_gesture_swipe_v1.destroy = destructor
+zwp_pointer_gestures_v1 = journal retire=
+zwp_pointer_gestures_v1.get_swipe_gesture = create
+zwp_pointer_gestures_v1.get_pinch_gesture = create
+zwp_pointer_gestures_v1.release = destructor
+zwp_pointer_gestures_v1.get_hold_gesture = create
+zwp_primary_selection_device_manager_v1 = journal retire=
+zwp_primary_selection_device_manager_v1.create_source = dropped
+zwp_primary_selection_device_manager_v1.get_device = create
+zwp_primary_selection_device_manager_v1.destroy = destructor
+zwp_primary_selection_device_v1 = journal retire=selection
+zwp_primary_selection_device_v1.set_selection = dropped
+zwp_primary_selection_device_v1.destroy = destructor
+zwp_primary_selection_offer_v1 = inert retire=
+zwp_primary_selection_offer_v1.receive = latest
+zwp_primary_selection_offer_v1.destroy = destructor
+zwp_primary_selection_source_v1 = inert retire=cancelled
+zwp_primary_selection_source_v1.offer = latest
+zwp_primary_selection_source_v1.destroy = destructor
+zwp_relative_pointer_manager_v1 = journal retire=
+zwp_relative_pointer_manager_v1.destroy = destructor
+zwp_relative_pointer_manager_v1.get_relative_pointer = create
+zwp_relative_pointer_v1 = journal retire=
+zwp_relative_pointer_v1.destroy = destructor
+zwp_tablet_manager_v2 = journal retire=
+zwp_tablet_manager_v2.get_tablet_seat = create
+zwp_tablet_manager_v2.destroy = destructor
+zwp_tablet_pad_dial_v2 = inert retire=
+zwp_tablet_pad_dial_v2.set_feedback = latest
+zwp_tablet_pad_dial_v2.destroy = destructor
+zwp_tablet_pad_group_v2 = inert retire=
+zwp_tablet_pad_group_v2.destroy = destructor
+zwp_tablet_pad_ring_v2 = inert retire=
+zwp_tablet_pad_ring_v2.set_feedback = latest
+zwp_tablet_pad_ring_v2.destroy = destructor
+zwp_tablet_pad_strip_v2 = inert retire=
+zwp_tablet_pad_strip_v2.set_feedback = latest
+zwp_tablet_pad_strip_v2.destroy = destructor
+zwp_tablet_pad_v2 = inert retire=removed
+zwp_tablet_pad_v2.set_feedback = latest
+zwp_tablet_pad_v2.destroy = destructor
+zwp_tablet_seat_v2 = journal retire=
+zwp_tablet_seat_v2.destroy = destructor
+zwp_tablet_tool_v2 = inert retire=removed
+zwp_tablet_tool_v2.set_cursor = dropped
+zwp_tablet_tool_v2.destroy = destructor
+zwp_tablet_v2 = inert retire=removed
+zwp_tablet_v2.destroy = destructor
+zwp_text_input_manager_v3 = journal retire=
+zwp_text_input_manager_v3.destroy = destructor
+zwp_text_input_manager_v3.get_text_input = create
+zwp_text_input_v3 = journal retire=
+zwp_text_input_v3.destroy = destructor
+zwp_text_input_v3.enable = latest
+zwp_text_input_v3.disable = latest
+zwp_text_input_v3.set_surrounding_text = latest
+zwp_text_input_v3.set_text_change_cause = latest
+zwp_text_input_v3.set_content_type = latest
+zwp_text_input_v3.set_cursor_rectangle = latest
+zwp_text_input_v3.commit = count
+zwp_text_input_v3.set_available_actions = latest
+zwp_text_input_v3.show_input_panel = latest
+zwp_text_input_v3.hide_input_panel = latest
+zwp_virtual_keyboard_manager_v1 = journal retire=
+zwp_virtual_keyboard_manager_v1.create_virtual_keyboard = create
+zwp_virtual_keyboard_v1 = journal retire=
+zwp_virtual_keyboard_v1.keymap = latest
+zwp_virtual_keyboard_v1.key = dropped
+zwp_virtual_keyboard_v1.modifiers = dropped
+zwp_virtual_keyboard_v1.destroy = destructor
+zxdg_decoration_manager_v1 = journal retire=
+zxdg_decoration_manager_v1.destroy = destructor
+zxdg_decoration_manager_v1.get_toplevel_decoration = create
+zxdg_exported_v1 = refused retire=
+zxdg_exported_v1.destroy = destructor
+zxdg_exported_v2 = refused retire=
+zxdg_exported_v2.destroy = destructor
+zxdg_exporter_v1 = journal retire=
+zxdg_exporter_v1.destroy = destructor
+zxdg_exporter_v1.export = create
+zxdg_exporter_v2 = journal retire=
+zxdg_exporter_v2.destroy = destructor
+zxdg_exporter_v2.export_toplevel = create
+zxdg_imported_v1 = refused retire=
+zxdg_imported_v1.destroy = destructor
+zxdg_imported_v1.set_parent_of = latest
+zxdg_imported_v2 = refused retire=
+zxdg_imported_v2.destroy = destructor
+zxdg_imported_v2.set_parent_of = latest
+zxdg_importer_v1 = journal retire=
+zxdg_importer_v1.destroy = destructor
+zxdg_importer_v1.import = create
+zxdg_importer_v2 = journal retire=
+zxdg_importer_v2.destroy = destructor
+zxdg_importer_v2.import_toplevel = create
+zxdg_output_manager_v1 = journal retire=
+zxdg_output_manager_v1.destroy = destructor
+zxdg_output_manager_v1.get_xdg_output = create
+zxdg_output_v1 = journal retire=
+zxdg_output_v1.destroy = destructor
+zxdg_toplevel_decoration_v1 = journal retire=
+zxdg_toplevel_decoration_v1.destroy = destructor
+zxdg_toplevel_decoration_v1.set_mode = latest
+zxdg_toplevel_decoration_v1.unset_mode = latest

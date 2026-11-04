@@ -5,6 +5,7 @@ package shell
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"image"
 	"slices"
 	"time"
@@ -108,6 +109,7 @@ func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
 	if _, err := d.AddGlobal(sxdg.XdgWmBaseInterface, wmBaseVersion, sh.bind); err != nil {
 		return nil, err
 	}
+	d.OnPrepareHandover(sh.markRetiredRoles)
 	if _, err := d.AddGlobal(swlr.ZwlrLayerShellV1Interface, layerShellVersion, sh.bindLayerShell); err != nil {
 		return nil, err
 	}
@@ -296,6 +298,7 @@ func (q *configures[T]) reset() {
 
 type roleObject interface {
 	ack(serial uint32) bool
+	ackAny()
 	applyPending() error
 	initialCommit() error
 	mapped() error
@@ -380,7 +383,15 @@ func (xs *XdgSurface) AckConfigure(obj *sxdg.XdgSurface, serial uint32) error {
 	if xs.role.inert() {
 		return nil
 	}
+	if xs.surface.Client().Restoring() {
+		xs.role.ackAny()
+		xs.life.acked()
+		return nil
+	}
 	if !xs.role.ack(serial) {
+		if xs.base.shell.display.StaleAck(serial) {
+			return nil
+		}
 		return obj.ProtocolError(sxdg.XdgSurfaceErrorInvalidSerial, "serial %d was never sent or is already acked", serial)
 	}
 	xs.life.acked()
@@ -437,4 +448,56 @@ func (xs *XdgSurface) unmap() error {
 
 func (xs *XdgSurface) unmapped() error {
 	return errors.Join(xs.dismissPopups(), xs.role.unmapped())
+}
+
+func (xs *XdgSurface) HandoverPrelude(st *server.Stream, res *sw.WlSurface) (bool, error) {
+	if xs.role == nil || xs.role.inert() || !xs.life.initialSent() {
+		return false, nil
+	}
+	if _, popup := xs.role.(*Popup); popup {
+		return false, nil
+	}
+	return true, emitInitial(st, res, xs.resource.Base().ID(), sxdg.XdgSurfaceInterface)
+}
+
+func emitInitial(st *server.Stream, res *sw.WlSurface, role wire.ObjectID, iface *wire.Interface) error {
+	e, err := st.Request(res.Base().ID(), sw.WlSurfaceInterface, "commit")
+	if err != nil {
+		return err
+	}
+	if err := e.End(); err != nil {
+		return err
+	}
+	e, err = st.Request(role, iface, "ack_configure")
+	if err != nil {
+		return err
+	}
+	e.Uint(0)
+	return e.End()
+}
+
+func (sh *Shell) markRetiredRoles(c *server.Client, st *server.Stream) error {
+	for _, r := range c.Objects() {
+		res, ok := r.(*sxdg.XdgSurface)
+		if !ok {
+			continue
+		}
+		xs, ok := res.Handler().(*XdgSurface)
+		if !ok {
+			return fmt.Errorf("shell: xdg_surface@%d has handler %T", res.Base().ID(), res.Handler())
+		}
+		if _, popup := xs.role.(*Popup); popup {
+			st.MarkInert(res)
+		}
+	}
+	return nil
+}
+
+func (q *configures[T]) ackAny() {
+	if n := len(q.pending); n > 0 {
+		q.acked, q.isAcked = q.pending[n-1].state, true
+		q.pending = q.pending[:0]
+		return
+	}
+	q.acked, q.isAcked = q.sent, true
 }

@@ -4,11 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-wm/internal/handover"
+	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/server"
 )
 
 const maxDisplays = 32
@@ -130,4 +135,37 @@ func (s *sockets) close() error {
 		return fmt.Errorf("xwayland: release display :%d: %w", s.n, err)
 	}
 	return nil
+}
+
+type SocketState struct {
+	N        int
+	LockPath string
+	Path     string
+	FDs      [2]int
+}
+
+func (s *Server) Sockets(t *handover.FDs) SocketState {
+	return SocketState{N: s.socks.n, LockPath: s.socks.lockPath, Path: s.socks.path, FDs: [2]int{t.Add(s.socks.fds[0]), t.Add(s.socks.fds[1])}}
+}
+
+func Adopt(l *loop.Loop, d *server.Display, opts Options, st SocketState, t *handover.FDs) (*Server, error) {
+	binary, err := exec.LookPath(opts.Binary)
+	if err != nil {
+		return nil, fmt.Errorf("xwayland: find %s (set %s to its path): %w", opts.Binary, Env, err)
+	}
+	opts.Binary = binary
+	socks := &sockets{n: st.N, lockPath: st.LockPath, path: st.Path}
+	for i, n := range st.FDs {
+		if socks.fds[i], err = t.Get(n); err != nil {
+			return nil, err
+		}
+	}
+	s := &Server{loop: l, display: d, opts: opts, socks: socks}
+	if s.shell, err = newShell(d, s.IsClient, s.associated, s.dissociated); err != nil {
+		return nil, errors.Join(err, socks.close())
+	}
+	if err := s.arm(); err != nil {
+		return nil, errors.Join(err, s.Close())
+	}
+	return s, nil
 }

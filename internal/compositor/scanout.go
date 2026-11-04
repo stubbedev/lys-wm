@@ -32,7 +32,7 @@ type filling struct {
 
 func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle) (bool, error) {
 	out, ok := o.Backend().(backend.Scanner)
-	if !ok {
+	if !ok || c.adopting != nil {
 		return false, nil
 	}
 	op, alone := fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)

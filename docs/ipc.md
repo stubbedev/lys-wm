@@ -10,6 +10,7 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 ```sh
 lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
+lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see Upgrading in place
 lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | configproblems | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
@@ -29,7 +30,8 @@ then the server closes it:
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
 `activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
-`window` and `size`) and `watch`. Unknown
+`window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
+[Upgrading in place](./guide/upgrade)) and `watch`. Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
 queries, `result`. A client should refuse to talk to a version it does not

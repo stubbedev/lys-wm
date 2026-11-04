@@ -63,8 +63,12 @@ func (e *Encoder) reserve(n int) bool {
 		e.fail(ErrMessageTooLarge)
 		return false
 	}
-	if len(c.out)+n > cap(c.out) && cap(c.out) < bufferSize {
-		c.out = append(make([]byte, 0, min(bufferSize, max(2*cap(c.out), len(c.out)+n))), c.out...)
+	if len(c.out)+n > cap(c.out) && (cap(c.out) < bufferSize || c.muted) {
+		limit := bufferSize
+		if c.muted {
+			limit = max(2*cap(c.out), len(c.out)+n)
+		}
+		c.out = append(make([]byte, 0, min(limit, max(2*cap(c.out), len(c.out)+n))), c.out...)
 	}
 	if len(c.out)+n <= cap(c.out) {
 		return true
@@ -139,12 +143,12 @@ func (e *Encoder) FD(fd int) {
 		return
 	}
 	c := e.c
-	if len(c.fdsOut) == maxFDsOut {
+	if len(c.fdsOut) == maxFDsOut && !c.muted {
 		if err := e.flushBefore(); err != nil {
 			e.fail(err)
 			return
 		}
-		if len(c.fdsOut) == maxFDsOut {
+		if len(c.fdsOut) == maxFDsOut && !c.muted {
 			e.fail(fmt.Errorf("%w: more than %d in one message", ErrTooManyFDs, maxFDsOut))
 			return
 		}
