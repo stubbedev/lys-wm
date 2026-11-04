@@ -265,6 +265,7 @@ type Compositor struct {
 	cursorSessions  []*cursorSession
 	scannedOut      map[*dmabuf.Buffer]*scannedOut
 	scannedFree     []*scannedOut
+	overlays        map[*output.Output]overlayShown
 	lookPath        func(string) (string, error)
 	execs           loop.Serial
 	cursorLoader    func(theme *xcursor.Theme, name string, px int) (xcursor.Image, error)

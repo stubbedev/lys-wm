@@ -175,6 +175,9 @@ func (c *Compositor) render(o *output.Output) error {
 	sc.cur.clip()
 	c.resolveBlurs(o, &sc.cur, 0)
 	sc.cur.dropHiddenRims()
+	if err := c.assignOverlay(o, sc, bounds, shading != nil); err != nil {
+		c.report(fmt.Errorf("compositor: an overlay plane on %s: %w", o.Backend().Name(), err))
+	}
 	if err := sc.blurs.dropUnused(); err != nil {
 		c.report(fmt.Errorf("compositor: drop the blurs unused on %s: %w", o.Backend().Name(), err))
 	}
@@ -200,6 +203,13 @@ func (c *Compositor) render(o *output.Output) error {
 		c.frames.Scanout(o.Backend().Name())
 		sc.presented()
 		sc.targetStale = true
+		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
+	}
+	if flipped, err := c.flipOverlay(o, sc); err != nil || flipped {
+		if err != nil {
+			return err
+		}
+		sc.presented()
 		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
 	}
 	if sc.targetStale {

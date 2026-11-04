@@ -87,7 +87,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 		if err != nil {
 			return nil, err
 		}
-		sc.cur.replay(p, colorOut{plans: &c.plans})
+		sc.cur.replayOnPrimary(p, colorOut{plans: &c.plans})
 		return repaint, p.End()
 	}
 	if err := c.ensureWorking(o, sc, bounds); err != nil {

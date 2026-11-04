@@ -465,7 +465,7 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 		return err
 	}
 	p.Clear(render.Color{})
-	replayOps(below, p, area.Min, to)
+	replayOps(below, p, area.Min, to, false)
 	if err := p.End(); err != nil {
 		return err
 	}

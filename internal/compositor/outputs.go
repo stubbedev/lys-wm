@@ -311,6 +311,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	if hw, ok := c.hwCursors[o]; ok {
 		errs = append(errs, hw.release())
 		delete(c.hwCursors, o)
+		delete(c.overlays, o)
 	}
 	delete(c.blanked, o)
 	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())

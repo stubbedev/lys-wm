@@ -144,6 +144,13 @@ type Scanner interface {
 	ScanoutFormats() gpu.ScanoutTarget
 }
 
+type OverlayPlanes interface {
+	TestOverlay(key ScanoutKey, d gpu.DMABUF, dst image.Rectangle) bool
+	SetOverlay(key ScanoutKey, d gpu.DMABUF, dst image.Rectangle, release func() error) error
+	ClearOverlay()
+	FlipOverlay() (bool, error)
+}
+
 type CursorPlane interface {
 	CursorSize() image.Point
 	BeginCursor() (Frame, error)

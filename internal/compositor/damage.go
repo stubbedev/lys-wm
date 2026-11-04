@@ -38,6 +38,7 @@ type drawOp struct {
 	glass     unique.Handle[render.Glass]
 	pending   int32
 	whole     image.Rectangle
+	overlay   bool
 }
 
 const (
@@ -394,16 +395,23 @@ func (f *frame) replay(p render.Pass, to colorOut) {
 }
 
 func (f *frame) replayFrom(p render.Pass, origin image.Point, to colorOut) {
-	replayOps(f.ops, p, origin, to)
+	replayOps(f.ops, p, origin, to, false)
 }
 
-func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut) {
+func (f *frame) replayOnPrimary(p render.Pass, to colorOut) {
+	replayOps(f.ops, p, image.Point{}, to, true)
+}
+
+func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut, skipOverlay bool) {
 	var transform *render.ColorTransform
 	var last *colorspace.Description
 	settled := false
 	active := to.to != nil || to.working != nil
 	for i := range ops {
 		op := &ops[i]
+		if skipOverlay && op.overlay {
+			continue
+		}
 		if active || op.space != last {
 			if src := to.source(op); !settled || src != last {
 				settled, last = true, src

@@ -176,3 +176,97 @@ func (c *Compositor) scanoutBufferGone(b *dmabuf.Buffer) error {
 	}
 	return errors.Join(errs...)
 }
+
+const overlayMinPixels = 256 * 256
+
+func overlayCandidate(ops []drawOp, cursorFrom int, bounds image.Rectangle) int {
+	for i := cursorFrom - 1; i >= 0; i-- {
+		if op := &ops[i]; op.overlayable(bounds) && !overlapped(ops[i+1:], op.dst) {
+			return i
+		}
+	}
+	return -1
+}
+
+func overlapped(above []drawOp, r image.Rectangle) bool {
+	for i := range above {
+		if above[i].dst.Overlaps(r) {
+			return true
+		}
+	}
+	return false
+}
+
+func (op *drawOp) overlayable(bounds image.Rectangle) bool {
+	return op.surface != nil && op.covers() && op.transform == render.Normal && op.alpha == 1 && op.whole.Empty() &&
+		op.dst != bounds && op.dst.In(bounds) && op.dst.Dx()*op.dst.Dy() >= overlayMinPixels &&
+		op.src == render.FRect{W: float64(op.dst.Dx()), H: float64(op.dst.Dy())}
+}
+
+type overlayShown struct {
+	buffer *dmabuf.Buffer
+	dst    image.Rectangle
+}
+
+func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rectangle, shading bool) error {
+	out, ok := o.Backend().(backend.OverlayPlanes)
+	if !ok {
+		return nil
+	}
+	var want overlayShown
+	var op *drawOp
+	if !shading && sc.zoom == nil && c.adopting == nil && c.hdr[o.Backend()] == nil {
+		if i := overlayCandidate(sc.cur.ops, sc.cur.cursorFrom, bounds); i >= 0 {
+			op = &sc.cur.ops[i]
+			if t, isImported := c.textures[op.surface].(imported); isImported {
+				d := t.buffer.DMABUF()
+				d.Format = d.Format.Opaque()
+				if out.TestOverlay(t.buffer, d, op.dst) {
+					want = overlayShown{t.buffer, op.dst}
+				}
+			}
+		}
+	}
+	if want.buffer != nil {
+		op.overlay = true
+	}
+	if want == c.overlays[o] {
+		return nil
+	}
+	if want.buffer == nil {
+		delete(c.overlays, o)
+		out.ClearOverlay()
+		return nil
+	}
+	if c.overlays == nil {
+		c.overlays = map[*output.Output]overlayShown{}
+	}
+	d := want.buffer.DMABUF()
+	d.Format = d.Format.Opaque()
+	if err := out.SetOverlay(want.buffer, d, want.dst, c.imported[want.buffer].left); err != nil {
+		op.overlay = false
+		return err
+	}
+	held, ok := c.scannedOut[want.buffer]
+	if !ok {
+		held = c.takeScannedOut()
+		c.scannedOut[want.buffer] = held
+	}
+	held.outputs++
+	c.overlays[o] = want
+	return nil
+}
+
+func (c *Compositor) flipOverlay(o *output.Output, sc *scene) (bool, error) {
+	shown, ok := c.overlays[o]
+	out, planes := o.Backend().(backend.OverlayPlanes)
+	if !ok || !planes || !sc.drawn || sc.targetStale {
+		return false, nil
+	}
+	for _, r := range sc.damage.Rects() {
+		if !r.In(shown.dst) {
+			return false, nil
+		}
+	}
+	return out.FlipOverlay()
+}

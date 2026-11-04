@@ -43,6 +43,7 @@ const (
 	propConnCRTC
 	propInFence
 	propDamageClips
+	propZpos
 	propHotspotX
 	propHotspotY
 	propGammaLUT
@@ -93,6 +94,8 @@ type fakeDevice struct {
 	refusePowerOff    bool
 	busyNonblock      bool
 	damageClips       bool
+	overlayZpos       uint64
+	refuseOverlay     bool
 	probeGate         chan struct{}
 	probesOnLoop      syncatomic.Int64
 	loopGoroutine     string
@@ -222,6 +225,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		}
 		if f.damageClips {
 			props["FB_DAMAGE_CLIPS"] = kdrm.Property{ID: propDamageClips}
+		}
+		if f.overlayZpos != 0 {
+			props["zpos"] = kdrm.Property{ID: propZpos, Value: map[uint32]uint64{40: 0, 41: 0, 42: f.overlayZpos}[object]}
 		}
 		if object == 43 {
 			props["HOTSPOT_X"], props["HOTSPOT_Y"] = kdrm.Property{ID: propHotspotX}, kdrm.Property{ID: propHotspotY}
@@ -392,6 +398,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	f.commits = append(f.commits, c)
 	if f.busyNonblock && flags&kdrm.AtomicNonblock != 0 && flags&kdrm.AtomicAllowModeset != 0 {
 		return unix.EBUSY
+	}
+	if f.refuseOverlay && c.values[[2]uint32{42, propFB}] != 0 {
+		return unix.EINVAL
 	}
 	active, setsActive := c.values[[2]uint32{10, propActive}]
 	cursorFB, setsCursor := c.values[[2]uint32{43, propFB}]
@@ -2561,5 +2570,80 @@ func TestAFlipCarriesDamageClipsReusingTheBlobWhileTheyMatch(t *testing.T) {
 	}
 	if whole := present(render.Region{image.Rect(0, 0, 1920, 1080)}); whole != 0 {
 		t.Fatalf("a whole repaint carried clips %d", whole)
+	}
+}
+
+func overlayRig(t *testing.T, zpos uint64) (*rig, *Output, gpu.DMABUF) {
+	t.Helper()
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.overlayZpos = zpos
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.lit()
+	if o.overlay != nil {
+		r.b.planes[slices.IndexFunc(r.b.planes, func(p *plane) bool { return p.id == 42 })].clients = []gpu.FormatModifier{{Format: scanoutFormat, Modifier: fourcc.Linear}}
+	}
+	return r, o, gpu.DMABUF{Size: image.Pt(640, 360), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 9, Stride: 640 * 4}}}
+}
+
+func TestAnOverlayBelowThePrimaryPlaneIsNotUsed(t *testing.T) {
+	_, o, _ := overlayRig(t, 0)
+	if o.overlay != nil {
+		t.Fatal("an overlay with no zpos above the primary plane was claimed")
+	}
+}
+
+func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
+	r, o, client := overlayRig(t, 2)
+	if o.overlay == nil {
+		t.Fatal("no overlay plane claimed")
+	}
+	key := &fakeBuffer{client}
+	dst := image.Rect(100, 100, 740, 460)
+	r.dev.refuseOverlay = true
+	n := len(r.dev.commits)
+	if o.TestOverlay(key, client, dst) {
+		t.Fatal("a TEST_ONLY commit the kernel refuses passed")
+	}
+	if got := r.dev.commits[n:]; len(got) != 1 || got[0].flags&kdrm.AtomicTestOnly == 0 {
+		t.Fatalf("testing the overlay committed %+v", got)
+	}
+	r.dev.refuseOverlay = false
+	clear(o.overlayTested)
+	if !o.TestOverlay(key, client, dst) {
+		t.Fatal("the overlay was refused")
+	}
+	tests := len(r.dev.commits)
+	if !o.TestOverlay(key, client, dst) || len(r.dev.commits) != tests {
+		t.Fatal("the same overlay was tested twice")
+	}
+	released := 0
+	if err := o.SetOverlay(key, client, dst, func() error { released++; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	flipped, err := o.FlipOverlay()
+	if err != nil || !flipped {
+		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
+	}
+	c := r.dev.commits[len(r.dev.commits)-1]
+	if c.flags&kdrm.AtomicTestOnly != 0 || c.values[[2]uint32{42, propFB}] == 0 || c.values[[2]uint32{42, propCRTCW}] != 640 {
+		t.Fatalf("the overlay flip %+v", c)
+	}
+	if _, touched := c.values[[2]uint32{40, propFB}]; touched {
+		t.Fatalf("an overlay flip touched the primary plane: %+v", c)
+	}
+	r.dev.flip(t, 10, 2)
+	r.until("the overlay's flip", func() bool { return !o.flipping })
+	o.ClearOverlay()
+	if flipped, err := o.FlipOverlay(); err != nil || !flipped {
+		t.Fatalf("clearing the overlay: %t, %v", flipped, err)
+	}
+	if off := r.dev.commits[len(r.dev.commits)-1]; off.values[[2]uint32{42, propFB}] != 0 {
+		t.Fatalf("clearing left the overlay on: %+v", off)
+	}
+	r.dev.flip(t, 10, 3)
+	r.until("the flip that takes it off", func() bool { return !o.flipping })
+	if released != 1 {
+		t.Fatalf("the overlay's buffer was released %d times", released)
 	}
 }

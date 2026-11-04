@@ -118,6 +118,7 @@ type planeKind uint8
 const (
 	primaryPlane planeKind = iota
 	cursorPlane
+	overlayPlane
 )
 
 type plane struct {
@@ -352,6 +353,11 @@ func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable 
 		p.kind, format = primaryPlane, scanoutFormat
 	case enum.Enums["Cursor"]:
 		p.kind, format = cursorPlane, cursorFormat
+	case enum.Enums["Overlay"]:
+		if _, stacked := props["zpos"]; !stacked {
+			return nil, nil
+		}
+		p.kind, format = overlayPlane, scanoutFormat
 	default:
 		return nil, nil
 	}
@@ -363,6 +369,12 @@ func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable 
 		if blob, err = b.dev.Blob(uint32(in.Value)); err != nil { //nolint:gosec // property blob IDs are 32-bit
 			return nil, err
 		}
+	}
+	if p.kind == overlayPlane {
+		if p.clients, err = b.clientFormats(info.Formats, blob); err != nil {
+			return nil, fmt.Errorf("drm: formats of overlay plane %d: %w", id, err)
+		}
+		return p, nil
 	}
 	if p.kind == primaryPlane {
 		if p.clients, err = b.clientFormats(info.Formats, blob); err != nil {
@@ -681,6 +693,13 @@ func (b *Backend) add(c kdrm.Connector) error {
 		cp.taken = true
 		o.cursor = &cursor{o: o, plane: cp}
 	}
+	for ov := range b.frees(overlayPlane, cr) {
+		if ov.props["zpos"].Value > p.props["zpos"].Value {
+			ov.taken = true
+			o.overlay = ov
+			break
+		}
+	}
 	if o.pacer, err = b.loop.AddTimer(o.paceElapsed); err != nil {
 		return errors.Join(err, o.release())
 	}
@@ -834,6 +853,11 @@ const (
 
 type Output struct {
 	spare         []*scanout
+	overlay       *plane
+	overlayNext   *overlayUse
+	overlayQueued *overlayUse
+	overlayShown  *overlayUse
+	overlayTested map[overlayTest]bool
 	damageBlob    uint32
 	damageRects   render.Region
 	damageBytes   []byte
@@ -1094,6 +1118,10 @@ func (o *Output) commitDisable(r *kdrm.Request) error {
 }
 
 func (o *Output) detach() {
+	if ov := o.overlay; ov != nil && o.overlayShown != nil {
+		ov.set(&o.b.req, "FB_ID", 0)
+		ov.set(&o.b.req, "CRTC_ID", 0)
+	}
 	o.primary.set(&o.b.req, "FB_ID", 0)
 	o.primary.set(&o.b.req, "CRTC_ID", 0)
 	if c := o.cursor; c != nil {
@@ -1240,6 +1268,9 @@ func (o *Output) commitPresent(s *scanout) error {
 	}
 	err = o.submit(s, fence, flags)
 	if err != nil {
+		if refused(err) {
+			o.overlayRefused()
+		}
 		if fence >= 0 {
 			err = errors.Join(err, unix.Close(fence))
 		}
@@ -1250,6 +1281,7 @@ func (o *Output) commitPresent(s *scanout) error {
 	}
 	o.renderFence = fence
 	o.aimedAt, _ = backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
+	o.sentOverlay()
 	o.kms, o.lit, o.flipping, o.torn = kmsFlip, true, true, false
 	o.queued = s
 	return nil
@@ -1328,6 +1360,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 		}
 		return false, fmt.Errorf("drm: commit a client buffer on %s: %w", o.Name(), err)
 	}
+	o.sentOverlay()
 	cf.shown++
 	if o.cursor != nil && !torn {
 		o.cursor.sent()
@@ -1363,6 +1396,7 @@ func (o *Output) tearable(fb uint32, flags uint32) bool {
 
 type planeKey struct {
 	primary, cursor uint32
+	overlay         overlayTest
 	cursorClipped   bool
 	hotspot         image.Point
 	flags           uint32
@@ -1372,6 +1406,9 @@ const testedPlaneStates = 16
 
 func (o *Output) planeKey(fb, flags uint32) planeKey {
 	k := planeKey{primary: fb, flags: flags}
+	if u := o.overlayNext; u != nil {
+		k.overlay = overlayTest{u.client.fb, u.dst}
+	}
 	if c := o.cursor; c != nil && c.visible {
 		k.cursor, k.cursorClipped, k.hotspot = c.pending.fb, c.clipped(), c.hotspot
 	}
@@ -1452,6 +1489,7 @@ func (o *Output) frame(s *scanout, fence int) {
 	default:
 		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
 	}
+	o.addOverlay()
 	if c := o.cursor; c != nil && (c.dirty || o.kms != kmsFlip) {
 		c.add()
 	}
@@ -1617,13 +1655,19 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	}
 	o.flipping = false
 	o.lastFlip = time.Duration(e.Sec)*time.Second + time.Duration(e.Usec)*time.Microsecond
+	overlayFreed := o.overlayFlipped()
 	timing := o.timeFrame(o.lastFlip)
 	if c := o.cursor; c != nil && c.queued != nil {
 		c.front, c.queued = c.queued, nil
 	}
 	if o.queued == nil {
 		defer o.powerOffAfterFlip()
-		return errors.Join(timing, o.clock.Kick(), o.flushPlanes())
+		var presented error
+		if overlayFreed.changed {
+			presented = o.b.handler.Presented(o, o.presentation(e))
+		}
+		presented = errors.Join(overlayFreed.err, presented)
+		return errors.Join(presented, timing, o.clock.Kick(), o.flushPlanes())
 	}
 	var freed error
 	if old := o.front; old != nil && old.client != nil {
@@ -1633,9 +1677,13 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	o.front, o.queued = o.queued, nil
 	o.presented++
 	o.front.presented = o.presented
-	presented := o.b.handler.Presented(o, backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn})
+	presented := o.b.handler.Presented(o, o.presentation(e))
 	defer o.powerOffAfterFlip()
-	return errors.Join(freed, presented, timing, o.clock.Kick(), o.flushPlanes())
+	return errors.Join(overlayFreed.err, freed, presented, timing, o.clock.Kick(), o.flushPlanes())
+}
+
+func (o *Output) presentation(e kdrm.FlipEvent) backend.Presentation {
+	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn}
 }
 
 func (o *Output) dropScanout(s *scanout) error {
@@ -1646,7 +1694,7 @@ func (o *Output) dropScanout(s *scanout) error {
 }
 
 func (o *Output) dropScanouts() error {
-	err := errors.Join(o.dropScanout(o.front), o.dropScanout(o.queued))
+	err := errors.Join(o.dropScanout(o.front), o.dropScanout(o.queued), o.dropOverlays())
 	o.front, o.queued = nil, nil
 	return err
 }
@@ -1691,6 +1739,9 @@ func (o *Output) release() error {
 		o.modeBlob = 0
 	}
 	o.crtc.output, o.primary.taken = nil, false
+	if o.overlay != nil {
+		o.overlay.taken = false
+	}
 	if o.latch != nil {
 		err = errors.Join(err, o.latch.Remove())
 		o.latch = nil

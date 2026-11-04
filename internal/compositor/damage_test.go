@@ -422,3 +422,66 @@ func TestAScanoutKeepsTheDiffBaseAndAComposedFrameAfterItRepaintsEverything(t *t
 		t.Fatalf("an unchanged frame after a scanout damaged %v, so it would commit the same framebuffer again", d.Rects())
 	}
 }
+
+func TestOverlayCandidatesAreOpaqueUntransformedAndUnderNothing(t *testing.T) {
+	bounds := image.Rect(0, 0, 1920, 1080)
+	video := image.Rect(100, 100, 900, 700)
+	op := func() drawOp {
+		return drawOp{surface: &surface.Surface{}, dst: video, src: render.FRect{W: 800, H: 600}, alpha: 1, opaque: true, transform: render.Normal}
+	}
+	bg := drawOp{fill: true, color: render.Color{A: 255}, dst: bounds, opaque: true}
+	cases := []struct {
+		name string
+		ops  []drawOp
+		want int
+	}{
+		{"an unmasked opaque window", []drawOp{bg, op()}, 1},
+		{"something over it", []drawOp{bg, op(), {fill: true, dst: image.Rect(50, 50, 200, 200)}}, -1},
+		{"something beside it", []drawOp{bg, op(), {fill: true, dst: image.Rect(1000, 50, 1200, 200)}}, 1},
+		{"a translucent window", []drawOp{bg, func() drawOp { o := op(); o.opaque = false; return o }()}, -1},
+		{"a rotated window", []drawOp{bg, func() drawOp { o := op(); o.transform = render.Rotate90; return o }()}, -1},
+		{"a scaled window", []drawOp{bg, func() drawOp { o := op(); o.src.W = 400; return o }()}, -1},
+		{"a rounded window", []drawOp{bg, func() drawOp {
+			o := op()
+			o.mask.Keep = render.RoundRect{Rect: video, Radius: 8}
+			return o
+		}()}, -1},
+		{"a small window", []drawOp{bg, func() drawOp {
+			o := op()
+			o.dst, o.src = image.Rect(0, 0, 100, 100), render.FRect{W: 100, H: 100}
+			return o
+		}()}, -1},
+	}
+	for _, tc := range cases {
+		if got := overlayCandidate(tc.ops, len(tc.ops), bounds); got != tc.want {
+			t.Errorf("%s: candidate %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestAnOverlaidOpIsLeftOutOfThePrimaryPlaneButNotACapture(t *testing.T) {
+	r := soft.New()
+	tex, err := r.NewTexture(render.XRGB8888, image.Pt(4, 4), 16, slices.Repeat([]byte{0xff, 0xff, 0xff, 0xff}, 16))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := frame{ops: []drawOp{{tex: tex, src: render.FRect{W: 4, H: 4}, dst: image.Rect(0, 0, 4, 4), alpha: 1, transform: render.Normal, overlay: true}}}
+	draw := func(replay func(render.Pass)) byte {
+		b := soft.NewBuffer(4, 4)
+		p, err := r.Begin(b, render.Region{image.Rect(0, 0, 4, 4)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		replay(p)
+		if err := p.End(); err != nil {
+			t.Fatal(err)
+		}
+		return b.Pix[0]
+	}
+	if got := draw(func(p render.Pass) { f.replayOnPrimary(p, colorOut{}) }); got != 0 {
+		t.Fatalf("the primary plane drew the overlaid op: %#x", got)
+	}
+	if got := draw(func(p render.Pass) { f.replayFrom(p, image.Point{}, colorOut{}) }); got != 0xff {
+		t.Fatalf("a capture left out the overlaid op: %#x", got)
+	}
+}
