@@ -120,15 +120,16 @@ func (r *recorder) count() int {
 }
 
 type env struct {
-	t   *testing.T
-	l   *loop.Loop
-	dev *drm.Device
-	rec *recorder
-	scr *screen
-	c   *wlclient.Display
-	cmp *cw.WlCompositor
-	buf *cld.ZwpLinuxDmabufV1
-	mgr *cls.WpLinuxDrmSyncobjManagerV1
+	t       *testing.T
+	l       *loop.Loop
+	dev     *drm.Device
+	rec     *recorder
+	scr     *screen
+	c       *wlclient.Display
+	cmp     *cw.WlCompositor
+	buf     *cld.ZwpLinuxDmabufV1
+	mgr     *cls.WpLinuxDrmSyncobjManagerV1
+	manager *Manager
 }
 
 type registry map[string]uint32
@@ -165,7 +166,7 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(d, l, dev, fencer{dev}, e.scr); err != nil {
+	if e.manager, err = New(d, l, dev, fencer{dev}, e.scr); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -447,5 +448,36 @@ func TestAReleasePointSignalsAtOnceWhenTheGPUHasFinished(t *testing.T) {
 	}
 	if tl.refs != 1 {
 		t.Fatalf("the point left %d references", tl.refs)
+	}
+}
+
+func TestASurfaceReusesItsEventFDAcrossCommits(t *testing.T) {
+	e := setup(t)
+	acquire, atl := e.timeline()
+	_, rtl := e.timeline()
+	s, ss := e.surface()
+	const commits = 8
+	for i := range uint32(commits) {
+		b := e.dmabuf()
+		for _, err := range []error{ss.SetAcquirePoint(atl, 0, i+1), ss.SetReleasePoint(rtl, 0, i+1), s.Attach(b, 0, 0), s.Commit()} {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		e.roundtrip()
+		if err := e.dev.Signal(acquire, uint64(i+1)); err != nil {
+			t.Fatal(err)
+		}
+		e.waitFor("the commit after its acquire point", func() bool { return e.rec.count() == int(i+1) })
+	}
+	made := make(chan uint64, 1)
+	if err := e.l.Post(func() error {
+		made <- e.manager.eventFDs
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-made; got != 1 {
+		t.Fatalf("%d commits made %d eventfds", commits, got)
 	}
 }

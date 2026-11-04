@@ -43,16 +43,17 @@ type Listener interface {
 }
 
 type Manager struct {
-	loop     *loop.Loop
-	importer Importer
-	listener Listener
-	formats  []gpu.FormatModifier
-	index    map[gpu.FormatModifier]uint16
-	all      []byte
-	device   []byte
-	table    int
-	version  uint32
-	surfaces map[*surface.Surface][]surfaceFeedback
+	loop      *loop.Loop
+	fenceDups uint64
+	importer  Importer
+	listener  Listener
+	formats   []gpu.FormatModifier
+	index     map[gpu.FormatModifier]uint16
+	all       []byte
+	device    []byte
+	table     int
+	version   uint32
+	surfaces  map[*surface.Surface][]surfaceFeedback
 }
 
 type surfaceFeedback struct {
@@ -409,6 +410,78 @@ type Buffer struct {
 	dmabuf   gpu.DMABUF
 	m        *Manager
 	resource *sw.WlBuffer
+	fences   []*planeFence
+}
+
+type planeFence struct {
+	plane   int
+	dup     int
+	src     *loop.Source
+	waiters []func() error
+	armed   bool
+	gone    bool
+}
+
+func (f *planeFence) signalled(loop.Events) error {
+	f.armed = false
+	waiters := f.waiters
+	f.waiters = f.waiters[len(waiters):]
+	var errs []error
+	for _, release := range waiters {
+		errs = append(errs, release())
+	}
+	if f.gone {
+		errs = append(errs, f.close())
+	}
+	return errors.Join(errs...)
+}
+
+func (f *planeFence) close() error {
+	return errors.Join(f.src.Remove(), unix.Close(f.dup))
+}
+
+func (b *Buffer) distinctFences() error {
+	if b.fences != nil {
+		return nil
+	}
+	seen := make(map[[2]uint64]struct{}, len(b.dmabuf.Planes))
+	for _, p := range b.dmabuf.Planes {
+		var st unix.Stat_t
+		if err := unix.Fstat(p.FD, &st); err != nil {
+			return fmt.Errorf("dmabuf: stat plane fd %d: %w", p.FD, err)
+		}
+		key := [2]uint64{uint64(st.Dev), st.Ino} //nolint:unconvert // Dev is not uint64 everywhere
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		b.fences = append(b.fences, &planeFence{plane: p.FD, dup: -1})
+	}
+	return nil
+}
+
+func (b *Buffer) arm(f *planeFence) error {
+	if f.dup < 0 {
+		fd, err := unix.FcntlInt(uintptr(f.plane), unix.F_DUPFD_CLOEXEC, 0)
+		if err != nil {
+			return fmt.Errorf("dmabuf: duplicate plane fd %d to wait on: %w", f.plane, err)
+		}
+		f.dup = fd
+		b.m.fenceDups++
+		if f.src, err = b.m.loop.AddFD(fd, loop.Readable|loop.OneShot, f.signalled); err != nil {
+			return errors.Join(fmt.Errorf("dmabuf: wait on plane fd %d: %w", f.plane, err), unix.Close(fd))
+		}
+		f.armed = true
+		return nil
+	}
+	if f.armed {
+		return nil
+	}
+	if err := f.src.Modify(loop.Readable | loop.OneShot); err != nil {
+		return fmt.Errorf("dmabuf: wait on plane fd %d: %w", f.plane, err)
+	}
+	f.armed = true
+	return nil
 }
 
 func (b *Buffer) Size() image.Point {
@@ -419,22 +492,22 @@ func (b *Buffer) Size() image.Point {
 // linux-dmabuf's implicit synchronization, which a Vulkan renderer's sampling
 // does not wait on by itself. A dmabuf polls readable once its writers finish.
 func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
-	for _, p := range b.dmabuf.Planes {
-		pfd := [1]unix.PollFd{{Fd: int32(p.FD), Events: unix.POLLIN}} //nolint:gosec // a file descriptor fits an int32
+	if err := b.distinctFences(); err != nil {
+		return err
+	}
+	for _, f := range b.fences {
+		pfd := [1]unix.PollFd{{Fd: int32(f.plane), Events: unix.POLLIN}} //nolint:gosec // a file descriptor fits an int32
 		n, err := unix.Poll(pfd[:], 0)
 		if err != nil && !errors.Is(err, unix.EINTR) {
-			return fmt.Errorf("dmabuf: poll plane fd %d for its writer: %w", p.FD, err)
+			return fmt.Errorf("dmabuf: poll plane fd %d for its writer: %w", f.plane, err)
 		}
 		if n > 0 {
 			continue
 		}
-		fd, err := unix.FcntlInt(uintptr(p.FD), unix.F_DUPFD_CLOEXEC, 0)
-		if err != nil {
-			return fmt.Errorf("dmabuf: duplicate plane fd %d to wait on: %w", p.FD, err)
+		if err := b.arm(f); err != nil {
+			return err
 		}
-		if err := b.m.loop.Once(fd, c.Await()); err != nil {
-			return fmt.Errorf("dmabuf: wait on plane fd %d: %w", p.FD, err)
-		}
+		f.waiters = append(f.waiters, c.Await())
 	}
 	return nil
 }
@@ -452,7 +525,18 @@ func (b *Buffer) Destroy(*sw.WlBuffer) error {
 }
 
 func (b *Buffer) destroyed() error {
-	return errors.Join(b.m.listener.BufferDestroyed(b), closeAll(b.dmabuf))
+	errs := []error{b.m.listener.BufferDestroyed(b)}
+	for _, f := range b.fences {
+		if f.dup < 0 {
+			continue
+		}
+		if len(f.waiters) > 0 {
+			f.gone = true
+			continue
+		}
+		errs = append(errs, f.close())
+	}
+	return errors.Join(append(errs, closeAll(b.dmabuf))...)
 }
 
 func (m *Manager) emit(c *server.Client, st *server.Stream) error {

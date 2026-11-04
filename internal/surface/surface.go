@@ -242,11 +242,12 @@ type Hooks struct {
 }
 
 type Update struct {
-	s       *Surface
-	state   state
-	gates   []func() bool
-	applied []func() error
-	barrier *Barrier
+	s        *Surface
+	state    state
+	gates    []func() bool
+	explicit bool
+	applied  []func() error
+	barrier  *Barrier
 }
 
 func (u *Update) Buffer() Buffer {
@@ -278,6 +279,10 @@ func (u *Update) DamagedPixels() int {
 	}
 	scale := max(u.s.pending.scale, 1)
 	return u.s.pending.bufferDamage.Area() + u.s.pending.damage.Area()*int(scale)*int(scale)
+}
+
+func (u *Update) ExplicitlySynced() {
+	u.explicit = true
 }
 
 func (u *Update) OnApply(f func() error) {
@@ -322,7 +327,7 @@ func (s *Surface) recycle(u *Update) {
 	u.state.reset()
 	clear(u.gates)
 	clear(u.applied)
-	u.gates, u.applied, u.barrier = u.gates[:0], u.applied[:0], nil
+	u.gates, u.applied, u.barrier, u.explicit = u.gates[:0], u.applied[:0], nil, false
 	s.spare = append(s.spare, u)
 }
 
@@ -611,7 +616,7 @@ func (s *Surface) commit() error {
 			}
 		}
 	}
-	if b, ok := s.pending.buffer.(Awaited); ok && s.pending.set&fieldBuffer != 0 {
+	if b, ok := s.pending.buffer.(Awaited); ok && s.pending.set&fieldBuffer != 0 && !u.explicit {
 		if err := b.AwaitWriter(u); err != nil {
 			return err
 		}

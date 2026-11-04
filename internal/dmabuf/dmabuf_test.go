@@ -575,3 +575,57 @@ func TestAwaitWriterHoldsUntilThePlaneIsReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAWaitedPlaneKeepsOneDuplicateAcrossCommits(t *testing.T) {
+	e := setup(t, nil)
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(p[0])
+	defer unix.Close(p[1])
+	b := &Buffer{m: e.m, dmabuf: gpu.DMABUF{Planes: []gpu.Plane{{FD: p[0]}, {FD: p[0]}}}}
+	const commits = 20
+	for range commits {
+		released, held := make(chan struct{}), make(chan int, 1)
+		if err := e.l.Post(func() error {
+			n := 0
+			err := b.AwaitWriter(awaiter(func() func() error {
+				n++
+				return func() error {
+					close(released)
+					return nil
+				}
+			}))
+			held <- n
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n := <-held; n != 1 {
+			t.Fatalf("%d holds for two planes of one dmabuf", n)
+		}
+		if _, err := unix.Write(p[1], []byte{0}); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-released:
+		case <-time.After(30 * time.Second):
+			t.Fatal("not released after the writer finished")
+		}
+		var one [1]byte
+		if _, err := unix.Read(p[0], one[:]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dups := make(chan uint64, 1)
+	if err := e.l.Post(func() error {
+		dups <- e.m.fenceDups
+		return errors.Join(b.fences[0].close())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-dups; got != 1 {
+		t.Fatalf("%d commits duplicated the plane %d times", commits, got)
+	}
+}

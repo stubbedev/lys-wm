@@ -37,6 +37,7 @@ type Manager struct {
 	fencer   Fencer
 	screen   Screen
 	surfaces map[*surface.Surface]*syncSurface
+	eventFDs uint64
 }
 
 func New(d *server.Display, l *loop.Loop, dev *drm.Device, f Fencer, screen Screen) (*Manager, error) {
@@ -178,6 +179,10 @@ func (w *wait) cancel() error {
 	return errors.Join(w.src.Remove(), unix.Close(w.efd), w.acquire.drop())
 }
 
+func (w *wait) close() error {
+	return errors.Join(w.src.Remove(), unix.Close(w.efd))
+}
+
 type syncSurface struct {
 	m       *Manager
 	s       *surface.Surface
@@ -188,6 +193,7 @@ type syncSurface struct {
 	latched []latch
 	current latch
 	waits   []*wait
+	idle    []*wait
 }
 
 type latch struct {
@@ -298,26 +304,56 @@ func (ss *syncSurface) commit(u *surface.Update) error {
 	if acquire == nil {
 		return nil
 	}
+	u.ExplicitlySynced()
 	return ss.wait(acquire, u.Hold())
 }
 
 func (ss *syncSurface) wait(acquire *point, hold *surface.Hold) error {
-	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
+	w, err := ss.idleWait()
 	if err != nil {
-		return errors.Join(fmt.Errorf("syncobj: eventfd: %w", err), acquire.drop())
+		return errors.Join(err, acquire.drop())
 	}
-	if err := ss.m.dev.EventFD(acquire.t.handle, acquire.value, efd, false); err != nil {
-		return errors.Join(err, unix.Close(efd), acquire.drop())
+	if err := ss.m.dev.EventFD(acquire.t.handle, acquire.value, w.efd, false); err != nil {
+		return errors.Join(err, w.close(), acquire.drop())
 	}
-	w := &wait{efd: efd, acquire: acquire, hold: hold}
-	if w.src, err = ss.m.loop.AddFD(efd, loop.Readable, func(loop.Events) error {
-		ss.waits = slices.DeleteFunc(ss.waits, func(x *wait) bool { return x == w })
-		return errors.Join(w.cancel(), w.hold.Release())
-	}); err != nil {
-		return errors.Join(err, unix.Close(efd), acquire.drop(), w.hold.Release())
-	}
+	w.acquire, w.hold = acquire, hold
 	ss.waits = append(ss.waits, w)
 	return nil
+}
+
+func (ss *syncSurface) idleWait() (*wait, error) {
+	if n := len(ss.idle); n > 0 {
+		w := ss.idle[n-1]
+		ss.idle = ss.idle[:n-1]
+		return w, nil
+	}
+	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
+	if err != nil {
+		return nil, fmt.Errorf("syncobj: eventfd: %w", err)
+	}
+	ss.m.eventFDs++
+	w := &wait{efd: efd}
+	if w.src, err = ss.m.loop.AddFD(efd, loop.Readable|loop.Edge, func(loop.Events) error { return ss.signalled(w) }); err != nil {
+		return nil, errors.Join(err, unix.Close(efd))
+	}
+	return w, nil
+}
+
+func (ss *syncSurface) signalled(w *wait) error {
+	ss.waits = slices.DeleteFunc(ss.waits, func(x *wait) bool { return x == w })
+	acquire, hold := w.acquire, w.hold
+	w.acquire, w.hold = nil, nil
+	ss.idle = append(ss.idle, w)
+	return errors.Join(acquire.drop(), hold.Release())
+}
+
+func (ss *syncSurface) closeIdle() error {
+	var errs []error
+	for _, w := range ss.idle {
+		errs = append(errs, w.close())
+	}
+	ss.idle = nil
+	return errors.Join(errs...)
 }
 
 func (ss *syncSurface) applied() error {
@@ -326,7 +362,7 @@ func (ss *syncSurface) applied() error {
 	ss.latched[0] = latch{}
 	ss.latched = ss.latched[1:]
 	if ss.res == nil && ss.current.release == nil && len(ss.latched) == 0 {
-		ss.forget()
+		err = errors.Join(err, ss.forget())
 	}
 	return err
 }
@@ -336,7 +372,7 @@ func (ss *syncSurface) objectGone() error {
 	err := errors.Join(ss.acquire.drop(), ss.release.drop())
 	ss.acquire, ss.release = nil, nil
 	if ss.current.release == nil && len(ss.latched) == 0 {
-		ss.forget()
+		err = errors.Join(err, ss.forget())
 	}
 	return err
 }
@@ -355,9 +391,10 @@ func (ss *syncSurface) surfaceGone() error {
 	return errors.Join(append(errs, ss.objectGone())...)
 }
 
-func (ss *syncSurface) forget() {
+func (ss *syncSurface) forget() error {
 	ss.s.RemoveHooks(ss.hooks)
 	if ss.m.surfaces[ss.s] == ss {
 		delete(ss.m.surfaces, ss.s)
 	}
+	return ss.closeIdle()
 }

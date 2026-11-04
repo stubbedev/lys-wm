@@ -23,6 +23,8 @@ const (
 	Writable Events = unix.EPOLLOUT
 	Hangup   Events = unix.EPOLLHUP | unix.EPOLLRDHUP
 	Error    Events = unix.EPOLLERR
+	Edge     Events = unix.EPOLLET
+	OneShot  Events = unix.EPOLLONESHOT
 )
 
 var ErrClosed = errors.New("loop: closed")
