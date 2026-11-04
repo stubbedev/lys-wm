@@ -252,6 +252,9 @@ const gpuGoldenTolerance = 1
 
 func (h *Harness) assertGolden(name string) {
 	h.t.Helper()
+	h.Eventually("labels and cursors loaded before a golden", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return !c.LabelsPending() && !c.CursorsLoading()
+	})
 	tolerance := gpuGoldenTolerance
 	if _, isSoft := h.backend.Renderer().(*soft.Renderer); isSoft {
 		tolerance = 0
