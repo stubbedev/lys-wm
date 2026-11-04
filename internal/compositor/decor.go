@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
@@ -207,44 +208,105 @@ func lysUIColor(c render.Color) gtext.Color {
 	return gtext.RGBA(c.R, c.G, c.B, c.A)
 }
 
-func (c *Compositor) label(o *output.Output, key labelKey) (render.Texture, error) {
+type labelSlot struct {
+	window wm.WindowID
+	notice int
+}
+
+func (c *Compositor) label(o *output.Output, key labelKey, slot labelSlot) render.Texture {
 	cache := c.labels[o]
 	if cache == nil {
 		cache = map[labelKey]*label{}
 		c.labels[o] = cache
+		c.labelSlots[o] = map[labelSlot]labelKey{}
 	}
 	if l, ok := cache[key]; ok {
 		l.used = true
-		return l.tex, nil
+		if slot != (labelSlot{}) && l.tex != nil {
+			c.labelSlots[o][slot] = key
+		}
+		return l.tex
 	}
+	c.rasterLabelLater(o, key)
+	if was, ok := c.labelSlots[o][slot]; ok && slot != (labelSlot{}) {
+		if l, ok := cache[was]; ok {
+			l.used = true
+			return l.tex
+		}
+	}
+	return nil
+}
+
+type labelJob struct {
+	o   *output.Output
+	key labelKey
+}
+
+func (c *Compositor) rasterLabelLater(o *output.Output, key labelKey) {
+	job := labelJob{o, key}
+	if _, ok := c.labelsPending[job]; ok {
+		return
+	}
+	c.labelsPending[job] = struct{}{}
+	font, pad := c.font, o.Scale().ToDevice(c.decor.Tab.TextPadding)
+	c.labelWork.Run(func() {
+		pix, err := rasterLabel(font, key, pad)
+		if posted := c.loop.Post(func() error { return c.labelRastered(job, pix, err) }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+			panic(fmt.Sprintf("compositor: hand a rastered label back to the loop: %v", posted))
+		}
+	})
+}
+
+func (c *Compositor) labelRastered(job labelJob, pix []byte, err error) error {
+	delete(c.labelsPending, job)
+	cache := c.labels[job.o]
+	if cache == nil {
+		return nil
+	}
+	l := &label{used: true}
+	cache[job.key] = l
+	if err != nil {
+		c.report(fmt.Errorf("compositor: tab label %q: %w", job.key.text, err))
+		return nil
+	}
+	tex, err := c.renderer.NewTexture(render.ARGB8888, job.key.size, job.key.size.X*4, pix)
+	if err != nil {
+		c.report(fmt.Errorf("compositor: tab label %q: %w", job.key.text, err))
+		return nil
+	}
+	l.tex = tex
+	return c.schedule(job.o)
+}
+
+func (c *Compositor) LabelsPending() bool {
+	return len(c.labelsPending) > 0
+}
+
+func rasterLabel(font *gtext.Typeface, key labelKey, pad int) ([]byte, error) {
 	stride := key.size.X * 4
 	pix := make([]byte, stride*key.size.Y)
 	cv := gtext.New(pix, stride, key.size.X, key.size.Y)
 	cv.Clear(gtext.Rect{W: key.size.X, H: key.size.Y}, lysUIColor(key.colors.Background))
-	pad := o.Scale().ToDevice(c.decor.Tab.TextPadding)
 	box := gtext.Rect{X: pad, W: key.size.X - 2*pad, H: key.size.Y}
-	if side, err := c.drawTabIcon(cv, key, pad); err != nil {
-		return nil, fmt.Errorf("compositor: tab icon of %q: %w", key.text, err)
-	} else if side > 0 {
+	side, err := drawTabIcon(cv, key, pad)
+	if err != nil {
+		return nil, fmt.Errorf("the icon: %w", err)
+	}
+	if side > 0 {
 		box.X += side + pad
 		box.W -= side + pad
 	}
-	text := c.font.Ellipsize(key.text, float64(box.W), float64(key.px))
-	c.font.DrawAligned(cv, text, box, float64(key.px), lysUIColor(key.colors.Text), gtext.AlignStart)
-	tex, err := c.renderer.NewTexture(render.ARGB8888, key.size, stride, pix)
-	if err != nil {
-		return nil, fmt.Errorf("compositor: tab label %q: %w", key.text, err)
-	}
-	cache[key] = &label{tex: tex, used: true}
-	return tex, nil
+	text := font.Ellipsize(key.text, float64(box.W), float64(key.px))
+	font.DrawAligned(cv, text, box, float64(key.px), lysUIColor(key.colors.Text), gtext.AlignStart)
+	return pix, nil
 }
 
-func (c *Compositor) drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
+func drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
 	side := key.size.Y - 2*pad
 	if side <= 0 || key.size.X < tabIconRoom*side || key.icon == nil {
 		return 0, nil
 	}
-	ic, err := c.tabIcon(key, side)
+	ic, err := tabIcon(key, side)
 	if err != nil || ic == nil {
 		return 0, err
 	}
@@ -252,14 +314,14 @@ func (c *Compositor) drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, 
 	return side, nil
 }
 
-func (c *Compositor) tabIcon(key labelKey, side int) (*gtext.Icon, error) {
+func tabIcon(key labelKey, side int) (*gtext.Icon, error) {
 	if key.icon.Name != "" {
 		ic, err := key.theme.Icon(key.icon.Name, side, iconScale)
 		if err == nil {
 			return ic, nil
 		}
 		if !errors.Is(err, icontheme.ErrNotFound) {
-			c.report(fmt.Errorf("compositor: tab icon %q from the icon theme: %w", key.icon.Name, err))
+			return nil, fmt.Errorf("%q from the icon theme: %w", key.icon.Name, err)
 		}
 	}
 	best, ok := key.icon.Best(side)
@@ -273,7 +335,9 @@ func (c *Compositor) evictLabels(o *output.Output) error {
 	var errs []error
 	for key, l := range c.labels[o] {
 		if !l.used {
-			errs = append(errs, c.destroyTexture(l.tex))
+			if l.tex != nil {
+				errs = append(errs, c.destroyTexture(l.tex))
+			}
 			delete(c.labels[o], key)
 			continue
 		}
@@ -498,7 +562,7 @@ func (c *Compositor) tabBarView(bar *wm.TabBar) (view, bool) {
 	return identity, bar.Shown
 }
 
-func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
+func (c *Compositor) drawTabBars(pass *frame, o *output.Output) {
 	for i := range c.tabBars {
 		bar := &c.tabBars[i]
 		v, drawn := c.tabBarView(bar)
@@ -533,9 +597,15 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 			if w := c.windowByID(id); w != nil {
 				title, icon = w.top.Title(), w.top.Icon()
 			}
-			tex, err := c.label(o, labelKey{text: title, icon: icon, theme: c.icons, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: c.tabColors(id, tab == bar.Active)})
-			if err != nil {
-				return err
+			colors := c.tabColors(id, tab == bar.Active)
+			tex := c.label(o, labelKey{text: title, icon: icon, theme: c.icons, size: dst.Size(), px: o.Scale().ToDevice(c.decor.Tab.TextHeight), colors: colors}, labelSlot{window: id})
+			if tex == nil {
+				if corners != (render.Mask{}) && (tab == 0 || tab == n-1) {
+					pass.fillMasked(dst, colors.Background, corners)
+				} else {
+					pass.FillRect(dst, colors.Background)
+				}
+				continue
 			}
 			size := tex.Size()
 			src := render.FRect{W: float64(size.X), H: float64(size.Y)}
@@ -552,14 +622,17 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) error {
 			pass.fade(from, float32(max(v.alpha, 0)))
 		}
 	}
-	return nil
 }
 
 func (c *Compositor) dropLabels(o *output.Output) error {
 	var errs []error
 	for _, l := range c.labels[o] {
+		if l.tex == nil {
+			continue
+		}
 		errs = append(errs, c.destroyTexture(l.tex))
 	}
 	delete(c.labels, o)
+	delete(c.labelSlots, o)
 	return errors.Join(errs...)
 }

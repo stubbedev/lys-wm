@@ -1,7 +1,6 @@
 package compositor
 
 import (
-	"errors"
 	"fmt"
 	"image"
 	"math"
@@ -53,9 +52,7 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 	fadeOrDrop(pass, from, 1-in)
 	if in < 1 {
 		from = len(pass.ops)
-		if err := c.drawTabBars(pass, o); err != nil {
-			return shown, err
-		}
+		c.drawTabBars(pass, o)
 		fadeOrDrop(pass, from, 1-in)
 	}
 	if c.switches[o] == nil {
@@ -467,9 +464,9 @@ func (c *Compositor) drawOverviewLabel(pass *frame, o *output.Output, text strin
 	}
 	screen := o.Backend().State().Mode.Size
 	w = min(w, screen.X/2)
-	tex, err := c.label(o, labelKey{text: text, icon: icon, theme: c.icons, size: image.Pt(w, h), px: px, colors: c.decor.Tab.Active})
-	if err != nil {
-		return errors.Join(fmt.Errorf("the label %q", text), err)
+	tex := c.label(o, labelKey{text: text, icon: icon, theme: c.icons, size: image.Pt(w, h), px: px, colors: c.decor.Tab.Active}, labelSlot{})
+	if tex == nil {
+		return nil
 	}
 	x := under.Min.X + (under.Dx()-w)/2
 	x = min(max(x, 0), screen.X-w)

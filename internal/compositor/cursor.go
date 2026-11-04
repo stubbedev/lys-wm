@@ -28,19 +28,120 @@ type cursorTexture struct {
 	pixels  []byte
 }
 
-func (c *Compositor) cursorImage(name string, px int) (xcursor.Image, error) {
-	if c.cursors.Theme == nil {
+var commonCursorShapes = []string{"default", "text", "pointer", "grabbing", "grab", "crosshair", "wait", "ew-resize", "ns-resize", "nwse-resize", "nesw-resize", "not-allowed"}
+
+func loadCursorImage(theme *xcursor.Theme, name string, px int) (xcursor.Image, error) {
+	if theme == nil {
 		return xcursor.Builtin(px), nil
 	}
-	img, err := c.cursors.Theme.Load(px, xcursor.Names(name)...)
+	img, err := theme.Load(px, xcursor.Names(name)...)
 	if err == nil || name == "default" {
 		return img, err
 	}
-	return c.cursorImage("default", px)
+	return loadCursorImage(theme, "default", px)
 }
 
 func (c *Compositor) cursorTexture(name string, scale output.Scale) (*cursorTexture, error) {
 	return c.cursorTextureAt(name, scale.ToDevice(c.cursors.Size))
+}
+
+type loadedCursor struct {
+	img    xcursor.Image
+	size   image.Point
+	spot   image.Point
+	pixels []byte
+}
+
+func prepareCursor(img xcursor.Image, px int) loadedCursor {
+	nominal := max(img.Nominal, 1)
+	l := loadedCursor{
+		img:    img,
+		size:   image.Pt(img.Size.X*px/nominal, img.Size.Y*px/nominal),
+		spot:   image.Pt(img.Hotspot.X*px/nominal, img.Hotspot.Y*px/nominal),
+		pixels: img.Pixels,
+	}
+	if l.size != img.Size {
+		l.pixels = resample(img.Pixels, img.Size, l.size)
+	}
+	return l
+}
+
+func (c *Compositor) storeCursor(key cursorKey, l loadedCursor) (*cursorTexture, error) {
+	tex, err := c.renderer.NewTexture(render.ARGB8888, l.img.Size, l.img.Size.X*4, l.img.Pixels)
+	if err != nil {
+		return nil, fmt.Errorf("compositor: cursor %q at %dpx: %w", key.name, key.px, err)
+	}
+	ct := &cursorTexture{tex: tex, size: l.size, hotspot: l.spot, pixels: l.pixels}
+	c.pointers[key] = ct
+	return ct, nil
+}
+
+func (c *Compositor) preloadCursors(px int) error {
+	if c.cursors.Theme == nil {
+		return nil
+	}
+	for _, name := range commonCursorShapes {
+		key := cursorKey{name, px}
+		if _, ok := c.pointers[key]; ok {
+			continue
+		}
+		img, err := c.cursorLoader(c.cursors.Theme, name, px)
+		if err != nil {
+			img = xcursor.Builtin(px)
+			c.report(fmt.Errorf("compositor: cursor %q at %dpx: %w", name, px, err))
+		}
+		if _, err := c.storeCursor(key, prepareCursor(img, px)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Compositor) CursorsLoading() bool {
+	return len(c.cursorsLoading) > 0
+}
+
+func (c *Compositor) preloadCursorsLater(px int) {
+	if c.cursors.Theme == nil {
+		return
+	}
+	for _, name := range commonCursorShapes {
+		c.loadCursorLater(cursorKey{name, px})
+	}
+}
+
+func (c *Compositor) loadCursorLater(key cursorKey) {
+	if _, ok := c.pointers[key]; ok {
+		return
+	}
+	if _, ok := c.cursorsLoading[key]; ok {
+		return
+	}
+	if c.cursorsLoading == nil {
+		c.cursorsLoading = map[cursorKey]struct{}{}
+	}
+	c.cursorsLoading[key] = struct{}{}
+	theme, load := c.cursors.Theme, c.cursorLoader
+	var l loadedCursor
+	c.offLoop(func() error {
+		img, err := load(theme, key.name, key.px)
+		if err != nil {
+			img = xcursor.Builtin(key.px)
+		}
+		l = prepareCursor(img, key.px)
+		return err
+	}, func(err error) error {
+		delete(c.cursorsLoading, key)
+		if err != nil {
+			c.report(fmt.Errorf("compositor: cursor %q at %dpx: %w", key.name, key.px, err))
+		}
+		if _, err := c.storeCursor(key, l); err != nil {
+			c.report(err)
+			return nil
+		}
+		c.cursorGen++
+		return c.scheduleAll()
+	})
 }
 
 func (c *Compositor) cursorTextureAt(name string, px int) (*cursorTexture, error) {
@@ -48,26 +149,36 @@ func (c *Compositor) cursorTextureAt(name string, px int) (*cursorTexture, error
 	if ct, ok := c.pointers[key]; ok {
 		return ct, nil
 	}
-	img, err := c.cursorImage(name, px)
-	if err != nil {
-		return nil, fmt.Errorf("compositor: cursor %q at %dpx: %w", name, px, err)
+	if c.cursors.Theme == nil {
+		return c.storeCursor(key, prepareCursor(xcursor.Builtin(px), px))
 	}
-	tex, err := c.renderer.NewTexture(render.ARGB8888, img.Size, img.Size.X*4, img.Pixels)
-	if err != nil {
-		return nil, err
+	c.loadCursorLater(key)
+	if ct := c.nearestCursor(name, px); ct != nil {
+		return ct, nil
 	}
-	nominal := max(img.Nominal, 1)
-	ct := &cursorTexture{
-		tex:     tex,
-		size:    image.Pt(img.Size.X*px/nominal, img.Size.Y*px/nominal),
-		hotspot: image.Pt(img.Hotspot.X*px/nominal, img.Hotspot.Y*px/nominal),
+	return c.storeCursor(cursorKey{builtinCursor, px}, prepareCursor(xcursor.Builtin(px), px))
+}
+
+const builtinCursor = "\x00builtin"
+
+func (c *Compositor) nearestCursor(name string, px int) *cursorTexture {
+	var best *cursorTexture
+	bestKey := cursorKey{}
+	better := func(k cursorKey) bool {
+		d, b := max(k.px-px, px-k.px), max(bestKey.px-px, px-bestKey.px)
+		return best == nil || d < b || d == b && k.px < bestKey.px
 	}
-	ct.pixels = img.Pixels
-	if ct.size != img.Size {
-		ct.pixels = resample(img.Pixels, img.Size, ct.size)
+	for _, want := range [...]string{name, "default", builtinCursor} {
+		for k, ct := range c.pointers {
+			if k.name == want && better(k) {
+				best, bestKey = ct, k
+			}
+		}
+		if best != nil {
+			return best
+		}
 	}
-	c.pointers[key] = ct
-	return ct, nil
+	return nil
 }
 
 func resample(pix []byte, from, to image.Point) []byte {

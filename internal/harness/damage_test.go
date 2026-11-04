@@ -35,6 +35,9 @@ func presentCount(h *Harness) uint64 {
 
 func settle(t testing.TB, h *Harness) {
 	t.Helper()
+	h.Eventually("labels and cursors to finish loading", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return !c.LabelsPending() && !c.CursorsLoading()
+	})
 	presents := presentCount(h)
 	for deadline := time.Now().Add(clientTimeout); ; {
 		time.Sleep(50 * time.Millisecond)

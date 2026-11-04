@@ -238,9 +238,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 			}
 		}
 		if layer == wm.LayerTiled {
-			if err := c.drawTabBars(pass, o); err != nil {
-				return shown, err
-			}
+			c.drawTabBars(pass, o)
 			c.drawDragPreview(pass, o)
 		}
 	}

@@ -269,6 +269,7 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 		return err
 	}
 	c.addCursorPlane(o)
+	c.preloadCursorsLater(o.Scale().ToDevice(c.cursors.Size))
 	if err := c.relayout(); err != nil {
 		return err
 	}

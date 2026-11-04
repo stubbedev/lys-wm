@@ -224,3 +224,34 @@ func testAGradientBorderRunsAlongItsAngle(t *testing.T, start gpuStarter) {
 	})
 	h.assertGolden("gradient")
 }
+
+func TestATitleChangeRastersItsLabelOutsideTheFrame(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.WM = compositor.DefaultSettings()
+		cfg.Decor = compositor.DefaultDecor()
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	a := c.Window("first", quadrants)
+	c.DispatchUntil("the first window to map", a.Mapped)
+	a.Stop()
+	h.dispatch("makegroup tab")
+	b := c.Window("second", quadrants)
+	c.DispatchUntil("the second window to map", b.Mapped)
+	b.Stop()
+	settle(t, h)
+	if err := errors.Join(a.Toplevel.SetTitle("renamed"), c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	h.Do(func(bk *headless.Backend, comp *compositor.Compositor) error {
+		before := bk.Renderer().Counts().Uploads
+		if err := comp.Frame(bk.Outputs()[0]); err != nil {
+			return err
+		}
+		if got := bk.Renderer().Counts().Uploads - before; got != 0 {
+			t.Errorf("%d uploads inside the frame after a title change", got)
+		}
+		return nil
+	})
+	h.Eventually("the new label", func(_ *headless.Backend, comp *compositor.Compositor) bool { return !comp.LabelsPending() })
+}

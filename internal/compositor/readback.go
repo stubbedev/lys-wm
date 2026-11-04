@@ -182,6 +182,7 @@ func (r *asyncRead) end(err error) error {
 
 func (c *Compositor) endReads() error {
 	c.execs.Wait()
+	c.labelWork.Wait()
 	c.offLoopWork.Wait()
 	var errs []error
 	for r := range c.reads {

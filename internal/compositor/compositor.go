@@ -267,6 +267,11 @@ type Compositor struct {
 	scannedFree     []*scannedOut
 	lookPath        func(string) (string, error)
 	execs           loop.Serial
+	cursorLoader    func(theme *xcursor.Theme, name string, px int) (xcursor.Image, error)
+	cursorsLoading  map[cursorKey]struct{}
+	labelWork       loop.Serial
+	labelsPending   map[labelJob]struct{}
+	labelSlots      map[*output.Output]map[labelSlot]labelKey
 	loadedConfig    func() error
 	reloading       int
 	lidBusy         bool
@@ -403,6 +408,9 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		reads:          map[*asyncRead]struct{}{},
 		scannedOut:     map[*dmabuf.Buffer]*scannedOut{},
 		lookPath:       exec.LookPath,
+		cursorLoader:   loadCursorImage,
+		labelsPending:  map[labelJob]struct{}{},
+		labelSlots:     map[*output.Output]map[labelSlot]labelKey{},
 		filled:         map[*output.Output]filling{},
 		constraints:    map[*surface.Surface]*constraint{},
 		keyInhibitors:  map[*surface.Surface]*shortcutsInhibitor{},
@@ -413,6 +421,9 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 	c.adopt(cfg, m)
 	if err := c.setup(l, display, b, cfg); err != nil {
 		return nil, errors.Join(fmt.Errorf("compositor: %w", err), c.Close())
+	}
+	if err := c.preloadCursors(c.cursors.Size); err != nil {
+		return nil, err
 	}
 	return c, nil
 }

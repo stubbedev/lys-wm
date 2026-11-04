@@ -76,6 +76,10 @@ Everything else that waits on another process runs on a worker too. A bind's `ex
 forks there, in order, and a reload reads the file, its font and compiles its keymap
 there and only applies the result on the loop; over IPC the connection's goroutine does
 that load, so its reply still says whether the config was taken. A hotplug's
+A cursor theme file is read on a worker: the common shapes at startup and for each new
+output scale, any other shape on its first use while the nearest loaded one shows. A tab
+label is rastered on a worker and uploaded between frames while its old texture, or just
+its background, stays on screen.
 connector probe, which reads EDID over DDC, posts its result to the loop. An input
 device is taken from logind or the holder on one worker per session, in order, and
 added to libinput on the loop with its fd ready; a release, a VT switch, a completed

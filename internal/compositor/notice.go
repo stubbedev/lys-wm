@@ -1,7 +1,6 @@
 package compositor
 
 import (
-	"errors"
 	"fmt"
 	"image"
 
@@ -64,9 +63,10 @@ func (c *Compositor) drawConfigNotice(pass *frame, o *output.Output) error {
 	width := o.Backend().State().Mode.Size.X
 	height, px := s.ToDevice(noticeLineHeight), s.ToDevice(noticeTextPx)
 	for i, line := range c.configProblems.noticeLines() {
-		tex, err := c.label(o, labelKey{text: line, size: image.Pt(width, height), px: px, colors: noticeColors})
-		if err != nil {
-			return errors.Join(errors.New("compositor: the config notice"), err)
+		tex := c.label(o, labelKey{text: line, size: image.Pt(width, height), px: px, colors: noticeColors}, labelSlot{notice: i + 1})
+		if tex == nil {
+			pass.FillRect(image.Rect(0, i*height, width, (i+1)*height), noticeColors.Background)
+			continue
 		}
 		size := tex.Size()
 		pass.ops = append(pass.ops, drawOp{tex: tex, src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: image.Rect(0, i*height, width, (i+1)*height), alpha: 1})
