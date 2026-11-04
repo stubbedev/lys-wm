@@ -135,7 +135,7 @@ func TestAFrameClockWaitsForItsLatchDeadline(t *testing.T) {
 	}
 }
 
-func TestTheLatchDeadlineIsHalfwayToTheNextVblank(t *testing.T) {
+func TestTheLatchDeadlineLeavesTheBudgetBeforeTheNextVblank(t *testing.T) {
 	const ms = time.Millisecond
 	for _, tc := range []struct {
 		last, now, want time.Duration
@@ -145,9 +145,80 @@ func TestTheLatchDeadlineIsHalfwayToTheNextVblank(t *testing.T) {
 		{last: 100 * ms, now: 125 * ms, want: 124 * ms},
 		{last: 0, now: 125 * ms, want: 125 * ms},
 	} {
-		if got := LatchDeadline(tc.last, tc.now, 16*ms); got != tc.want {
+		var b RenderBudget
+		if got := b.Deadline(tc.last, tc.now, 16*ms); got != tc.want {
 			t.Errorf("last %v, now %v: deadline %v, want %v", tc.last, tc.now, got, tc.want)
 		}
+	}
+}
+
+func TestAFrameWithNoTimeLeftWaitsForTheNextDeadline(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	if got := b.Deadline(100*ms, 114*ms, 16*ms); got != 124*ms {
+		t.Fatalf("2 ms before the vblank the deadline is %v, want the next refresh's, 124 ms", got)
+	}
+	if got := b.Deadline(100*ms, 124*ms, 16*ms); got != 124*ms {
+		t.Fatalf("at the next refresh's deadline it is %v", got)
+	}
+}
+
+func TestAFrameWithAFastRendersWorthOfTimeLeftStillStarts(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	if got := b.Deadline(100*ms, 112*ms, 16*ms); got != 108*ms {
+		t.Fatalf("4 ms before the vblank the deadline is %v, want the one already past", got)
+	}
+}
+
+func TestADeferredFrameIsNotDeferredAgain(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	if got := b.Deadline(100*ms, 114*ms, 16*ms); got != 124*ms {
+		t.Fatalf("the first deadline is %v", got)
+	}
+	if got := b.Deadline(100*ms, 131*ms, 16*ms); got > 131*ms {
+		t.Fatalf("woken 1 ms before the next vblank, a deferred frame waits until %v", got)
+	}
+	if got := b.Deadline(100*ms, 147*ms, 16*ms); got != 156*ms {
+		t.Fatalf("the frame after it is deferred again only as its own: %v", got)
+	}
+}
+
+func TestWhatIsTooLateToStartFollowsTheTypicalRender(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	for i := range renderSamples {
+		cost := 7 * ms
+		if i == 0 {
+			cost = 12 * ms
+		}
+		b.Sample(cost)
+	}
+	if got := b.Deadline(100*ms, 110*ms, 16*ms); got != 117*ms {
+		t.Fatalf("6 ms before the vblank with 7 ms renders the deadline is %v, want the next refresh's", got)
+	}
+	var fast RenderBudget
+	for range renderSamples {
+		fast.Sample(ms)
+	}
+	if got := fast.Deadline(100*ms, 112*ms, 16*ms); got > 112*ms {
+		t.Fatalf("4 ms before the vblank with 1 ms renders the frame waits until %v", got)
+	}
+}
+
+func TestTheLatchDeadlineDoesNotAllocate(t *testing.T) {
+	const ms = time.Millisecond
+	var b RenderBudget
+	for range renderSamples {
+		b.Sample(ms)
+	}
+	now := 100 * ms
+	if n := testing.AllocsPerRun(100, func() {
+		now += ms
+		b.Deadline(100*ms, now, 16*ms)
+	}); n != 0 {
+		t.Fatalf("a latch deadline allocated %v times", n)
 	}
 }
 

@@ -203,7 +203,7 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 		Wait: func() time.Duration {
 			now := backend.Now()
 			interval := o.state.Mode.Interval()
-			return backend.LatchDeadlineWithin(o.lastVblank, now, interval, o.budget.Budget(interval)) - now
+			return o.budget.Deadline(o.lastVblank, now, interval) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})

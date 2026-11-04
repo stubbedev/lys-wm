@@ -1,6 +1,9 @@
 package backend
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 type Latch struct {
 	Wait func() time.Duration
@@ -66,26 +69,44 @@ func (f *FrameClock) fire() error {
 	return f.frame()
 }
 
-func LatchDeadline(last, now, interval time.Duration) time.Duration {
-	return LatchDeadlineWithin(last, now, interval, interval/2)
-}
-
-func LatchDeadlineWithin(last, now, interval, budget time.Duration) time.Duration {
-	if last == 0 || last > now {
-		return now
-	}
-	next, _ := NextVblank(last, now, interval)
-	return next - budget
-}
-
 const (
 	renderSamples = 32
 	renderMargin  = 3 * time.Millisecond
 )
 
 type RenderBudget struct {
-	samples [renderSamples]time.Duration
-	n, next int
+	samples  [renderSamples]time.Duration
+	n, next  int
+	deferred bool
+}
+
+func (b *RenderBudget) Deadline(last, now, interval time.Duration) time.Duration {
+	if last == 0 || last > now {
+		return now
+	}
+	next, _ := NextVblank(last, now, interval)
+	budget := b.Budget(interval)
+
+	deadline := next - budget
+	if now < deadline {
+		return deadline
+	}
+	if !b.deferred && next-now < b.leastToStart() {
+		b.deferred = true
+		return deadline + interval
+	}
+	b.deferred = false
+	return deadline
+}
+
+func (b *RenderBudget) leastToStart() time.Duration {
+	sorted := b.samples
+	seen := sorted[:b.n]
+	slices.Sort(seen)
+	if b.n == 0 {
+		return renderMargin
+	}
+	return max(renderMargin, seen[b.n/2])
 }
 
 func (b *RenderBudget) Sample(took time.Duration) {

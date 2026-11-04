@@ -1280,7 +1280,7 @@ func (o *Output) test(flags uint32) error {
 
 func (o *Output) latchDeadline(now time.Duration) time.Duration {
 	interval := modeOf(o.mode).Interval()
-	return backend.LatchDeadlineWithin(o.lastFlip, now, interval, o.budget.Budget(interval))
+	return o.budget.Deadline(o.lastFlip, now, interval)
 }
 
 func (o *Output) latchWait() time.Duration {
