@@ -59,11 +59,11 @@ client's buffer privately; a goroutine waits on the GPU fence, the loop maps
 the pixel buffer, and a second goroutine copies the rows into the private
 mapping. Each step hands back to the loop through the mailbox, so the loop
 never waits on the GPU or copies a frame. The exception is the read's
-`cancelled` flag, which `asyncRead.mu` guards for the length of the copy: a client
-that abandons a capture has the loop take that lock, so the loop waits for a copy
-in flight, and the abandoned mapping is never written afterwards. On close, the
-compositor waits for these goroutines and releases what their posted closures
-would have.
+atomic `cancelled` flag: a client that abandons a capture sets it without waiting
+for anything, however long the copy is stuck on the client's memory, and the copy
+checks it before every row, so at most the row in flight lands afterwards. The
+mapping is released off the loop too. On close, the compositor waits for these
+goroutines and releases what their posted closures would have.
 
 The loop goroutine is locked to its OS thread for as long as it runs
 (`gpu.PinThread`, #149), so a GL context it makes current stays current

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"sync"
+	"sync/atomic"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -71,17 +71,33 @@ type asyncRead struct {
 	target    render.AsyncReadTarget
 	owner     *captureScratch
 	pending   render.PendingRead
-	dst       *shm.Mapping
+	dst       frameWriter
 	finish    func(error) error
-	mu        sync.Mutex
-	cancelled bool
+	cancelled atomic.Bool
 	ended     bool
 }
 
+type frameWriter interface {
+	Write(f func(data []byte, stride int) error) error
+	Close() error
+}
+
 func (r *asyncRead) cancel() {
-	r.mu.Lock()
-	r.cancelled = true
-	r.mu.Unlock()
+	r.cancelled.Store(true)
+}
+
+func (r *asyncRead) copyRows(dst frameWriter, pix []byte, stride int, size image.Point) error {
+	err := dst.Write(func(data []byte, dstStride int) error {
+		row := size.X * 4
+		for y := range size.Y {
+			if r.cancelled.Load() {
+				return nil
+			}
+			copy(data[y*dstStride:y*dstStride+row], pix[y*stride:])
+		}
+		return nil
+	})
+	return errors.Join(err, dst.Close())
 }
 
 func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *captureScratch, k *capture, finish func(error) error) error {
@@ -103,9 +119,11 @@ func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *cap
 	if read.pending, err = target.ReadAsync(); err != nil {
 		return read.end(err)
 	}
-	if read.dst, err = b.MapForWriting(); err != nil {
+	dst, err := b.MapForWriting()
+	if err != nil {
 		return read.end(err)
 	}
+	read.dst = dst
 	k.read = read
 	c.reads[read] = struct{}{}
 	c.offLoop(read.pending.Wait, read.waited)
@@ -113,7 +131,7 @@ func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *cap
 }
 
 func (r *asyncRead) waited(err error) error {
-	if err != nil || r.cancelled {
+	if err != nil || r.cancelled.Load() {
 		return r.end(err)
 	}
 	pix, stride, err := r.pending.Map()
@@ -122,21 +140,14 @@ func (r *asyncRead) waited(err error) error {
 	}
 	size, dst := r.k.size, r.dst
 	r.dst = nil
-	r.c.offLoop(func() error {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if r.cancelled {
-			return dst.Close()
-		}
-		err := dst.Write(func(data []byte, dstStride int) error {
-			row := size.X * 4
-			for y := range size.Y {
-				copy(data[y*dstStride:y*dstStride+row], pix[y*stride:])
-			}
-			return nil
-		})
-		return errors.Join(err, dst.Close())
-	}, r.end)
+	r.c.offLoop(func() error { return r.copyRows(dst, pix, stride, size) }, r.end)
+	return nil
+}
+
+func (c *Compositor) reportUnmap(err error) error {
+	if err != nil {
+		c.report(fmt.Errorf("compositor: release a capture's mapping: %w", err))
+	}
 	return nil
 }
 
@@ -151,15 +162,16 @@ func (r *asyncRead) end(err error) error {
 	if r.pending != nil {
 		err = errors.Join(err, r.pending.Release())
 	}
-	if r.dst != nil {
-		err = errors.Join(err, r.dst.Close())
+	if dst := r.dst; dst != nil {
+		r.dst = nil
+		r.c.offLoop(dst.Close, r.c.reportUnmap)
 	}
 	if r.owner == nil {
 		err = errors.Join(err, r.target.Destroy())
 	} else {
 		r.owner.read = nil
 	}
-	if r.cancelled {
+	if r.cancelled.Load() {
 		if err != nil {
 			r.c.report(fmt.Errorf("compositor: an abandoned capture: %w", err))
 		}
@@ -175,6 +187,7 @@ func (c *Compositor) endReads() error {
 		r.cancel()
 		errs = append(errs, r.end(nil))
 	}
+	c.offLoopWork.Wait()
 	for r := range c.cursorReads {
 		errs = append(errs, r.end(false))
 	}
