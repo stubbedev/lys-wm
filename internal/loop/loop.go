@@ -2,6 +2,7 @@
 package loop
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -22,8 +24,6 @@ const (
 	Hangup   Events = unix.EPOLLHUP | unix.EPOLLRDHUP
 	Error    Events = unix.EPOLLERR
 )
-
-const edgeTriggered Events = unix.EPOLLET
 
 var ErrClosed = errors.New("loop: closed")
 
@@ -40,25 +40,28 @@ func tokenOf(ev *unix.EpollEvent) token {
 type source struct {
 	fd      int
 	owned   bool
-	edge    bool
 	handler func(Events) error
 }
 
 type Loop struct {
-	epfd    int
-	sources map[token]*source
-	next    token
-	events  []unix.EpollEvent
-	pending []unix.EpollEvent
-	idle    []func() error
-	running []func() error
-	before  []func() error
-	flush   []func() error
-	stopped bool
-	closed  bool
-	wakeups int
-	batch   uint64
-	busy    time.Duration
+	epfd     int
+	sources  map[token]*source
+	next     token
+	events   []unix.EpollEvent
+	pending  []unix.EpollEvent
+	idle     []func() error
+	running  []func() error
+	before   []func() error
+	flush    []func() error
+	stopped  bool
+	closed   bool
+	wakeups  int
+	epoch    time.Time
+	timers   []*Timer
+	due      []*Timer
+	seq      uint64
+	noPwait2 bool
+	busy     time.Duration
 
 	mailboxFD int
 	mu        sync.Mutex
@@ -74,7 +77,7 @@ func New() (*Loop, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loop: epoll_create1: %w", err)
 	}
-	l := &Loop{epfd: epfd, sources: map[token]*source{}, events: make([]unix.EpollEvent, 64)}
+	l := &Loop{epfd: epfd, sources: map[token]*source{}, events: make([]unix.EpollEvent, 64), epoch: time.Now()}
 	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
 	if err != nil {
 		_ = unix.Close(epfd)
@@ -99,7 +102,7 @@ func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error
 	if err := unix.EpollCtl(l.epfd, unix.EPOLL_CTL_ADD, fd, &ev); err != nil {
 		return 0, fmt.Errorf("loop: add fd %d: %w", fd, err)
 	}
-	l.sources[t] = &source{fd: fd, owned: owned, edge: events&edgeTriggered != 0, handler: handler}
+	l.sources[t] = &source{fd: fd, owned: owned, handler: handler}
 	return t, nil
 }
 
@@ -167,71 +170,107 @@ func (s *Source) Remove() error {
 }
 
 type Timer struct {
-	loop  *Loop
-	token token
-	fd    int
-	armed bool
-	set   uint64
+	loop    *Loop
+	handler func() error
+	at      time.Duration
+	seq     uint64
+	armed   bool
+	removed bool
 }
 
 func (l *Loop) AddTimer(handler func() error) (*Timer, error) {
-	fd, err := unix.TimerfdCreate(unix.CLOCK_MONOTONIC, unix.TFD_CLOEXEC|unix.TFD_NONBLOCK)
-	if err != nil {
-		return nil, fmt.Errorf("loop: timerfd_create: %w", err)
+	if l.closed {
+		return nil, ErrClosed
 	}
-	timer := &Timer{loop: l, fd: fd}
-	timer.token, err = l.add(fd, true, Readable|edgeTriggered, func(Events) error {
-		if timer.set == l.batch {
-			return nil
-		}
-		timer.armed = false
-		return handler()
-	})
-	if err != nil {
-		_ = unix.Close(fd)
-		return nil, err
-	}
-	return timer, nil
+	t := &Timer{loop: l, handler: handler}
+	l.timers = append(l.timers, t)
+	return t, nil
 }
 
 func (t *Timer) Arm(d time.Duration) error {
-	if d <= 0 {
-		d = 1
+	if t.removed {
+		return ErrClosed
 	}
-	if err := t.settime(unix.NsecToTimespec(d.Nanoseconds())); err != nil {
-		return err
-	}
-	t.armed = true
+	l := t.loop
+	l.seq++
+	t.at, t.seq, t.armed = time.Since(l.epoch)+max(d, 1), l.seq, true
 	return nil
 }
 
 func (t *Timer) Disarm() error {
-	if !t.armed {
-		if _, ok := t.loop.sources[t.token]; !ok {
-			return ErrClosed
-		}
-		return nil
-	}
-	if err := t.settime(unix.Timespec{}); err != nil {
-		return err
+	if t.removed {
+		return ErrClosed
 	}
 	t.armed = false
 	return nil
 }
 
-func (t *Timer) settime(ts unix.Timespec) error {
-	if _, ok := t.loop.sources[t.token]; !ok {
-		return ErrClosed
+func (t *Timer) Remove() error {
+	if t.removed {
+		return nil
 	}
-	if err := unix.TimerfdSettime(t.fd, 0, &unix.ItimerSpec{Value: ts}, nil); err != nil {
-		return fmt.Errorf("loop: timerfd_settime on fd %d: %w", t.fd, err)
+	t.removed, t.armed = true, false
+	l := t.loop
+	if i := slices.Index(l.timers, t); i >= 0 {
+		l.timers = slices.Delete(l.timers, i, i+1)
 	}
-	t.set = t.loop.batch
 	return nil
 }
 
-func (t *Timer) Remove() error {
-	return t.loop.remove(t.token)
+func (l *Loop) nextDeadline() (time.Duration, bool) {
+	var next time.Duration
+	found := false
+	for _, t := range l.timers {
+		if t.armed && (!found || t.at < next) {
+			next, found = t.at, true
+		}
+	}
+	return next, found
+}
+
+func (l *Loop) fireTimers() (bool, error) {
+	now := time.Since(l.epoch)
+	l.due = l.due[:0]
+	for _, t := range l.timers {
+		if t.armed && t.at <= now {
+			l.due = append(l.due, t)
+		}
+	}
+	if len(l.due) == 0 {
+		return false, nil
+	}
+	slices.SortFunc(l.due, func(a, b *Timer) int { return cmp.Compare(a.seq, b.seq) })
+	for i, t := range l.due {
+		l.due[i] = nil
+		if !t.armed || t.at > now || l.stopped {
+			continue
+		}
+		t.armed = false
+		if err := t.handler(); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func (l *Loop) wait(block time.Duration) (int, error) {
+	if block <= 0 || l.noPwait2 {
+		ms := -1
+		if block >= 0 {
+			ms = int((block + time.Millisecond - 1) / time.Millisecond)
+		}
+		return unix.EpollWait(l.epfd, l.events, ms)
+	}
+	ts := unix.NsecToTimespec(block.Nanoseconds())
+	n, _, errno := unix.Syscall6(unix.SYS_EPOLL_PWAIT2, uintptr(l.epfd), uintptr(unsafe.Pointer(&l.events[0])), uintptr(len(l.events)), uintptr(unsafe.Pointer(&ts)), 0, 0) //nolint:gosec // the kernel reads and fills these during the call
+	if errno == unix.ENOSYS {
+		l.noPwait2 = true
+		return l.wait(block)
+	}
+	if errno != 0 {
+		return 0, errno
+	}
+	return int(n), nil
 }
 
 type Signals struct {
@@ -366,9 +405,6 @@ func (l *Loop) Run() error {
 	l.stopped = false
 	woke := time.Now()
 	defer func() { l.busy += time.Since(woke) }()
-	if err := l.dispatch(true); err != nil {
-		return err
-	}
 	for !l.stopped {
 		if err := l.flushBeforeIdle(); err != nil {
 			return err
@@ -385,11 +421,13 @@ func (l *Loop) Run() error {
 			break
 		}
 		l.busy += time.Since(woke)
-		block := -1
+		block := time.Duration(-1)
 		if len(l.idle) > 0 {
 			block = 0
+		} else if at, ok := l.nextDeadline(); ok {
+			block = max(at-time.Since(l.epoch), 0)
 		}
-		n, err := unix.EpollWait(l.epfd, l.events, block)
+		n, err := l.wait(block)
 		woke = time.Now()
 		if errors.Is(err, unix.EINTR) {
 			continue
@@ -397,25 +435,27 @@ func (l *Loop) Run() error {
 		if err != nil {
 			return fmt.Errorf("loop: epoll_wait: %w", err)
 		}
-		if n == 0 {
-			continue
-		}
-		l.wakeups++
-		l.batch++
 		l.pending = l.events[:n]
-		if err := l.dispatch(false); err != nil {
+		if err := l.dispatch(); err != nil {
+			return err
+		}
+		fired, err := l.fireTimers()
+		if n > 0 || fired {
+			l.wakeups++
+		}
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (l *Loop) dispatch(edgesOnly bool) error {
+func (l *Loop) dispatch() error {
 	for len(l.pending) > 0 && !l.stopped {
 		ev := &l.pending[0]
 		l.pending = l.pending[1:]
 		s, ok := l.sources[tokenOf(ev)]
-		if !ok || edgesOnly && !s.edge {
+		if !ok {
 			continue
 		}
 		if err := s.handler(Events(ev.Events)); err != nil {
@@ -436,6 +476,9 @@ func (l *Loop) Close() error {
 		l.signals[0].Remove()
 	}
 	var errs []error
+	for _, t := range slices.Clone(l.timers) {
+		errs = append(errs, t.Remove())
+	}
 	for _, t := range slices.Sorted(maps.Keys(l.sources)) {
 		errs = append(errs, l.remove(t))
 	}

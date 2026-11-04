@@ -180,12 +180,8 @@ func TestTimer(t *testing.T) {
 	if fires != 3 || time.Since(start) < 3*time.Millisecond {
 		t.Fatalf("timer fired %d times in %v, want 3 re-armed one-shots", fires, time.Since(start))
 	}
-	file := opened(t, timer.fd)
 	if err := timer.Remove(); err != nil {
 		t.Fatal(err)
-	}
-	if file.stillOpen() {
-		t.Fatal("Remove left the timerfd open")
 	}
 	if err := timer.Arm(time.Millisecond); !errors.Is(err, ErrClosed) {
 		t.Fatalf("Arm after Remove = %v, want ErrClosed", err)
@@ -390,7 +386,7 @@ func TestCloseReleasesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	timer, err := l.AddTimer(func() error { return nil })
+	_, err = l.AddTimer(func() error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +398,7 @@ func TestCloseReleasesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owned := []openFile{opened(t, l.epfd), opened(t, l.mailboxFD), opened(t, timer.fd)}
+	owned := []openFile{opened(t, l.epfd), opened(t, l.mailboxFD)}
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -697,5 +693,34 @@ func TestBeforeIdleRunsOnlyAheadOfIdleWork(t *testing.T) {
 	run(t, l)
 	if want := []string{"flush", "idle", "before", "posted", "before"}; !slices.Equal(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+func TestTimersTakeNoFileDescriptors(t *testing.T) {
+	l := newLoop(t)
+	fds := func() int {
+		entries, err := os.ReadDir("/proc/self/fd")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(entries)
+	}
+	before := fds()
+	timer, err := l.AddTimer(func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := timer.Arm(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if got := fds(); got != before {
+		t.Fatalf("a timer went from %d to %d open files, so arming it would be a syscall", before, got)
+	}
+	if allocs := testing.AllocsPerRun(100, func() {
+		if err := timer.Arm(time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}); allocs != 0 {
+		t.Fatalf("%v allocations per arm", allocs)
 	}
 }

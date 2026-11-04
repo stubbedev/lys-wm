@@ -380,3 +380,36 @@ func TestAFenceAllocatesOnlyItsHandle(t *testing.T) {
 		t.Errorf("a fence created and destroyed allocates %v times, want its one handle", got)
 	}
 }
+
+func TestLeavingOnAPinnedThreadTakesNoLookupAfterTheFirst(t *testing.T) {
+	lib := testenv.GPU(t)
+	d, err := lib.Surfaceless()
+	if err != nil {
+		t.Skipf("no surfaceless display: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	unpin := gpu.PinThread()
+	defer func() {
+		if err := unpin(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := d.Enter(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Leave(); err != nil {
+		t.Fatal(err)
+	}
+	before := gpu.PinnedLookups()
+	for range 100 {
+		if err := d.Enter(); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.Leave(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := gpu.PinnedLookups() - before; got != 0 {
+		t.Fatalf("%d lookups in 100 leaves on the pinned thread", got)
+	}
+}

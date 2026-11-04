@@ -250,10 +250,11 @@ func (d Device) RenderNode() string {
 }
 
 type Display struct {
-	lib  *Library
-	dpy  uintptr
-	ctx  uintptr
-	exts []string
+	thread atomic.Pointer[pinnedThread]
+	lib    *Library
+	dpy    uintptr
+	ctx    uintptr
+	exts   []string
 }
 
 func (l *Library) Surfaceless() (*Display, error) {

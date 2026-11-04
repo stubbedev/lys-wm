@@ -3,23 +3,33 @@ package gpu
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ebitengine/purego"
-	"golang.org/x/sys/unix"
 )
+
+func currentG() uintptr
+
+type pinnedThread struct {
+	g       atomic.Uintptr
+	current atomic.Pointer[Display]
+}
 
 var pinned = struct {
 	sync.Mutex
-	current map[int]*Display
-}{current: map[int]*Display{}}
+	threads map[uintptr]*pinnedThread
+	lookups atomic.Uint64
+}{threads: map[uintptr]*pinnedThread{}}
 
 func PinThread() (unpin func() error) {
 	runtime.LockOSThread()
-	tid := unix.Gettid()
+	g := currentG()
 	pinned.Lock()
-	_, nested := pinned.current[tid]
+	t, nested := pinned.threads[g]
 	if !nested {
-		pinned.current[tid] = nil
+		t = &pinnedThread{}
+		t.g.Store(g)
+		pinned.threads[g] = t
 	}
 	pinned.Unlock()
 	return func() error {
@@ -28,9 +38,10 @@ func PinThread() (unpin func() error) {
 			return nil
 		}
 		pinned.Lock()
-		d := pinned.current[tid]
-		delete(pinned.current, tid)
+		delete(pinned.threads, g)
 		pinned.Unlock()
+		t.g.Store(0)
+		d := t.current.Load()
 		if d == nil {
 			return nil
 		}
@@ -52,25 +63,27 @@ func (d *Display) Enter() error {
 
 func (d *Display) Leave() error {
 	defer runtime.UnlockOSThread()
-	tid := unix.Gettid()
-	pinned.Lock()
-	_, keep := pinned.current[tid]
-	if keep {
-		pinned.current[tid] = d
-	}
-	pinned.Unlock()
-	if keep {
+	g := currentG()
+	if t := d.thread.Load(); t != nil && t.g.Load() == g {
+		t.current.Store(d)
 		return nil
 	}
-	return d.Release()
+	pinned.lookups.Add(1)
+	pinned.Lock()
+	t := pinned.threads[g]
+	pinned.Unlock()
+	if t == nil {
+		return d.Release()
+	}
+	d.thread.Store(t)
+	t.current.Store(d)
+	return nil
 }
 
 func forget(d *Display) {
 	pinned.Lock()
 	defer pinned.Unlock()
-	for tid, held := range pinned.current {
-		if held == d {
-			pinned.current[tid] = nil
-		}
+	for _, t := range pinned.threads {
+		t.current.CompareAndSwap(d, nil)
 	}
 }

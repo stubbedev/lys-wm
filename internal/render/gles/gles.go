@@ -157,6 +157,7 @@ func (r *Renderer) newProgram(id uint32) program {
 type Renderer struct {
 	counts       render.Counts
 	drawnOps     uint64
+	nativeFences bool
 	d            *gpu.Display
 	device       uint64
 	gl           *gpu.GL
@@ -255,6 +256,7 @@ func (r *Renderer) setup() error {
 		r.gl.GenBuffers(1, &r.unpack)
 	}
 	r.async = r.es3 && r.d.Has("EGL_KHR_fence_sync")
+	r.nativeFences = r.d.Has("EGL_ANDROID_native_fence_sync")
 	r.floatTargets = r.es3 && (slices.Contains(exts, "GL_EXT_color_buffer_float") || slices.Contains(exts, "GL_EXT_color_buffer_half_float"))
 	return nil
 }
@@ -491,7 +493,7 @@ func (r *Renderer) WaitFence(fd int) error {
 }
 
 func (r *Renderer) NativeFences() bool {
-	return r.d.Has("EGL_ANDROID_native_fence_sync")
+	return r.nativeFences
 }
 
 func (r *Renderer) MainDevice() (uint64, error) {
