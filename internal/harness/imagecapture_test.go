@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"image"
@@ -662,5 +663,56 @@ func testShmCapturesLeaveTheLoopFreeOnHardware(t *testing.T, start gpuStarter) {
 	t.Logf("the loop was busy a median %v per frame without a capture and %v with a %v shm capture", plain, with, view.size)
 	if blocking := syncReads() - blockingBefore; blocking != 0 {
 		t.Errorf("%d of %d %v shm captures read back on the loop, want none", blocking, frames, view.size)
+	}
+}
+
+func TestACaptureRepaintsOnlyTheDamageSinceTheLastCapture(t *testing.T) {
+	t.Parallel()
+	onEachGPURenderer(t, testACaptureRepaintsOnlyTheDamageSinceTheLastCapture)
+}
+
+func testACaptureRepaintsOnlyTheDamageSinceTheLastCapture(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
+	async := false
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		r, ok := b.Renderer().(render.AsyncReader)
+		async = ok && r.AsyncReads()
+		return nil
+	})
+	if !async {
+		t.Skip("this renderer reads captures back synchronously")
+	}
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("captured", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	quiesce(t, h, c, w)
+	r := newCaptureRig(t, h, c)
+	session, view := r.outputSession(0)
+	r.first(session, view.size)
+	pixels := func() uint64 {
+		var n uint64
+		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+			n = comp.CapturedPixels()
+			return nil
+		})
+		return n
+	}
+	before := pixels()
+	next, partial := r.waiting(session, view.size)
+	buf := c.Buffer(w.Logical, 1, testclient.Fill(0, 0xff, 0))
+	if err := errors.Join(w.Surface.Attach(buf, 0, 0), w.Surface.Damage(0, 0, 4, 4), w.Surface.Commit(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the next frame after damage", func() bool { return next.ready || next.failed })
+	if next.failed {
+		t.Fatalf("the next frame %+v", *next)
+	}
+	area := next.damage.Dx() * next.damage.Dy()
+	if got := pixels() - before; got == 0 || got > uint64(area) {
+		t.Fatalf("a capture repainted %d pixels for damage %v", got, next.damage)
+	}
+	fresh, freshView := r.outputSession(0)
+	if whole := r.first(fresh, freshView.size); !bytes.Equal(partial, whole) {
+		t.Fatal("the partly repainted capture differs from a whole one")
 	}
 }

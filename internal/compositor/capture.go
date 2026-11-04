@@ -96,6 +96,16 @@ func (c *Compositor) captureTarget(r captureRenderer, b *dmabuf.Buffer) (render.
 	return t, nil
 }
 
+func (c *Compositor) paintRegion(target render.Target, k *capture, repaint render.Region) error {
+	c.capturedPixels += uint64(repaint.Area()) //nolint:gosec // an area is not negative
+	p, err := c.renderer.Begin(target, repaint)
+	if err != nil {
+		return err
+	}
+	p.Clear(k.clear)
+	return errors.Join(k.draw(p), p.End())
+}
+
 func paint(r render.Renderer, target render.Target, k *capture) error {
 	p, err := r.Begin(target, render.Region{image.Rectangle{Max: k.size}})
 	if err != nil {
@@ -115,6 +125,8 @@ type capture struct {
 	painted func() error
 	done    func(at time.Duration, err error) error
 	read    *asyncRead
+	partial bool
+	repaint render.Region
 }
 
 type frameState uint8

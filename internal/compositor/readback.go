@@ -20,6 +20,10 @@ func (c *Compositor) offLoop(work func() error, then func(error) error) {
 	})
 }
 
+func (c *Compositor) CapturedPixels() uint64 {
+	return c.capturedPixels
+}
+
 func (c *Compositor) ShmSyncReads() uint64 {
 	return c.shmSyncReads
 }
@@ -34,22 +38,22 @@ type captureScratch struct {
 	read   *asyncRead
 }
 
-func (s *captureScratch) take(r render.AsyncReader, size image.Point) (render.AsyncReadTarget, error) {
+func (s *captureScratch) take(r render.AsyncReader, size image.Point) (t render.AsyncReadTarget, kept bool, err error) {
 	if s.read != nil {
 		s.read.owner, s.read, s.target = nil, nil, nil
 	}
 	if s.target != nil && s.target.Size() == size {
-		return s.target, nil
+		return s.target, true, nil
 	}
 	if err := s.drop(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	t, err := r.NewAsyncTarget(size)
+	t, err = r.NewAsyncTarget(size)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s.target = t
-	return t, nil
+	return t, false, nil
 }
 
 func (s *captureScratch) drop() error {
@@ -105,7 +109,7 @@ func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *cap
 	if oneShot {
 		scratch = &captureScratch{}
 	}
-	target, err := scratch.take(r, k.size)
+	target, kept, err := scratch.take(r, k.size)
 	if err != nil {
 		return finish(err)
 	}
@@ -113,7 +117,12 @@ func (c *Compositor) readAsync(r render.AsyncReader, b *shm.Buffer, scratch *cap
 	if !oneShot {
 		read.owner, scratch.read = scratch, read
 	}
-	if err := paint(c.renderer, target, k); err != nil {
+	if kept && k.partial {
+		err = c.paintRegion(target, k, k.repaint)
+	} else {
+		err = c.paintRegion(target, k, render.Region{image.Rectangle{Max: k.size}})
+	}
+	if err != nil {
 		return read.end(err)
 	}
 	if read.pending, err = target.ReadAsync(); err != nil {

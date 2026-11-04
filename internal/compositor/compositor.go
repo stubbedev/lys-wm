@@ -274,6 +274,7 @@ type Compositor struct {
 	labelSlots      map[*output.Output]map[labelSlot]labelKey
 	loadedConfig    func() error
 	reloading       int
+	capturedPixels  uint64
 	lidBusy         bool
 	lidAgain        bool
 	filled          map[*output.Output]filling

@@ -500,6 +500,7 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 		damage = []image.Rectangle{{Max: size}}
 		if s.captured {
 			damage = slices.Clone(s.damage.Rects())
+			k.partial, k.repaint = true, damage
 		}
 		s.captured = true
 		s.damage.Reset()
