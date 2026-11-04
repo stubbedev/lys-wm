@@ -691,6 +691,7 @@ func (b *Backend) Resume() error {
 		if o.cursor != nil {
 			o.cursor.queued = nil
 		}
+		o.powerOffAfterFlip()
 		errs = append(errs, b.handler.OutputDamaged(o))
 	}
 	return errors.Join(append(errs, b.scan())...)
@@ -746,6 +747,7 @@ const (
 
 type Output struct {
 	spare         []*scanout
+	offDue        bool
 	b             *Backend
 	identity      edid.Info
 	conn          kdrm.Connector
@@ -935,21 +937,40 @@ func (o *Output) setPower(on bool) error {
 		return nil
 	}
 	if on {
-		o.off, o.kms = false, kmsModeset
+		o.off, o.offDue, o.kms = false, false, kmsModeset
 		return o.b.handler.OutputDamaged(o)
 	}
+	if o.lit && o.flipping {
+		o.off, o.offDue = true, true
+		o.clock.Cancel()
+		return nil
+	}
+	return o.powerOff()
+}
+
+func (o *Output) powerOff() error {
 	if o.lit {
 		r := &o.b.req
 		r.Reset()
 		o.crtc.set(&o.b.req, "ACTIVE", 0)
 		o.detach()
-		if err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset, 0); err != nil {
+		if err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset|kdrm.AtomicNonblock, 0); err != nil {
 			return fmt.Errorf("drm: power off %s: %w", o.Name(), err)
 		}
 	}
-	o.off, o.flipping = true, false
+	o.off, o.flipping, o.offDue = true, false, false
 	o.clock.Cancel()
 	return o.dropScanouts()
+}
+
+func (o *Output) powerOffAfterFlip() {
+	if !o.offDue || o.b.paused {
+		return
+	}
+	if err := o.powerOff(); err != nil {
+		o.offDue = false
+		o.b.report(fmt.Errorf("%w; the output stays lit until it next changes", err))
+	}
 }
 
 func (o *Output) disable() error {
@@ -966,12 +987,20 @@ func (o *Output) disable() error {
 	o.crtc.set(&o.b.req, "ACTIVE", 0)
 	o.crtc.set(&o.b.req, "MODE_ID", 0)
 	o.detach()
-	if err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset, 0); err != nil {
+	if err := o.commitDisable(r); err != nil {
 		return fmt.Errorf("drm: disable %s: %w", o.Name(), err)
 	}
 	o.enabled, o.lit, o.flipping = false, false, false
 	o.clock.Cancel()
 	return o.freeBuffers()
+}
+
+func (o *Output) commitDisable(r *kdrm.Request) error {
+	err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset|kdrm.AtomicNonblock, 0)
+	if !errors.Is(err, unix.EBUSY) {
+		return err
+	}
+	return o.b.dev.Commit(r, kdrm.AtomicAllowModeset, 0)
 }
 
 func (o *Output) detach() {
@@ -1428,6 +1457,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 		c.front, c.queued = c.queued, nil
 	}
 	if o.queued == nil {
+		defer o.powerOffAfterFlip()
 		return errors.Join(timing, o.clock.Kick(), o.flushPlanes())
 	}
 	var freed error
@@ -1439,6 +1469,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	o.presented++
 	o.front.presented = o.presented
 	presented := o.b.handler.Presented(o, backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn})
+	defer o.powerOffAfterFlip()
 	return errors.Join(freed, presented, timing, o.clock.Kick(), o.flushPlanes())
 }
 

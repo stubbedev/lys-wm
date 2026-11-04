@@ -87,6 +87,7 @@ type fakeDevice struct {
 	refuseCursorAt    func(at image.Point) error
 	refuseAsync       bool
 	refusePowerOff    bool
+	busyNonblock      bool
 	refuseModesets    bool
 	asyncFlips        bool
 	failCommits       error
@@ -374,6 +375,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	c := commit{flags: flags, userData: userData, values: map[[2]uint32]uint64{}}
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
+	if f.busyNonblock && flags&kdrm.AtomicNonblock != 0 && flags&kdrm.AtomicAllowModeset != 0 {
+		return unix.EBUSY
+	}
 	active, setsActive := c.values[[2]uint32{10, propActive}]
 	cursorFB, setsCursor := c.values[[2]uint32{43, propFB}]
 	if !setsCursor {
@@ -915,7 +919,7 @@ func TestModeChangesAndDisabling(t *testing.T) {
 		t.Fatal(err)
 	}
 	off := r.dev.commits[len(r.dev.commits)-1]
-	if off.flags != kdrm.AtomicAllowModeset || off.values[[2]uint32{10, propActive}] != 0 || off.values[[2]uint32{40, propFB}] != 0 || o.State().Enabled() || len(o.buffers) != 0 {
+	if off.flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || off.values[[2]uint32{10, propActive}] != 0 || off.values[[2]uint32{40, propFB}] != 0 || o.State().Enabled() || len(o.buffers) != 0 {
 		t.Fatalf("disable commit %+v, state %+v", off, o.State())
 	}
 }
@@ -982,13 +986,15 @@ func TestPowerAndWake(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.committedSince("the first frame", o, 0)
+	r.dev.flip(t, 10, 1)
+	r.until("the first frame's flip", func() bool { return !o.flipping })
 	state := o.State()
 	state.Power = backend.PoweredOff
 	if err := o.Commit(state); err != nil {
 		t.Fatal(err)
 	}
 	off := r.dev.commits[len(r.dev.commits)-1]
-	if off.flags != kdrm.AtomicAllowModeset || off.values[[2]uint32{10, propActive}] != 0 || o.State().Power != backend.PoweredOff || len(o.buffers) == 0 {
+	if off.flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || off.values[[2]uint32{10, propActive}] != 0 || o.State().Power != backend.PoweredOff || len(o.buffers) == 0 {
 		t.Fatalf("power off commit %+v, state %+v", off, o.State())
 	}
 	before := len(r.dev.commits)
@@ -1458,10 +1464,15 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 	for name, stop := range map[string]func(r *rig, o *Output) error{
 		"disabled": func(_ *rig, o *Output) error { return o.Commit(backend.OutputState{}) },
-		"powered off": func(_ *rig, o *Output) error {
+		"powered off": func(r *rig, o *Output) error {
 			st := o.State()
 			st.Power = backend.PoweredOff
-			return o.Commit(st)
+			if err := o.Commit(st); err != nil {
+				return err
+			}
+			r.dev.flip(r.t, 10, 2)
+			r.until("the power off after the flip", func() bool { return !o.offDue })
+			return nil
 		},
 		"paused and resumed": func(r *rig, _ *Output) error {
 			r.b.Pause()
@@ -2017,7 +2028,7 @@ func TestAnOutputLitInItsModeTurnsOffBeforeItsFirstFrame(t *testing.T) {
 	if err := o.Commit(state); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.dev.commits) != 1 || r.dev.commits[0].flags != kdrm.AtomicAllowModeset || r.dev.commits[0].values[[2]uint32{10, propActive}] != 0 {
+	if len(r.dev.commits) != 1 || r.dev.commits[0].flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || r.dev.commits[0].values[[2]uint32{10, propActive}] != 0 {
 		t.Fatalf("powering off what is on screen committed %+v", r.dev.commits)
 	}
 }
@@ -2338,5 +2349,46 @@ func TestScanoutFramesReuseTheirRecords(t *testing.T) {
 	}
 	if len(records) > 2 {
 		t.Fatalf("20 scanout frames used %d records, want the on-screen and the queued one reused", len(records))
+	}
+}
+
+func TestAPowerOffDuringAFlipWaitsForItsEventInsteadOfTheKernel(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	frames := len(r.dev.commits)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("a frame in flight", o, frames)
+	state := o.State()
+	state.Power = backend.PoweredOff
+	n := len(r.dev.commits)
+	if err := o.Commit(state); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.dev.commits) != n {
+		t.Fatalf("a power off during a flip committed at once: %+v", r.dev.commits[n:])
+	}
+	if o.State().Power != backend.PoweredOff {
+		t.Fatal("the output does not count as off while its commit waits for the flip")
+	}
+	r.dev.flip(t, 10, 2)
+	r.until("the power off after the flip", func() bool { return len(r.dev.commits) > n })
+	off := r.dev.commits[n]
+	if off.flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || off.values[[2]uint32{10, propActive}] != 0 {
+		t.Fatalf("power off commit %+v", off)
+	}
+}
+
+func TestDisableFallsBackToWaitingOnlyWhenTheKernelIsBusy(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.dev.busyNonblock = true
+	n := len(r.dev.commits)
+	if err := o.Commit(backend.OutputState{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.dev.commits[n:]; len(got) != 2 || got[0].flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || got[1].flags != kdrm.AtomicAllowModeset {
+		t.Fatalf("disable during a flip committed %+v", got)
 	}
 }
