@@ -3,7 +3,9 @@ package session
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sync"
 	"time"
 	"unsafe"
@@ -181,6 +183,11 @@ func (d *InputDevice) SetLEDs(l xkb.Locks) {
 
 type Libinput struct {
 	fn      libinputFuncs
+	loop    *loop.Loop
+	work    Serial
+	ready   map[string]takenDevice
+	adding  map[string]struct{}
+	resumes uint64
 	lib     uintptr
 	li      uintptr
 	id      uintptr
@@ -238,7 +245,7 @@ func openRestricted(path *byte, _ int32, userData uintptr) int32 {
 	if in == nil {
 		return -int32(unix.ENODEV)
 	}
-	fd, dev, err := in.opener.TakeDevice(goString(path))
+	fd, dev, err := in.take(goString(path))
 	if err != nil {
 		in.openErr = err
 		if errno, ok := errors.AsType[unix.Errno](err); ok {
@@ -259,7 +266,7 @@ func closeRestricted(fd int32, userData uintptr) {
 	delete(in.fds, fd)
 	err := unix.Close(int(fd))
 	if ok {
-		err = errors.Join(err, in.opener.ReleaseDevice(dev))
+		in.releaseLater(dev)
 	}
 	if err != nil {
 		in.report(fmt.Errorf("session: close input device fd %d: %w", fd, err))
@@ -271,7 +278,7 @@ func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, 
 	if err != nil {
 		return nil, fmt.Errorf("session: load libinput from %s (set %s to its path): %w", path, LibinputEnv, err)
 	}
-	in := &Libinput{lib: lib, opener: opener, config: config, report: report, devices: map[uintptr]*InputDevice{}, paths: map[string]uintptr{}, fds: map[int32]Device{}}
+	in := &Libinput{loop: l, ready: map[string]takenDevice{}, adding: map[string]struct{}{}, lib: lib, opener: opener, config: config, report: report, devices: map[uintptr]*InputDevice{}, paths: map[string]uintptr{}, fds: map[int32]Device{}}
 	if err := in.bind(path); err != nil {
 		return nil, errors.Join(err, purego.Dlclose(lib))
 	}
@@ -449,6 +456,7 @@ func (in *Libinput) Add(path string) error {
 }
 
 func (in *Libinput) Remove(path string) error {
+	delete(in.adding, path)
 	dev, ok := in.paths[path]
 	if !ok {
 		return nil
@@ -460,6 +468,7 @@ func (in *Libinput) Remove(path string) error {
 }
 
 func (in *Libinput) Suspend() {
+	in.resumes++
 	if in.suspended {
 		return
 	}
@@ -479,6 +488,134 @@ func (in *Libinput) Resume() error {
 	}
 	in.suspended = false
 	return in.drain()
+}
+
+type takenDevice struct {
+	fd  int
+	dev Device
+	err error
+}
+
+func (in *Libinput) take(path string) (int, Device, error) {
+	if t, ok := in.ready[path]; ok {
+		delete(in.ready, path)
+		return t.fd, t.dev, t.err
+	}
+	return in.opener.TakeDevice(path)
+}
+
+func (in *Libinput) releaseLater(dev Device) {
+	in.work.Run(func() {
+		if err := in.opener.ReleaseDevice(dev); err != nil {
+			in.postReport(fmt.Errorf("session: release input device %d:%d: %w", dev.Major, dev.Minor, err))
+		}
+	})
+}
+
+func (in *Libinput) postReport(err error) {
+	if posted := in.loop.Post(func() error { in.report(err); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+		panic(fmt.Sprintf("session: hand an input device error back to the loop: %v", posted))
+	}
+}
+
+func (in *Libinput) dropReady() {
+	for path, t := range in.ready {
+		delete(in.ready, path)
+		in.letGo(t)
+	}
+}
+
+func (in *Libinput) letGo(t takenDevice) {
+	if t.err != nil {
+		return
+	}
+	if err := unix.Close(t.fd); err != nil {
+		in.report(fmt.Errorf("session: close input device fd %d: %w", t.fd, err))
+	}
+	in.releaseLater(t.dev)
+}
+
+func (in *Libinput) AddLater(path string) {
+	if _, ok := in.paths[path]; ok {
+		return
+	}
+	if _, ok := in.adding[path]; ok {
+		return
+	}
+	in.adding[path] = struct{}{}
+	in.work.Run(func() {
+		var t takenDevice
+		t.fd, t.dev, t.err = in.opener.TakeDevice(path)
+		in.postTaken(t, func() error { return in.added(path, t) })
+	})
+}
+
+func (in *Libinput) postTaken(t takenDevice, then func() error) {
+	err := in.loop.Post(then)
+	if err == nil {
+		return
+	}
+	if t.err == nil {
+		_ = unix.Close(t.fd)
+	}
+	if !errors.Is(err, loop.ErrClosed) {
+		panic(fmt.Sprintf("session: hand a taken input device back to the loop: %v", err))
+	}
+}
+
+func (in *Libinput) added(path string, t takenDevice) error {
+	if _, wanted := in.adding[path]; !wanted {
+		in.letGo(t)
+		return nil
+	}
+	delete(in.adding, path)
+	in.ready[path] = t
+	err := in.Add(path)
+	if t, unused := in.ready[path]; unused {
+		delete(in.ready, path)
+		in.letGo(t)
+	}
+	if err != nil && !errors.Is(err, ErrDeclined) {
+		in.report(err)
+	}
+	return nil
+}
+
+func (in *Libinput) ResumeLater() {
+	if !in.suspended {
+		return
+	}
+	in.resumes++
+	resume := in.resumes
+	paths := make([]string, 0, len(in.paths))
+	for path := range in.paths {
+		paths = append(paths, path)
+	}
+	slices.Sort(paths)
+	in.work.Run(func() {
+		taken := make(map[string]takenDevice, len(paths))
+		for _, path := range paths {
+			var t takenDevice
+			t.fd, t.dev, t.err = in.opener.TakeDevice(path)
+			taken[path] = t
+		}
+		if err := in.loop.Post(func() error { return in.resumed(resume, taken) }); err != nil && !errors.Is(err, loop.ErrClosed) {
+			panic(fmt.Sprintf("session: hand the resumed input devices back to the loop: %v", err))
+		}
+	})
+}
+
+func (in *Libinput) resumed(resume uint64, taken map[string]takenDevice) error {
+	if resume != in.resumes {
+		for _, t := range taken {
+			in.letGo(t)
+		}
+		return nil
+	}
+	maps.Copy(in.ready, taken)
+	err := in.Resume()
+	in.dropReady()
+	return err
 }
 
 func (in *Libinput) read(loop.Events) error {
@@ -633,6 +770,8 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 
 func (in *Libinput) Close() error {
 	var errs []error
+	in.work.Wait()
+	in.dropReady()
 	if in.src != nil {
 		errs = append(errs, in.src.Remove())
 	}
@@ -647,6 +786,7 @@ func (in *Libinput) Close() error {
 		in.fn.unref(in.li)
 		in.li = 0
 	}
+	in.work.Wait()
 	return errors.Join(append(errs, in.forget(), purego.Dlclose(in.lib))...)
 }
 

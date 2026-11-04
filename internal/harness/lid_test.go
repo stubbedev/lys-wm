@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -37,6 +38,7 @@ func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
 	}
 	expect := func(when string, want int) {
 		t.Helper()
+		lidSettled(h)
 		h.Do(func(*headless.Backend, *compositor.Compositor) error {
 			if suspends != want {
 				t.Errorf("%s: %d suspends, want %d", when, suspends, want)
@@ -98,6 +100,7 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 		return b.Switches().Toggle(backend.SwitchLid, true)
 	})
 	powerChanged(h)
+	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
 		if suspends != 2 {
 			t.Errorf("%d suspends, want one for the lid closing and one for the power change", suspends)
@@ -108,6 +111,10 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func lidSettled(h *Harness) {
+	h.Eventually("the lid policy to settle", func(_ *headless.Backend, c *compositor.Compositor) bool { return !c.LidPending() })
 }
 
 func powerChanged(h *Harness) {
@@ -139,6 +146,7 @@ func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
 		return b.Switches().Toggle(backend.SwitchLid, true)
 	})
 	powerChanged(h)
+	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
 		if suspends != 0 {
 			t.Errorf("%d suspends with the power state unknown, want none", suspends)
@@ -149,4 +157,38 @@ func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestTheLidPolicyAsksItsServicesOffTheLoop(t *testing.T) {
+	t.Parallel()
+	gate := make(chan struct{})
+	reached := make(chan struct{})
+	var first sync.Once
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Hooks.Lid = compositor.LidPolicy{
+			Suspend: func() error { return nil },
+			OnBattery: func() (bool, error) {
+				first.Do(func() { close(reached) })
+				<-gate
+				return false, nil
+			},
+		}
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		if _, err := b.AddNamedOutput("eDP-1", small); err != nil {
+			return err
+		}
+		return b.Switches().Toggle(backend.SwitchLid, true)
+	})
+	<-reached
+	ticks := 0
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		ticks++
+		return nil
+	})
+	if ticks != 1 {
+		t.Fatalf("%d loop ticks while the power read is stuck", ticks)
+	}
+	close(gate)
+	lidSettled(h)
 }

@@ -49,20 +49,21 @@ type gpuCard struct {
 }
 
 type native struct {
-	l       *loop.Loop
-	paths   gpu.Paths
-	vendors edid.Vendors
-	logind  broker
-	monitor *session.Monitor
-	input   *session.Libinput
-	handler backend.Handler
-	cards   []*card
-	report  func(error)
-	vulkan  bool
-	lid     *os.File
-	power   func()
-	wake    *loop.Timer
-	holdoff time.Duration
+	sessionWork session.Serial
+	l           *loop.Loop
+	paths       gpu.Paths
+	vendors     edid.Vendors
+	logind      broker
+	monitor     *session.Monitor
+	input       *session.Libinput
+	handler     backend.Handler
+	cards       []*card
+	report      func(error)
+	vulkan      bool
+	lid         *os.File
+	power       func()
+	wake        *loop.Timer
+	holdoff     time.Duration
 }
 
 const lidHoldoff = 30 * time.Second
@@ -290,9 +291,20 @@ func (n *native) addInputs() error {
 }
 
 func (n *native) addInput(path string) {
-	if err := n.input.Add(path); err != nil && !errors.Is(err, session.ErrDeclined) {
-		n.report(err)
-	}
+	n.input.AddLater(path)
+}
+
+func (n *native) switchVT(vt uint32) error {
+	n.sessionWork.Run(func() {
+		err := n.logind.SwitchTo(vt)
+		if err == nil {
+			return
+		}
+		if posted := n.l.Post(func() error { n.report(err); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+			panic(fmt.Sprintf("hand a failed VT switch back to the loop: %v", posted))
+		}
+	})
+	return nil
 }
 
 func (n *native) Outputs() []*drmbackend.Output {
@@ -389,7 +401,8 @@ func (n *native) ActiveChanged(active bool) error {
 		n.input.Suspend()
 		return nil
 	}
-	return n.input.Resume()
+	n.input.ResumeLater()
+	return nil
 }
 
 func (n *native) udev(ev session.UdevEvent) error {
@@ -507,6 +520,7 @@ func (n *native) busy() string {
 
 func (n *native) Close() error {
 	var errs []error
+	n.sessionWork.Wait()
 	if n.wake != nil {
 		errs = append(errs, n.wake.Remove())
 	}

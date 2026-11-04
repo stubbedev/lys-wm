@@ -264,6 +264,8 @@ type Compositor struct {
 	cursorSessions  []*cursorSession
 	scannedOut      map[*dmabuf.Buffer]*scannedOut
 	scannedFree     []*scannedOut
+	lidBusy         bool
+	lidAgain        bool
 	filled          map[*output.Output]filling
 	constraints     map[*surface.Surface]*constraint
 	constraint      *constraint

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/godbus"
@@ -62,7 +63,8 @@ type Logind struct {
 	signals    chan *dbus.Signal
 	done       chan struct{}
 	active     bool
-	sleeping   bool
+	sleeping   atomic.Bool
+	work       Serial
 	deferPause bool
 	seatID     string
 	owner      string
@@ -192,7 +194,7 @@ func (lg *Logind) handle(sig *dbus.Signal) error {
 		}
 		err := lg.listener.DevicePaused(d)
 		if kind == "pause" && !lg.deferPause {
-			err = errors.Join(err, lg.CompletePause(d))
+			lg.work.Run(func() { lg.completePause(d) })
 		}
 		return err
 	case sessionIface + ".ResumeDevice":
@@ -207,7 +209,7 @@ func (lg *Logind) handle(sig *dbus.Signal) error {
 		if err := dbus.Store(sig.Body, &sleeping); err != nil {
 			return fmt.Errorf("session: PrepareForSleep: %w", err)
 		}
-		lg.sleeping = sleeping
+		lg.sleeping.Store(sleeping)
 		return lg.listener.PrepareForSleep(sleeping)
 	case propsIface + ".PropertiesChanged":
 		var iface string
@@ -252,6 +254,16 @@ func (lg *Logind) CompletePause(d Device) error {
 	return nil
 }
 
+func (lg *Logind) completePause(d Device) {
+	err := lg.CompletePause(d)
+	if err == nil {
+		return
+	}
+	if posted := lg.loop.Post(func() error { return err }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+		panic(fmt.Sprintf("session: hand a pause failure back to the loop: %v", posted))
+	}
+}
+
 func (lg *Logind) ReleaseDevice(d Device) error {
 	if err := call(lg.session, sessionIface+".ReleaseDevice", d.Major, d.Minor).Err; err != nil {
 		return fmt.Errorf("session: release device %d:%d: %w", d.Major, d.Minor, err)
@@ -268,7 +280,7 @@ func (lg *Logind) InhibitLidSwitch() (*os.File, error) {
 }
 
 func (lg *Logind) Suspend() error {
-	if lg.sleeping {
+	if lg.sleeping.Load() {
 		return nil
 	}
 	err := call(lg.manager, managerIface+".Suspend", false).Err
@@ -279,7 +291,7 @@ func (lg *Logind) Suspend() error {
 	case err != nil:
 		return fmt.Errorf("session: suspend: %w", err)
 	}
-	lg.sleeping = true
+	lg.sleeping.Store(true)
 	return nil
 }
 
@@ -291,6 +303,7 @@ func (lg *Logind) SwitchTo(vt uint32) error {
 }
 
 func (lg *Logind) Close() error {
+	lg.work.Wait()
 	close(lg.done)
 	lg.conn.RemoveSignal(lg.signals)
 	return errors.Join(call(lg.session, sessionIface+".ReleaseControl").Err, lg.conn.Close())

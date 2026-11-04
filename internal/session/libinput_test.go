@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -158,5 +159,93 @@ func TestLibinputResumesOnlyAfterASuspend(t *testing.T) {
 	}
 	if d, _ := DeviceOf(kbd.node); !opener.taken[d] {
 		t.Error("the keyboard was not taken back after the resume")
+	}
+}
+
+type blockingOpener struct {
+	entered, release chan struct{}
+	released         chan Device
+}
+
+func (o *blockingOpener) TakeDevice(path string) (int, Device, error) {
+	close(o.entered)
+	<-o.release
+	return PlainOpener{}.TakeDevice(path)
+}
+
+func (o *blockingOpener) ReleaseDevice(d Device) error {
+	o.released <- d
+	return nil
+}
+
+func TestAnInputDeviceIsTakenOffTheLoop(t *testing.T) {
+	opener := &blockingOpener{entered: make(chan struct{}), release: make(chan struct{}), released: make(chan Device, 1)}
+	in := libinput(t, opener)
+	in.AddLater("/dev/null")
+	<-opener.entered
+	ticks := 0
+	if err := in.loop.Post(func() error {
+		ticks++
+		in.loop.Stop()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.loop.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if ticks != 1 {
+		t.Fatalf("%d posted ticks ran while an opener was stuck in logind", ticks)
+	}
+	if _, adding := in.adding["/dev/null"]; !adding {
+		t.Fatal("the device was not in flight while the opener held it")
+	}
+	if err := in.loop.Post(func() error { close(opener.release); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(30 * time.Second)
+	for {
+		var pending bool
+		if err := in.loop.Post(func() error {
+			_, pending = in.adding["/dev/null"]
+			in.loop.Stop()
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := in.loop.Run(); err != nil {
+			t.Fatal(err)
+		}
+		if !pending {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("the taken device never reached the loop")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if len(in.ready) != 0 || len(in.paths) != 0 {
+		t.Fatalf("a device libinput declines left ready %v, paths %v", in.ready, in.paths)
+	}
+	select {
+	case <-opener.released:
+	case <-deadline:
+		t.Fatal("the declined device was never released")
+	}
+}
+
+func TestAReleaseDoesNotWaitForTheOpener(t *testing.T) {
+	opener := &blockingOpener{entered: make(chan struct{}), release: make(chan struct{}), released: make(chan Device)}
+	in := libinput(t, opener)
+	in.releaseLater(Device{Major: 13, Minor: 64})
+	select {
+	case d := <-opener.released:
+		if d.Major != 13 {
+			t.Fatalf("released %+v", d)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the release never ran")
 	}
 }

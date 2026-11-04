@@ -181,7 +181,7 @@ func openBackend(kind backendKind, renderer rendererKind, l *loop.Loop, opts nat
 		if err != nil {
 			return opened{}, err
 		}
-		return opened{Backend: n, switchVT: n.logind.SwitchTo, configureInput: n.input.Reconfigure, lid: n.lidPolicy(), onPower: n.onPower, native: n}, nil
+		return opened{Backend: n, switchVT: n.switchVT, configureInput: n.input.Reconfigure, lid: n.lidPolicy(), onPower: n.onPower, native: n}, nil
 	}
 	b, err := openOther(kind, renderer, l)
 	return opened{Backend: b, configureInput: hostInput}, err

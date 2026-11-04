@@ -14,19 +14,52 @@ func (c *Compositor) PowerChanged() {
 
 func (c *Compositor) applyLidPolicy() {
 	lid := c.hooks.Lid
-	if lid.Suspend == nil || !c.lidClosed || c.docked() {
+	if lid.Suspend == nil || !c.lidWantsSleep() {
 		return
 	}
-	battery, err := lid.OnBattery()
+	if c.lidBusy {
+		c.lidAgain = true
+		return
+	}
+	c.lidBusy = true
+	var battery bool
+	c.offLoop(func() (err error) {
+		battery, err = lid.OnBattery()
+		return err
+	}, func(err error) error {
+		switch {
+		case err != nil:
+			c.report(fmt.Errorf("compositor: the lid policy does not suspend, the power state is unknown: %w", err))
+		case battery && c.lidWantsSleep():
+			c.offLoop(lid.Suspend, c.lidSuspended)
+			return nil
+		}
+		c.lidSettled()
+		return nil
+	})
+}
+
+func (c *Compositor) LidPending() bool {
+	return c.lidBusy
+}
+
+func (c *Compositor) lidWantsSleep() bool {
+	return c.lidClosed && !c.docked()
+}
+
+func (c *Compositor) lidSuspended(err error) error {
 	if err != nil {
-		c.report(fmt.Errorf("compositor: the lid policy does not suspend, the power state is unknown: %w", err))
-		return
-	}
-	if !battery {
-		return
-	}
-	if err := lid.Suspend(); err != nil {
 		c.report(fmt.Errorf("compositor: the lid policy could not suspend: %w", err))
+	}
+	c.lidSettled()
+	return nil
+}
+
+func (c *Compositor) lidSettled() {
+	c.lidBusy = false
+	if c.lidAgain {
+		c.lidAgain = false
+		c.applyLidPolicy()
 	}
 }
 

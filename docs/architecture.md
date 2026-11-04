@@ -65,6 +65,13 @@ checks it before every row, so at most the row in flight lands afterwards. The
 mapping is released off the loop too. On close, the compositor waits for these
 goroutines and releases what their posted closures would have.
 
+Everything else that waits on another process runs on a worker too. A hotplug's
+connector probe, which reads EDID over DDC, posts its result to the loop. An input
+device is taken from logind or the holder on one worker per session, in order, and
+added to libinput on the loop with its fd ready; a release, a VT switch, a completed
+pause and the lid policy's calls go the same way. The loop never sends a D-Bus
+request once the session is up.
+
 The loop goroutine is locked to its OS thread for as long as it runs
 (`gpu.PinThread`, #149), so a GL context it makes current stays current
 between renderer calls: `eglMakeCurrent` runs only when another display's
@@ -842,7 +849,8 @@ whose settings could disagree. `lid_suspend: false` hands the lid back.
 A sleep is pending from the moment logind accepts lys-wm's Suspend, or
 announces `PrepareForSleep(true)`, until `PrepareForSleep(false)`; the policy
 does not ask again in between, so the AC and battery uevents of one unplug
-suspend once (#205). A Suspend logind refuses is reported, never fatal.
+suspend once (#205). The power read and the Suspend call run off the loop, one policy check at a time.
+A Suspend logind refuses is reported, never fatal.
 A power supply that disappears while it is read, as USB-C supplies do on
 plug and unplug, is skipped; any other read error is reported and leaves the
 power state unknown, so the policy does not suspend (#211).
