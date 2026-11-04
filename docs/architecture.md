@@ -94,6 +94,12 @@ its context current and releases it around every call, as before, since the
 goroutine may move to another thread in between. Unpinning releases the
 context, so whatever closes the renderer afterwards can make it current.
 
+The pinned thread asks for SCHED_RR at priority 1, then nice -10, both resetting on fork so
+no other thread or child inherits them, and logs what it got. The Debian and RPM packages
+and the NixOS module allow that through a PAM limit; a file capability would make the
+binary setuid-like to libc, whose secure mode hides the driver environment variables the
+renderers need.
+
 ## Errors that end the session
 
 `Loop.Run` returns the first error a callback returns, and `lys-wm` exits

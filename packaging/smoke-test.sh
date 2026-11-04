@@ -22,7 +22,7 @@ fail() {
 	exit 1
 }
 
-for file in /usr/lib/systemd/user/lys-wm-session.target /usr/share/xdg-desktop-portal/lys-wm-portals.conf \
+for file in /usr/lib/systemd/user/lys-wm-session.target /etc/security/limits.d/90-lys-wm.conf /usr/share/xdg-desktop-portal/lys-wm-portals.conf \
 	/usr/share/wayland-sessions/lys-wm.desktop /usr/share/lys-wm/DejaVuSans.ttf /usr/share/hwdata/pnp.ids /usr/share/X11/xkb/rules/evdev; do
 	[[ -f ${file} ]] || fail "${file} is missing"
 done

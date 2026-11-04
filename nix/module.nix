@@ -34,6 +34,10 @@ in {
         environment.systemPackages = [cfg.package];
         programs.foot.enable = lib.mkDefault true;
         systemd.packages = [cfg.package];
+        security.pam.loginLimits = [
+          {domain = "*"; type = "-"; item = "rtprio"; value = "1";}
+          {domain = "*"; type = "-"; item = "nice"; value = "-10";}
+        ];
         services.displayManager.sessionPackages = [cfg.package];
         xdg.portal = {
           enable = true;

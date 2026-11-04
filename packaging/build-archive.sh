@@ -19,6 +19,7 @@ cp "${DIST_DIR}/lys-wm" "${DIST_DIR}/lys-wmctl" LICENSE THIRD_PARTY.md \
 	packaging/systemd/lys-wm-session.target \
 	packaging/xdg-desktop-portal/lys-wm-portals.conf \
 	packaging/wayland-sessions/lys-wm.desktop \
+	packaging/limits.d/90-lys-wm.conf \
 	"${STAGING}/"
 cp third_party/xgb/LICENSE "${STAGING}/xgb.LICENSE"
 tar czf "${STAGING}.tar.gz" "${STAGING}"

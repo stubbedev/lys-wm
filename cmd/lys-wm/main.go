@@ -697,6 +697,11 @@ func run(args []string) (err error) {
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: listening on %s with the %s backend\n", listening, kind)
 	unpin := gpu.PinThread()
+	if how, err := raiseThreadPriority(); err != nil {
+		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "lys-wm: the compositor thread runs at %s\n", how)
+	}
 	ran := l.Run()
 	if errors.Is(ran, nested.ErrClosed) {
 		ran = nil
