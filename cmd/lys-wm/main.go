@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	rtdebug "runtime/debug"
 	"runtime/pprof"
 	"slices"
 	"strconv"
@@ -372,6 +373,11 @@ type reloader struct {
 	configureInput func(session.InputConfig) error
 }
 
+const (
+	gcPercent       = 400
+	softMemoryLimit = 1 << 30
+)
+
 func (s *reloader) reload() func() error {
 	s.loading.Lock()
 	next, err := s.load()
@@ -696,6 +702,8 @@ func run(args []string) (err error) {
 		listening += " and X display " + os.Getenv("DISPLAY")
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: listening on %s with the %s backend\n", listening, kind)
+	rtdebug.SetGCPercent(gcPercent)
+	rtdebug.SetMemoryLimit(softMemoryLimit)
 	unpin := gpu.PinThread()
 	if how, err := raiseThreadPriority(); err != nil {
 		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
