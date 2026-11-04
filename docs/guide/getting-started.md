@@ -94,7 +94,10 @@ input:
 ```
 
 A bad file is rejected whole, with the file, line and key in the error, and the
-running config stays. Nothing reloads by itself when the file changes.
+running config stays; a notice across the top of the screen says so until a
+reload fixes it. A key this lys-wm does not know is left out with the same
+notice, and the rest of the file applies. Nothing reloads by itself when the
+file changes.
 [Config](../config) has every key and [Actions](../actions) every action a bind
 can run.
 

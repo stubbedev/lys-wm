@@ -35,6 +35,7 @@ var everyAction = []Action{
 	FocusWindowAction{ID: 7},
 	CloseWindowAction{ID: 12},
 	ReloadAction{},
+	DismissConfigNoticeAction{},
 	ExitAction{},
 	NextLayoutAction{},
 	DPMSAction{Mode: PowerOff},

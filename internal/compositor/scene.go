@@ -141,6 +141,11 @@ func (c *Compositor) render(o *output.Output) error {
 	} else if shown, err = c.drawDesktop(pass, o, shown); err != nil {
 		return err
 	}
+	if !c.shell.Locked() {
+		if err := c.drawConfigNotice(pass, o); err != nil {
+			return err
+		}
+	}
 	if held, err := c.holdsInherited(o, len(shown) > 0); held || err != nil {
 		return err
 	}

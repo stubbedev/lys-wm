@@ -108,7 +108,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	actions := []string{
 		"focus left", "move right", "makegroup tab ephemeral", "togglefloating", "togglefloating",
 		"minimize", "restore", "fullscreen", "fullscreen", "resizeactive 10 0", "submap resize", "submap reset", "zoom in", "zoom set 2", "zoom out 1.2", "zoom reset", "overview toggle", "overview hide", "overview show", "overview hide",
-		"movetoworkspace 3", "workspace 3", "workspace e-1", "exec true", "nextlayout", "global voice:ptt", "reload", "exit", "dpms off", "dpms toggle HEADLESS-1", "kill",
+		"movetoworkspace 3", "workspace 3", "workspace e-1", "exec true", "nextlayout", "global voice:ptt", "reload", "dismissconfignotice", "exit", "dpms off", "dpms toggle HEADLESS-1", "kill",
 	}
 	mouseOnly := []string{"movewindow", "resizewindow"}
 	byID := []string{"focuswindow", "closewindow"}

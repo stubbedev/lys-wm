@@ -297,6 +297,8 @@ type Compositor struct {
 	gesture         gestureInput
 	shownWorkspace  map[string]wm.WorkspaceID
 	shaders         map[string]*screenShader
+	configProblems  ConfigProblems
+	noticeDismissed bool
 }
 
 type entered struct {

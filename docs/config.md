@@ -7,15 +7,15 @@ With no file at the default path, lys-wm runs the built-in config,
 [`internal/config/default.yaml`](https://github.com/stubbedev/lys-wm/blob/main/internal/config/default.yaml),
 which is a good starting point to copy.
 
-Unknown keys are errors. Every error gives the file, the line and the key:
+Every error gives the file, the line and the key:
 
 ```
 config.yaml:12: binds[3].action: bad action: unknown action "teleport"
 ```
 
 `lys-wm --check-config [--config <file>]` loads the file exactly as a reload
-does and exits without starting: status 0 and no output when it would be
-accepted, the error and status 1 when not. `lys-wm --default-config` prints the
+does and exits without starting: status 0 and no output when it applies whole,
+the error and status 1 when not, a key lys-wm does not know included. `lys-wm --default-config` prints the
 built-in config. `lys-wm --config-schema` prints a JSON schema of every key, the
 same as the committed
 [`schema/lys-wm-config.schema.json`](https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json),
@@ -27,6 +27,17 @@ Go package.
 `SIGHUP` and the `reload` action read the file again. A file that does not
 parse, or whose chords, layout or font do not load, is rejected whole and the
 running config stays. Nothing reloads when the file changes.
+
+A key this lys-wm does not know, such as a typo or one a newer lys-wm reads, is
+a warning, not an error: it is left out and everything else in the file
+applies, so an update's config still reaches a compositor that has not moved
+to the new binary yet.
+
+Both reach the screen: a red notice across the top of every output names each
+problem, and stays until a reload no longer finds it, or until the
+`dismissconfignotice` action hides it. `lys-wmctl reload` prints warnings to
+stderr and exits 1 on a rejected file, and `lys-wmctl configproblems` lists them
+at any time.
 
 Every section is optional, and a file replaces the built-in config rather than
 adding to it: each key the file leaves out takes the default this page gives,

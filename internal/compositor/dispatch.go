@@ -71,6 +71,9 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 			return errors.New("no config file to reload")
 		}
 		return c.hooks.Reload()
+	case wm.DismissConfigNoticeAction:
+		c.dismissConfigNotice()
+		return nil
 	case wm.NextLayoutAction:
 		return c.seat.NextLayout()
 	case wm.ExitAction:

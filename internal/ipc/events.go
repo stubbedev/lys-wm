@@ -83,26 +83,30 @@ type (
 	OverviewEvent struct {
 		Open bool `json:"open"`
 	}
+	ConfigProblemsEvent struct {
+		ConfigProblems
+	}
 )
 
-func (OutputEvent) Name() string        { return "output" }
-func (WorkspaceEvent) Name() string     { return "workspace" }
-func (FocusedOutputEvent) Name() string { return "focusedoutput" }
-func (OpenEvent) Name() string          { return "open" }
-func (CloseEvent) Name() string         { return "close" }
-func (MoveEvent) Name() string          { return "move" }
-func (TitleEvent) Name() string         { return "title" }
-func (IconEvent) Name() string          { return "icon" }
-func (UrgentEvent) Name() string        { return "urgent" }
-func (MinimizedEvent) Name() string     { return "minimized" }
-func (UnresponsiveEvent) Name() string  { return "unresponsive" }
-func (FocusEvent) Name() string         { return "focus" }
-func (SubmapEvent) Name() string        { return "submap" }
-func (LayoutEvent) Name() string        { return "layout" }
-func (LocksEvent) Name() string         { return "locks" }
-func (ReducedMotionEvent) Name() string { return "reducedmotion" }
-func (DispatchEvent) Name() string      { return "dispatch" }
-func (OverviewEvent) Name() string      { return "overview" }
+func (OutputEvent) Name() string         { return "output" }
+func (WorkspaceEvent) Name() string      { return "workspace" }
+func (FocusedOutputEvent) Name() string  { return "focusedoutput" }
+func (OpenEvent) Name() string           { return "open" }
+func (CloseEvent) Name() string          { return "close" }
+func (MoveEvent) Name() string           { return "move" }
+func (TitleEvent) Name() string          { return "title" }
+func (IconEvent) Name() string           { return "icon" }
+func (UrgentEvent) Name() string         { return "urgent" }
+func (MinimizedEvent) Name() string      { return "minimized" }
+func (UnresponsiveEvent) Name() string   { return "unresponsive" }
+func (FocusEvent) Name() string          { return "focus" }
+func (SubmapEvent) Name() string         { return "submap" }
+func (LayoutEvent) Name() string         { return "layout" }
+func (LocksEvent) Name() string          { return "locks" }
+func (ReducedMotionEvent) Name() string  { return "reducedmotion" }
+func (DispatchEvent) Name() string       { return "dispatch" }
+func (OverviewEvent) Name() string       { return "overview" }
+func (ConfigProblemsEvent) Name() string { return "configproblems" }
 
 func Encode(e Event) ([]byte, error) {
 	body, err := json.Marshal(e)
@@ -216,6 +220,9 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	if prev.Overview != next.Overview {
 		out = append(out, OverviewEvent{Open: next.Overview})
+	}
+	if prev.ConfigProblems.Rejected != next.ConfigProblems.Rejected || !slices.Equal(prev.ConfigProblems.Messages, next.ConfigProblems.Messages) {
+		out = append(out, ConfigProblemsEvent{ConfigProblems{Rejected: next.ConfigProblems.Rejected, Messages: nonNil(next.ConfigProblems.Messages)}})
 	}
 	return out
 }

@@ -285,7 +285,53 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	if got := outputScale(t, socket); got != 1.5 {
 		t.Fatalf("scale %g after a rejected reload, want 1.5", got)
 	}
+	if got := configProblems(t, socket); !got.Rejected || len(got.Messages) != 1 || !strings.Contains(got.Messages[0], path+":6: binds[0].action") {
+		t.Fatalf("a rejected reload reported %+v", got)
+	}
 
+	write("outputs:\n  - {match: HEADLESS-1, scale: 1.25}\nfrom_a_newer_lys_wm: true\n")
+	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err != nil {
+		t.Fatalf("a file with one unknown key did not reload: %v", err)
+	}
+	if got := outputScale(t, socket); got != 1.25 {
+		t.Fatalf("scale %g beside an unknown key, want 1.25", got)
+	}
+	if got := configProblems(t, socket); got.Rejected || len(got.Messages) != 1 || !strings.Contains(got.Messages[0], "from_a_newer_lys_wm: unknown key") {
+		t.Fatalf("an unknown key reported %+v", got)
+	}
+
+	write("outputs:\n  - {match: HEADLESS-1, scale: 1.25}\n")
+	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := configProblems(t, socket); got.Rejected || len(got.Messages) != 0 {
+		t.Fatalf("a clean reload still reports %+v", got)
+	}
+
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	expectCleanExit(t, socket, done, "SIGTERM")
+}
+
+func configProblems(t *testing.T, socket string) ipc.ConfigProblems {
+	t.Helper()
+	result, err := ipc.Do(socket, ipc.Request{Request: ipc.KindConfigProblems})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p ipc.ConfigProblems
+	if err := json.Unmarshal(result, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestAConfigWithAnUnknownKeyStartsAndSaysSo(t *testing.T) {
+	socket, _, done := startSession(t, "from_a_newer_lys_wm: true\n")
+	if got := configProblems(t, socket); got.Rejected || len(got.Messages) != 1 || !strings.Contains(got.Messages[0], "from_a_newer_lys_wm: unknown key") {
+		t.Fatalf("reported %+v", got)
+	}
 	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}

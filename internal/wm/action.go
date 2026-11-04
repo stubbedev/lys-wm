@@ -63,18 +63,19 @@ func (m OverviewMode) String() string {
 	return enumName(overviewModes, m, "OverviewMode")
 }
 
-func (CloseWindowAction) isEffect() {}
-func (ExecAction) isEffect()        {}
-func (SubmapAction) isEffect()      {}
-func (DragAction) isEffect()        {}
-func (ReloadAction) isEffect()      {}
-func (ExitAction) isEffect()        {}
-func (NextLayoutAction) isEffect()  {}
-func (GlobalAction) isEffect()      {}
-func (DPMSAction) isEffect()        {}
-func (MinimizeAction) isEffect()    {}
-func (RestoreAction) isEffect()     {}
-func (ZoomAction) isEffect()        {}
+func (CloseWindowAction) isEffect()         {}
+func (ExecAction) isEffect()                {}
+func (SubmapAction) isEffect()              {}
+func (DragAction) isEffect()                {}
+func (ReloadAction) isEffect()              {}
+func (DismissConfigNoticeAction) isEffect() {}
+func (ExitAction) isEffect()                {}
+func (NextLayoutAction) isEffect()          {}
+func (GlobalAction) isEffect()              {}
+func (DPMSAction) isEffect()                {}
+func (MinimizeAction) isEffect()            {}
+func (RestoreAction) isEffect()             {}
+func (ZoomAction) isEffect()                {}
 
 func (OverviewAction) isEffect() {}
 
@@ -132,16 +133,17 @@ type (
 		Layout    Layout
 		Ephemeral bool
 	}
-	SubmapAction     struct{ Name string }
-	FloatAction      struct{}
-	FullscreenAction struct{}
-	DragAction       struct{ Mode DragMode }
-	ResizeAction     struct{ DX, DY int }
-	ReloadAction     struct{}
-	ExitAction       struct{}
-	NextLayoutAction struct{}
-	GlobalAction     struct{ AppID, ID string }
-	DPMSAction       struct {
+	SubmapAction              struct{ Name string }
+	FloatAction               struct{}
+	FullscreenAction          struct{}
+	DragAction                struct{ Mode DragMode }
+	ResizeAction              struct{ DX, DY int }
+	ReloadAction              struct{}
+	DismissConfigNoticeAction struct{}
+	ExitAction                struct{}
+	NextLayoutAction          struct{}
+	GlobalAction              struct{ AppID, ID string }
+	DPMSAction                struct {
 		Mode   PowerMode
 		Output string
 	}
@@ -290,6 +292,12 @@ func (a NextLayoutAction) apply(s State, _ Settings) (State, []Effect, error) {
 }
 
 func (a ReloadAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (DismissConfigNoticeAction) String() string { return "dismissconfignotice" }
+
+func (a DismissConfigNoticeAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
 }
 
@@ -626,6 +634,11 @@ var Actions = []ActionSpec{
 		Name:    "reload",
 		Summary: "Read the config file again; a bad file keeps the running config and reports the error.",
 		parse:   bare(ReloadAction{}),
+	},
+	{
+		Name:    "dismissconfignotice",
+		Summary: "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds.",
+		parse:   bare(DismissConfigNoticeAction{}),
 	},
 	{
 		Name:    "exit",

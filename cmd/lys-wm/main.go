@@ -265,6 +265,7 @@ type loaded struct {
 	xwayland  bool
 	zero      bool
 	native    nativeOptions
+	warnings  []error
 }
 
 func (s source) load() (loaded, error) {
@@ -292,7 +293,7 @@ func (s source) load() (loaded, error) {
 	if err != nil {
 		return loaded{}, errors.Join(err, keymap.Close())
 	}
-	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}}, nil
+	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}, warnings: file.Warnings}, nil
 }
 
 func checkConfigFile(path string, getenv func(string) string) error {
@@ -307,7 +308,7 @@ func checkConfigFile(path string, getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	return l.keymap.Close()
+	return errors.Join(errors.Join(l.warnings...), l.keymap.Close())
 }
 
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
@@ -335,15 +336,27 @@ type reloader struct {
 func (s *reloader) reload() error {
 	next, err := s.load()
 	if err != nil {
+		s.comp.ShowConfigProblems(compositor.ConfigProblems{Rejected: true, Messages: errorLines(err)})
 		return err
 	}
 	next.cfg.Cursor = s.cursor
 	if err := s.comp.Reconfigure(next.cfg); err != nil {
-		return errors.Join(err, next.keymap.Close())
+		err = errors.Join(err, next.keymap.Close())
+		s.comp.ShowConfigProblems(compositor.ConfigProblems{Rejected: true, Messages: errorLines(err)})
+		return err
 	}
 	old := s.keymap
 	s.keymap = next.keymap
-	return errors.Join(old.Close(), s.configureInput(next.native.input))
+	err = errors.Join(old.Close(), s.configureInput(next.native.input))
+	s.comp.ShowConfigProblems(compositor.ConfigProblems{Messages: errorLines(errors.Join(errors.Join(next.warnings...), err))})
+	return err
+}
+
+func errorLines(err error) []string {
+	if err == nil {
+		return nil
+	}
+	return strings.Split(err.Error(), "\n")
 }
 
 func withEnv(env [][2]string, getenv func(string) string) func(string) string {
@@ -520,6 +533,7 @@ func run(args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, s.comp.Close()) }()
 	s.comp.TraceFrames(frames)
+	s.comp.ShowConfigProblems(compositor.ConfigProblems{Messages: errorLines(errors.Join(first.warnings...))})
 	if *swipes {
 		if err := readSwipes(l, b.Backend, os.Stdin); err != nil {
 			return err

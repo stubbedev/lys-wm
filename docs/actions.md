@@ -16,6 +16,7 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `closewindow` | `<id>` | Ask the window with this IPC ID to close. |
 | `dpms` | `<on\|off\|toggle> [output]` | Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on. |
 | `reload` |  | Read the config file again; a bad file keeps the running config and reports the error. |
+| `dismissconfignotice` |  | Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds. |
 | `exit` |  | End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM. |
 | `nextlayout` |  | Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing. |
 | `global` | `<app_id>:<id>` | Press the global shortcut an application registered, and release it with the bind. |

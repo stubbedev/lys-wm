@@ -19,22 +19,23 @@ const Version = 1
 type Kind string
 
 const (
-	KindVersion       Kind = "version"
-	KindOutputs       Kind = "outputs"
-	KindWorkspaces    Kind = "workspaces"
-	KindWindows       Kind = "windows"
-	KindActiveWindow  Kind = "activewindow"
-	KindSubmap        Kind = "submap"
-	KindLayout        Kind = "layout"
-	KindLocks         Kind = "locks"
-	KindReducedMotion Kind = "reducedmotion"
-	KindDispatch      Kind = "dispatch"
-	KindWatch         Kind = "watch"
-	KindIcon          Kind = "icon"
-	KindOverview      Kind = "overview"
+	KindVersion        Kind = "version"
+	KindOutputs        Kind = "outputs"
+	KindWorkspaces     Kind = "workspaces"
+	KindWindows        Kind = "windows"
+	KindActiveWindow   Kind = "activewindow"
+	KindSubmap         Kind = "submap"
+	KindLayout         Kind = "layout"
+	KindLocks          Kind = "locks"
+	KindReducedMotion  Kind = "reducedmotion"
+	KindDispatch       Kind = "dispatch"
+	KindWatch          Kind = "watch"
+	KindIcon           Kind = "icon"
+	KindOverview       Kind = "overview"
+	KindConfigProblems Kind = "configproblems"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -187,14 +188,20 @@ type Locks struct {
 }
 
 type Snapshot struct {
-	Outputs       []Output
-	Workspaces    []Workspace
-	Windows       []Window
-	Submap        string
-	Layout        Layout
-	Locks         Locks
-	ReducedMotion bool
-	Overview      bool
+	Outputs        []Output
+	Workspaces     []Workspace
+	Windows        []Window
+	Submap         string
+	Layout         Layout
+	Locks          Locks
+	ReducedMotion  bool
+	Overview       bool
+	ConfigProblems ConfigProblems
+}
+
+type ConfigProblems struct {
+	Rejected bool     `json:"rejected"`
+	Messages []string `json:"messages"`
 }
 
 func (s Snapshot) active() (Window, bool) {
@@ -229,6 +236,8 @@ func (s Snapshot) answer(k Kind) any {
 		return s.ReducedMotion
 	case KindOverview:
 		return s.Overview
+	case KindConfigProblems:
+		return ConfigProblems{Rejected: s.ConfigProblems.Rejected, Messages: nonNil(s.ConfigProblems.Messages)}
 	}
 	return nil
 }

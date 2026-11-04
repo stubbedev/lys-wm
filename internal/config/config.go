@@ -107,7 +107,7 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 			key := n.Content[i]
 			ft, ok := fields[key.Value]
 			if !ok {
-				p.fail(key.Line, join(key.Value), "unknown key (known: %s)", strings.Join(slices.Sorted(maps.Keys(fields)), ", "))
+				p.warn(key.Line, join(key.Value), "unknown key (known: %s)", strings.Join(slices.Sorted(maps.Keys(fields)), ", "))
 				continue
 			}
 			p.unknownKeys(n.Content[i+1], ft, join(key.Value))
@@ -407,6 +407,7 @@ type Bind struct {
 
 type Config struct {
 	File            string
+	Warnings        []error
 	Keyboard        xkb.Names
 	RepeatRate      int32
 	RepeatDelay     int32
@@ -450,9 +451,14 @@ func rgb(v uint32) render.Color {
 }
 
 type parser struct {
-	file    string
-	palette map[string]render.Color
-	errs    []error
+	file     string
+	palette  map[string]render.Color
+	errs     []error
+	warnings []error
+}
+
+func (p *parser) warn(line int, key string, format string, args ...any) {
+	p.warnings = append(p.warnings, &Error{File: p.file, Line: line, Key: key, Err: fmt.Errorf(format, args...)})
 }
 
 func (p *parser) fail(line int, key string, format string, args ...any) {
@@ -604,7 +610,7 @@ func (p *parser) animations(r rawAnimations, motion map[anim.Event]anim.Setting)
 			for _, e := range anim.Events() {
 				known = append(known, e.String())
 			}
-			p.fail(at.Line, key, "unknown event (known: %s)", strings.Join(known, ", "))
+			p.warn(at.Line, key, "unknown event (known: %s)", strings.Join(known, ", "))
 			continue
 		}
 		lines[e] = at.Line
@@ -1228,13 +1234,8 @@ func Parse(file string, data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("%s: %w", file, err)
 	}
 	p.unknownKeys(&doc, reflect.TypeFor[rawConfig](), "")
-	if err := errors.Join(p.errs...); err != nil {
-		return Config{}, err
-	}
 	var raw rawConfig
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
+	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
 		return Config{}, fmt.Errorf("%s: %w", file, err)
 	}
 	maps.Copy(p.palette, mocha)
@@ -1337,9 +1338,10 @@ func Parse(file string, data []byte) (Config, error) {
 	for _, a := range raw.Autostart {
 		cfg.Autostart = append(cfg.Autostart, a.V)
 	}
-	if err := errors.Join(p.errs...); err != nil {
-		return Config{}, err
+	if len(p.errs) != 0 {
+		return Config{}, errors.Join(slices.Concat(p.errs, p.warnings)...)
 	}
+	cfg.Warnings = p.warnings
 	return cfg, nil
 }
 

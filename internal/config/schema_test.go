@@ -220,7 +220,7 @@ func TestTheSchemaCoversEveryKeyTheParserKnows(t *testing.T) {
 		t.Fatal("the schema's root has no properties")
 	}
 	if root["additionalProperties"] != false {
-		t.Fatal("the schema's root accepts unknown keys, and the parser does not")
+		t.Fatal("the schema's root accepts unknown keys, and the parser warns about them")
 	}
 	got := slices.Sorted(maps.Keys(props))
 	want := slices.Sorted(maps.Keys(fieldNames(reflect.TypeFor[rawConfig]())))

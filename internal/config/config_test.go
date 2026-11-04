@@ -205,13 +205,48 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 	}
 }
 
+func TestUnknownKeysWarnAndTheRestOfTheFileApplies(t *testing.T) {
+	cases := map[string]string{
+		"borders:\n  colour: red\n":                                           "t.yaml:2: borders.colour: unknown key (known: active, inactive, width)",
+		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":              "t.yaml:3: submaps.r[0].x: unknown key",
+		"rules:\n  - {app_id: a, floating: true}\n":                           "t.yaml:2: rules[0].floating: unknown key",
+		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n": "t.yaml:3: animations.curves.a.tension: unknown key",
+		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
+		"borders:\n  active: {colors: [red, blue], angel: 4}\n":               "t.yaml:2: borders.active.angel: unknown key",
+		"input:\n  touchpad:\n    tapping: true\n":                            "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
+		"input:\n  devices:\n    mouse:\n      speed: 1\n":                    "t.yaml:4: input.devices.mouse.speed: unknown key",
+		"decoration:\n  blur:\n    glint: 1\n":                                "t.yaml:3: decoration.blur.glint: unknown key",
+		"from_a_newer_lys_wm: {a: 1}\n":                                       "t.yaml:1: from_a_newer_lys_wm: unknown key (known: ",
+	}
+	for text, want := range cases {
+		cfg, err := Parse("t.yaml", []byte(text+"gpu: card1\n"))
+		if err != nil {
+			t.Errorf("%q was rejected: %v", text, err)
+			continue
+		}
+		if cfg.GPU != "card1" {
+			t.Errorf("%q: the key next to the unknown one did not apply: gpu %q", text, cfg.GPU)
+		}
+		if len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0].Error(), want) {
+			t.Errorf("%q warned %v, want %q", text, cfg.Warnings, want)
+		}
+	}
+	if cfg, err := Parse("t.yaml", []byte("gpu: card1\n")); err != nil || len(cfg.Warnings) != 0 {
+		t.Errorf("a clean file: %v, warnings %v", err, cfg.Warnings)
+	}
+}
+
+func TestARejectedFileAlsoNamesItsUnknownKeys(t *testing.T) {
+	_, err := Parse("t.yaml", []byte("colour: red\ngpu: renderD128\n"))
+	if err == nil || !strings.Contains(err.Error(), "t.yaml:1: colour: unknown key") || !strings.Contains(err.Error(), "t.yaml:2: gpu:") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestErrorsNameFileLineAndKey(t *testing.T) {
 	cases := map[string]string{
-		"borders:\n  colour: red\n":                                             "t.yaml:2: borders.colour: unknown key (known: active, inactive, width)",
 		"binds:\n  - chord: Q\n    acton: kill\n":                               "t.yaml:3: binds[0].acton: unknown key (known: action, chord, flags)",
-		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":                "t.yaml:3: submaps.r[0].x: unknown key",
 		"tabs:\n  urgent:\n    fg: red\n":                                       "t.yaml:3: tabs.urgent.fg: unknown key (known: background, text)",
-		"rules:\n  - {app_id: a, floating: true}\n":                             "t.yaml:2: rules[0].floating: unknown key",
 		"env:\n  LYS_WM_SOCKET: /x\n":                                           "t.yaml:2: env.LYS_WM_SOCKET: is set by lys-wm",
 		"env:\n  A=B: c\n":                                                      "t.yaml:2: env.A=B: is not a valid environment variable",
 		"tabs:\n  height: tall\n":                                               "t.yaml: yaml: unmarshal errors:\n  line 2: cannot unmarshal",
@@ -237,8 +272,6 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"animations:\n  curves:\n    a: {}\n":                                   "t.yaml:3: animations.curves.a: give exactly one of bezier and spring",
 		"animations:\n  curves:\n    a: {spring: {stiffness: 1}}\n":             "t.yaml:3: animations.curves.a.spring: anim: spring stiffness 1, damping 0",
 		"animations:\n  curves:\n    linear: {bezier: [0, 0, 1, 1]}\n":          "t.yaml:3: animations.curves.linear: is a built-in curve",
-		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n":   "t.yaml:3: animations.curves.a.tension: unknown key",
-		"animations:\n  events:\n    window: {curve: linear}\n":                 "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, border, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
 		"animations:\n  events:\n    windows: {curve: bouncy}\n":                `t.yaml:3: animations.events.windows.curve: "bouncy" is not a curve (known: ease,`,
 		"animations:\n  events:\n    windows_in: {style: popin 120%}\n":         "t.yaml:3: animations.events.windows_in.style: anim: popin takes a percentage from 0% to 100%",
 		"animations:\n  events:\n    windows_in: {style: wobble}\n":             `t.yaml:3: animations.events.windows_in.style: anim: unknown style "wobble"`,
@@ -251,7 +284,6 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"decoration:\n  shadow:\n    render_power: 5\n":                         "t.yaml:3: decoration.shadow.render_power: 5 is not from 1 to 4",
 		"decoration:\n  shadow:\n    offset: [1]\n":                             "t.yaml:3: decoration.shadow.offset: [1] is not [x, y]",
 		"decoration:\n  shadow:\n    scale: 0\n":                                "t.yaml:3: decoration.shadow.scale: 0 is not above 0 to 1",
-		"borders:\n  active: {colors: [red, blue], angel: 4}\n":                 "t.yaml:2: borders.active.angel: unknown key",
 		"borders:\n  active: {colors: [red, nope]}\n":                           `t.yaml:2: borders.active.colors[1]: "nope" is neither`,
 		"borders:\n  active: {colors: []}\n":                                    "t.yaml:2: borders.active: compositor: a gradient border takes 2 to 10 colours, not 0",
 		"decoration:\n  blur:\n    passes: 5\n":                                 "t.yaml:3: decoration.blur.passes: 5 is not from 1 to 4",
@@ -260,8 +292,6 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"gaps:\n  outer: [1, 2]\n":                                              "t.yaml:2: gaps.outer: [1 2] is not zero or more, or a list of four",
 		"gaps:\n  outer: [1, 2, -3, 4]\n":                                       "t.yaml:2: gaps.outer: [1 2 -3 4] is not zero or more",
 		"palette:\n  accent: orange\n":                                          `t.yaml:2: palette.accent: "orange" is not #rrggbb[aa]`,
-		"input:\n  touchpad:\n    tapping: true\n":                              "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
-		"input:\n  devices:\n    mouse:\n      speed: 1\n":                      `t.yaml:4: input.devices.mouse.speed: unknown key`,
 		"input:\n  touchpad:\n    click_method: tap\n":                          `t.yaml:3: input.touchpad.click_method: "tap" is not one of button_areas, clickfinger, none`,
 		"input:\n  pointer:\n    accel_speed: 2\n":                              "t.yaml:3: input.pointer.accel_speed: 2 is not from -1 to 1",
 		"input:\n  pointer:\n    scroll_factor: 0\n":                            "t.yaml:3: input.pointer.scroll_factor: 0 is not above 0 to 100",
@@ -434,7 +464,6 @@ rules:
 		"decoration:\n  blur:\n    saturation: 5\n":                       "t.yaml:3: decoration.blur.saturation: 5 is not from 0 to 4",
 		"decoration:\n  blur:\n    grain: 2\n":                            "t.yaml:3: decoration.blur.grain: 2 is not from 0 to 1",
 		"decoration:\n  blur:\n    mica: {passes: 9}\n":                   "t.yaml:3: decoration.blur.mica.passes: 9 is not from 1 to 4",
-		"decoration:\n  blur:\n    glint: 1\n":                            "unknown key",
 		"rules:\n  - {app_id: a, blur_look: {specular: {strength: 3}}}\n": "specular.strength: 3 is not from 0 to 1",
 	} {
 		if _, err := Parse("t.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), msg) {

@@ -27,6 +27,7 @@ func TestParseArgs(t *testing.T) {
 		"layout":                     {Request: ipc.KindLayout},
 		"locks":                      {Request: ipc.KindLocks},
 		"reducedmotion":              {Request: ipc.KindReducedMotion},
+		"configproblems":             {Request: ipc.KindConfigProblems},
 		"watch":                      {Request: ipc.KindWatch},
 		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {
@@ -44,7 +45,7 @@ func TestParseArgs(t *testing.T) {
 type handler struct{ dispatched []wm.Action }
 
 func (h *handler) Snapshot() ipc.Snapshot {
-	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize"}
+	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize", ConfigProblems: ipc.ConfigProblems{Messages: []string{"c.yaml:3: colour: unknown key"}}}
 }
 
 func (h *handler) Dispatch(a wm.Action) error {
@@ -85,19 +86,23 @@ func TestRunAgainstASocket(t *testing.T) {
 		return ""
 	}
 	var out bytes.Buffer
-	if err := run([]string{"activewindow"}, getenv, &out); err != nil {
+	if err := run([]string{"activewindow"}, getenv, &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(out.String(), "{\n  \"id\": 3,\n  \"app_id\": \"foot\",") {
 		t.Fatalf("activewindow printed %q", out.String())
 	}
 	out.Reset()
-	if err := run([]string{"submap"}, getenv, &out); err != nil || out.String() != "\"resize\"\n" {
+	if err := run([]string{"submap"}, getenv, &out, io.Discard); err != nil || out.String() != "\"resize\"\n" {
 		t.Fatalf("submap printed %q, %v", out.String(), err)
 	}
 	out.Reset()
-	if err := run([]string{"--socket", path, "reload"}, func(string) string { return "" }, &out); err != nil || out.Len() != 0 {
+	var warnings bytes.Buffer
+	if err := run([]string{"--socket", path, "reload"}, func(string) string { return "" }, &out, &warnings); err != nil || out.Len() != 0 {
 		t.Fatalf("reload: %q, %v", out.String(), err)
+	}
+	if want := "lys-wmctl: warning: c.yaml:3: colour: unknown key\n"; warnings.String() != want {
+		t.Fatalf("reload warned %q, want %q", warnings.String(), want)
 	}
 	if err := l.Post(func() error {
 		if len(h.dispatched) != 1 || h.dispatched[0] != (wm.ReloadAction{}) {
@@ -107,18 +112,18 @@ func TestRunAgainstASocket(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := run([]string{"--socket", filepath.Join(testenv.SocketDir(t), "none.sock"), "windows"}, getenv, &out); err == nil {
+	if err := run([]string{"--socket", filepath.Join(testenv.SocketDir(t), "none.sock"), "windows"}, getenv, &out, io.Discard); err == nil {
 		t.Fatal("a missing socket succeeded")
 	}
 }
 
 func TestNoRunningCompositorHasItsOwnExitStatus(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-such.sock")
-	err := run([]string{"--socket", missing, "reload"}, func(string) string { return "" }, io.Discard)
+	err := run([]string{"--socket", missing, "reload"}, func(string) string { return "" }, io.Discard, io.Discard)
 	if code := exitCode(err); code != exitNotRunning {
 		t.Fatalf("a socket that is not there: %v, status %d", err, code)
 	}
-	err = run([]string{"reload"}, func(string) string { return "" }, io.Discard)
+	err = run([]string{"reload"}, func(string) string { return "" }, io.Discard, io.Discard)
 	if code := exitCode(err); code != exitNotRunning {
 		t.Fatalf("no socket to find: %v, status %d", err, code)
 	}
@@ -135,7 +140,7 @@ func TestNoRunningCompositorHasItsOwnExitStatus(t *testing.T) {
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	err = run([]string{"--socket", stale, "reload"}, func(string) string { return "" }, io.Discard)
+	err = run([]string{"--socket", stale, "reload"}, func(string) string { return "" }, io.Discard, io.Discard)
 	if code := exitCode(err); code != exitNotRunning {
 		t.Fatalf("a stale socket: %v, status %d", err, code)
 	}

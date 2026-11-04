@@ -21,7 +21,8 @@ import (
 const usage = `usage: lys-wmctl [--socket <path>] <command>
 
   dispatch <action> [args...]  run an action, as a keybind would (see docs/actions.md)
-  reload                       read the config file again
+  reload                       read the config file again; prints what it did not apply
+  configproblems               print what the last load of the config did not apply as JSON
   outputs                      print the outputs as JSON
   workspaces                   print the open workspaces as JSON
   windows                      print the mapped windows as JSON
@@ -53,7 +54,7 @@ func exitCode(err error) int {
 }
 
 func main() {
-	if err := run(os.Args[1:], os.Getenv, os.Stdout); err != nil {
+	if err := run(os.Args[1:], os.Getenv, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "lys-wmctl:", err)
 		os.Exit(exitCode(err))
 	}
@@ -61,7 +62,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindVersion, ipc.KindWatch}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindWatch}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {
@@ -122,7 +123,24 @@ func watch(path string, out io.Writer) (err error) {
 	}
 }
 
-func run(args []string, getenv func(string) string, out io.Writer) error {
+func printWarnings(path string, warnings io.Writer) error {
+	result, err := ipc.Do(path, ipc.Request{Request: ipc.KindConfigProblems})
+	if err != nil {
+		return fmt.Errorf("ask what the reload did not apply: %w", err)
+	}
+	var problems ipc.ConfigProblems
+	if err := json.Unmarshal(result, &problems); err != nil {
+		return fmt.Errorf("read what the reload did not apply: %w", err)
+	}
+	for _, m := range problems.Messages {
+		if _, err := fmt.Fprintln(warnings, "lys-wmctl: warning:", m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func run(args []string, getenv func(string) string, out, warnings io.Writer) error {
 	flags := flag.NewFlagSet("lys-wmctl", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	socket := flags.String("socket", "", "")
@@ -143,8 +161,14 @@ func run(args []string, getenv func(string) string, out io.Writer) error {
 		return watch(path, out)
 	}
 	result, err := ipc.Do(path, req)
-	if err != nil || req.Request == ipc.KindDispatch {
+	if err != nil {
 		return err
+	}
+	if req.Action == (wm.ReloadAction{}).String() {
+		return printWarnings(path, warnings)
+	}
+	if req.Request == ipc.KindDispatch {
+		return nil
 	}
 	if result == nil {
 		result = json.RawMessage("null")

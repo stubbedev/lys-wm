@@ -24,11 +24,12 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 	focusedOutput := s.FocusedOutput()
 	locks := c.seat.Locks()
 	snap := ipc.Snapshot{
-		Submap:        c.submap,
-		Overview:      c.overviewHolds(),
-		Layout:        c.keyboardLayout(),
-		Locks:         ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
-		ReducedMotion: c.animations.Reduced(),
+		Submap:         c.submap,
+		Overview:       c.overviewHolds(),
+		Layout:         c.keyboardLayout(),
+		Locks:          ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
+		ReducedMotion:  c.animations.Reduced(),
+		ConfigProblems: ipc.ConfigProblems(c.configProblems),
 	}
 	for _, o := range c.outputs {
 		b := o.Backend()
