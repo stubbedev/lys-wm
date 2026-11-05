@@ -124,7 +124,7 @@ func requestDamagedCapture(t *testing.T, session *ceic.ExtImageCopyCaptureSessio
 	}
 	errs := []error{frame.AttachBuffer(wl)}
 	for _, d := range damage {
-		errs = append(errs, frame.DamageBuffer(int32(d.Min.X), int32(d.Min.Y), int32(d.Dx()), int32(d.Dy()))) //nolint:gosec // test captures are small
+		errs = append(errs, frame.DamageBuffer(int32(d.Min.X), int32(d.Min.Y), int32(d.Dx()), int32(d.Dy())))
 	}
 	if err := errors.Join(append(errs, frame.Capture())...); err != nil {
 		t.Fatal(err)
