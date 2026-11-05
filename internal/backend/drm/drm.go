@@ -520,6 +520,8 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 			errs = append(errs, err, b.remove(o))
 		case c.Connection != kdrm.Connected:
 			errs = append(errs, b.remove(o))
+		default:
+			errs = append(errs, o.recheckLink(c))
 		}
 	}
 	for _, id := range p.ids {
@@ -1159,6 +1161,41 @@ func (o *Output) Commit(s backend.OutputState) error {
 	return o.ScheduleFrame()
 }
 
+const (
+	propLinkStatus = "link-status"
+	linkStatusGood = 0
+	linkStatusBad  = 1
+)
+
+func (o *Output) recheckLink(c kdrm.Connector) error {
+	if _, ok := o.connector.props[propLinkStatus]; !ok || !o.enabled || !o.lit || o.b.paused {
+		return nil
+	}
+	props, err := o.b.dev.Properties(o.conn.ID, kdrm.ObjectConnector)
+	if err != nil {
+		return fmt.Errorf("drm: read the link status of %s: %w", o.Name(), err)
+	}
+	if props[propLinkStatus].Value != linkStatusBad {
+		return nil
+	}
+	if fresh := progressive(c.Modes); len(fresh) > 0 {
+		o.conn.Modes = fresh
+	}
+	m := o.mode
+	if !slices.Contains(o.conn.Modes, m) {
+		m = o.conn.Modes[max(slices.IndexFunc(o.conn.Modes, kdrm.Mode.Preferred), 0)]
+	}
+	o.b.report(fmt.Errorf("drm: the link of %s went bad; modesetting it again in %+v", o.Name(), modeOf(m)))
+	if m == o.mode {
+		o.kms = kmsModeset
+		return o.b.handler.OutputDamaged(o)
+	}
+	if err := o.setMode(m, o.depth, o.signal.meta); err != nil {
+		return err
+	}
+	return errors.Join(o.b.handler.OutputChanged(o), o.b.handler.OutputDamaged(o))
+}
+
 func (o *Output) setPower(on bool) error {
 	if on == !o.off {
 		return nil
@@ -1707,6 +1744,7 @@ func (o *Output) frame(s *scanout, fence int) {
 		o.crtc.set(r, "MODE_ID", uint64(o.modeBlob))
 		o.crtc.set(r, "ACTIVE", 1)
 		o.addSignal(r)
+		o.connector.set(r, propLinkStatus, linkStatusGood)
 		if o.restate {
 			o.addRestatement(r)
 		}

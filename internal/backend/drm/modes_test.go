@@ -203,3 +203,58 @@ func TestANonDesktopConnectorIsNotLit(t *testing.T) {
 		t.Fatalf("reports %v, want DP-2 named once", r.reports)
 	}
 }
+
+func bootLinks(t *testing.T) *rig {
+	t.Helper()
+	return boot(t, func(d *fakeDevice) allocator {
+		d.links = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+}
+
+func modesetsWithGoodLink(commits []commit) int {
+	n := 0
+	for _, c := range commits {
+		if v, ok := c.values[[2]uint32{20, propLinkStatusID}]; ok && v == linkStatusGood && c.flags&kdrm.AtomicAllowModeset != 0 && c.flags&kdrm.AtomicTestOnly == 0 {
+			n++
+		}
+	}
+	return n
+}
+
+func TestALinkThatGoesBadIsModesetAgainWithAGoodLink(t *testing.T) {
+	r := bootLinks(t)
+	o := r.flipFirstFrame()
+	r.dev.linkBad = true
+	if err := r.hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the modeset after the bad link", o, 0)
+	if n := modesetsWithGoodLink(r.dev.commits); n != 1 || o.mode != modes[0] || r.dev.linkBad {
+		t.Fatalf("%d modesets with a good link in %+v, link still bad %v", n, modeOf(o.mode), r.dev.linkBad)
+	}
+	r.dev.flip(t, 10, 2)
+	r.until("the flip", func() bool { return !o.flipping })
+	r.dev.commits = nil
+	if err := r.hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if len(r.dev.commits) != 0 {
+		t.Fatalf("a probe with a good link committed %+v", r.dev.commits)
+	}
+}
+
+func TestALinkThatGoesBadTakesAModeTheSinkStillOffers(t *testing.T) {
+	r := bootLinks(t)
+	o := r.flipFirstFrame()
+	r.dev.linkBad = true
+	r.dev.modes = []kdrm.Mode{modes[1]}
+	if err := r.hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the modeset after the bad link", o, 0)
+	if n := modesetsWithGoodLink(r.dev.commits); n != 1 || o.mode != modes[1] || len(o.Modes()) != 1 {
+		t.Fatalf("%d modesets with a good link in %+v, modes %+v", n, modeOf(o.mode), o.Modes())
+	}
+}

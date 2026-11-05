@@ -54,7 +54,7 @@ const (
 	propColorspaceID
 	propMaxBPCID
 	propNonDesktop
-	propLinkStatus
+	propLinkStatusID
 	inFormatsBlob = 500
 	edidBlob      = 501
 	litModeBlob   = 502
@@ -106,6 +106,8 @@ type fakeDevice struct {
 	modes             []kdrm.Mode
 	connectors        []uint32
 	nonDesktop        map[uint32]bool
+	links             bool
+	linkBad           bool
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -264,6 +266,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 			routed = uint64(f.splash.crtc)
 		}
 		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC, Value: routed}}
+		if f.links {
+			props[propLinkStatus] = kdrm.Property{ID: propLinkStatusID, Value: map[bool]uint64{false: linkStatusGood, true: linkStatusBad}[f.linkBad]}
+		}
 		if f.nonDesktop[object] {
 			props["non-desktop"] = kdrm.Property{ID: propNonDesktop, Value: 1}
 		}
@@ -443,6 +448,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	}
 	if flags&kdrm.AtomicTestOnly == 0 {
 		f.cursorPlaneFB = cursorFB
+		if v, ok := c.values[[2]uint32{20, propLinkStatusID}]; ok && v == linkStatusGood {
+			f.linkBad = false
+		}
 		for _, crtc := range []uint32{10, 11} {
 			if v, ok := c.values[[2]uint32{crtc, propActive}]; ok {
 				if f.active == nil {
