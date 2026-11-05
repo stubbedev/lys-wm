@@ -603,13 +603,14 @@ func TestWithoutTheSwitchNoHolderRunsAndUpgradeSaysHowToTurnItOn(t *testing.T) {
 func TestOnlyTheSwitchStartsAHolder(t *testing.T) {
 	none := func(string) string { return "" }
 	for args, want := range map[string]bool{
-		"":                         false,
-		"--systemd":                false,
-		"--backend headless":       false,
-		"--holder":                 true,
-		"--systemd --holder":       true,
-		"--holder --check-config":  false,
-		"--holder --handover-info": false,
+		"":                            false,
+		"--systemd":                   false,
+		"--backend headless":          false,
+		"--holder":                    true,
+		"--systemd --holder":          true,
+		"--holder --check-config":     false,
+		"--holder --handover-info":    false,
+		"--holder --effective-config": false,
 	} {
 		if got := holds(strings.Fields(args), none); got != want {
 			t.Errorf("%q: holds %t, want %t", args, got, want)

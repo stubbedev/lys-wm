@@ -50,6 +50,65 @@ line.
 parse, or whose chords, layout or font do not load, is rejected whole and the
 running config stays. Nothing reloads when the file changes.
 
+## Runtime overrides
+
+`runtime.yaml` beside the config file (`$XDG_CONFIG_HOME/lys-wm/runtime.yaml`,
+or beside the file `--config` names) is merged over `config.yaml`, or over the
+built-in config when there is no `config.yaml`. It is how a program such as
+lys-settings changes a setting without rewriting `config.yaml`, which keeps
+working when `config.yaml` is a read-only link into the Nix store. lys-wm only
+reads it; a missing `runtime.yaml` is no overrides.
+
+The merge is the one lys-shell's `runtime.yaml` uses: mappings merge key by
+key, and a scalar or a list in the override replaces the value below it whole.
+A key the override sets wins; a key it leaves out comes from `config.yaml`,
+then from the default this page gives. A `null` (`gaps:` with nothing after
+it) clears the whole mapping below it.
+
+```yaml
+# runtime.yaml
+gaps:
+  inner: 8
+input:
+  keyboard:
+    layout: us,dk
+```
+
+Startup, `SIGHUP`, the `reload` action and `lys-wmctl reload` load the merged
+result, and errors and warnings name the file and line the key came from
+(`runtime.yaml:3: gaps.inner: -1 is not zero or more`). A bad override is
+rejected whole, as a bad `config.yaml` is, and the running config stays.
+
+`lys-wm --runtime <file>` reads another override file instead, which must
+exist. With `--check-config` it checks a candidate before it is installed:
+`lys-wm --check-config --runtime candidate.yaml` accepts and rejects exactly as
+a reload with `candidate.yaml` as `runtime.yaml` would.
+
+`lys-wm --effective-config` prints, as JSON, the layers it read and every key
+they set, each with the layer its value comes from (`runtime`, `config`, or
+`built-in` when there is no `config.yaml`), the file, the line and the value.
+A key that is not listed has the default this page gives.
+
+```json
+{
+  "layers": [
+    {"source": "config", "file": "/home/me/.config/lys-wm/config.yaml"},
+    {"source": "runtime", "file": "/home/me/.config/lys-wm/runtime.yaml"}
+  ],
+  "keys": [
+    {"path": ["gaps", "inner"], "source": "runtime", "file": "/home/me/.config/lys-wm/runtime.yaml", "line": 2, "value": 8}
+  ]
+}
+```
+
+A path is a list of keys, so a key with a dot in it, such as a device name
+under `input.devices`, stays one key. A list is one value.
+
+To fold the overrides back into a Nix config, copy each key of `runtime.yaml`
+into the attribute set Home Manager writes `config.yaml` from, at the same
+path, then delete `runtime.yaml`: `lys-wm --effective-config` lists what is
+left to move, every key whose `source` is `runtime`.
+
 A key this lys-wm does not know, such as a typo or one a newer lys-wm reads, is
 a warning, not an error: it is left out and everything else in the file
 applies, so an update's config still reaches a compositor that has not moved

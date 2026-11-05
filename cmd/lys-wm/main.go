@@ -255,22 +255,49 @@ func configPath(getenv func(string) string) (string, error) {
 }
 
 type source struct {
-	path     string
-	explicit bool
-	keymaps  *xkb.Compiler
-	getenv   func(string) string
+	path            string
+	explicit        bool
+	runtime         string
+	runtimeExplicit bool
+	keymaps         *xkb.Compiler
+	getenv          func(string) string
 }
 
-func (s source) read() (string, []byte, error) {
+func newSource(path, runtime string, getenv func(string) string) (source, error) {
+	s := source{path: path, explicit: path != "", runtime: runtime, runtimeExplicit: runtime != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
+	if !s.explicit {
+		var err error
+		if s.path, err = configPath(getenv); err != nil {
+			return source{}, err
+		}
+	}
+	if !s.runtimeExplicit {
+		s.runtime = filepath.Join(filepath.Dir(s.path), config.RuntimeFile)
+	}
+	return s, nil
+}
+
+func (s source) read() ([]config.Layer, error) {
+	base := config.Layer{Source: config.SourceConfig, File: s.path}
 	data, err := os.ReadFile(s.path)
 	switch {
 	case err == nil:
-		return s.path, data, nil
+		base.Data = data
 	case errors.Is(err, fs.ErrNotExist) && !s.explicit:
 		fmt.Fprintf(os.Stderr, "lys-wm: no config at %s; using the built-in one\n", s.path)
-		return "built-in config", config.Default, nil
+		base = config.Layer{Source: config.SourceBuiltIn, File: "built-in config", Data: config.Default}
+	default:
+		return nil, fmt.Errorf("read the config: %w", err)
 	}
-	return "", nil, fmt.Errorf("read the config: %w", err)
+	layers := []config.Layer{base}
+	data, err = os.ReadFile(s.runtime)
+	switch {
+	case err == nil:
+		layers = append(layers, config.Layer{Source: config.SourceRuntime, File: s.runtime, Data: data})
+	case !errors.Is(err, fs.ErrNotExist) || s.runtimeExplicit:
+		return nil, fmt.Errorf("read the runtime overrides: %w", err)
+	}
+	return layers, nil
 }
 
 type loaded struct {
@@ -285,11 +312,11 @@ type loaded struct {
 }
 
 func (s source) load() (loaded, error) {
-	name, data, err := s.read()
+	layers, err := s.read()
 	if err != nil {
 		return loaded{}, err
 	}
-	file, err := config.Parse(name, data)
+	file, err := config.ParseLayers(layers...)
 	if err != nil {
 		return loaded{}, err
 	}
@@ -312,14 +339,11 @@ func (s source) load() (loaded, error) {
 	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}, warnings: file.Warnings}, nil
 }
 
-func printHandoverInfo(path string, getenv func(string) string, out io.Writer) error {
+func printHandoverInfo(path, runtime string, getenv func(string) string, out io.Writer) error {
 	info := preflightInfo{Format: handover.Format}
-	s := source{path: path, explicit: path != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
-	if !s.explicit {
-		var err error
-		if s.path, err = configPath(getenv); err != nil {
-			return err
-		}
+	s, err := newSource(path, runtime, getenv)
+	if err != nil {
+		return err
 	}
 	l, err := s.load()
 	if err != nil {
@@ -335,19 +359,48 @@ func printHandoverInfo(path string, getenv func(string) string, out io.Writer) e
 	return json.NewEncoder(out).Encode(info)
 }
 
-func checkConfigFile(path string, getenv func(string) string) error {
-	s := source{path: path, explicit: path != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
-	if !s.explicit {
-		var err error
-		if s.path, err = configPath(getenv); err != nil {
-			return err
-		}
+func checkConfigFile(path, runtime string, getenv func(string) string) error {
+	s, err := newSource(path, runtime, getenv)
+	if err != nil {
+		return err
 	}
 	l, err := s.load()
 	if err != nil {
 		return err
 	}
 	return errors.Join(errors.Join(l.warnings...), l.keymap.Close())
+}
+
+type effectiveLayer struct {
+	Source string `json:"source"`
+	File   string `json:"file"`
+}
+
+type effectiveConfig struct {
+	Layers []effectiveLayer   `json:"layers"`
+	Keys   []config.KeySource `json:"keys"`
+}
+
+func printEffectiveConfig(path, runtime string, getenv func(string) string, out io.Writer) error {
+	s, err := newSource(path, runtime, getenv)
+	if err != nil {
+		return err
+	}
+	layers, err := s.read()
+	if err != nil {
+		return err
+	}
+	keys, err := config.Sources(layers...)
+	if err != nil {
+		return err
+	}
+	info := effectiveConfig{Keys: keys}
+	for _, l := range layers {
+		info.Layers = append(info.Layers, effectiveLayer{Source: l.Source, File: l.File})
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(info)
 }
 
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
@@ -484,6 +537,7 @@ func run(args []string) (err error) {
 	}
 	flags := flag.NewFlagSet("lys-wm", flag.ContinueOnError)
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
+	runtime := flags.String("runtime", "", "runtime overrides merged over the config, which must exist when given (default: "+config.RuntimeFile+" beside the config file, when it exists)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
 	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; drm takes gles or vulkan)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
@@ -493,7 +547,8 @@ func run(args []string) (err error) {
 	handoverFD := flags.Int("handover-fd", -1, "take over a running session from the lys-wm that started this process and passed this descriptor")
 	handoverInfo := flags.Bool("handover-info", false, "print what this binary needs to take over a running session, the config's problems included, as JSON, and exit")
 	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy> and end, for lys-wm-pace")
-	checkConfig := flags.Bool("check-config", false, "load the config as a reload would, and exit without starting: nothing printed and status 0 when it would be accepted")
+	checkConfig := flags.Bool("check-config", false, "load the config and its runtime overrides as a reload would, and exit without starting: nothing printed and status 0 when it would be accepted")
+	effective := flags.Bool("effective-config", false, "print every key the config and its runtime overrides set, with the layer, file and line its value comes from, as JSON, and exit")
 	defaultConfig := flags.Bool("default-config", false, "print the built-in config and exit")
 	configSchema := flags.Bool("config-schema", false, "print the config's JSON schema and exit")
 	if err := flags.Parse(args); err != nil {
@@ -507,10 +562,12 @@ func run(args []string) (err error) {
 		_, err := os.Stdout.Write(config.Schema())
 		return err
 	case *checkConfig:
-		return checkConfigFile(*path, os.Getenv)
+		return checkConfigFile(*path, *runtime, os.Getenv)
+	case *effective:
+		return printEffectiveConfig(*path, *runtime, os.Getenv, os.Stdout)
 	}
 	if *handoverInfo {
-		return printHandoverInfo(*path, os.Getenv, os.Stdout)
+		return printHandoverInfo(*path, *runtime, os.Getenv, os.Stdout)
 	}
 	stopProfile, err := startCPUProfile(*cpuProfile)
 	if err != nil {
@@ -533,12 +590,11 @@ func run(args []string) (err error) {
 	if dbg.wire {
 		trace = os.Stderr
 	}
-	s := &reloader{path: *path, explicit: *path != "", keymaps: xkb.NewCompiler(os.Getenv), getenv: os.Getenv}
-	if !s.explicit {
-		if s.path, err = configPath(os.Getenv); err != nil {
-			return err
-		}
+	src, err := newSource(*path, *runtime, os.Getenv)
+	if err != nil {
+		return err
 	}
+	s := &reloader{source: src}
 	if *handoverFD >= 0 {
 		unix.CloseOnExec(*handoverFD)
 		if incoming, err = receiveHandover(*handoverFD); err != nil {
@@ -680,7 +736,7 @@ func run(args []string) (err error) {
 			defer leave(func() error { return sess.Close() })
 		}
 	}
-	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, holder: hold, opened: b}
+	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, opened: b}
 	srv.OnUpgrade(u.start)
 	if incoming == nil {
 		for _, command := range first.autostart {

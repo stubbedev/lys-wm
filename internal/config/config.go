@@ -3,7 +3,6 @@
 package config
 
 import (
-	"bytes"
 	_ "embed"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,7 +10,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"io"
 	"maps"
 	"math"
 	"os"
@@ -406,6 +404,7 @@ type Bind struct {
 }
 
 type Config struct {
+	layered
 	File            string
 	Warnings        []error
 	Keyboard        xkb.Names
@@ -451,18 +450,20 @@ func rgb(v uint32) render.Color {
 }
 
 type parser struct {
-	file     string
+	layered
 	palette  map[string]render.Color
 	errs     []error
 	warnings []error
 }
 
 func (p *parser) warn(line int, key string, format string, args ...any) {
-	p.warnings = append(p.warnings, &Error{File: p.file, Line: line, Key: key, Err: fmt.Errorf(format, args...)})
+	file, at := p.where(line)
+	p.warnings = append(p.warnings, &Error{File: file, Line: at, Key: key, Err: fmt.Errorf(format, args...)})
 }
 
 func (p *parser) fail(line int, key string, format string, args ...any) {
-	p.errs = append(p.errs, &Error{File: p.file, Line: line, Key: key, Err: fmt.Errorf(format, args...)})
+	file, at := p.where(line)
+	p.errs = append(p.errs, &Error{File: file, Line: at, Key: key, Err: fmt.Errorf(format, args...)})
 }
 
 var cardName = regexp.MustCompile(`^card[0-9]+$`)
@@ -965,7 +966,8 @@ func (p *parser) shaderPath(a At[string], key string) string {
 	if filepath.IsAbs(a.V) {
 		return a.V
 	}
-	return filepath.Join(filepath.Dir(p.file), a.V)
+	file, _ := p.where(a.Line)
+	return filepath.Join(filepath.Dir(file), a.V)
 }
 
 var (
@@ -1269,15 +1271,22 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 }
 
 func Parse(file string, data []byte) (Config, error) {
-	p := &parser{file: file, palette: map[string]render.Color{}}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return Config{}, fmt.Errorf("%s: %w", file, err)
+	return ParseLayers(Layer{Source: SourceConfig, File: file, Data: data})
+}
+
+func ParseLayers(layers ...Layer) (Config, error) {
+	doc, l, err := merged(layers)
+	if err != nil {
+		return Config{}, err
 	}
-	p.unknownKeys(&doc, reflect.TypeFor[rawConfig](), "")
+	file := l.files[0]
+	p := &parser{layered: l, palette: map[string]render.Color{}}
+	p.unknownKeys(doc, reflect.TypeFor[rawConfig](), "")
 	var raw rawConfig
-	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
-		return Config{}, fmt.Errorf("%s: %w", file, err)
+	if doc.Kind != 0 {
+		if err := doc.Decode(&raw); err != nil {
+			return Config{}, l.decodeError(err)
+		}
 	}
 	maps.Copy(p.palette, mocha)
 	for _, name := range slices.Sorted(maps.Keys(raw.Palette)) {
@@ -1290,6 +1299,7 @@ func Parse(file string, data []byte) (Config, error) {
 	}
 	look := compositor.DefaultLook(render.GPU)
 	cfg := Config{
+		layered:         l,
 		File:            file,
 		Keyboard:        p.keyboard(raw.Input.Keyboard),
 		RepeatRate:      p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
@@ -1324,7 +1334,7 @@ func Parse(file string, data []byte) (Config, error) {
 	cfg.WM.Gaps = p.gaps(raw.Gaps, cfg.WM.Gaps)
 	cfg.Animations = p.animations(raw.Animations, look.Motion)
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
-	again := &parser{file: file, palette: p.palette}
+	again := &parser{layered: l, palette: p.palette}
 	for _, speed := range compositor.SlowerSpeeds {
 		slower := compositor.DefaultLook(speed)
 		cfg.Slower[speed] = compositor.Effects{Decor: again.decor(raw, slower.Decor), Animations: again.animations(raw.Animations, slower.Motion), Overview: again.overview(raw.Overview, slower.Overview)}
@@ -1390,7 +1400,8 @@ func (c Config) resolveBinds(r binds.Resolver) ([]binds.Bind, error) {
 	for _, b := range c.Binds {
 		chord, err := binds.ParseChord(b.Chord, r)
 		if err != nil {
-			errs = append(errs, &Error{File: c.File, Line: b.Line, Key: "chord", Err: err})
+			file, line := c.where(b.Line)
+			errs = append(errs, &Error{File: file, Line: line, Key: "chord", Err: err})
 			continue
 		}
 		out = append(out, binds.Bind{Submap: b.Submap, Chord: chord, Flags: b.Flags, Action: b.Action})
@@ -1398,7 +1409,13 @@ func (c Config) resolveBinds(r binds.Resolver) ([]binds.Bind, error) {
 	}
 	for _, d := range binds.Duplicates(out) {
 		first, again := src[d[0]], src[d[1]]
-		errs = append(errs, &Error{File: c.File, Line: again.Line, Key: "chord", Err: fmt.Errorf("%q is the same chord as %q at line %d", again.Chord, first.Chord, first.Line)})
+		file, line := c.where(again.Line)
+		firstFile, firstLine := c.where(first.Line)
+		at := fmt.Sprintf("line %d", firstLine)
+		if firstFile != file {
+			at = fmt.Sprintf("%s:%d", firstFile, firstLine)
+		}
+		errs = append(errs, &Error{File: file, Line: line, Key: "chord", Err: fmt.Errorf("%q is the same chord as %q at %s", again.Chord, first.Chord, at)})
 	}
 	return out, errors.Join(errs...)
 }

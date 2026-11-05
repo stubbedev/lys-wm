@@ -63,6 +63,7 @@ type upgrader struct {
 	xw      *xwayland.Server
 	args    []string
 	path    string
+	runtime string
 	holder  *session.Holder
 	opened  opened
 	held    []*os.File
@@ -70,9 +71,13 @@ type upgrader struct {
 	dropX11 bool
 }
 
-func preflight(binary, configPath string) (preflightInfo, error) {
+func preflight(binary, configPath, runtime string) (preflightInfo, error) {
 	var out, errOut bytes.Buffer
-	cmd := exec.Command(binary, "--handover-info", "--config", configPath) //nolint:gosec // the path is the one the user named in lys-wmctl upgrade
+	args := []string{"--handover-info", "--config", configPath}
+	if runtime != "" {
+		args = append(args, "--runtime", runtime)
+	}
+	cmd := exec.Command(binary, args...) //nolint:gosec // the paths are the ones the running lys-wm reads
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	timer := time.AfterFunc(preflightLimit, func() {
 		if cmd.Process != nil {
@@ -140,7 +145,7 @@ func (u *upgrader) start(binary string, dropX11 bool, conn *os.File, done func(i
 		done(ipc.UpgradeResult{}, err)
 	}
 	go func() {
-		info, err := preflight(binary, u.path)
+		info, err := preflight(binary, u.path, u.runtime)
 		_ = u.loop.Post(func() error {
 			if err == nil {
 				err = u.refusal(binary, info)
@@ -398,7 +403,7 @@ func holds(args []string, getenv func(string) string) bool {
 	wanted := false
 	for _, a := range args {
 		switch strings.TrimLeft(a, "-") {
-		case "check-config", "default-config", "config-schema", "handover-info", "h", "help":
+		case "check-config", "effective-config", "default-config", "config-schema", "handover-info", "h", "help":
 			return false
 		case "holder":
 			wanted = true

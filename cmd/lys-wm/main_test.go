@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
@@ -107,7 +108,12 @@ func TestFontPath(t *testing.T) {
 func testSource(t *testing.T, path string, explicit bool) source {
 	t.Helper()
 	testenv.Font(t)
-	return source{path: path, explicit: explicit, keymaps: testenv.XKBCompiler(t), getenv: os.Getenv}
+	return source{path: path, explicit: explicit, runtime: filepath.Join(filepath.Dir(path), config.RuntimeFile), keymaps: testenv.XKBCompiler(t), getenv: os.Getenv}
+}
+
+func (s source) withRuntime(path string) source {
+	s.runtime, s.runtimeExplicit = path, true
+	return s
 }
 
 func TestLoadingTheConfig(t *testing.T) {
@@ -314,6 +320,55 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	expectCleanExit(t, socket, done, "SIGTERM")
 }
 
+func TestReloadPicksUpTheRuntimeOverridesAndRefusesABadOne(t *testing.T) {
+	socket, path, done := startSession(t, "outputs:\n  - {match: HEADLESS-1, scale: 2}\n")
+	override := filepath.Join(filepath.Dir(path), config.RuntimeFile)
+	write := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(override, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reload := func() error {
+		_, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"})
+		return err
+	}
+	write("outputs:\n  - {match: HEADLESS-1, scale: 1.5}\n")
+	if err := reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := outputScale(t, socket); got != 1.5 {
+		t.Fatalf("scale %g after an override, want 1.5", got)
+	}
+	write("outputs:\n  - {match: HEADLESS-1, scale: 1.25}\n")
+	if err := reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := outputScale(t, socket); got != 1.25 {
+		t.Fatalf("scale %g after a changed override, want 1.25", got)
+	}
+	write("outputs:\n  - {match: HEADLESS-1, scale: 1.5}\ngaps:\n  inner: -1\n")
+	if err := reload(); err == nil || !strings.Contains(err.Error(), override+":4: gaps.inner") {
+		t.Fatalf("a bad override reloaded: %v", err)
+	}
+	if got := outputScale(t, socket); got != 1.25 {
+		t.Fatalf("scale %g after a rejected override, want 1.25", got)
+	}
+	if err := os.Remove(override); err != nil {
+		t.Fatal(err)
+	}
+	if err := reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := outputScale(t, socket); got != 2 {
+		t.Fatalf("scale %g without the override, want the file's 2", got)
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	expectCleanExit(t, socket, done, "SIGTERM")
+}
+
 func configProblems(t *testing.T, socket string) ipc.ConfigProblems {
 	t.Helper()
 	result, err := ipc.Do(socket, ipc.Request{Request: ipc.KindConfigProblems})
@@ -360,10 +415,10 @@ func TestCheckConfigAcceptsWhatAReloadWouldAndRefusesTheRest(t *testing.T) {
 	if err := os.WriteFile(good, []byte("gaps: {inner: 3}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkConfigFile(good, getenv); err != nil {
+	if err := checkConfigFile(good, "", getenv); err != nil {
 		t.Fatalf("a good file: %v", err)
 	}
-	if err := checkConfigFile("", getenv); err != nil {
+	if err := checkConfigFile("", "", getenv); err != nil {
 		t.Fatalf("no file falls back to the built-in config: %v", err)
 	}
 	for name, content := range map[string]string{
@@ -376,7 +431,7 @@ func TestCheckConfigAcceptsWhatAReloadWouldAndRefusesTheRest(t *testing.T) {
 		if err := os.WriteFile(bad, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		err := checkConfigFile(bad, getenv)
+		err := checkConfigFile(bad, "", getenv)
 		if err == nil {
 			t.Errorf("%s was accepted", name)
 			continue
@@ -385,7 +440,116 @@ func TestCheckConfigAcceptsWhatAReloadWouldAndRefusesTheRest(t *testing.T) {
 			t.Errorf("%s: the error names no file: %v", name, err)
 		}
 	}
-	if err := checkConfigFile(filepath.Join(dir, "absent.yaml"), getenv); !errors.Is(err, fs.ErrNotExist) {
+	if err := checkConfigFile(filepath.Join(dir, "absent.yaml"), "", getenv); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("a named file that is not there: %v", err)
+	}
+}
+
+func TestCheckConfigWithACandidateOverrideJudgesItAsAReloadWould(t *testing.T) {
+	testenv.Font(t)
+	testenv.XKBCompiler(t)
+	dir := t.TempDir()
+	getenv := func(name string) string {
+		if name == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return os.Getenv(name)
+	}
+	main := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(main, []byte("binds:\n  - {chord: SUPER + Q, action: kill}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	candidate := filepath.Join(dir, "candidate.yaml")
+	for content, accepted := range map[string]bool{
+		"gaps: {inner: 4}\n":                                    true,
+		"gaps: {inner: -4}\n":                                   false,
+		"input: {keyboard: {layout: no-such-layout}}\n":         false,
+		"submaps: {s: [{chord: SUPER + Nope, action: kill}]}\n": false,
+	} {
+		if err := os.WriteFile(candidate, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := checkConfigFile(main, candidate, getenv)
+		if (err == nil) != accepted {
+			t.Errorf("%q: %v, want accepted %v", content, err, accepted)
+		}
+		if err != nil && !strings.Contains(err.Error(), "no-such-layout") && !strings.Contains(err.Error(), candidate+":1:") {
+			t.Errorf("%q: the error does not name the candidate: %v", content, err)
+		}
+		_, reload := testSource(t, main, true).withRuntime(candidate).load()
+		if (reload == nil) != accepted {
+			t.Errorf("%q: a reload says %v, the check %v", content, reload, err)
+		}
+	}
+	if err := checkConfigFile(main, filepath.Join(dir, "absent.yaml"), getenv); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a named override that is not there: %v", err)
+	}
+}
+
+func TestAReadOnlyLinkedConfigLoadsWithItsOverrides(t *testing.T) {
+	store := t.TempDir()
+	dir := t.TempDir()
+	target := filepath.Join(store, "config.yaml")
+	if err := os.WriteFile(target, []byte("gaps:\n  inner: 3\nborders:\n  width: 5\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(store, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(store, 0o700) })
+	link := filepath.Join(dir, "config.yaml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.RuntimeFile), []byte("gaps:\n  inner: 8\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := testSource(t, link, false).load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.cfg.WM.Gaps.Inner != 8 || l.cfg.Decor.BorderWidth != 5 {
+		t.Fatalf("gaps %d, borders %d; want the override's 8 and the linked file's 5", l.cfg.WM.Gaps.Inner, l.cfg.Decor.BorderWidth)
+	}
+	if err := l.keymap.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEffectiveConfigNamesEachKeysLayer(t *testing.T) {
+	dir := t.TempDir()
+	getenv := func(name string) string {
+		if name == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return ""
+	}
+	main := filepath.Join(dir, "lys-wm", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(main), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(main, []byte("gaps:\n  inner: 3\n  outer: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	override := filepath.Join(dir, "lys-wm", config.RuntimeFile)
+	if err := os.WriteFile(override, []byte("gaps:\n  inner: 6\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := printEffectiveConfig("", "", getenv, &out); err != nil {
+		t.Fatal(err)
+	}
+	var got effectiveConfig
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatal(err)
+	}
+	wantLayers := []effectiveLayer{{Source: config.SourceConfig, File: main}, {Source: config.SourceRuntime, File: override}}
+	if !slices.Equal(got.Layers, wantLayers) || len(got.Keys) != 2 {
+		t.Fatalf("%s", out.String())
+	}
+	for _, k := range got.Keys {
+		if want := map[string]string{"inner": config.SourceRuntime, "outer": config.SourceConfig}[k.Path[1]]; k.Source != want {
+			t.Errorf("%v comes from %s, want %s", k.Path, k.Source, want)
+		}
 	}
 }
