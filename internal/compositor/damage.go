@@ -267,6 +267,10 @@ func (f *frame) fillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: r, goo: g})
 }
 
+func (f *frame) fillSurface(s *surface.Surface, dst image.Rectangle, c render.Color, m render.Mask) {
+	f.ops = append(f.ops, drawOp{fill: true, color: c, dst: dst, surface: s, size: s.Size(), opaque: c.A == 0xff, mask: m})
+}
+
 func (f *frame) drawSurface(s *surface.Surface, space *colorspace.Description, t render.Texture, src render.FRect, dst image.Rectangle, transform render.Transform, alpha float32, opaque bool, m render.Mask) {
 	f.ops = append(f.ops, drawOp{tex: t, src: src, dst: dst, transform: transform, alpha: alpha, surface: s, size: s.Size(), opaque: opaque && alpha == 1, mask: m, space: space})
 }

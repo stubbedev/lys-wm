@@ -147,7 +147,7 @@ func (c *Compositor) drawOverviewEntry(pass *frame, o *output.Output, e overview
 }
 
 func (c *Compositor) drawOverviewWindow(pass *frame, o *output.Output, w *window, at image.Rectangle, p, alpha float64, shown []*surface.Surface) []*surface.Surface {
-	if c.textureOf(w.top.Surface()) == nil {
+	if !c.drawable(w.top.Surface()) {
 		r := deviceRect(o, at)
 		pass.fillMasked(r, scaleColor(c.decor.Tab.Inactive.Background, float32(alpha)), render.Mask{Keep: render.RoundRect{Rect: r, Radius: deviceLength(o, overviewRadius)}})
 		return shown

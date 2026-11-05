@@ -48,6 +48,14 @@ func (t imported) texture() render.Texture { return t.tex }
 
 func (t imported) opaque() bool { return !t.buffer.DMABUF().Format.HasAlpha() }
 
+type filled struct {
+	color render.Color
+}
+
+func (filled) texture() render.Texture { return nil }
+
+func (t filled) opaque() bool { return t.color.A == 0xff }
+
 type dmabufRenderer interface {
 	dmabuf.Importer
 	ImportTexture(b gpu.DMABUF) (render.Texture, error)
@@ -185,14 +193,13 @@ func (c *Compositor) attach(s *surface.Surface) error {
 		c.textures[s] = imported{tex, b}
 		return nil
 	case *singlepixel.Buffer:
-		tex, err := c.renderer.NewTexture(render.ARGB8888, b.Size(), 4, b.Pixel())
-		if err != nil {
-			return fmt.Errorf("compositor: upload single-pixel wl_surface@%d: %w", s.Resource().Base().ID(), err)
+		p := b.Pixel()
+		if _, ok := c.textures[s].(filled); !ok {
+			if err := c.dropTexture(s); err != nil {
+				return err
+			}
 		}
-		if err := c.dropTexture(s); err != nil {
-			return errors.Join(err, tex.Destroy())
-		}
-		c.textures[s] = uploaded{tex, render.ARGB8888, b.Size()}
+		c.textures[s] = filled{render.Color{B: p[0], G: p[1], R: p[2], A: p[3]}}
 		return b.Release()
 	default:
 		return fmt.Errorf("compositor: no upload path for buffers of type %T", b)
@@ -303,7 +310,10 @@ func (c *Compositor) dropTexture(s *surface.Surface) error {
 		return nil
 	}
 	delete(c.textures, s)
-	if t, ok := t.(imported); ok {
+	switch t := t.(type) {
+	case filled:
+		return nil
+	case imported:
 		return c.releaseBuffer(t.buffer, s.Client())
 	}
 	if err := c.destroyTexture(t.texture()); err != nil {
@@ -340,11 +350,9 @@ func (c *Compositor) opaque(s *surface.Surface) bool {
 	return ok && t.opaque() || s.Opaque().Covers(image.Rectangle{Max: s.Size()})
 }
 
-func (c *Compositor) textureOf(s *surface.Surface) render.Texture {
-	if t, ok := c.textures[s]; ok {
-		return t.texture()
-	}
-	return nil
+func (c *Compositor) drawable(s *surface.Surface) bool {
+	_, ok := c.textures[s]
+	return ok
 }
 
 func (c *Compositor) Destroyed(s *surface.Surface) error {

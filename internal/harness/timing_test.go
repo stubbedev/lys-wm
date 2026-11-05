@@ -243,3 +243,69 @@ func TestActivationTokenCommittedTwice(t *testing.T) {
 	}
 	c.ExpectProtocolError(uint32(cxa.XdgActivationTokenV1ErrorAlreadyUsed))
 }
+
+func TestASinglePixelBufferIsAFillThatCostsNoUploadAndCullsWhatItCovers(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, throttled, small)
+	c := testclient.Connect(t, h.Socket())
+	spb, err := cspb.NewWpSinglePixelBufferManagerV1(c.Display, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Bind(spb)
+	behind := c.Window("behind", quadrants)
+	c.DispatchUntil("the window behind to map", behind.Mapped)
+	quiesce(t, h, c, behind)
+	wall := c.Window("wall", quadrants)
+	c.DispatchUntil("the wall to map", wall.Mapped)
+	quiesce(t, h, c, wall)
+	vp, err := c.Viewporter.GetViewport(wall.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vp.SetDestination(120, 80); err != nil {
+		t.Fatal(err)
+	}
+	state := func() (uploads uint64, draws int) {
+		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+			uploads = b.Renderer().Counts().Uploads
+			draws, _ = comp.FrameCost(comp.Outputs()[0])
+			return nil
+		})
+		return uploads, draws
+	}
+	show := func(alpha uint32, want [3]byte) (uploads uint64, draws int) {
+		t.Helper()
+		buf, err := spb.CreateU32RgbaBuffer(&releases{}, 0, 0, alpha, alpha)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attach := func() {
+			if err := errors.Join(wall.Surface.Attach(buf, 0, 0), wall.Surface.Damage(0, 0, 120, 80), wall.Surface.Commit(), c.Display.Flush()); err != nil {
+				t.Fatal(err)
+			}
+			c.Sync()
+		}
+		attach()
+		h.Eventually("the single pixel over the wall", showingAbout(30, 20, want))
+		settle(t, h)
+		before, _ := state()
+		for range 3 {
+			attach()
+		}
+		settle(t, h)
+		after, draws := state()
+		return after - before, draws
+	}
+	uploads, translucent := show(0xfeffffff, [3]byte{0, 0, 0xfe})
+	if uploads != 0 {
+		t.Fatalf("attaching a single-pixel buffer three times uploaded %d textures", uploads)
+	}
+	uploads, opaque := show(0xffffffff, [3]byte{0, 0, 0xff})
+	if uploads != 0 {
+		t.Fatalf("attaching an opaque single-pixel buffer three times uploaded %d textures", uploads)
+	}
+	if opaque >= translucent {
+		t.Fatalf("an opaque single pixel draws %d ops, a translucent one %d: what it covers was not culled", opaque, translucent)
+	}
+}

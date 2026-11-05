@@ -459,14 +459,19 @@ func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surf
 			}
 			continue
 		}
-		tex := c.textureOf(s)
-		if tex == nil {
+		t, ok := c.textures[s]
+		if !ok {
 			continue
 		}
 		if st.regions {
 			c.drawBlurRegion(pass, o, s, org, st.mask, st.look)
 		}
-		pass.drawSurface(s, c.surfaceSpace(s), tex, s.BufferSource(), org.device(o, s.Size()), s.Transform().Invert(), c.alpha.Alpha(s)*st.alpha, c.opaque(s), st.mask)
+		dst, alpha := org.device(o, s.Size()), c.alpha.Alpha(s)*st.alpha
+		if f, fill := t.(filled); fill {
+			pass.fillSurface(s, dst, scaleColor(f.color, alpha), st.mask)
+		} else {
+			pass.drawSurface(s, c.surfaceSpace(s), t.texture(), s.BufferSource(), dst, s.Transform().Invert(), alpha, c.opaque(s), st.mask)
+		}
 		shown = append(shown, s)
 	}
 	return shown
