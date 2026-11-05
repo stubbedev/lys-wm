@@ -600,9 +600,23 @@ zwp_tablet_tool_v2.set_cursor = dropped
 zwp_tablet_tool_v2.destroy = destructor
 zwp_tablet_v2 = inert retire=removed
 zwp_tablet_v2.destroy = destructor
+zwp_text_input_manager_v1 = journal retire=
+zwp_text_input_manager_v1.create_text_input = create
 zwp_text_input_manager_v3 = journal retire=
 zwp_text_input_manager_v3.destroy = destructor
 zwp_text_input_manager_v3.get_text_input = create
+zwp_text_input_v1 = journal retire=
+zwp_text_input_v1.activate = latest
+zwp_text_input_v1.deactivate = latest
+zwp_text_input_v1.show_input_panel = latest
+zwp_text_input_v1.hide_input_panel = latest
+zwp_text_input_v1.reset = dropped
+zwp_text_input_v1.set_surrounding_text = latest
+zwp_text_input_v1.set_content_type = latest
+zwp_text_input_v1.set_cursor_rectangle = latest
+zwp_text_input_v1.set_preferred_language = latest
+zwp_text_input_v1.commit_state = latest
+zwp_text_input_v1.invoke_action = dropped
 zwp_text_input_v3 = journal retire=
 zwp_text_input_v3.destroy = destructor
 zwp_text_input_v3.enable = latest
