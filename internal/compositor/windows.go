@@ -59,6 +59,7 @@ type window struct {
 
 type decided struct {
 	appID, title string
+	tag          string
 	rules        uint64
 	d            wm.Decision
 	look         wm.Look
@@ -66,10 +67,10 @@ type decided struct {
 }
 
 func (c *Compositor) decision(w *window) *wm.Decision {
-	appID, title := w.top.AppID(), w.top.Title()
+	appID, title, tag := w.top.AppID(), w.top.Title(), w.top.Tag()
 	k := &w.decided
-	if k.rules != c.rulesGen || k.appID != appID || k.title != title {
-		*k = decided{appID: appID, title: title, rules: c.rulesGen, d: wm.Decide(c.rules, appID, title)}
+	if k.rules != c.rulesGen || k.appID != appID || k.title != title || k.tag != tag {
+		*k = decided{appID: appID, title: title, tag: tag, rules: c.rulesGen, d: wm.DecideTagged(c.rules, appID, title, tag)}
 		k.look, k.mica = k.d.Look.Over(c.decor.Blur.Look), micaOf(&k.d, c.decor.Blur.Mica.Enabled)
 	}
 	return &k.d
@@ -346,7 +347,7 @@ func (c *Compositor) settle(w *window, goal want) error {
 }
 
 func (c *Compositor) floats(t toplevel) (bool, image.Point) {
-	d := wm.Decide(c.rules, t.AppID(), t.Title())
+	d := wm.DecideTagged(c.rules, t.AppID(), t.Title(), t.Tag())
 	wants := t.parent() != nil || t.prefersFloating() || fixedSize(t.sizeLimits())
 	return d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile), d.Size
 }
@@ -545,7 +546,7 @@ func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) err
 	switch change {
 	case shell.ChangedSizeLimits:
 		return errors.Join(c.refreshLimits(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
-	case shell.ChangedTitle, shell.ChangedAppID, shell.ChangedParent:
+	case shell.ChangedTitle, shell.ChangedAppID, shell.ChangedTag, shell.ChangedParent:
 		return errors.Join(c.redecide(xdgToplevel{t}), c.syncForeign())
 	case shell.ChangedModal:
 		return errors.Join(c.reconcile(), c.syncForeign())

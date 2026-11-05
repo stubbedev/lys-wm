@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
+	cxtt "github.com/stubbedev/lys-wm/internal/protocol/client/xdgtopleveltag"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -404,4 +405,38 @@ func TestFullscreenAskedBeforeMappingIsHonoured(t *testing.T) {
 	if slices.Contains(unset.States, cxdg.XdgToplevelStateFullscreen) {
 		t.Fatalf("a window that unset fullscreen before mapping was configured with %v", unset.States)
 	}
+}
+
+func TestRulesMatchingATagSetAfterMappingFloatAndTintTheWindow(t *testing.T) {
+	t.Parallel()
+	quarter := float32(0.25)
+	settings := regexp.MustCompile(`^settings$`)
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Rules = []wm.Rule{{Tag: settings, Mode: wm.RuleFloat, Size: image.Pt(40, 90)}, {Tag: settings, Opacity: &quarter}}
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	white := [3]byte{0xff, 0xff, 0xff}
+	at := func(want [3]byte) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return near(pixel(snapshot(b.Outputs()[0]), 70, 20), want)
+		}
+	}
+	w := c.Window("app", testclient.Fill(0xff, 0xff, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	if w.Logical != small.Size {
+		t.Fatalf("the untagged window is %v, want tiled over the output", w.Logical)
+	}
+	quiesce(t, h, c, w)
+	h.Eventually("the untagged window opaque", at(white))
+	tags, err := cxtt.NewXdgToplevelTagManagerV1(c.Display, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Bind(tags)
+	if err := errors.Join(tags.SetToplevelTag(w.Toplevel, "settings"), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the tagged window floated at its rule's size", func() bool { return w.Logical == image.Pt(40, 90) })
+	bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
+	h.Eventually("the tagged window at its rule's opacity", at(blend(white, bg, 0.25)))
 }
