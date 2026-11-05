@@ -42,11 +42,13 @@ func (t *transaction) complete() bool {
 }
 
 type HoldStats struct {
-	Landed  int
-	Expired int
-	Longest time.Duration
-	Last    time.Duration
-	Armed   time.Duration
+	Landed            int
+	Expired           int
+	Longest           time.Duration
+	Last              time.Duration
+	Armed             time.Duration
+	MapToShown        int
+	LongestMapToShown int
 }
 
 func (s *HoldStats) note(held time.Duration, expired bool) {
@@ -54,6 +56,29 @@ func (s *HoldStats) note(held time.Duration, expired bool) {
 	s.Last, s.Longest = held, max(s.Longest, held)
 	if expired {
 		s.Expired++
+	}
+}
+
+func (c *Compositor) opening(a wm.Arrangement) bool {
+	for _, p := range a.Windows {
+		if w := c.windowByID(p.ID); w != nil && !w.appeared && p.Visible && !p.Minimized {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Compositor) noteFirstShown(shown []*surface.Surface) {
+	for _, w := range c.windows {
+		if w.firstShown {
+			continue
+		}
+		w.framesUnshown++
+		if slices.Contains(shown, w.top.Surface()) {
+			w.firstShown = true
+			c.holds.MapToShown = w.framesUnshown
+			c.holds.LongestMapToShown = max(c.holds.LongestMapToShown, w.framesUnshown)
+		}
 	}
 }
 

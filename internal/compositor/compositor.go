@@ -76,6 +76,7 @@ type Config struct {
 	InheritTimeout  time.Duration
 	HoldBound       time.Duration
 	HiddenFrame     time.Duration
+	HoldOpening     bool
 	Animations      anim.Table
 	BlurLayers      []string
 	Gestures        Gestures
@@ -200,6 +201,7 @@ type Compositor struct {
 	holdTimer       *loop.Timer
 	hidden          throttle
 	holdBound       time.Duration
+	holdOpening     bool
 	holds           HoldStats
 	awaited         []*window
 	layoutDirty     bool
@@ -386,6 +388,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
+	c.holdOpening = cfg.HoldOpening
 	c.overviewStyle = cfg.Overview
 	c.rulesGen++
 }

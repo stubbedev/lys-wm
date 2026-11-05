@@ -164,7 +164,7 @@ func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
 	t.Parallel()
 	demo := testenv.Require(t, "gtk3-demo")
 	h := StartXwaylandWith(t, func(cfg *compositor.Config) {
-		flat(cfg)
+		held(cfg)
 		cfg.HoldBound = gtkHoldBound
 	}, xReport(t), desktop)
 	xc := xDial(t, h)

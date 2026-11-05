@@ -193,6 +193,7 @@ func (c *Compositor) render(o *output.Output) error {
 		return err
 	}
 	c.shown[o], sc.shown = shown, c.shown[o]
+	c.noteFirstShown(shown)
 	for _, s := range shown {
 		s.Latch()
 	}

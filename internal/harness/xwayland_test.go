@@ -797,6 +797,7 @@ func TestAnXWindowWhoseSurfaceGoesBeforeItsUnmapNotifyStillCloses(t *testing.T) 
 		return len(windowsOf(c)) == 1
 	})
 	h.Eventually("the X window drawn", showing(150, 90, [3]byte{0xff, 0, 0}))
+	settle(t, h)
 	checks := []interface{ Check() error }{
 		xproto.GrabServerChecked(xc.x),
 		xproto.ChangePropertyChecked(xc.x, xproto.PropModeReplace, win, xc.atoms["WM_NAME"], xproto.AtomString, 8, 4, []byte("busy")),

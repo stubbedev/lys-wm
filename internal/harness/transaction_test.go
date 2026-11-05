@@ -26,8 +26,13 @@ func flat(cfg *compositor.Config) {
 	cfg.WM.Autotile.Enabled = false
 }
 
-func heldForever(cfg *compositor.Config) {
+func held(cfg *compositor.Config) {
 	flat(cfg)
+	cfg.HoldOpening = true
+}
+
+func heldForever(cfg *compositor.Config) {
+	held(cfg)
 	cfg.HoldBound = time.Hour
 }
 
@@ -126,7 +131,7 @@ func TestAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce(t *testing.T) {
 }
 
 func testAFrozenClientHoldsOthersOnlyUpToTheBoundAndOnce(t *testing.T, start gpuStarter) {
-	h := start(t, flat, small)
+	h := start(t, held, small)
 	cf, frozen := open(t, h, "frozen", fillGreen)
 	cr, right := open(t, h, "right", fillBlue)
 	h.Eventually("the frozen client's bound over", landed)
@@ -165,7 +170,7 @@ func TestClientsThatDoNotAnswerAConfigureHoldOnlyUpToTheBound(t *testing.T) {
 	t.Parallel()
 	for name, answer := range map[string]testclient.Answer{"no ack": testclient.AnswerNever, "ack without a commit": testclient.AnswerAckOnly} {
 		t.Run(name, func(t *testing.T) {
-			h := Start(t, small)
+			h := StartWith(t, func(cfg *compositor.Config) { cfg.HoldOpening = true }, small)
 			c, w := open(t, h, "mute", fillGreen)
 			w.Answer = answer
 			_, _ = open(t, h, "right", fillBlue)
@@ -694,7 +699,7 @@ func TestAnUnsignalledFenceKeepsAnAnswerFromLanding(t *testing.T) {
 
 func TestAFenceThatNeverSignalsHoldsOthersOnlyUpToTheBound(t *testing.T) {
 	t.Parallel()
-	h := StartWith(t, flat, small)
+	h := StartWith(t, held, small)
 	c, w := open(t, h, "fenced", fillGreen)
 	var fence *surface.Hold
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
@@ -1041,4 +1046,21 @@ func TestDragFrameAllocations(t *testing.T) {
 		return errors.Join(p.Button(btnLeft, false), p.Frame())
 	})
 	h.key(keySuper, false)
+}
+
+func TestAnOpeningWindowShowsWithoutWaitingForItsNeighbours(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		flat(cfg)
+		cfg.HoldBound = time.Hour
+	}, small)
+	c, mute := open(t, h, "mute", fillGreen)
+	mute.Answer = testclient.AnswerNever
+	c.Sync()
+	_, _ = open(t, h, "opening", fillBlue)
+	h.Eventually("the opening window shown", showing(150, 50, blueColor))
+	if s := h.holds(); s.MapToShown != 1 || h.compositorHolding() {
+		t.Fatalf("holds %+v, holding %v: want the opening window shown on the first frame after it mapped, holding nothing", s, h.compositorHolding())
+	}
+	h.Eventually("the mute neighbour stretched into its new tile", showing(75, 50, greenColor))
 }

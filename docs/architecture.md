@@ -233,7 +233,10 @@ No such window, no transaction: the change is installed in the same call, so a
 focus change, a floating move, a workspace switch to windows at their sizes, or a
 lone window nothing happens to, pays one comparison per placement. No hook is
 installed, no timer armed, and a frame costs two loads, so an idle desktop stays
-asleep.
+asleep. A change that maps a window is not held either (#332): the new window starts
+its fade-in on the first frame after it maps, and neighbours that have not yet drawn
+their new sizes are stretched until they do, as after the bound, rather than one slow
+client delaying the new window. `Config.HoldOpening` brings the hold back.
 
 While it is held, a commit that answers the configure is parked by a
 `surface.Barrier`, a hold at the end of the update's gates: it reaches the barrier only

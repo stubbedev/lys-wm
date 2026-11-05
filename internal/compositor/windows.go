@@ -17,42 +17,44 @@ import (
 )
 
 type window struct {
-	id           wm.WindowID
-	top          toplevel
-	goal         image.Rectangle
-	stalled      bool
-	member       *member
-	tile         image.Rectangle
-	rect         image.Rectangle
-	visible      bool
-	laid         bool
-	workspace    wm.WorkspaceID
-	layer        wm.PlacementLayer
-	output       *output.Output
-	urgent       bool
-	hung         bool
-	scale        output.Scale
-	floated      bool
-	motion       anim.RectMotion
-	fade         anim.Tween[float64]
-	appeared     bool
-	look         focusLook
-	looked       bool
-	border       Border
-	borderAngle  anim.Tween[float64]
-	snapshot     render.TextureTarget
-	frost        *frost
-	decided      decided
-	wobble       *anim.Wobble
-	bud          image.Rectangle
-	jelly        render.TextureTarget
-	jellyOps     []drawOp
-	jellyArea    image.Rectangle
-	jellyOut     colorOut
-	jellyVersion uint64
-	minimized    bool
-	icon         iconHint
-	genie        *genie
+	id            wm.WindowID
+	top           toplevel
+	goal          image.Rectangle
+	stalled       bool
+	member        *member
+	tile          image.Rectangle
+	rect          image.Rectangle
+	visible       bool
+	laid          bool
+	workspace     wm.WorkspaceID
+	layer         wm.PlacementLayer
+	output        *output.Output
+	urgent        bool
+	hung          bool
+	scale         output.Scale
+	floated       bool
+	motion        anim.RectMotion
+	fade          anim.Tween[float64]
+	appeared      bool
+	firstShown    bool
+	framesUnshown int
+	look          focusLook
+	looked        bool
+	border        Border
+	borderAngle   anim.Tween[float64]
+	snapshot      render.TextureTarget
+	frost         *frost
+	decided       decided
+	wobble        *anim.Wobble
+	bud           image.Rectangle
+	jelly         render.TextureTarget
+	jellyOps      []drawOp
+	jellyArea     image.Rectangle
+	jellyOut      colorOut
+	jellyVersion  uint64
+	minimized     bool
+	icon          iconHint
+	genie         *genie
 }
 
 type decided struct {
@@ -217,7 +219,7 @@ func (c *Compositor) reconcile() error {
 	placed := false
 	switch {
 	case held:
-	case len(awaited) > 0 && c.holdable():
+	case len(awaited) > 0 && c.holdable() && (c.holdOpening || !c.opening(a)):
 		err = errors.Join(err, c.begin(x, awaited))
 	default:
 		placed = true
