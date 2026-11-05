@@ -4,19 +4,7 @@
       "genie-minimize": {
         "allocs_per_frame": 44,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 107,
-        "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
-        "submits_per_frame": 1,
-        "thumb_draws_per_settle": 2,
-        "uploads_per_frame": 5
-      },
-      "genie-restore": {
-        "allocs_per_frame": 70,
-        "damage_rects_per_frame": 32,
-        "draws_per_frame": 107,
+        "draws_per_frame": 102,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -25,8 +13,20 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
+      "genie-restore": {
+        "allocs_per_frame": 70,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 102,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 5
+      },
       "glass-over-busy": {
-        "allocs_per_frame": 79,
+        "allocs_per_frame": 42,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
@@ -50,9 +50,9 @@
         "uploads_per_frame": 2
       },
       "glass-slide-back": {
-        "allocs_per_frame": 221,
+        "allocs_per_frame": 130,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 62,
+        "draws_per_frame": 52,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
@@ -62,9 +62,9 @@
         "uploads_per_frame": 4
       },
       "glass-slide-there": {
-        "allocs_per_frame": 79,
+        "allocs_per_frame": 62,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 60,
+        "draws_per_frame": 50,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
@@ -112,7 +112,7 @@
       "overview-10-close": {
         "allocs_per_frame": 73,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 208,
+        "draws_per_frame": 213,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -125,20 +125,20 @@
       "overview-10-open": {
         "allocs_per_frame": 140,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 195,
+        "draws_per_frame": 200,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 10,
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 4,
         "uploads_per_frame": 4
       },
       "overview-30-close": {
         "allocs_per_frame": 73,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 526,
+        "draws_per_frame": 531,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -151,20 +151,20 @@
       "overview-30-open": {
         "allocs_per_frame": 140,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 493,
+        "draws_per_frame": 497,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 4,
         "uploads_per_frame": 4
       },
       "overview-scrub-10-follow-close": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 165,
+        "draws_per_frame": 170,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -177,7 +177,7 @@
       "overview-scrub-10-follow-open": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 165,
+        "draws_per_frame": 170,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -190,7 +190,7 @@
       "overview-scrub-10-release-close": {
         "allocs_per_frame": 73,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 208,
+        "draws_per_frame": 213,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -203,7 +203,7 @@
       "overview-scrub-10-release-open": {
         "allocs_per_frame": 140,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 150,
+        "draws_per_frame": 155,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
@@ -216,7 +216,7 @@
       "overview-scrub-30-follow-close": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 395,
+        "draws_per_frame": 405,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -229,7 +229,7 @@
       "overview-scrub-30-follow-open": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 417,
+        "draws_per_frame": 422,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -242,7 +242,7 @@
       "overview-scrub-30-release-close": {
         "allocs_per_frame": 73,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 507,
+        "draws_per_frame": 512,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -255,7 +255,7 @@
       "overview-scrub-30-release-open": {
         "allocs_per_frame": 140,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 358,
+        "draws_per_frame": 363,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
@@ -316,7 +316,7 @@
       "swipe-release-back": {
         "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -328,7 +328,7 @@
       "swipe-release-there": {
         "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 40,
+        "draws_per_frame": 32,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -340,19 +340,19 @@
       "window-close": {
         "allocs_per_frame": 44,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 28,
+        "draws_per_frame": 23,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
-        "uploads_per_frame": 4
+        "uploads_per_frame": 3
       },
       "window-open": {
         "allocs_per_frame": 38,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 38,
+        "draws_per_frame": 33,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -364,7 +364,7 @@
       "workspace-back": {
         "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -376,7 +376,7 @@
       "workspace-there": {
         "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -778,9 +778,9 @@
   "vulkan/gpu": {
     "steps": {
       "genie-minimize": {
-        "allocs_per_frame": 42,
+        "allocs_per_frame": 38,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 107,
+        "draws_per_frame": 102,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -790,19 +790,19 @@
         "uploads_per_frame": 4
       },
       "genie-restore": {
-        "allocs_per_frame": 60,
+        "allocs_per_frame": 56,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 107,
+        "draws_per_frame": 102,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
-        "uploads_per_frame": 3
+        "uploads_per_frame": 5
       },
       "glass-over-busy": {
-        "allocs_per_frame": 44,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
@@ -826,9 +826,9 @@
         "uploads_per_frame": 2
       },
       "glass-slide-back": {
-        "allocs_per_frame": 147,
+        "allocs_per_frame": 106,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 62,
+        "draws_per_frame": 52,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
@@ -838,9 +838,9 @@
         "uploads_per_frame": 4
       },
       "glass-slide-there": {
-        "allocs_per_frame": 42,
+        "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 60,
+        "draws_per_frame": 50,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
@@ -864,7 +864,7 @@
       "move-spring-left": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 37,
+        "draws_per_frame": 35,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -886,9 +886,9 @@
         "uploads_per_frame": 2
       },
       "overview-10-close": {
-        "allocs_per_frame": 32,
+        "allocs_per_frame": 37,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 208,
+        "draws_per_frame": 213,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -901,20 +901,20 @@
       "overview-10-open": {
         "allocs_per_frame": 95,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 208,
+        "draws_per_frame": 213,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 10,
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 4,
         "uploads_per_frame": 3
       },
       "overview-30-close": {
-        "allocs_per_frame": 32,
+        "allocs_per_frame": 37,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 507,
+        "draws_per_frame": 512,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -927,20 +927,20 @@
       "overview-30-open": {
         "allocs_per_frame": 95,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 493,
+        "draws_per_frame": 506,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 4,
         "uploads_per_frame": 3
       },
       "overview-scrub-10-follow-close": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 165,
+        "draws_per_frame": 170,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -953,7 +953,7 @@
       "overview-scrub-10-follow-open": {
         "allocs_per_frame": 40,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 165,
+        "draws_per_frame": 170,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -966,7 +966,7 @@
       "overview-scrub-10-release-close": {
         "allocs_per_frame": 37,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 210,
+        "draws_per_frame": 215,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -979,7 +979,7 @@
       "overview-scrub-10-release-open": {
         "allocs_per_frame": 95,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 150,
+        "draws_per_frame": 155,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
@@ -992,7 +992,7 @@
       "overview-scrub-30-follow-close": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 400,
+        "draws_per_frame": 405,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -1003,9 +1003,9 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-open": {
-        "allocs_per_frame": 40,
+        "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 417,
+        "draws_per_frame": 422,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -1018,7 +1018,7 @@
       "overview-scrub-30-release-close": {
         "allocs_per_frame": 37,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 501,
+        "draws_per_frame": 512,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
@@ -1031,7 +1031,7 @@
       "overview-scrub-30-release-open": {
         "allocs_per_frame": 95,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 358,
+        "draws_per_frame": 363,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
@@ -1092,7 +1092,7 @@
       "swipe-release-back": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -1104,7 +1104,7 @@
       "swipe-release-there": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 40,
+        "draws_per_frame": 32,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -1116,7 +1116,7 @@
       "window-close": {
         "allocs_per_frame": 36,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 28,
+        "draws_per_frame": 23,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -1126,21 +1126,21 @@
         "uploads_per_frame": 3
       },
       "window-open": {
-        "allocs_per_frame": 44,
+        "allocs_per_frame": 40,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 38,
+        "draws_per_frame": 33,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
-        "uploads_per_frame": 4
+        "uploads_per_frame": 5
       },
       "workspace-back": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
@@ -1152,7 +1152,7 @@
       "workspace-there": {
         "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
-        "draws_per_frame": 55,
+        "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
