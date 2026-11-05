@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	ccm "github.com/stubbedev/lys-wm/internal/protocol/client/colormanagement"
+	cpt "github.com/stubbedev/lys-wm/internal/protocol/client/presentationtime"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
@@ -267,4 +268,36 @@ func testACommitThatChangesNothingScansOutNothingAgain(t *testing.T, start gpuSt
 	if n := scanouts(s.h); n != before {
 		t.Fatalf("%d commits that only asked for a frame callback flipped the same buffer %d times", 5, n-before)
 	}
+}
+
+func TestAScannedOutFrameIsZeroCopyAndACompositedOneIsNot(t *testing.T) {
+	onEachDMABUFRenderer(t, func(t *testing.T, start gpuStarter) {
+		s := fullscreenScanout(t, start, func(*compositor.Config) {})
+		p, err := cpt.NewWpPresentation(s.c.Display, 2, &presentationEvents{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.c.Bind(p)
+		feedback := func() *feedbackEvents {
+			fb := &feedbackEvents{}
+			if _, err := p.Feedback(s.w.Surface, fb); err != nil {
+				t.Fatal(err)
+			}
+			return fb
+		}
+		direct := feedback()
+		s.show(t, "the dmabuf", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0xff, 0, 0)))
+		s.c.DispatchUntil("the scanned-out frame presented", func() bool { return len(direct.log) > 0 })
+		if direct.flags&cpt.WpPresentationFeedbackKindZeroCopy == 0 {
+			t.Fatalf("a scanned-out frame presented with flags %#x, want zero_copy", direct.flags)
+		}
+		composited := feedback()
+		if err := errors.Join(s.w.Surface.Attach(s.c.Buffer(image.Pt(160, 100), 1, quadrants), 0, 0), s.w.Surface.DamageBuffer(0, 0, 160, 100), s.w.Surface.Commit(), s.c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		s.c.DispatchUntil("the composited frame presented", func() bool { return len(composited.log) > 0 })
+		if composited.flags&cpt.WpPresentationFeedbackKindZeroCopy != 0 {
+			t.Fatalf("a composited frame presented with flags %#x, want no zero_copy", composited.flags)
+		}
+	})
 }

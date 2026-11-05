@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
+	spt "github.com/stubbedev/lys-wm/internal/protocol/server/presentationtime"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -56,6 +57,7 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	if err != nil || !shown {
 		return false, err
 	}
+	sc.zeroCopy[0] = op.surface
 	held, ok := c.scannedOut[b]
 	if !ok {
 		held = c.takeScannedOut()
@@ -228,7 +230,7 @@ func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rec
 		}
 	}
 	if want.buffer != nil {
-		op.overlay = true
+		op.overlay, sc.zeroCopy[1] = true, op.surface
 	}
 	if want == c.overlays[o] {
 		return nil
@@ -244,7 +246,7 @@ func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rec
 	d := want.buffer.DMABUF()
 	d.Format = d.Format.Opaque()
 	if err := out.SetOverlay(want.buffer, d, want.dst, c.imported[want.buffer].left); err != nil {
-		op.overlay = false
+		op.overlay, sc.zeroCopy[1] = false, nil
 		return err
 	}
 	held, ok := c.scannedOut[want.buffer]
@@ -269,4 +271,11 @@ func (c *Compositor) flipOverlay(o *output.Output, sc *scene) (bool, error) {
 		}
 	}
 	return out.FlipOverlay()
+}
+
+func (sc *scene) feedbackKind(s *surface.Surface, kind spt.WpPresentationFeedbackKind, idle bool) spt.WpPresentationFeedbackKind {
+	if !idle && (sc.zeroCopy[0] == s || sc.zeroCopy[1] == s) {
+		kind |= spt.WpPresentationFeedbackKindZeroCopy
+	}
+	return kind
 }

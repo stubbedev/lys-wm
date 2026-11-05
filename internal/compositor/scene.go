@@ -204,6 +204,7 @@ func (c *Compositor) render(o *output.Output) error {
 		return err
 	}
 	sc.cur.dropHiddenRims()
+	sc.zeroCopy = [2]*surface.Surface{}
 	if err := c.assignOverlay(o, sc, bounds, shading != nil); err != nil {
 		c.report(fmt.Errorf("compositor: an overlay plane on %s: %w", o.Backend().Name(), err))
 	}
@@ -537,7 +538,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		} else {
 			frame = s.FrameDone(wire.Millis(p.Time))
 		}
-		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, seq, kind))
+		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, seq, sc.feedbackKind(s, kind, p.Idle)))
 	}
 	if p.Idle {
 		return errs

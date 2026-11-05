@@ -484,6 +484,7 @@ type scene struct {
 	zoom        *outputZoom
 	whole       [1]image.Rectangle
 	culled      map[*surface.Surface]bool
+	zeroCopy    [2]*surface.Surface
 }
 
 func newScene() *scene {
