@@ -102,6 +102,9 @@ type fakeDevice struct {
 	refuseModesets    bool
 	modes             []kdrm.Mode
 	connectors        []uint32
+	refuseLone        bool
+	refuseMode        func(m kdrm.Mode) bool
+	active            map[uint32]bool
 	asyncFlips        bool
 	failCommits       error
 	commits           []commit
@@ -410,6 +413,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	if f.refuseOverlay && c.values[[2]uint32{42, propFB}] != 0 {
 		return unix.EINVAL
 	}
+	if f.refusesModeset(c) {
+		return unix.EINVAL
+	}
 	active, setsActive := c.values[[2]uint32{10, propActive}]
 	cursorFB, setsCursor := c.values[[2]uint32{43, propFB}]
 	if !setsCursor {
@@ -430,8 +436,33 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	}
 	if flags&kdrm.AtomicTestOnly == 0 {
 		f.cursorPlaneFB = cursorFB
+		for _, crtc := range []uint32{10, 11} {
+			if v, ok := c.values[[2]uint32{crtc, propActive}]; ok {
+				if f.active == nil {
+					f.active = map[uint32]bool{}
+				}
+				f.active[crtc] = v == 1
+			}
+		}
 	}
 	return nil
+}
+
+func (f *fakeDevice) refusesModeset(c commit) bool {
+	stated, lit := 0, 0
+	for _, crtc := range []uint32{10, 11} {
+		blob, ok := c.values[[2]uint32{crtc, propModeID}]
+		if ok {
+			stated++
+			if m, err := kdrm.ParseMode(f.blobData[uint32(blob)]); err == nil && f.refuseMode != nil && f.refuseMode(m) {
+				return true
+			}
+		}
+		if ok || f.active[crtc] {
+			lit++
+		}
+	}
+	return f.refuseLone && c.flags&kdrm.AtomicAllowModeset != 0 && stated > 0 && stated < lit
 }
 
 func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
@@ -591,6 +622,7 @@ func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	if err := r.b.Start(r.rec); err != nil {
 		t.Fatal(err)
 	}
+	r.dev.commits = nil
 	return r
 }
 
@@ -1003,6 +1035,7 @@ func TestHotplugAndSessionPause(t *testing.T) {
 		t.Fatalf("log %v", r.rec.log)
 	}
 	o := r.b.Outputs()[0]
+	r.dev.commits = nil
 	r.b.Pause()
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)

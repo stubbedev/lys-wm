@@ -713,9 +713,13 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if o.planesLatch, err = b.loop.AddTimer(o.planesDue); err != nil {
 		return errors.Join(err, o.release())
 	}
-	i := max(slices.IndexFunc(c.Modes, kdrm.Mode.Preferred), 0)
-	if err := o.setMode(c.Modes[i], backend.Depth8, backend.HDRMetadata{}); err != nil {
-		return errors.Join(err, o.release())
+	if err := o.lightBest(); err != nil {
+		err = errors.Join(err, o.release())
+		if refused(err) {
+			b.report(err)
+			return nil
+		}
+		return err
 	}
 	inherited, err := b.inherits(o, routed)
 	if err != nil {
@@ -908,6 +912,9 @@ type Output struct {
 	colorErr      error
 	torn          bool
 	planesFailing bool
+	restate       bool
+	restated      []uint32
+	extraFlips    int
 }
 
 func (o *Output) Name() string {
@@ -967,14 +974,15 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
 	refused := make([]error, 0, len(layouts))
+	var restate bool
 	for _, l := range layouts {
 		buffers, err := o.allocateBuffers(size, l)
 		if err != nil {
 			refused = append(refused, fmt.Errorf("%v buffers: %w", l.format, err))
 			continue
 		}
-		if d != backend.Depth8 && !o.b.paused {
-			if err := o.testMode(m, blob, buffers[0], next); err != nil {
+		if !o.b.paused {
+			if restate, err = o.testMode(m, blob, buffers[0], next); err != nil {
 				refused = append(refused, fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
 				continue
 			}
@@ -982,7 +990,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 		if len(refused) > 0 {
 			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refused...)))
 		}
-		return o.adoptMode(m, d, blob, buffers, next)
+		return o.adoptMode(m, d, blob, buffers, next, restate)
 	}
 	refused = append(refused, o.b.dev.DestroyBlob(blob), o.dropSignal(next))
 	if hdr.Active {
@@ -1014,22 +1022,103 @@ func (o *Output) free(buffers []*scanout) error {
 	return errors.Join(errs...)
 }
 
-func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout, next signal) error {
-	mode, modeBlob, kms, sig := o.mode, o.modeBlob, o.kms, o.signal
-	defer func() { o.mode, o.modeBlob, o.kms, o.signal = mode, modeBlob, kms, sig }()
-	o.mode, o.modeBlob, o.kms, o.signal = m, blob, kmsModeset, next
+func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout, next signal) (bool, error) {
+	mode, modeBlob, kms, sig, restate := o.mode, o.modeBlob, o.kms, o.signal, o.restate
+	defer func() { o.mode, o.modeBlob, o.kms, o.signal, o.restate = mode, modeBlob, kms, sig, restate }()
+	o.mode, o.modeBlob, o.kms, o.signal, o.restate = m, blob, kmsModeset, next, false
 	o.frame(s, -1)
-	return o.test(kdrm.AtomicAllowModeset)
+	alone := o.test(kdrm.AtomicAllowModeset)
+	if !refused(alone) || len(o.b.litBeside(o)) == 0 {
+		return false, alone
+	}
+	o.restate = true
+	o.frame(s, -1)
+	all := o.test(kdrm.AtomicAllowModeset)
+	if err := o.dropRestated(); err != nil {
+		return false, errors.Join(alone, all, err)
+	}
+	if all != nil {
+		return false, fmt.Errorf("%w; with every lit output restated: %w", alone, all)
+	}
+	return true, nil
 }
 
-func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout, next signal) error {
+func (b *Backend) litBeside(o *Output) []*Output {
+	var lit []*Output
+	for _, l := range b.outputs {
+		if l != o && l.enabled && l.lit && !l.off && l.bound() {
+			lit = append(lit, l)
+		}
+	}
+	return lit
+}
+
+func (o *Output) addRestatement(r *kdrm.Request) {
+	if err := o.dropRestated(); err != nil {
+		o.b.report(fmt.Errorf("drm: release the restated modes beside %s: %w", o.Name(), err))
+	}
+	for _, l := range o.b.litBeside(o) {
+		blob, err := o.b.dev.CreateBlob(l.mode.Bytes())
+		if err != nil {
+			o.b.report(fmt.Errorf("drm: restate the mode of %s beside %s: %w", l.Name(), o.Name(), err))
+			continue
+		}
+		o.restated = append(o.restated, blob)
+		l.connector.set(r, "CRTC_ID", uint64(l.crtc.id))
+		l.crtc.set(r, "MODE_ID", uint64(blob))
+		l.crtc.set(r, "ACTIVE", 1)
+	}
+}
+
+func (o *Output) dropRestated() error {
+	errs := make([]error, 0, len(o.restated))
+	for _, blob := range o.restated {
+		errs = append(errs, o.b.dev.DestroyBlob(blob))
+	}
+	o.restated = o.restated[:0]
+	return errors.Join(errs...)
+}
+
+func (o *Output) lightBest() error {
+	preferred := o.conn.Modes[max(slices.IndexFunc(o.conn.Modes, kdrm.Mode.Preferred), 0)]
+	first := o.setMode(preferred, backend.Depth8, backend.HDRMetadata{})
+	if !refused(first) {
+		return first
+	}
+	refusals := []error{fmt.Errorf("%+v: %w", modeOf(preferred), first)}
+	for _, m := range stepDown(o.conn.Modes, preferred) {
+		err := o.setMode(m, backend.Depth8, backend.HDRMetadata{})
+		if err == nil {
+			o.b.report(fmt.Errorf("drm: %s lights in %+v, the best mode the device takes: %w", o.Name(), modeOf(m), errors.Join(refusals...)))
+			return nil
+		}
+		if !refused(err) {
+			return err
+		}
+		refusals = append(refusals, fmt.Errorf("%+v: %w", modeOf(m), err))
+	}
+	return fmt.Errorf("drm: %s stays dark, the device takes none of its modes: %w", o.Name(), errors.Join(refusals...))
+}
+
+func stepDown(modes []kdrm.Mode, refusedMode kdrm.Mode) []kdrm.Mode {
+	next := slices.DeleteFunc(slices.Clone(modes), func(m kdrm.Mode) bool { return m == refusedMode })
+	slices.SortStableFunc(next, func(a, b kdrm.Mode) int {
+		if d := int(b.HDisplay)*int(b.VDisplay) - int(a.HDisplay)*int(a.VDisplay); d != 0 {
+			return d
+		}
+		return int(b.RefreshMHz() - a.RefreshMHz())
+	})
+	return next
+}
+
+func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout, next signal, restate bool) error {
 	clear(o.tested)
 	err := errors.Join(o.freeBuffers(), o.releaseSignal())
 	o.signal = next
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 	}
-	o.buffers, o.mode, o.depth, o.modeBlob, o.enabled, o.kms = buffers, m, d, blob, true, kmsModeset
+	o.buffers, o.mode, o.depth, o.modeBlob, o.enabled, o.kms, o.restate = buffers, m, d, blob, true, kmsModeset, restate
 	return err
 }
 
@@ -1343,6 +1432,8 @@ func (o *Output) commitPresent(s *scanout) error {
 		flags |= kdrm.AtomicAllowModeset
 	}
 	err = o.submit(s, fence, flags)
+	restated := len(o.restated)
+	err = errors.Join(err, o.dropRestated())
 	if err != nil {
 		if refused(err) {
 			o.overlayRefused()
@@ -1358,7 +1449,7 @@ func (o *Output) commitPresent(s *scanout) error {
 	o.renderFence = fence
 	o.aimedAt, _ = backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
 	o.sentOverlay()
-	o.kms, o.lit, o.flipping, o.torn = kmsFlip, true, true, false
+	o.kms, o.lit, o.flipping, o.torn, o.restate, o.extraFlips = kmsFlip, true, true, false, false, restated
 	o.queued = s
 	return nil
 }
@@ -1561,6 +1652,9 @@ func (o *Output) frame(s *scanout, fence int) {
 		o.crtc.set(r, "MODE_ID", uint64(o.modeBlob))
 		o.crtc.set(r, "ACTIVE", 1)
 		o.addSignal(r)
+		if o.restate {
+			o.addRestatement(r)
+		}
 		fallthrough
 	default:
 		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
@@ -1740,6 +1834,10 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	if !o.flipping {
 		return nil
 	}
+	if o.extraFlips > 0 {
+		o.extraFlips--
+		return nil
+	}
 	o.flipping = false
 	o.lastFlip = time.Duration(e.Sec)*time.Second + time.Duration(e.Usec)*time.Microsecond
 	overlayFreed := o.overlayFlipped()
@@ -1820,7 +1918,7 @@ func (o *Output) leaveOnScreen() error {
 
 func (o *Output) release() error {
 	o.setDamageClips(nil)
-	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence())
+	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence(), o.dropRestated())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0
