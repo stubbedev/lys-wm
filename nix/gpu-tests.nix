@@ -29,11 +29,8 @@
     tests,
     allowSkips,
   }: ''
-    machine.succeed(
-        "cd ${tests_}/internal/${dir} && LYS_WM_HEADLESS=1 HOME=/tmp TMPDIR=/tmp timeout 280 ${tests_}/bin/${name}.test "
-        "-test.count=1 -test.v -test.run '${tests}' > /tmp/${name}.log 2>&1 || (cat /tmp/${name}.log; exit 1)",
-        timeout=300,
-    )
+    ran("${name}", "cd ${tests_}/internal/${dir} && LYS_WM_HEADLESS=1 GOTRACEBACK=crash HOME=/tmp TMPDIR=/tmp timeout 280 ${tests_}/bin/${name}.test "
+        "-test.count=1 -test.v -test.run '${tests}' > /tmp/${name}.log 2>&1")
     print(machine.succeed("grep -E '^(--- |    --- |ok|FAIL|PASS|.*_test.go:.*(frame|nested|async))' /tmp/${name}.log"))
     assert_ran("/tmp/${name}.log", "${allowSkips}")
   '';
@@ -47,6 +44,11 @@ in
       virtualisation = {
         cores = 4;
         memorySize = 4096;
+        diskSize = 8192;
+      };
+      systemd.coredump.settings.Coredump = {
+        ProcessSizeMax = "6G";
+        ExternalSizeMax = "6G";
       };
       environment = {
         variables = env // {GBM_BACKENDS_PATH = "${pkgs.mesa}/lib/gbm";};
@@ -55,6 +57,13 @@ in
     };
     testScript = ''
       import re
+
+      def ran(name, command):
+          status, _ = machine.execute(command, timeout=300)
+          if status != 0:
+              print(machine.execute(f"cat /tmp/{name}.log")[1])
+              print(machine.execute("coredumpctl info --no-pager")[1])
+              raise Exception(f"the {name} tests failed with status {status}")
 
       def assert_ran(log, allowed):
           skipped = re.findall(r"--- SKIP: (\S+)", machine.succeed(f"cat {log}"))
