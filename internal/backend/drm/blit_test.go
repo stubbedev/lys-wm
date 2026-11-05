@@ -188,7 +188,7 @@ func TestASecondaryStaysOnTheFirstStackItsCardRuns(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			alloc, how := secondaryAllocator(dev, c.primary, c.stacks, c.canRender)
-			if _, blit := alloc.(*blitAllocator); blit != c.wantBlit {
+			if _, blit := alloc.(*lazyBlit); blit != c.wantBlit {
 				t.Errorf("%T for %q", alloc, how)
 			}
 			for _, want := range c.want {

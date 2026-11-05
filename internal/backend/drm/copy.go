@@ -210,16 +210,16 @@ func stacksFor(opts Options) []namedStack {
 	return []namedStack{{"Vulkan", func(dev *kdrm.Device) (*gbmAllocator, error) { return newVulkanAllocator(dev, opts.Paths) }}, glesStack}
 }
 
-func openLocal(dev *kdrm.Device, stacks []namedStack) (*gbmAllocator, string, error) {
+func openLocal(dev *kdrm.Device, stacks []namedStack) (*gbmAllocator, namedStack, error) {
 	var errs []error
 	for _, s := range stacks {
 		a, err := s.open(dev)
 		if err == nil {
-			return a, s.name, nil
+			return a, s, nil
 		}
 		errs = append(errs, err)
 	}
-	return nil, "", errors.Join(errs...)
+	return nil, namedStack{}, errors.Join(errs...)
 }
 
 func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
@@ -241,12 +241,30 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack,
 		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since %s cannot render: %v", name, err))
 	}
 	a := &blitAllocator{primary: p, local: local}
+	how := "a GPU blit with " + stack.name + " on " + name
 	direct := a.probe()
-	if direct == nil {
-		return a, "a GPU blit with " + stack + " on " + name
+	throughVulkan := direct != nil
+	if throughVulkan {
+		if err := a.copyThroughVulkan(); err != nil {
+			return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close())))
+		}
+		how += ", from a linear copy of each frame that Vulkan makes on the primary GPU"
 	}
-	if err := a.copyThroughVulkan(); err != nil {
-		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the GPUs share no buffer: %v", errors.Join(direct, err, local.close())))
+	lazy, err := newLazyBlit(a, func() (*blitAllocator, error) {
+		local, err := stack.open(dev)
+		if err != nil {
+			return nil, err
+		}
+		b := &blitAllocator{primary: p, local: local}
+		if throughVulkan {
+			if err := b.copyThroughVulkan(); err != nil {
+				return nil, errors.Join(err, local.close())
+			}
+		}
+		return b, nil
+	})
+	if err != nil {
+		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since %s gives no formats to render: %v", name, err))
 	}
-	return a, "a GPU blit with " + stack + " on " + name + ", from a linear copy of each frame that Vulkan makes on the primary GPU"
+	return lazy, how + ", opened only while " + name + " drives an output"
 }
