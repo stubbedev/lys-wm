@@ -159,6 +159,7 @@ type Renderer struct {
 	drawnOps     uint64
 	opaqueRuns   uint64
 	nativeFences bool
+	unflushed    bool
 	d            *gpu.Display
 	device       uint64
 	gl           *gpu.GL
@@ -191,6 +192,13 @@ func (r *Renderer) enter() error {
 
 func (r *Renderer) leave(op string) error {
 	return errors.Join(r.gl.Check(op), r.d.Leave())
+}
+
+func (r *Renderer) flushed() {
+	if r.unflushed {
+		r.unflushed = false
+		r.counts.Submits++
+	}
 }
 
 func New(d *gpu.Display) (*Renderer, error) {
@@ -309,6 +317,7 @@ func (r *Renderer) Finish() error {
 		return err
 	}
 	r.gl.Finish()
+	r.flushed()
 	r.counts.GPUWaits++
 	return r.leave("gles: finish")
 }
@@ -483,6 +492,7 @@ func (r *Renderer) SyncFile() (int, error) {
 	fd := -1
 	sync, err := r.d.Fence()
 	if err == nil {
+		r.flushed()
 		fd, err = sync.FD()
 		err = errors.Join(err, sync.Destroy())
 	}
@@ -768,6 +778,7 @@ func (f *Framebuffer) Read(pix []byte, stride int) error {
 	gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
 	gl.PixelStorei(gpu.PackRowLengthNV, int32(stride/4))                    //nolint:gosec // bounded by CheckPixels
 	gl.ReadPixels(0, 0, int32(f.size.X), int32(f.size.Y), gpu.BGRAExt, pix) //nolint:gosec // framebuffer sizes fit GLsizei
+	f.r.flushed()
 	gl.PixelStorei(gpu.PackRowLengthNV, 0)
 	gl.BindFramebuffer(gpu.Framebuffer, 0)
 	return f.r.leave("gles: read a framebuffer")
@@ -852,8 +863,7 @@ func (p *pass) End() error {
 	gl.Disable(gpu.ScissorTest)
 	gl.Disable(gpu.Blend)
 	gl.BindFramebuffer(gpu.Framebuffer, 0)
-	gl.Flush()
-	p.owner.counts.Submits++
+	p.owner.unflushed = true
 	p.active, p.fb = false, nil
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }

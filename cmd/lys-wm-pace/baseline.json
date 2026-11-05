@@ -9,6 +9,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
       },
@@ -20,6 +21,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -31,6 +33,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -42,6 +45,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
+        "submits_per_frame": 0,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -53,6 +57,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -64,6 +69,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -75,6 +81,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -86,6 +93,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -97,6 +105,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -109,6 +118,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -121,6 +131,7 @@
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -133,6 +144,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -145,6 +157,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -157,6 +170,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -169,6 +183,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -181,6 +196,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -193,6 +209,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -205,6 +222,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -217,6 +235,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -229,6 +248,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -241,6 +261,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -252,6 +273,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -263,6 +285,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -274,6 +297,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -285,6 +309,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -296,6 +321,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -307,6 +333,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -318,6 +345,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -329,6 +357,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 6
       },
@@ -340,6 +369,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -351,6 +381,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
@@ -366,6 +397,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
       },
@@ -377,6 +409,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
       },
@@ -388,6 +421,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -399,6 +433,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
+        "submits_per_frame": 0,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -410,6 +445,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -421,6 +457,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -432,6 +469,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -443,6 +481,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -454,6 +493,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -466,6 +506,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -478,6 +519,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -490,6 +532,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -502,6 +545,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -514,6 +558,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -526,6 +571,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -538,6 +584,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -550,6 +597,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -562,6 +610,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -574,6 +623,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
@@ -586,6 +636,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -598,6 +649,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -609,6 +661,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -620,6 +673,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -631,6 +685,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -642,6 +697,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -653,6 +709,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -664,6 +721,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -675,6 +733,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -686,6 +745,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 6
       },
@@ -697,6 +757,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -708,6 +769,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
@@ -723,6 +785,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -734,6 +797,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -745,6 +809,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -756,6 +821,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
+        "submits_per_frame": 0,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -767,6 +833,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -778,6 +845,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -789,6 +857,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -800,6 +869,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -811,6 +881,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -823,6 +894,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -835,6 +907,7 @@
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -847,6 +920,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -859,6 +933,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -871,6 +946,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -883,6 +959,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -895,6 +972,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -907,6 +985,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -919,6 +998,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -931,6 +1011,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -943,6 +1024,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -955,6 +1037,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -966,6 +1049,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -977,6 +1061,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -988,6 +1073,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -999,6 +1085,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1010,6 +1097,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1021,6 +1109,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1032,6 +1121,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -1043,6 +1133,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1054,6 +1145,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1065,6 +1157,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }
@@ -1080,6 +1173,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1091,6 +1185,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1102,6 +1197,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -1113,6 +1209,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
+        "submits_per_frame": 0,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1124,6 +1221,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1135,6 +1233,7 @@
         "filter_passes_per_frame": 6,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1146,6 +1245,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1157,6 +1257,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1168,6 +1269,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1180,6 +1282,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1192,6 +1295,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -1204,6 +1308,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1216,6 +1321,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -1228,6 +1334,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1240,6 +1347,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -1252,6 +1360,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1264,6 +1373,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -1276,6 +1386,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1288,6 +1399,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
@@ -1300,6 +1412,7 @@
         "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1312,6 +1425,7 @@
         "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
       },
@@ -1323,6 +1437,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -1334,6 +1449,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 7
       },
@@ -1345,6 +1461,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1356,6 +1473,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 1,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
@@ -1367,6 +1485,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1378,6 +1497,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1389,6 +1509,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
+        "submits_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
       },
@@ -1400,6 +1521,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1411,6 +1533,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
@@ -1422,6 +1545,7 @@
         "filter_passes_per_frame": 2,
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
+        "submits_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       }

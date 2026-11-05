@@ -386,7 +386,7 @@ func TestOpaqueOpsDrawWithoutBlendingAndTranslucentOnesWithIt(t *testing.T) {
 	rendertest.OpaqueRunsWithoutBlending(t, r, framebuffer(t, r, image.Pt(64, 64)), func() uint64 { return gles.OpaqueRuns(r) })
 }
 
-func TestTargetsCountAndEachPassIsASubmit(t *testing.T) {
+func TestTargetsCountAndAFrameOfPassesIsOneSubmit(t *testing.T) {
 	r := renderer(t)
 	rendertest.TargetsAndSubmitsCount(t, r, framebuffer(t, r, rendertest.Size), 1)
 }

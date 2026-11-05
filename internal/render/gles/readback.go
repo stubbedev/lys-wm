@@ -65,6 +65,9 @@ func (f *Framebuffer) ReadAsync() (render.PendingRead, error) {
 	gl.BindFramebuffer(gpu.Framebuffer, 0)
 	gl.BindBuffer(gpu.PixelPackBuffer, 0)
 	fence, err := r.d.PlainFence()
+	if fence != nil {
+		r.flushed()
+	}
 	if err = errors.Join(err, r.leave("gles: start reading a framebuffer")); err != nil {
 		if fence != nil {
 			err = errors.Join(err, fence.Destroy())

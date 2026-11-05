@@ -303,3 +303,17 @@ func TestTheReportShowsSchedulerLatencyGCPausesAndTheNewCounts(t *testing.T) {
 		t.Errorf("the report lacks the new counts:\n%s", text)
 	}
 }
+
+func TestASecondSubmitInAFrameIsOverTheLimitOfOne(t *testing.T) {
+	var one frametrace.CostSummary
+	one.Submits.Worst = 1
+	b := baseline{"gles/software": derive(costReport("glass-over-busy", one))}
+	if got := b["gles/software"].Steps["glass-over-busy"]["submits_per_frame"]; got != 1 {
+		t.Fatalf("submit limit %d from a run of one a frame, want 1", got)
+	}
+	two := one
+	two.Submits.Worst = 2
+	if err := checkBaseline(b, costReport("glass-over-busy", two)); err == nil || !strings.Contains(err.Error(), "glass-over-busy: submits_per_frame 2, limit 1") {
+		t.Fatalf("two submits in a frame: %v", err)
+	}
+}

@@ -45,6 +45,7 @@ type Renderer struct {
 func (r *Renderer) Counts() render.Counts {
 	counts := r.counts
 	counts.GPUWaits = r.d.BlockingWaits()
+	counts.Submits = r.d.Submissions()
 	return counts
 }
 
@@ -625,6 +626,5 @@ func (p *pass) End() error {
 	}
 	p.r.pass = nil
 	err := p.p.End()
-	p.r.counts.Submits++
 	return errors.Join(p.err, err)
 }

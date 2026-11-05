@@ -80,6 +80,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
 | `gpu_waits_per_frame` | Times the loop waited for the GPU to finish since the last composited frame, at worst, with no slack: a renderer's fence waits on Vulkan, `glFinish` on GLES | A frame or a resize that stalls the loop on the GPU, such as freeing a resource still in use |
+| `submits_per_frame` | GPU submissions since the last composited frame, at worst, with no slack: Vulkan queue submits from `Device.Submissions`, GLES flushes of ended passes at a fence export, `glFinish` or a read back. A frame is one, plus an upload flush when it uploads past the batch bound | A pass that submits on its own, as `glFlush` at every pass end did |
 | `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
 | `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
 | `allocs_per_frame` | Heap allocations in the costliest frame of a play, taking the play where that is lowest. What only happens once, as the overview building its blur chain, passes: a median would move with how many frames fall in a step's costly part, which the load decides, and the worst alone would catch a burst from another goroutine | An allocation added to a path every play takes |
@@ -94,8 +95,7 @@ busy to reach 60 Hz draws fewer frames that each cost the same.
 The trace takes these with `runtime.ReadMemStats` and a read of `/proc/self/io`
 at both ends of each frame, outside the `cpu` column.
 
-The cost table also reports, ungated, the worst frame's `submits` (pass ends
-that flush or submit to the GPU), `targets` (render targets created),
+The cost table also reports, ungated, the worst frame's `targets` (render targets created),
 `filter px` (pixels a Kawase pass covered within its damage), `repaint px`
 (pixels of the output repainted) and `copied bytes` (capture bytes copied to
 clients). The time table adds `sched`, the worst wait of a runnable goroutine

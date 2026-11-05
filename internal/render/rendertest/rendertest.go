@@ -1182,7 +1182,7 @@ func OpaqueRunsWithoutBlending(t *testing.T, r render.Renderer, target render.Re
 	}
 }
 
-func TargetsAndSubmitsCount(t *testing.T, r render.Renderer, target render.Target, submitsPerPass uint64) {
+func TargetsAndSubmitsCount(t *testing.T, r render.Renderer, target render.Target, submitsPerFrame uint64) {
 	t.Helper()
 	before := r.Counts()
 	rt, err := r.NewTarget(image.Pt(8, 8))
@@ -1205,9 +1205,17 @@ func TargetsAndSubmitsCount(t *testing.T, r render.Renderer, target render.Targe
 			p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
 		})
 	}
+	if got := r.Counts().Submits - before.Submits; got != 0 {
+		t.Fatalf("three passes before a sync point counted %d submits, want none", got)
+	}
+	if f, ok := r.(Finisher); ok {
+		if err := f.Finish(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	now := r.Counts()
-	if got := now.Submits - before.Submits; got != 3*submitsPerPass {
-		t.Fatalf("three passes counted %d submits, want %d", got, 3*submitsPerPass)
+	if got := now.Submits - before.Submits; got != submitsPerFrame {
+		t.Fatalf("a frame of three passes counted %d submits, want %d", got, submitsPerFrame)
 	}
 	if now.Targets != before.Targets {
 		t.Fatalf("painting counted %d new targets", now.Targets-before.Targets)
