@@ -358,7 +358,10 @@ surface, into an offscreen target, and the drm backend copies it into a
 linear ARGB8888 dumb buffer, the only buffer every cursor plane takes:
 NVIDIA's cursor planes scan out linear only, and its EGL renders to no
 linear modifier. Pointer motion then moves the plane in an atomic commit of
-its own, or in the next frame's commit, and repaints nothing. A cursor commit
+its own, or in the next frame's commit, and repaints nothing. A move waits
+for a requested frame only when that frame is due before the next vblank; a
+frame deferred past it (#257) does not hold the cursor back a refresh (#276).
+A cursor commit
 sets only what changed against what the last accepted commit left on the
 plane; a modeset, a resume or a cursor coming back from hidden sets it all. An image
 larger than the plane, or a plane that refuses it, puts the

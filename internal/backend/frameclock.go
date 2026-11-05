@@ -40,6 +40,14 @@ func (f *FrameClock) Requested() bool {
 	return f.requested
 }
 
+func (f *FrameClock) Queued() bool {
+	return f.requested && f.queued
+}
+
+func (f *FrameClock) Waiting() bool {
+	return f.requested && f.waiting
+}
+
 func (f *FrameClock) Kick() error {
 	if !f.requested || f.queued || f.waiting || !f.ready() {
 		return nil

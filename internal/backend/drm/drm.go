@@ -672,7 +672,10 @@ func (b *Backend) add(c kdrm.Connector) error {
 	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1, tested: map[planeKey]struct{}{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: o.frameWait,
-		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
+		Wake: func(after time.Duration) error {
+			o.frameDue = o.b.now() + after
+			return o.latch.Arm(after)
+		},
 	})
 	o.colorErr = errNoEDID
 	if blob, ok := props["EDID"]; ok && blob.Value != 0 {
@@ -887,6 +890,7 @@ type Output struct {
 	planesLatch   *loop.Timer
 	planesWaiting bool
 	latch         *loop.Timer
+	frameDue      time.Duration
 	empties       int
 	idleAt        time.Duration
 	budget        backend.RenderBudget
@@ -1581,7 +1585,7 @@ func (o *Output) flushPlanes() error {
 	if cursor && c.settled() {
 		c.dirty, cursor = false, false
 	}
-	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.clock.Requested() || o.framing {
+	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.frameCarriesPlanes() {
 		return nil
 	}
 	if !o.color.dirty() {
@@ -1610,6 +1614,17 @@ func (o *Output) flushPlanes() error {
 		c.sent()
 	}
 	return o.colorSent()
+}
+
+func (o *Output) frameCarriesPlanes() bool {
+	switch {
+	case o.framing || o.clock.Queued():
+		return true
+	case !o.clock.Waiting():
+		return false
+	}
+	next, _ := backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
+	return o.frameDue < next
 }
 
 func (o *Output) commitPlanes(cursor bool) error {

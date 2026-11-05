@@ -135,6 +135,41 @@ func TestAFrameClockWaitsForItsLatchDeadline(t *testing.T) {
 	}
 }
 
+func TestAFrameClockSaysWhetherItsFrameIsQueuedOrWaiting(t *testing.T) {
+	var q idleQueue
+	ahead := true
+	clock := NewFrameClock(q.add, func() bool { return true }, func() error { return nil }, &Latch{
+		Wait: func() time.Duration {
+			if ahead {
+				return 5 * time.Millisecond
+			}
+			return 0
+		},
+		Wake: func(time.Duration) error { return nil },
+	})
+	if clock.Queued() || clock.Waiting() {
+		t.Fatal("a clock with no request is queued or waiting")
+	}
+	must(t, clock.Request())
+	if clock.Queued() || !clock.Waiting() {
+		t.Fatalf("a request before its deadline: queued %t, waiting %t", clock.Queued(), clock.Waiting())
+	}
+	clock.Cancel()
+	if clock.Waiting() {
+		t.Fatal("a cancelled request still waits")
+	}
+	ahead = false
+	must(t, clock.Woke())
+	must(t, clock.Request())
+	if !clock.Queued() || clock.Waiting() {
+		t.Fatalf("a request past its deadline: queued %t, waiting %t", clock.Queued(), clock.Waiting())
+	}
+	q.run(t)
+	if clock.Queued() || clock.Waiting() {
+		t.Fatal("a drawn frame is still queued or waiting")
+	}
+}
+
 func TestTheLatchDeadlineLeavesTheBudgetBeforeTheNextVblank(t *testing.T) {
 	const ms = time.Millisecond
 	for _, tc := range []struct {

@@ -2244,6 +2244,34 @@ func TestACursorMoveJustBeforeTheVblankStillCommits(t *testing.T) {
 	}
 }
 
+func TestACursorMoveCommitsAheadOfAFrameDeferredPastTheVblank(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	interval := modeOf(o.mode).Interval()
+	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
+	o.lastFlip = o.b.now() - interval + time.Millisecond
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	if !o.clock.Waiting() {
+		t.Fatal("a frame requested 1 ms before the vblank was not deferred")
+	}
+	cp, _ := o.CursorPlane()
+	n := len(r.dev.commits)
+	if err := cp.MoveCursor(image.Pt(20, 30)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.dev.commits) != n+1 || r.dev.commits[n].flags&kdrm.AtomicTestOnly != 0 {
+		t.Fatalf("a move ahead of a deferred frame sent %+v, want one real commit at once", r.dev.commits[n:])
+	}
+	if _, at, _ := cursorAt(r.dev.commits[n]); at != image.Pt(20, 30).Sub(image.Pt(4, 6)) {
+		t.Fatalf("the move put the cursor plane at %v", at)
+	}
+	if !o.clock.Waiting() {
+		t.Fatal("the cursor's commit took the deferred frame with it")
+	}
+}
+
 func TestACursorCommitCarriesOnlyWhatChanged(t *testing.T) {
 	r := start(t)
 	o := r.lit()
