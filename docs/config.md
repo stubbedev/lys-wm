@@ -509,8 +509,8 @@ The events:
 | `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output; `fade`: it fades where it is | cross-fade |
 | `overview` | `global` | The [overview](#overview) opening and closing, its windows moving to new places in it, and a window dropped on a thumbnail. Unlike the other events its curve does not come from `global`: it is a spring unless this event names a curve, because a spring keeps its velocity when the overview reverses or a gesture lets go, and a bézier given here starts each move from rest. `enabled: false` or `animations.enabled: false` jumps, and so does `reduced_motion`. | |
 | `fade` | `global` | Every fade | | fade |
-| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears | | fade |
-| `fade_out` | `fade` | A closing window fading out | | fade |
+| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears, and the session lock fading in | | fade |
+| `fade_out` | `fade` | A closing window fading out, and the session lock fading out on unlock | | fade |
 | `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | | fade |
 | `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | | fade |
 | `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | | fade |
@@ -858,8 +858,11 @@ one. Read at startup only.
 lys-wm speaks `ext-session-lock-v1`, so lockers such as swaylock, hyprlock or
 lys-login's lock screen work. While the session is locked, nothing but the lock
 surfaces renders or receives input, and only binds flagged `locked` run.
-lys-wm tells the locker it is locked only after every output has drawn a
-blank frame. If the locker dies, the session stays locked on a dark red
+The lock fades in over the desktop by `fade_in` and lys-wm tells the locker
+it is locked only after every output has drawn the lock fully opaque; on
+unlock the last lock frame fades out over the desktop by `fade_out`, while
+input already goes to the session. With those animations off both are
+instant. If the locker dies, the session stays locked on a dark red
 screen until a new locker takes over; outputs added while locked show the
 lock colour until the locker covers them. lys-wm does not set logind's
 `LockedHint`: the locker does, as lys-login does.

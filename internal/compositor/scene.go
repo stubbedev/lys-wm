@@ -73,6 +73,9 @@ func (c *Compositor) frame(o *output.Output) error {
 	c.finishSwitches(o, c.frameTime)
 	c.settleGenies(c.frameTime)
 	c.settlePreview(c.frameTime)
+	if err := c.settleLockFade(c.frameTime); err != nil {
+		return err
+	}
 	if err := c.settleWobbles(); err != nil {
 		return err
 	}
@@ -142,15 +145,19 @@ func (c *Compositor) render(o *output.Output) error {
 	pass.FillRect(bounds, Background)
 	shown := sc.shown[:0]
 	var err error
-	if c.shell.Locked() {
-		shown = c.drawLocked(pass, o, bounds, shown)
-	} else if shown, err = c.drawDesktop(pass, o, shown); err != nil {
-		return err
+	locked, lockAlpha := c.shell.Locked(), c.lockOpacity(c.frameTime)
+	if !locked || lockAlpha < 1 {
+		if shown, err = c.drawDesktop(pass, o, shown); err != nil {
+			return err
+		}
 	}
-	if !c.shell.Locked() {
+	if locked {
+		shown = c.drawLocked(pass, o, bounds, shown, lockAlpha)
+	} else {
 		if err := c.drawConfigNotice(pass, o); err != nil {
 			return err
 		}
+		c.drawLockSnapshot(pass, o, bounds, lockAlpha)
 	}
 	if held, err := c.holdsInherited(o, len(shown) > 0); held || err != nil {
 		return err

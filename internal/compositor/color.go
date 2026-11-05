@@ -225,7 +225,7 @@ func (c *Compositor) setOutputColor(b backend.Output, co *colorspace.Output) err
 func (c *Compositor) outputColorChanged(o *output.Output, b backend.Output, wasHDR, isHDR bool, ctm backend.Matrix) error {
 	sc := c.sceneOf(o)
 	sc.invalidate()
-	errs := []error{sc.dropWorking(), c.dropBlurs(), c.dropClosingOn(o)}
+	errs := []error{sc.dropWorking(), c.dropBlurs(), c.dropClosingOn(o), c.dropLockSnapshotOn(o)}
 	if wasHDR != isHDR {
 		errs = append(errs, c.crtcColor(o, b, isHDR, ctm), c.cursorPlaneFollows(o, isHDR))
 	}

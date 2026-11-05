@@ -86,6 +86,7 @@ type Listener interface {
 	UserActive(c *server.Client, serial uint32) bool
 	GrabChanged() error
 	LockChanged() error
+	LockReleasing() error
 	LockOutputSize(output *sw.WlOutput) (image.Point, bool)
 }
 

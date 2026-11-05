@@ -253,6 +253,9 @@ type Compositor struct {
 	selectionWatch  func(data.Kind, data.Source) error
 	xwaylandClients func(*server.Client) bool
 	blanked         map[*output.Output]bool
+	lockFade        anim.Tween[float64]
+	lockShown       bool
+	lockSnapshots   map[*output.Output]render.TextureTarget
 	idle            *idle.Manager
 	extLists        []*extList
 	wlrManagers     []*wlrManager
@@ -406,6 +409,8 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		hwCursors:      map[*output.Output]*hwCursor{},
 		cursorReads:    map[*cursorRead]struct{}{},
 		blanked:        map[*output.Output]bool{},
+		lockFade:       anim.NewTween(0.0, anim.Lerp),
+		lockSnapshots:  map[*output.Output]render.TextureTarget{},
 		captures:       map[*output.Output][]*capture{},
 		reads:          map[*asyncRead]struct{}{},
 		scannedOut:     map[*dmabuf.Buffer]*scannedOut{},
@@ -605,7 +610,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.landInFlight(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropBlurs(), c.dropShaders()}
+	errs := []error{c.landInFlight(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.dropShaders()}
 	for _, sc := range c.scenes {
 		errs = append(errs, sc.dropImage())
 	}

@@ -146,8 +146,9 @@ func (l *SessionLock) UnlockAndDestroy(obj *sel.ExtSessionLockV1) error {
 	if sh.lock != l {
 		return nil
 	}
+	releasing := sh.listener.LockReleasing()
 	sh.lock, sh.locked = nil, false
-	return sh.listener.LockChanged()
+	return errors.Join(releasing, sh.listener.LockChanged())
 }
 
 func (l *SessionLock) GetLockSurface(obj *sel.ExtSessionLockV1, res *sel.ExtSessionLockSurfaceV1, wl *sw.WlSurface, output *sw.WlOutput) (sel.ExtSessionLockSurfaceV1Handler, error) {
