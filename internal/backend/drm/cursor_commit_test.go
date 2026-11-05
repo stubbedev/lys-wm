@@ -4,6 +4,7 @@ import (
 	"errors"
 	"image"
 	"testing"
+	"time"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -34,8 +35,15 @@ func (r *rig) shownCursor(o *Output, hotspot image.Point) *cursor {
 
 func (r *rig) frameWithCursorAt(o *Output, at image.Point) commit {
 	r.t.Helper()
+	defer func(clock time.Duration) { r.pinned = clock }(r.pinned)
+	interval := modeOf(o.mode).Interval()
+	vblank := o.lastFlip + interval
+	o.budget = backend.RenderBudget{}
+	r.pinned = o.lastFlip + time.Millisecond
 	return r.cursorCommit("the frame", o, func() error {
-		return errors.Join(o.ScheduleFrame(), o.cursor.MoveCursor(at))
+		err := errors.Join(o.ScheduleFrame(), o.cursor.MoveCursor(at))
+		r.pinned = vblank - backend.PlaneLead
+		return err
 	})
 }
 
