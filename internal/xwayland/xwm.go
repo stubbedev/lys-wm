@@ -122,6 +122,7 @@ type wm struct {
 	reap       *loop.Timer
 	focused    xproto.Window
 	clients    []xproto.Window
+	stacking   []xproto.Window
 	selections [2]*selection
 	incoming   []*incoming
 	outgoing   map[outKey]*outgoing
@@ -153,7 +154,7 @@ func (w *Window) Pid() int32 {
 }
 
 func (w *Window) Urgent() bool {
-	return w.props.hints.Urgent
+	return w.props.hints.Urgent || w.has(w.props.states, atomNetWMStateDemandsAttention)
 }
 
 func (w *Window) Parent() *Window {
@@ -227,10 +228,10 @@ func (w *Window) Apply(s State) error {
 		w.wm.notifyGeometry(w)
 	}
 	if s.Fullscreen != prev.Fullscreen {
-		w.setState(atomNetWMStateFullscreen, s.Fullscreen)
+		w.setState(s.Fullscreen, atomNetWMStateFullscreen)
 	}
 	if s.Minimized != prev.Minimized {
-		w.setState(atomNetWMStateHidden, s.Minimized)
+		w.setState(s.Minimized, atomNetWMStateHidden)
 		wmState := icccmNormalState
 		if s.Minimized {
 			wmState = icccmIconicState
@@ -239,6 +240,9 @@ func (w *Window) Apply(s State) error {
 	}
 	if s.Activated != prev.Activated {
 		w.wm.activate(w, s.Activated)
+		if s.Activated && w.has(w.props.states, atomNetWMStateDemandsAttention) {
+			w.setState(false, atomNetWMStateDemandsAttention)
+		}
 	}
 	return nil
 }
@@ -301,11 +305,13 @@ func (m *wm) alarmed(e xsync.AlarmNotify) error {
 	return nil
 }
 
-func (w *Window) setState(name atom, on bool) {
-	atom := w.wm.atoms[name]
-	w.props.states = slices.DeleteFunc(w.props.states, func(a xproto.Atom) bool { return a == atom })
-	if on {
-		w.props.states = append(w.props.states, atom)
+func (w *Window) setState(on bool, names ...atom) {
+	for _, name := range names {
+		atom := w.wm.atoms[name]
+		w.props.states = slices.DeleteFunc(w.props.states, func(a xproto.Atom) bool { return a == atom })
+		if on {
+			w.props.states = append(w.props.states, atom)
+		}
 	}
 	w.wm.changeAtoms(w.id, w.wm.atoms[atomNetWMState], xproto.AtomAtom, w.props.states)
 }
@@ -385,6 +391,9 @@ func (m *wm) activate(w *Window, on bool) {
 		m.protocol(w.id, atomWMTakeFocus, xproto.TimeCurrentTime, 0)
 	}
 	xproto.ConfigureWindow(m.x, w.id, xproto.ConfigWindowStackMode, []uint32{xproto.StackModeAbove})
+	if slices.Contains(m.stacking, w.id) {
+		m.restack(w.id, true)
+	}
 	m.changeWindows(m.root, atomNetActiveWindow, []xproto.Window{w.id})
 }
 
@@ -571,24 +580,36 @@ func (m *wm) stateRequested(id xproto.Window, action uint32, a, b xproto.Atom) e
 	if !ok {
 		return nil
 	}
-	full := m.atoms[atomNetWMStateFullscreen]
-	if a != full && b != full {
-		return nil
-	}
-	on := w.Fullscreen()
-	switch action {
-	case netWMStateRemove:
-		on = false
-	case netWMStateAdd:
-		on = true
-	case netWMStateToggle:
-		on = !on
-	default:
+	if action > netWMStateToggle {
 		m.report(fmt.Errorf("xwayland: _NET_WM_STATE action %d on window %#x", action, id))
 		return nil
 	}
-	if !w.shown {
-		w.setState(atomNetWMStateFullscreen, on)
+	requested := func(name atom) (asked, on bool) {
+		if x := m.atoms[name]; a != x && b != x {
+			return false, false
+		}
+		switch action {
+		case netWMStateRemove:
+			return true, false
+		case netWMStateAdd:
+			return true, true
+		}
+		return true, !w.has(w.props.states, name)
+	}
+	if asked, on := requested(atomNetWMStateDemandsAttention); asked {
+		w.setState(on, atomNetWMStateDemandsAttention)
+	}
+	vert, _ := requested(atomNetWMStateMaximizedVert)
+	if horz, _ := requested(atomNetWMStateMaximizedHorz); vert || horz {
+		w.setState(false, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
+		m.notifyGeometry(w)
+	}
+	asked, on := requested(atomNetWMStateFullscreen)
+	switch {
+	case !asked:
+		return nil
+	case !w.shown:
+		w.setState(on, atomNetWMStateFullscreen)
 		return nil
 	}
 	return m.listener.XWindowRequest(w, SetFullscreen{On: on})
@@ -618,8 +639,20 @@ func (m *wm) show(w *Window) error {
 	if w.managed {
 		m.clients = append(m.clients, w.id)
 		m.changeWindows(m.root, atomNetClientList, m.clients)
+		m.restack(w.id, true)
+		if w.has(w.props.states, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz) {
+			w.setState(false, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
+		}
 	}
 	return m.listener.XWindowMapped(w)
+}
+
+func (m *wm) restack(id xproto.Window, top bool) {
+	m.stacking = slices.DeleteFunc(m.stacking, func(s xproto.Window) bool { return s == id })
+	if top {
+		m.stacking = append(m.stacking, id)
+	}
+	m.changeWindows(m.root, atomNetClientListStacking, m.stacking)
 }
 
 func (m *wm) hide(w *Window) error {
@@ -634,6 +667,7 @@ func (m *wm) hide(w *Window) error {
 	if i := slices.Index(m.clients, w.id); i >= 0 {
 		m.clients = slices.Delete(m.clients, i, i+1)
 		m.changeWindows(m.root, atomNetClientList, m.clients)
+		m.restack(w.id, false)
 	}
 	return m.listener.XWindowUnmapped(w)
 }
