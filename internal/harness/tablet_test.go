@@ -51,11 +51,13 @@ type tabletEvents struct{ l *tabletLog }
 func (e tabletEvents) Name(_ *ctab.ZwpTabletV2, name string) error {
 	return e.l.log.Note("name %s", name)
 }
+
 func (e tabletEvents) ID(_ *ctab.ZwpTabletV2, vid, pid uint32) error {
 	return e.l.log.Note("id %x:%x", vid, pid)
 }
-func (tabletEvents) Path(*ctab.ZwpTabletV2, string) error                     { return nil }
-func (e tabletEvents) Done(*ctab.ZwpTabletV2) error                           { return e.l.log.Note("tablet_done") }
+func (tabletEvents) Path(*ctab.ZwpTabletV2, string) error { return nil }
+func (e tabletEvents) Done(*ctab.ZwpTabletV2) error       { return e.l.log.Note("tablet_done") }
+
 func (e tabletEvents) Removed(*ctab.ZwpTabletV2) error                        { return e.l.log.Note("tablet_removed") }
 func (tabletEvents) Bustype(*ctab.ZwpTabletV2, ctab.ZwpTabletV2Bustype) error { return nil }
 

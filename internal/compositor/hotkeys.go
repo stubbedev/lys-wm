@@ -24,8 +24,10 @@ var hotkeyModifiers = []struct {
 	wire sxh.XxHotkeyManagerV1Modifiers
 	set  binds.ModifierSet
 }{
-	{sxh.XxHotkeyManagerV1ModifiersShift, binds.ModShift}, {sxh.XxHotkeyManagerV1ModifiersCtrl, binds.ModControl},
-	{sxh.XxHotkeyManagerV1ModifiersAlt, binds.ModAlt}, {sxh.XxHotkeyManagerV1ModifiersSuper, binds.ModSuper},
+	{sxh.XxHotkeyManagerV1ModifiersShift, binds.ModShift},
+	{sxh.XxHotkeyManagerV1ModifiersCtrl, binds.ModControl},
+	{sxh.XxHotkeyManagerV1ModifiersAlt, binds.ModAlt},
+	{sxh.XxHotkeyManagerV1ModifiersSuper, binds.ModSuper},
 }
 
 type hotkeyTrigger struct {

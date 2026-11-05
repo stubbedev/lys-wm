@@ -61,9 +61,12 @@ var toolCapabilities = []struct {
 	has  tabletinput.Capability
 	send tablet.ZwpTabletToolV2Capability
 }{
-	{tabletinput.CanTilt, tablet.ZwpTabletToolV2CapabilityTilt}, {tabletinput.CanPressure, tablet.ZwpTabletToolV2CapabilityPressure},
-	{tabletinput.CanDistance, tablet.ZwpTabletToolV2CapabilityDistance}, {tabletinput.CanRotation, tablet.ZwpTabletToolV2CapabilityRotation},
-	{tabletinput.CanSlider, tablet.ZwpTabletToolV2CapabilitySlider}, {tabletinput.CanWheel, tablet.ZwpTabletToolV2CapabilityWheel},
+	{tabletinput.CanTilt, tablet.ZwpTabletToolV2CapabilityTilt},
+	{tabletinput.CanPressure, tablet.ZwpTabletToolV2CapabilityPressure},
+	{tabletinput.CanDistance, tablet.ZwpTabletToolV2CapabilityDistance},
+	{tabletinput.CanRotation, tablet.ZwpTabletToolV2CapabilityRotation},
+	{tabletinput.CanSlider, tablet.ZwpTabletToolV2CapabilitySlider},
+	{tabletinput.CanWheel, tablet.ZwpTabletToolV2CapabilityWheel},
 }
 
 func (s *Seat) bindTablets(c *server.Client, id wire.ObjectID, version uint32) error {

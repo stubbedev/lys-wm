@@ -288,8 +288,10 @@ func TestEveryStepHasEveryLimitInEveryBaseline(t *testing.T) {
 }
 
 func TestTheReportShowsSchedulerLatencyGCPausesAndTheNewCounts(t *testing.T) {
-	f := frametrace.Frame{Output: "A", Kind: frametrace.Composited, Start: 10, Present: 20, Refresh: 10, Sched: 3 * time.Millisecond, GCPause: 7 * time.Millisecond,
-		Cost: frametrace.Cost{Submits: 11, Targets: 12, FilterPx: 13, RepaintPx: 14, Copied: 15}}
+	f := frametrace.Frame{
+		Output: "A", Kind: frametrace.Composited, Start: 10, Present: 20, Refresh: 10, Sched: 3 * time.Millisecond, GCPause: 7 * time.Millisecond,
+		Cost: frametrace.Cost{Submits: 11, Targets: 12, FilterPx: 13, RepaintPx: 14, Copied: 15},
+	}
 	r := buildReport(frametrace.Header{Device: "x"}, 1, []mark{{step: "a", from: 0, to: 100}}, nil, []frametrace.Frame{f})
 	var out strings.Builder
 	r.write(&out)

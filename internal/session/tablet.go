@@ -48,17 +48,27 @@ var changedAxes = [9]struct {
 	axis tabletinput.Axis
 	name string
 }{
-	{tabletinput.AxisX, "x"}, {tabletinput.AxisY, "y"}, {tabletinput.AxisPressure, "pressure"},
-	{tabletinput.AxisDistance, "distance"}, {tabletinput.AxisTiltX, "tilt_x"}, {tabletinput.AxisTiltY, "tilt_y"},
-	{tabletinput.AxisRotation, "rotation"}, {tabletinput.AxisSlider, "slider"}, {tabletinput.AxisWheel, "wheel"},
+	{tabletinput.AxisX, "x"},
+	{tabletinput.AxisY, "y"},
+	{tabletinput.AxisPressure, "pressure"},
+	{tabletinput.AxisDistance, "distance"},
+	{tabletinput.AxisTiltX, "tilt_x"},
+	{tabletinput.AxisTiltY, "tilt_y"},
+	{tabletinput.AxisRotation, "rotation"},
+	{tabletinput.AxisSlider, "slider"},
+	{tabletinput.AxisWheel, "wheel"},
 }
 
 var toolCapabilities = [6]struct {
 	capability tabletinput.Capability
 	name       string
 }{
-	{tabletinput.CanTilt, "tilt"}, {tabletinput.CanPressure, "pressure"}, {tabletinput.CanDistance, "distance"},
-	{tabletinput.CanRotation, "rotation"}, {tabletinput.CanSlider, "slider"}, {tabletinput.CanWheel, "wheel"},
+	{tabletinput.CanTilt, "tilt"},
+	{tabletinput.CanPressure, "pressure"},
+	{tabletinput.CanDistance, "distance"},
+	{tabletinput.CanRotation, "rotation"},
+	{tabletinput.CanSlider, "slider"},
+	{tabletinput.CanWheel, "wheel"},
 }
 
 var toolTypes = map[int32]tabletinput.ToolType{
