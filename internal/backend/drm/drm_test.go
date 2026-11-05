@@ -57,11 +57,13 @@ const (
 	propNonDesktop
 	propLinkStatusID
 	propDegammaID
-	inFormatsBlob = 500
-	edidBlob      = 501
-	litModeBlob   = 502
-	splashFB      = 650
-	fakeNumber    = 0xe200
+	propInFormatsAsync
+	inFormatsBlob    = 500
+	edidBlob         = 501
+	litModeBlob      = 502
+	asyncFormatsBlob = 503
+	splashFB         = 650
+	fakeNumber       = 0xe200
 )
 
 type commit struct {
@@ -114,6 +116,8 @@ type fakeDevice struct {
 	refuseBPC         bool
 	staleDegamma      uint64
 	staleColorspace   uint64
+	asyncFormats      bool
+	imports           int
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -246,6 +250,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 			"CRTC_X": {ID: propCRTCX}, "CRTC_Y": {ID: propCRTCY}, "CRTC_W": {ID: propCRTCW}, "CRTC_H": {ID: propCRTCH},
 			"IN_FORMATS": {ID: propInFormats, Value: formats}, "IN_FENCE_FD": {ID: propInFence},
 		}
+		if f.asyncFormats && formats != 0 {
+			props["IN_FORMATS_ASYNC"] = kdrm.Property{ID: propInFormatsAsync, Value: asyncFormatsBlob}
+		}
 		if f.damageClips {
 			props["FB_DAMAGE_CLIPS"] = kdrm.Property{ID: propDamageClips}
 		}
@@ -312,24 +319,28 @@ func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
 	if id == litModeBlob && f.splash != nil {
 		return f.splash.mode.Bytes(), nil
 	}
-	if id != inFormatsBlob {
+	if id != inFormatsBlob && id != asyncFormatsBlob {
 		return nil, fmt.Errorf("no blob %d", id)
 	}
 	formats := []uint32{uint32(scanoutFormat)}
 	for _, format := range f.deep {
 		formats = append(formats, uint32(format))
 	}
+	modifiers := []uint64{0, 7}
+	if id == asyncFormatsBlob {
+		modifiers = []uint64{7}
+	}
 	mask := uint64(1)<<len(formats) - 1
 	modifiersAt := uint32(24 + (len(formats)*4+7)/8*8)
 	b := binary.NativeEndian.AppendUint32(nil, 1)
-	for _, v := range []uint32{0, uint32(len(formats)), 24, 2, modifiersAt} {
+	for _, v := range []uint32{0, uint32(len(formats)), 24, uint32(len(modifiers)), modifiersAt} {
 		b = binary.NativeEndian.AppendUint32(b, v)
 	}
 	for _, v := range formats {
 		b = binary.NativeEndian.AppendUint32(b, v)
 	}
 	b = append(b, make([]byte, int(modifiersAt)-len(b))...)
-	for _, m := range []uint64{0, 7} {
+	for _, m := range modifiers {
 		b = binary.NativeEndian.AppendUint64(b, mask)
 		b = binary.NativeEndian.AppendUint64(b, 0)
 		b = binary.NativeEndian.AppendUint64(b, m)
@@ -389,6 +400,9 @@ func (f *fakeDevice) unmap(b kdrm.Dumb) error {
 }
 
 func (f *fakeDevice) AddFB2(fb kdrm.FB) (uint32, error) {
+	if fb.Handles[0] >= primeHandles {
+		f.imports++
+	}
 	if f.refuseAddFB {
 		return 0, fmt.Errorf("add a framebuffer: %w", unix.EINVAL)
 	}

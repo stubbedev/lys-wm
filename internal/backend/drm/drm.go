@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"iter"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -128,6 +129,7 @@ type plane struct {
 	modifiers []fourcc.Modifier
 	deep      []layout
 	clients   []gpu.FormatModifier
+	async     []gpu.FormatModifier
 	taken     bool
 }
 
@@ -144,32 +146,33 @@ var (
 )
 
 type Backend struct {
-	loop       *loop.Loop
-	modifiers  bool
-	async      bool
-	number     uint64
-	vendors    edid.Vendors
-	report     func(error)
-	dev        device
-	alloc      allocator
-	handler    backend.Handler
-	crtcs      []*crtc
-	planes     []*plane
-	outputs    []*Output
-	src        *loop.Source
-	req        kdrm.Request
-	events     []byte
-	cursor     image.Point
-	paused     bool
-	closed     bool
-	clientFBs  map[backend.ScanoutKey]*clientFB
-	probes     sync.WaitGroup
-	syncReads  uint64
-	probing    bool
-	probeAgain bool
-	starved    bool
-	fenceTime  func(fd int) (time.Duration, bool, error)
-	now        func() time.Duration
+	loop         *loop.Loop
+	modifiers    bool
+	async        bool
+	number       uint64
+	vendors      edid.Vendors
+	report       func(error)
+	dev          device
+	alloc        allocator
+	handler      backend.Handler
+	crtcs        []*crtc
+	planes       []*plane
+	outputs      []*Output
+	src          *loop.Source
+	req          kdrm.Request
+	events       []byte
+	cursor       image.Point
+	paused       bool
+	closed       bool
+	clientFBs    map[backend.ScanoutKey]*clientFB
+	unimportable map[backend.ScanoutKey]error
+	probes       sync.WaitGroup
+	syncReads    uint64
+	probing      bool
+	probeAgain   bool
+	starved      bool
+	fenceTime    func(fd int) (time.Duration, bool, error)
+	now          func() time.Duration
 }
 
 type clientFB struct {
@@ -209,8 +212,12 @@ func (b *Backend) clientFB(key backend.ScanoutKey, d gpu.DMABUF) (*clientFB, err
 	if cf, ok := b.clientFBs[key]; ok {
 		return cf, nil
 	}
+	if err, ok := b.unimportable[key]; ok {
+		return nil, err
+	}
 	fb, err := importFB(b.dev, d, b.modifiers)
 	if err != nil {
+		b.unimportable[key] = err
 		return nil, err
 	}
 	cf := &clientFB{dev: b.dev, report: b.report, fb: fb}
@@ -219,11 +226,13 @@ func (b *Backend) clientFB(key backend.ScanoutKey, d gpu.DMABUF) (*clientFB, err
 }
 
 func (b *Backend) forget(key backend.ScanoutKey) {
+	delete(b.unimportable, key)
 	cf, ok := b.clientFBs[key]
 	if !ok {
 		return
 	}
 	delete(b.clientFBs, key)
+	b.forgetTests(cf.fb)
 	cf.forgotten = true
 	if cf.shown == 0 {
 		cf.remove()
@@ -234,7 +243,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if opts.Report == nil {
 		return nil, errors.New("drm: Options.Report is required")
 	}
-	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
+	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
 	if a, ok := alloc.(*copyAllocator); ok {
 		a.loop = l
 	}
@@ -380,6 +389,15 @@ func (b *Backend) plane(id uint32, renderable []fourcc.Modifier, deepRenderable 
 	if p.kind == primaryPlane {
 		if p.clients, err = b.clientFormats(info.Formats, blob); err != nil {
 			return nil, fmt.Errorf("drm: formats of primary plane %d: %w", id, err)
+		}
+		if in, ok := props["IN_FORMATS_ASYNC"]; ok && in.Value != 0 {
+			async, err := b.dev.Blob(uint32(in.Value)) //nolint:gosec // property blob IDs are 32-bit
+			if err != nil {
+				return nil, err
+			}
+			if p.async, err = b.clientFormats(info.Formats, async); err != nil {
+				return nil, fmt.Errorf("drm: async flip formats of primary plane %d: %w", id, err)
+			}
 		}
 	}
 	if p.kind == primaryPlane {
@@ -688,7 +706,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
-	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, tested: map[planeKey]struct{}{}}
+	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, tested: map[planeKey]bool{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: o.frameWait,
 		Wake: func(after time.Duration) error {
@@ -907,7 +925,7 @@ type Output struct {
 	empties       int
 	idleAt        time.Duration
 	budget        backend.RenderBudget
-	tested        map[planeKey]struct{}
+	tested        map[planeKey]bool
 	frameStart    time.Duration
 	renderFence   int
 	aimedAt       time.Duration
@@ -1611,7 +1629,7 @@ func (o *Output) ForgetScanout(key backend.ScanoutKey) error {
 }
 
 func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
-	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size {
+	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size || !slices.Contains(o.primary.clients, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
 		return false, nil
 	}
 	o.setDamageClips(nil)
@@ -1621,12 +1639,12 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	}
 	s := o.takeScanout(cf, release)
 	flags := planeFlags
-	torn := tear && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync)
+	torn := tear && o.tearable(d, cf.fb, flags|kdrm.AtomicPageFlipAsync)
 	if torn {
 		flags |= kdrm.AtomicPageFlipAsync
 	} else {
 		o.frame(s, -1)
-		if o.verify(cf.fb, flags) != nil {
+		if o.verify(cf.fb, flags, true) != nil {
 			o.spare = append(o.spare, s)
 			return false, nil
 		}
@@ -1663,14 +1681,25 @@ func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
 	return s
 }
 
-func (o *Output) tearable(fb uint32, flags uint32) bool {
+func (o *Output) tearable(d gpu.DMABUF, fb uint32, flags uint32) bool {
 	if !o.b.async || o.front == nil || o.color.dirty() || o.cursor != nil && o.cursor.dirty {
 		return false
 	}
+	if o.primary.async != nil && !slices.Contains(o.primary.async, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
+		return false
+	}
+	key := planeKey{primary: fb, flags: flags}
 	r := &o.b.req
 	r.Reset()
 	o.primary.set(&o.b.req, "FB_ID", uint64(fb))
-	return o.test(flags) == nil
+	if ok, seen := o.tested[key]; seen {
+		return ok
+	}
+	err := o.test(flags)
+	if err == nil || refused(err) {
+		o.remember(key, err == nil)
+	}
+	return err == nil
 }
 
 type planeKey struct {
@@ -1694,24 +1723,38 @@ func (o *Output) planeKey(fb, flags uint32) planeKey {
 	return k
 }
 
-func (o *Output) verify(fb, flags uint32) error {
+func (o *Output) verify(fb, flags uint32, keepRefusal bool) error {
 	key := o.planeKey(fb, flags)
-	if _, ok := o.tested[key]; ok && o.kms == kmsFlip && !o.color.dirty() {
-		return nil
+	if ok, seen := o.tested[key]; seen && o.kms == kmsFlip && !o.color.dirty() {
+		if ok {
+			return nil
+		}
+		return fmt.Errorf("drm: %s refused framebuffer %d before: %w", o.Name(), fb, unix.EINVAL)
 	}
-	if err := o.test(flags); err != nil {
-		return err
+	err := o.test(flags)
+	if err == nil || keepRefusal && refused(err) {
+		o.remember(key, err == nil)
 	}
+	return err
+}
+
+func (o *Output) remember(key planeKey, ok bool) {
 	if len(o.tested) >= testedPlaneStates {
 		clear(o.tested)
 	}
-	o.tested[key] = struct{}{}
-	return nil
+	o.tested[key] = ok
+}
+
+func (b *Backend) forgetTests(fb uint32) {
+	for _, o := range b.outputs {
+		maps.DeleteFunc(o.tested, func(k planeKey, _ bool) bool { return k.primary == fb || k.overlay.fb == fb })
+		maps.DeleteFunc(o.overlayTested, func(k overlayTest, _ bool) bool { return k.fb == fb })
+	}
 }
 
 func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	o.frame(s, fence)
-	err := o.verify(s.fb, flags)
+	err := o.verify(s.fb, flags, false)
 	cursorAtFault := err != nil
 	if err == nil {
 		err = o.commitFrame(flags)
