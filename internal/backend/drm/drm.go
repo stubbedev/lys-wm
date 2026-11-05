@@ -250,7 +250,10 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if opts.Report == nil {
 		return nil, errors.New("drm: Options.Report is required")
 	}
-	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
+	if opts.Master > WithoutMaster {
+		return nil, fmt.Errorf("drm: Options.Master %d is neither HoldsMaster nor WithoutMaster", opts.Master)
+	}
+	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, paused: opts.Master == WithoutMaster, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
 	if a, ok := alloc.(*copyAllocator); ok {
 		a.loop, a.report = l, opts.Report
 	}

@@ -204,7 +204,7 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 	if err != nil {
 		t.Skipf("no PNP ID database: %v", err)
 	}
-	b, err := New(l, dev, Options{Paths: gpu.PathsFromEnv(os.Getenv), Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan})
+	b, err := New(l, dev, Options{Paths: gpu.PathsFromEnv(os.Getenv), Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan, Master: WithoutMaster})
 	if err != nil {
 		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
 	}
@@ -230,7 +230,6 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 		deepFrames(t, o)
 	}
 	t.Logf("atomic async page flips: %v", b.async)
-	b.Pause()
 	if err := b.Close(); err != nil {
 		t.Fatal(err)
 	}

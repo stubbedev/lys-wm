@@ -233,11 +233,19 @@ func atomic(dev *kdrm.Device) error {
 	return nil
 }
 
+type Master uint8
+
+const (
+	HoldsMaster Master = iota
+	WithoutMaster
+)
+
 type Options struct {
 	Paths   gpu.Paths
 	Vendors edid.Vendors
 	Report  func(error)
 	Vulkan  bool
+	Master  Master
 }
 
 func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {

@@ -258,3 +258,47 @@ func TestALinkThatGoesBadTakesAModeTheSinkStillOffers(t *testing.T) {
 		t.Fatalf("%d modesets with a good link in %+v, modes %+v", n, modeOf(o.mode), o.Modes())
 	}
 }
+
+func riggedOnAFileWithoutMaster(t *testing.T, master Master) *rig {
+	t.Helper()
+	return rigged(t, func(d *fakeDevice) allocator {
+		d.noMaster = true
+		return &fakeAlloc{soft: soft.New()}
+	}, master)
+}
+
+func TestABackendStartedWithoutMasterLightsOutputsWithoutTestingTheirModes(t *testing.T) {
+	r := riggedOnAFileWithoutMaster(t, WithoutMaster)
+	if err := r.b.Start(r.rec); err != nil {
+		t.Fatalf("starting without master: %v", err)
+	}
+	if len(r.b.Outputs()) != 1 || len(r.reports) != 0 {
+		t.Fatalf("outputs %v, reports %v", r.rec.log, r.reports)
+	}
+	o := r.b.Outputs()[0]
+	if !o.State().Enabled() || len(o.buffers) != buffersPerOut || o.mode != modes[0] {
+		t.Fatalf("%s: state %+v, %d buffers, mode %+v", o.Name(), o.State(), len(o.buffers), o.mode)
+	}
+	if !r.b.Paused() || len(r.dev.commits) != 0 {
+		t.Fatalf("paused %v, a file without master committed %+v", r.b.Paused(), r.dev.commits)
+	}
+}
+
+func TestABackendHoldingMasterTestsTheModeOfEveryOutputItAdds(t *testing.T) {
+	r := rigged(t, func(*fakeDevice) allocator { return &fakeAlloc{soft: soft.New()} }, HoldsMaster)
+	if err := r.b.Start(r.rec); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.Paused() || !slices.ContainsFunc(r.dev.commits, func(c commit) bool {
+		return c.flags&kdrm.AtomicTestOnly != 0 && c.flags&kdrm.AtomicAllowModeset != 0
+	}) {
+		t.Fatalf("paused %v, no modeset tested at add: %+v", r.b.Paused(), r.dev.commits)
+	}
+}
+
+func TestABackendClaimingMasterItLacksFailsToStart(t *testing.T) {
+	r := riggedOnAFileWithoutMaster(t, HoldsMaster)
+	if err := r.b.Start(r.rec); !errors.Is(err, unix.EACCES) {
+		t.Fatalf("starting as master on a file without it: %v, want EACCES", err)
+	}
+}

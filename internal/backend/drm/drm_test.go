@@ -124,6 +124,7 @@ type fakeDevice struct {
 	contentTypes      bool
 	overlayYUV        bool
 	refuseLone        bool
+	noMaster          bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
 	asyncFlips        bool
@@ -469,6 +470,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	c := commit{flags: flags, userData: userData, values: map[[2]uint32]uint64{}}
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
+	if f.noMaster {
+		return unix.EACCES
+	}
 	if (f.busyNonblock || f.busyUntilFlip) && flags&kdrm.AtomicNonblock != 0 && flags&kdrm.AtomicAllowModeset != 0 {
 		return unix.EBUSY
 	}
@@ -669,6 +673,16 @@ func start(t *testing.T) *rig {
 
 func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	t.Helper()
+	r := rigged(t, alloc, HoldsMaster)
+	if err := r.b.Start(r.rec); err != nil {
+		t.Fatal(err)
+	}
+	r.dev.commits = nil
+	return r
+}
+
+func rigged(t *testing.T, alloc func(*fakeDevice) allocator, master Master) *rig {
+	t.Helper()
 	var p [2]int
 	if err := unix.Pipe2(p[:], unix.O_NONBLOCK|unix.O_CLOEXEC); err != nil {
 		t.Fatal(err)
@@ -683,15 +697,11 @@ func boot(t *testing.T, alloc func(*fakeDevice) allocator) *rig {
 	r.dev.now = r.now
 	a := alloc(r.dev)
 	r.alloc, _ = a.(*fakeAlloc)
-	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }}); err != nil {
+	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }, Master: master}); err != nil {
 		t.Fatal(err)
 	}
 	r.b.fenceTime = func(int) (time.Duration, bool, error) { return backend.Now(), true, nil }
 	r.b.now = r.now
-	if err := r.b.Start(r.rec); err != nil {
-		t.Fatal(err)
-	}
-	r.dev.commits = nil
 	return r
 }
 
