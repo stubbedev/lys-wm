@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 type benchSync struct{}
@@ -13,6 +14,7 @@ type benchSync struct{}
 func (benchSync) NativeFences() bool     { return false }
 func (benchSync) SyncFile() (int, error) { return -1, nil }
 func (benchSync) Finish() error          { return nil }
+func (benchSync) Counts() render.Counts  { return render.Counts{} }
 
 func BenchmarkRecorderFrame(b *testing.B) {
 	now := time.Second

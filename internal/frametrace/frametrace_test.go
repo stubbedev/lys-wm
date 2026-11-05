@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 const refresh = 10 * time.Millisecond
@@ -21,7 +22,10 @@ type fakeSync struct {
 	now      *time.Duration
 	failed   error
 	finishes int
+	waits    uint64
 }
+
+func (s *fakeSync) Counts() render.Counts { return render.Counts{GPUWaits: s.waits} }
 
 func (s *fakeSync) NativeFences() bool { return s.native }
 
@@ -31,6 +35,7 @@ func (s *fakeSync) SyncFile() (int, error) {
 	}
 	*s.now += s.cost
 	if s.cost > 0 {
+		s.waits++
 		return -1, nil
 	}
 	var p [2]int
@@ -43,6 +48,7 @@ func (s *fakeSync) SyncFile() (int, error) {
 
 func (s *fakeSync) Finish() error {
 	s.finishes++
+	s.waits++
 	*s.now += s.cost
 	return s.failed
 }
@@ -335,8 +341,26 @@ func TestTheRecordersOwnWaitIsNotAFrameCost(t *testing.T) {
 	}
 }
 
-func TestAFencedFrameKeepsEveryGPUWait(t *testing.T) {
+// A renderer that answers the recorder's fence request by waiting for
+// the queue, lavapipe without a device node, made that wait for the
+// recorder: it is not the frame's.
+func TestAFenceRequestThatWaitedIsNotAFrameCost(t *testing.T) {
 	sync := &fakeSync{native: true, cost: time.Millisecond}
+	g := newRig(t, func(g *rig) Sync {
+		sync.now = &g.now
+		return sync
+	})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{GPUWaits: 1})
+	g.flip(time.Second)
+	if frames := g.frames(); len(frames) != 1 || frames[0].Cost.GPUWaits != 0 || sync.waits != 1 {
+		t.Fatalf("frames %+v after %d waits, want the recorder's wait left out", frames, sync.waits)
+	}
+}
+
+func TestAFencedFrameKeepsEveryGPUWait(t *testing.T) {
+	sync := &fakeSync{native: true}
 	g := newRig(t, func(g *rig) Sync {
 		sync.now = &g.now
 		return sync

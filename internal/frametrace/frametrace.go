@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 type Header struct {
@@ -76,6 +77,7 @@ type Sync interface {
 	NativeFences() bool
 	SyncFile() (int, error)
 	Finish() error
+	Counts() render.Counts
 }
 
 type Clock struct {
@@ -124,8 +126,8 @@ type Recorder struct {
 	ioBuf  [ioStatSize]byte
 	mem    runtime.MemStats
 	// ownWaits counts the GPU waits the recorder made itself, timing a
-	// frame on a renderer without native fences, not yet taken out of a
-	// frame's cost.
+	// frame where the renderer has no fence to hand, not yet taken out of
+	// a frame's cost.
 	ownWaits uint64
 }
 
@@ -251,12 +253,13 @@ func (r *Recorder) Submit(output string) {
 		return
 	}
 	t.frame.submitted = r.clock.Now()
+	waitsBefore := r.sync.Counts().GPUWaits
+	defer func() { r.ownWaits += r.sync.Counts().GPUWaits - waitsBefore }()
 	if !r.sync.NativeFences() {
 		if err := r.sync.Finish(); err != nil {
 			r.report(fmt.Errorf("frametrace: wait for the frame on %s: %w", output, err))
 			return
 		}
-		r.ownWaits++
 		r.waited(t)
 		return
 	}
