@@ -98,7 +98,12 @@ The pinned thread asks for SCHED_RR at priority 1, then nice -10, both resetting
 no other thread or child inherits them, and logs what it got. The Debian and RPM packages
 and the NixOS module allow that through a PAM limit; a file capability would make the
 binary setuid-like to libc, whose secure mode hides the driver environment variables the
-renderers need.
+renderers need. Without the limit, as with a lys-wm from a Nix profile on another distro
+(#277), the thread asks rtkit on the system bus: SCHED_RR first, then nice -10. rtkit
+grants SCHED_RR only to a process whose hard RLIMIT_RTTIME is within its RTTimeUSecMax,
+so lys-wm lowers the hard limit to that, for itself and its children, and the soft limit
+to half of it. A thread that runs past the soft limit without blocking gets SIGXCPU and
+drops to SCHED_OTHER for the rest of the session, before the hard limit would kill it.
 
 ## Errors that end the session
 

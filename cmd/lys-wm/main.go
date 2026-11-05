@@ -705,12 +705,15 @@ func run(args []string) (err error) {
 	rtdebug.SetGCPercent(gcPercent)
 	rtdebug.SetMemoryLimit(softMemoryLimit)
 	unpin := gpu.PinThread()
-	if how, err := raiseThreadPriority(); err != nil {
-		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
-	} else {
+	how, release, err := raiseThreadPriority(session.SystemBus(os.Getenv))
+	if how != "" {
 		fmt.Fprintf(os.Stderr, "lys-wm: the compositor thread runs at %s\n", how)
 	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
+	}
 	ran := l.Run()
+	release()
 	if errors.Is(ran, nested.ErrClosed) {
 		ran = nil
 	}
