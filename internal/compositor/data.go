@@ -136,3 +136,7 @@ func (c *Compositor) drawDragIcon(pass *frame, o *output.Output, shown []*surfac
 	at := c.drag.by.at(c).pixel().Add(offset)
 	return c.drawTree(pass, o, icon, flat(at), shown)
 }
+
+func (c *Compositor) SetDropTarget(t data.DropTarget) {
+	c.data.SetDropTarget(t)
+}

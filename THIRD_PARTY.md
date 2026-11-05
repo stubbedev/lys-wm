@@ -43,6 +43,7 @@ listed here with its original copyright notice and licence.
 | --- | --- | --- |
 | `internal/shell/positioner.go` (`Positioner.Place`: flip when it shows more of the popup, slide, resize) | Hyprland [`CXDGPositionerRules::getPosition`](https://github.com/hyprwm/Hyprland/blob/1bd31aaa579a40680ce876e1547e371b60c45522/src/protocols/XDGShell.cpp) | BSD-3-Clause, below |
 | `internal/compositor/arrange.go` (`arrangeLayers`: layer-shell placement and exclusive zones) | Hyprland [`IHyprRenderer::arrangeLayerArray` and `applyExclusive`](https://github.com/hyprwm/Hyprland/blob/1bd31aaa579a40680ce876e1547e371b60c45522/src/render/Renderer.cpp) | BSD-3-Clause, below |
+| `internal/xwayland/dnd.go` (`xdndTarget`: the `XdndProxy` window used only when it names itself) | Hyprland [`CX11DataDevice::getProxyWindow`](https://github.com/hyprwm/Hyprland/blob/f389f008228d51fa48bdd69a4c9e2b91f24bb2da/src/xwayland/Dnd.cpp) | BSD-3-Clause, below |
 
 ### Hyprland
 

@@ -712,7 +712,18 @@ answers X requests by reading the Wayland source. When an X client that has
 focus takes a selection, XFixes reports it, the window manager reads its
 `TARGETS` and offers the matching mime types as a Wayland source. Transfers
 larger than 64 KiB use INCR in both directions, and every pipe has a 30
-second deadline. Drag and drop between X and Wayland is not bridged.
+second deadline.
+
+A Wayland drag over an X window is bridged through Xdnd (#310): the drag hands
+the window to the X side instead of offering it as a Wayland data device, and
+the window manager owns `XdndSelection` with the drag's types, sends
+`XdndEnter`, `XdndPosition` and `XdndLeave` (through a verified `XdndProxy`
+when the window names one), and passes `XdndStatus` back as the source's
+target and action. A drop the X window did not accept, or one on a window
+without `XdndAware`, cancels the drag; an accepted one sends `XdndDrop`, serves
+the conversions from the Wayland source as a selection is served, and finishes
+the source on `XdndFinished`, or cancels it when that does not come within the
+transfer timeout. An X drag does not reach Wayland windows yet.
 
 ## IPC
 

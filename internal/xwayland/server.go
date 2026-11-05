@@ -362,6 +362,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		for _, k := range []data.Kind{data.Clipboard, data.Primary} {
 			m.selections[k] = &selection{kind: k, atom: c.atoms[[]atom{atomClipboard, atomPrimary}[k]]}
 		}
+		m.dndSel = &selection{atom: c.atoms[atomXdndSelection]}
 		p.wm = m
 		var errs []error
 		for _, k := range []data.Kind{data.Clipboard, data.Primary} {
@@ -380,24 +381,24 @@ func (s *Server) manage(p *process, conn net.Conn) {
 }
 
 func (s *Server) SelectionChanged(k data.Kind, src data.Source) error {
-	if s.proc == nil || s.proc.wm == nil {
-		return nil
+	if m := s.running(); m != nil {
+		return m.selectionChanged(k, src)
 	}
-	return s.proc.wm.selectionChanged(k, src)
+	return nil
 }
 
 func (s *Server) associated(serial uint64, sf *surface.Surface) error {
-	if s.proc == nil || s.proc.wm == nil {
-		return nil
+	if m := s.running(); m != nil {
+		return m.associated(serial, sf)
 	}
-	return s.proc.wm.associated(serial, sf)
+	return nil
 }
 
 func (s *Server) dissociated(serial uint64) error {
-	if s.proc == nil || s.proc.wm == nil {
-		return nil
+	if m := s.running(); m != nil {
+		return m.dissociated(serial)
 	}
-	return s.proc.wm.dissociated(serial)
+	return nil
 }
 
 func (s *Server) report(err error) {
@@ -418,4 +419,43 @@ func (s *Server) Close() error {
 		s.proc = nil
 	}
 	return errors.Join(append(errs, s.shell.close(), s.socks.close())...)
+}
+
+func (s *Server) running() *wm {
+	if s.proc == nil {
+		return nil
+	}
+	return s.proc.wm
+}
+
+func (s *Server) Takes(sf *surface.Surface) bool {
+	return s.running() != nil && s.IsClient(sf.Client())
+}
+
+func (s *Server) DragEnter(d *data.Drag, sf *surface.Surface, x, y float64) error {
+	if m := s.running(); m != nil {
+		return m.dragEnter(d, sf, x, y)
+	}
+	return nil
+}
+
+func (s *Server) DragMotion(x, y float64) error {
+	if m := s.running(); m != nil {
+		return m.dragMotion(x, y)
+	}
+	return nil
+}
+
+func (s *Server) DragLeave() error {
+	if m := s.running(); m != nil {
+		return m.dragLeave()
+	}
+	return nil
+}
+
+func (s *Server) DragDrop() error {
+	if m := s.running(); m != nil {
+		return m.dragDrop()
+	}
+	return nil
 }

@@ -138,7 +138,7 @@ func (c *xclient) create(rect image.Rectangle, mask uint32, values []uint32, pro
 		switch name {
 		case "_NET_WM_NAME":
 			typ = c.atoms["UTF8_STRING"]
-		case "_NET_WM_WINDOW_TYPE", "_NET_WM_STATE", "WM_PROTOCOLS":
+		case "_NET_WM_WINDOW_TYPE", "_NET_WM_STATE", "WM_PROTOCOLS", "XdndAware":
 			typ, format = xproto.Atom(xproto.AtomAtom), 32
 		case "_NET_WM_SYNC_REQUEST_COUNTER":
 			typ, format = xproto.Atom(xproto.AtomCardinal), 32

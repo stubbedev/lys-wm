@@ -29,6 +29,20 @@ type Drag struct {
 	dropped    bool
 	ended      bool
 	done       bool
+	external   bool
+	accepted   bool
+}
+
+type DropTarget interface {
+	Takes(s *surface.Surface) bool
+	DragEnter(d *Drag, s *surface.Surface, x, y float64) error
+	DragMotion(x, y float64) error
+	DragLeave() error
+	DragDrop() error
+}
+
+func (m *Manager) SetDropTarget(t DropTarget) {
+	m.dropTarget = t
 }
 
 type dragIcon struct{ d *Drag }
@@ -79,6 +93,59 @@ func (d *Drag) Serial() uint32 {
 	return d.serial
 }
 
+func (d *Drag) Source() Source {
+	if d.source == nil {
+		return nil
+	}
+	return d.source
+}
+
+func (d *Drag) Actions() Action {
+	return d.sourceActions()
+}
+
+func (d *Drag) Status(accepted bool, action Action) error {
+	if !d.external || d.ended || d.source == nil {
+		return nil
+	}
+	var errs []error
+	if accepted != d.accepted {
+		d.accepted = accepted
+		var mime *string
+		if mimes := d.source.Mimes(); accepted && len(mimes) > 0 {
+			mime = &mimes[0]
+		}
+		errs = append(errs, d.target(mime))
+	}
+	if d.source.version() >= 3 {
+		if !accepted {
+			action = sw.WlDataDeviceManagerDndActionNone
+		}
+		errs = append(errs, d.source.resource.SendAction(action&d.sourceActions()))
+	}
+	return errors.Join(errs...)
+}
+
+func (d *Drag) Finished(ok bool) error {
+	if !d.dropped || d.done {
+		return nil
+	}
+	if ok {
+		return d.finish()
+	}
+	var err error
+	if d.source != nil && d.source.phase != sourceGone {
+		err = d.source.Cancel()
+	}
+	d.release()
+	return err
+}
+
+func (d *Drag) takes(target *surface.Surface) bool {
+	t := d.m.dropTarget
+	return t != nil && target != nil && d.source != nil && t.Takes(target)
+}
+
 func (d *Drag) liveDevices() []*sw.WlDataDevice {
 	if d.focus == nil {
 		return nil
@@ -91,6 +158,15 @@ func (d *Drag) liveDevices() []*sw.WlDataDevice {
 }
 
 func (d *Drag) leave() error {
+	if d.external {
+		err := d.m.dropTarget.DragLeave()
+		if d.accepted {
+			d.accepted = false
+			err = errors.Join(err, d.target(nil))
+		}
+		d.focus, d.external = nil, false
+		return err
+	}
 	var errs []error
 	for _, dev := range d.liveDevices() {
 		errs = append(errs, dev.SendLeave())
@@ -168,10 +244,17 @@ func (d *Drag) Motion(target *surface.Surface, x, y float64, at time.Duration) e
 		if d.focus != nil {
 			errs = append(errs, d.leave())
 		}
-		if target != nil {
+		switch {
+		case d.takes(target):
+			d.focus, d.external = target, true
+			errs = append(errs, d.m.dropTarget.DragEnter(d, target, x, y))
+		case target != nil:
 			errs = append(errs, d.enter(target, x, y))
 		}
 		return errors.Join(errs...)
+	}
+	if d.external {
+		return d.m.dropTarget.DragMotion(x, y)
 	}
 	var errs []error
 	for _, dev := range d.liveDevices() {
@@ -231,6 +314,9 @@ func (d *Drag) Drop() error {
 	if d.ended {
 		return nil
 	}
+	if d.external {
+		return d.dropExternal()
+	}
 	if d.source == nil {
 		var errs []error
 		for _, dev := range d.liveDevices() {
@@ -254,6 +340,19 @@ func (d *Drag) Drop() error {
 		errs = append(errs, d.source.resource.SendDndDropPerformed())
 	}
 	return errors.Join(append(errs, d.leave(), d.end())...)
+}
+
+func (d *Drag) dropExternal() error {
+	if !d.accepted {
+		return d.Cancel()
+	}
+	d.dropped = true
+	var errs []error
+	if d.source.version() >= 3 {
+		errs = append(errs, d.source.resource.SendDndDropPerformed())
+	}
+	d.focus, d.external = nil, false
+	return errors.Join(append(errs, d.m.dropTarget.DragDrop(), d.end())...)
 }
 
 func (d *Drag) end() error {

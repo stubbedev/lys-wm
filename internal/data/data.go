@@ -62,6 +62,7 @@ type Manager struct {
 	controlOffers  [kinds][]*selectionOffer
 	controlSources map[wire.Resource]*controlSource
 	drag           *Drag
+	dropTarget     DropTarget
 }
 
 func New(d *server.Display, listener Listener) (*Manager, error) {

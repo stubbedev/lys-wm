@@ -172,6 +172,9 @@ func (m *wm) dropOutgoing(drop func(outKey, *outgoing) bool) {
 }
 
 func (m *wm) selectionOf(atom xproto.Atom) *selection {
+	if m.dndSel != nil && m.dndSel.atom == atom {
+		return m.dndSel
+	}
 	for _, s := range m.selections {
 		if s.atom == atom {
 			return s

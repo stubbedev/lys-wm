@@ -124,6 +124,9 @@ type wm struct {
 	clients    []xproto.Window
 	stacking   []xproto.Window
 	selections [2]*selection
+	dndSel     *selection
+	dnd        *dndOut
+	dndStall   *loop.Timer
 	incoming   []*incoming
 	outgoing   map[outKey]*outgoing
 	reading    int
@@ -704,6 +707,7 @@ func (m *wm) close() error {
 		errs = append(errs, m.stall.Remove())
 		m.stall = nil
 	}
+	errs = append(errs, m.closeDnd())
 	m.dropOutgoing(func(outKey, *outgoing) bool { return true })
 	return errors.Join(errs...)
 }

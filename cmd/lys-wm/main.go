@@ -716,6 +716,7 @@ func run(args []string) (err error) {
 		defer leave(func() error { return xw.Close() })
 		xwRunning = xw
 		s.comp.WatchSelection(xw.SelectionChanged)
+		s.comp.SetDropTarget(xw)
 		if first.zero {
 			if err := s.comp.ScaleXwayland(xw.IsClient); err != nil {
 				return err

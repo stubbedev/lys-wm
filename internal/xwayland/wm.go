@@ -75,6 +75,19 @@ const (
 	atomNetWMPing
 	atomNetWMSyncRequest
 	atomNetWMSyncRequestCounter
+	atomXdndSelection
+	atomXdndAware
+	atomXdndProxy
+	atomXdndTypeList
+	atomXdndEnter
+	atomXdndPosition
+	atomXdndStatus
+	atomXdndLeave
+	atomXdndDrop
+	atomXdndFinished
+	atomXdndActionCopy
+	atomXdndActionMove
+	atomXdndActionAsk
 	atomCount
 )
 
@@ -129,6 +142,19 @@ var atomNames = [atomCount]string{
 	atomNetWMPing:                   "_NET_WM_PING",
 	atomNetWMSyncRequest:            "_NET_WM_SYNC_REQUEST",
 	atomNetWMSyncRequestCounter:     "_NET_WM_SYNC_REQUEST_COUNTER",
+	atomXdndSelection:               "XdndSelection",
+	atomXdndAware:                   "XdndAware",
+	atomXdndProxy:                   "XdndProxy",
+	atomXdndTypeList:                "XdndTypeList",
+	atomXdndEnter:                   "XdndEnter",
+	atomXdndPosition:                "XdndPosition",
+	atomXdndStatus:                  "XdndStatus",
+	atomXdndLeave:                   "XdndLeave",
+	atomXdndDrop:                    "XdndDrop",
+	atomXdndFinished:                "XdndFinished",
+	atomXdndActionCopy:              "XdndActionCopy",
+	atomXdndActionMove:              "XdndActionMove",
+	atomXdndActionAsk:               "XdndActionAsk",
 }
 
 func (a atom) String() string {
@@ -424,6 +450,10 @@ func (c *xconn) message(e xproto.ClientMessageEvent) {
 			m.frameless(e.Window)
 			return nil
 		})
+	case c.atoms[atomXdndStatus]:
+		c.post(func(m *wm) error { return m.dndStatus(xproto.Window(d[0]), d[1]&1 != 0, xproto.Atom(d[4])) })
+	case c.atoms[atomXdndFinished]:
+		c.post(func(m *wm) error { return m.dndFinished(xproto.Window(d[0]), d[1]&1 != 0) })
 	}
 }
 
