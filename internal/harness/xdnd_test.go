@@ -60,7 +60,9 @@ func xdndSetup(t *testing.T, aware bool, report func(error)) *xdndRig {
 	h.Eventually("the X window beside a", func(_ *headless.Backend, c *compositor.Compositor) bool { return len(windowsOf(c)) == 2 })
 	r := &inputRig{t: t, h: h, c: a.c, in: a.in, w: a.w}
 	r.moveOn(0, 20, 50)
-	a.seen(t, "the pointer over a", func() bool { return slices.Contains(a.in.Log, "motion 20,50") })
+	a.seen(t, "the pointer over a", func() bool {
+		return slices.ContainsFunc(a.in.Log, func(l string) bool { return l == "motion 20,50" || l == "enter a 20,50" })
+	})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		return errors.Join(b.Pointer().Button(272, true), b.Pointer().Frame())
 	})

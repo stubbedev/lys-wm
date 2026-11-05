@@ -85,6 +85,9 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 	root := s.Root()
 	reach := c.footprintMoved(s, root) || drawable != stillDrawable
 	err := errors.Join(c.noteCommit(s), c.updateCursorSessions())
+	if reach {
+		err = errors.Join(err, c.refreshPointer())
+	}
 	d := s.Damage()
 	if c.overview != nil && (len(d) > 0 || reach) {
 		c.overviewCommitted(root)
