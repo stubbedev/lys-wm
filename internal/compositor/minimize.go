@@ -68,7 +68,7 @@ func (c *Compositor) minimize(w *window) error {
 	}
 	var dismissed error
 	if top := c.grabTop(); top != nil && top.Client() == w.top.Surface().Client() {
-		dismissed = c.shell.DismissGrab()
+		dismissed = c.dismissGrabs()
 	}
 	return errors.Join(dismissed, c.update(s, nil))
 }

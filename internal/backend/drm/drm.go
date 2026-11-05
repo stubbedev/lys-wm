@@ -533,12 +533,17 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 			errs = append(errs, err)
 			continue
 		}
+		c.Modes = progressive(c.Modes)
 		if c.Connection != kdrm.Connected || len(c.Modes) == 0 {
 			continue
 		}
 		errs = append(errs, b.add(c))
 	}
 	return errors.Join(errs...)
+}
+
+func progressive(modes []kdrm.Mode) []kdrm.Mode {
+	return slices.DeleteFunc(slices.Clone(modes), func(m kdrm.Mode) bool { return m.Flags&kdrm.ModeFlagInterlace != 0 })
 }
 
 func (b *Backend) SyncReads() uint64 {

@@ -100,6 +100,7 @@ type fakeDevice struct {
 	probesOnLoop      syncatomic.Int64
 	loopGoroutine     string
 	refuseModesets    bool
+	modes             []kdrm.Mode
 	asyncFlips        bool
 	failCommits       error
 	commits           []commit
@@ -185,6 +186,9 @@ func (f *fakeDevice) Connector(id uint32) (kdrm.Connector, error) {
 	c := kdrm.Connector{ID: id, Type: 10, TypeID: 1, Encoders: []uint32{30}, Connection: kdrm.Disconnected}
 	if f.connected {
 		c.Connection, c.Modes = kdrm.Connected, modes
+		if f.modes != nil {
+			c.Modes = f.modes
+		}
 	}
 	return c, nil
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/outputmanagement"
 	"github.com/stubbedev/lys-wm/internal/outputpower"
+	shfg "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandfocusgrab"
 	ssb "github.com/stubbedev/lys-wm/internal/protocol/server/systembell"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -247,6 +248,7 @@ type Compositor struct {
 	drag            *dragging
 	usable          map[*output.Output]image.Rectangle
 	layerFocus      *shell.LayerSurface
+	focusGrab       *focusGrab
 	shown           map[*output.Output][]*surface.Surface
 	footprints      map[*surface.Surface]footprint
 	entered         []*entered
@@ -505,6 +507,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if _, err := display.AddGlobal(ssb.XdgSystemBellV1Interface, bellVersion, c.bindBell); err != nil {
+		return err
+	}
+	if _, err := display.AddGlobal(shfg.HyprlandFocusGrabManagerV1Interface, focusGrabVersion, c.bindFocusGrab); err != nil {
 		return err
 	}
 	if imp, ok := c.renderer.(dmabufRenderer); ok {

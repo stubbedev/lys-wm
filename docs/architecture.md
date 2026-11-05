@@ -847,6 +847,15 @@ already saw go down is never taken, as its release is owed. Virtual keyboards
 take part, with the keysym read from their own keymap, compiled on the first
 press an arm could take.
 
+## Focus grabs
+
+`hyprland_focus_grab_v1` (#313) works as an xdg popup grab does, over the
+committed whitelist of surfaces instead of one client's popups: only
+whitelisted surfaces (and their subsurfaces) get pointer focus, the keyboard
+stays on a whitelisted surface or moves to the newest one, and a press or touch
+outside clears the grab, sends `cleared` and goes nowhere else. A new grab
+clears the one before it, and locking the session clears it.
+
 ## Protocol bindings
 
 `internal/protocol/protocols.json` pins every protocol source and maps each
