@@ -193,6 +193,29 @@ def check_cursor(hidden, embedded, rect, px, py):
     print(machine.succeed(as_alice(f"{params['screencast']} cursor /tmp/{hidden} /tmp/{embedded} {rect['x']} {rect['y']} {rect['width']} {rect['height']} {px} {py}")))
 
 
+CAST_SOURCE_CLASS = re.compile(r"^(Video/Source|Stream/Output/Video)$")
+
+
+def media_class(obj):
+    return ((obj.get("info") or {}).get("props") or {}).get("media.class", "")
+
+
+def stalled_side():
+    status, out = machine.execute(as_alice("pw-dump"))
+    if status != 0:
+        return f"pw-dump failed: {out.strip()}"
+    objects = json.loads(out)
+    nodes = [o for o in objects if o["type"] == "PipeWire:Interface:Node"]
+    sources = [o["id"] for o in nodes if CAST_SOURCE_CLASS.match(media_class(o))]
+    viewers = [o["id"] for o in nodes if media_class(o) == "Stream/Input/Video"]
+    if not sources:
+        return "the portal never started the stream: PipeWire has no video source node"
+    links = [o["info"] for o in objects if o["type"] == "PipeWire:Interface:Link" and o["info"].get("output-node-id") in sources]
+    if not any(link.get("state") == "active" for link in links):
+        return f"PipeWire never negotiated: the portal's stream {sources} has links {[link.get('state') for link in links]} to viewers {viewers}"
+    return f"PipeWire negotiated and linked the portal's stream {sources}; with no frame, lys-wm never answered the copy"
+
+
 def share(app, label, confirms):
     before = {w["id"] for w in windows()}
     started = cpu_times()
@@ -214,6 +237,8 @@ def share(app, label, confirms):
         machine.wait_until_succeeds(finished, timeout=params["seconds"] + PICKER_APPEARS_S)
     except Exception:
         dump(app)
+        title = next((w["title"] for w in windows() if w["id"] == shown["id"]), "closed")
+        print(f"{app} did not finish sharing {label}: {title}; {stalled_side()}")
         raise
     finally:
         machine.screenshot(f"{app}-{KEYS[label]}")
@@ -222,7 +247,7 @@ def share(app, label, confirms):
     fields = SHARE_FIELDS.match(title)
     if fields is None:
         dump(app)
-        raise AssertionError(f"{app} could not share {label}: {title}")
+        raise AssertionError(f"{app} could not share {label}: {title}; {stalled_side()}")
     size, _, seconds, _, gap, distinct, background = fields.groups()
     assert float(seconds) >= params["seconds"], f"{app} shared {label} for only {seconds} s"
     assert int(gap) <= params["max_gap_ms"], f"{app} stalled {gap} ms sharing {label}"

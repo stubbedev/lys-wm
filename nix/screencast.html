@@ -36,6 +36,18 @@ function sample(video) {
   return {background: matching / (data.length / 4), hash};
 }
 
+function stalled(video, track, frames) {
+  const {width, height} = track.getSettings();
+  const state = `track ${track.readyState}${track.muted ? " muted" : ""}, video ready state ${video.readyState}, ${video.videoWidth}x${video.videoHeight}, track settings ${width ?? "?"}x${height ?? "?"}`;
+  if (frames > 0) {
+    return `stalled after ${frames} frames: the stream ran, then lys-wm or PipeWire stopped delivering (${state})`;
+  }
+  if (video.readyState < HTMLMediaElement.HAVE_METADATA && !width) {
+    return `stalled after 0 frames: the portal started the stream, but PipeWire never negotiated a format with it (${state})`;
+  }
+  return `stalled after 0 frames: the stream negotiated, but no frame arrived; lys-wm never answered a copy (${state})`;
+}
+
 function watch(video, track) {
   return new Promise((resolve, reject) => {
     const started = performance.now();
@@ -52,7 +64,7 @@ function watch(video, track) {
     };
     const watchdog = setInterval(() => {
       if (performance.now() - last > stallMs) {
-        end(reject, new Error(`stalled after ${frames} frames`));
+        end(reject, new Error(stalled(video, track, frames)));
       }
     }, 500);
     track.onended = () => end(reject, new Error(`the stream ended after ${frames} frames`));
@@ -82,21 +94,20 @@ function watch(video, track) {
 
 async function share(surface) {
   const report = (text) => { document.title = text; };
-  report("sharing");
+  report("sharing: waiting for the portal to start the stream");
   location.hash = surface;
-  let stream;
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia({video: {displaySurface: surface}});
+    const stream = await navigator.mediaDevices.getDisplayMedia({video: {displaySurface: surface}});
     const [track] = stream.getVideoTracks();
+    report("sharing: the portal started the stream, waiting for a frame");
     const video = document.createElement("video");
     video.muted = true;
     video.srcObject = stream;
     const [result] = await Promise.all([watch(video, track), video.play()]);
+    stream.getTracks().forEach((t) => t.stop());
     report(`shared ${result}`);
   } catch (e) {
     report(`failed: ${e.name}: ${e.message}`);
-  } finally {
-    stream?.getTracks().forEach((t) => t.stop());
   }
 }
 
