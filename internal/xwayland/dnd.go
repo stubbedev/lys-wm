@@ -133,8 +133,9 @@ func (m *wm) dragEnter(d *data.Drag, s *surface.Surface, x, y float64) error {
 			if len(atoms) > xdndInlineMax {
 				enter[1] |= 1
 			}
-			for i, a := range atoms[:min(len(atoms), xdndInlineMax)] {
-				enter[2+i] = uint32(a)
+			inline := enter[2:]
+			for i, a := range atoms[:min(len(atoms), len(inline))] {
+				inline[i] = uint32(a)
 			}
 			m.xdnd(out, atomXdndEnter, enter)
 			m.position(out)
