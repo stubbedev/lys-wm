@@ -596,6 +596,7 @@ func testASpringDraggedWindowTrailsThePointer(t *testing.T, start gpuStarter) {
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.dispatch("togglefloating")
 	c.DispatchUntil("a floating window", func() bool { return w.Logical == image.Pt(80, 50) })
+	c.Sync()
 	at(2 * time.Hour)
 	h.Eventually("the floating window settled in the middle", showing(45, 30, blueColor))
 	h.key(keySuper, true)
