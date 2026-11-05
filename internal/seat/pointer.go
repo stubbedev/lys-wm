@@ -12,8 +12,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
-const cursorRole = "wl_pointer-cursor"
-
 type Axis struct {
 	Orientation sw.WlPointerAxis
 	Source      sw.WlPointerAxisSource
@@ -35,7 +33,7 @@ type SurfaceCursor struct {
 }
 
 func IsCursorSurface(s *surface.Surface) bool {
-	return s.Role() != nil && s.Role().RoleName() == cursorRole
+	return s.Role() != nil && s.Role().RoleName() == surface.CursorRole
 }
 
 type ShapeCursor struct {
@@ -224,7 +222,7 @@ type cursorSurface struct {
 }
 
 func (cursorSurface) RoleName() string {
-	return cursorRole
+	return surface.CursorRole
 }
 
 func (c cursorSurface) Committed(sf *surface.Surface) error {

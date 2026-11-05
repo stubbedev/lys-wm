@@ -435,3 +435,9 @@ func TestNextLayoutReachesTheFocusedClientOnly(t *testing.T) {
 		t.Fatalf("a client without focus was told groups %v", kb.groups)
 	}
 }
+
+func TestACursorSurfaceHasTheRoleSurfacesTreatAsTheCursor(t *testing.T) {
+	if got := (cursorSurface{}).RoleName(); got != surface.CursorRole {
+		t.Fatalf("the pointer's cursor role is %q, surfaces treat %q as the cursor", got, surface.CursorRole)
+	}
+}
