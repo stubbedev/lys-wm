@@ -15,13 +15,14 @@ import (
 )
 
 type Blur struct {
-	Enabled  bool
-	Withhold bool
-	Size     int
-	Passes   int
-	XRay     bool
-	Look     wm.Look
-	Mica     Mica
+	Enabled   bool
+	Withhold  bool
+	Size      int
+	Passes    int
+	XRay      bool
+	LiveTiled bool
+	Look      wm.Look
+	Mica      Mica
 }
 
 type Mica struct {
@@ -276,6 +277,7 @@ type glassDraw struct {
 	alpha   float32
 	look    *wm.Look
 	mica    bool
+	tiled   bool
 }
 
 type pendingBlur struct {
@@ -336,7 +338,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	ops := pass.ops
 	sc := c.sceneOf(o)
 	var b *blurCache
-	shared := pass.background >= 0 && (g.mica || c.decor.Blur.XRay || pass.sharedBlur)
+	shared := pass.background >= 0 && (g.mica || c.decor.Blur.XRay || pass.sharedBlur || g.tiled && !c.decor.Blur.LiveTiled || !anyOverlaps(pass.ops[pass.background:], area))
 	switch {
 	case shared && spec != plain:
 		b = sc.blurs.micaChain()
@@ -493,4 +495,13 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 	c.blurGen++
 	b.area, b.below, b.version, b.to, b.spec = area, append(b.below[:0], below...), c.blurGen, to, pb.spec
 	return nil
+}
+
+func anyOverlaps(ops []drawOp, area image.Rectangle) bool {
+	for i := range ops {
+		if ops[i].dst.Overlaps(area) {
+			return true
+		}
+	}
+	return false
 }

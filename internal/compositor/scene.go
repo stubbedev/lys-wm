@@ -346,7 +346,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	rims := len(pass.rims)
 	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
 		under := deviceRect(o, w.rect)
-		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica})
+		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica, tiled: w.layer == wm.LayerTiled})
 	}
 	tree := len(pass.ops)
 	if c.honoursBlurRegions(w) {

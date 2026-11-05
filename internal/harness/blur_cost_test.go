@@ -121,3 +121,38 @@ func pump(c *testclient.Client, d time.Duration) {
 	until := time.Now().Add(d)
 	c.DispatchUntil("the time to pass", func() bool { return time.Now().After(until) })
 }
+
+func tiledGlassRedraws(t *testing.T, live bool) uint64 {
+	t.Helper()
+	zero := float32(0)
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1, LiveTiled: live}
+		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Opacity: &zero}}
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	for range 2 {
+		w := c.Window("glass", testclient.Fill(0, 0, 0))
+		c.DispatchUntil("a glass window to map", w.Mapped)
+		w.Stop()
+	}
+	settle(t, h)
+	before := blurRedraws(h)
+	for range 6 {
+		h.dispatch("resizeactive 6 0")
+		if err := c.Display.Roundtrip(); err != nil {
+			t.Fatal(err)
+		}
+		settle(t, h)
+	}
+	return blurRedraws(h) - before
+}
+
+func TestTiledGlassBlursOverTheSharedBackgroundChain(t *testing.T) {
+	t.Parallel()
+	if n := tiledGlassRedraws(t, false); n != 0 {
+		t.Errorf("resizing two tiled glass windows redrew %d blur chains, want none over an unchanged background", n)
+	}
+	if n := tiledGlassRedraws(t, true); n == 0 {
+		t.Error("with tiled windows blurring live, resizing them redrew no blur chain, so this test could not tell the two apart")
+	}
+}

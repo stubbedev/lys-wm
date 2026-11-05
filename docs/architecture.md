@@ -490,9 +490,14 @@ as the surface tree is drawn, so a subsurface's blur sees its parent, and it
 replaces that surface's whole-surface blur. Chains belong to the output's scene,
 keyed by surface (one shared per output under `xray`); a frame that draws no
 blur for a surface frees its chain, so an effect that is off holds nothing and
-costs one map lookup per surface. A shape that grows past its chain's area takes
-the whole surface's, so a client animating its region reallocates at most once
-and redraws no chain while nothing behind it changes.
+costs one map lookup per surface. A chain's area is rounded up to the steps
+textures grow by and moved within the output while the shape still fits, so a
+shape that grows or moves reallocates a bounded number of times, and the
+up-sampling levels write back into the down-sampling targets. A window whose
+blur area overlaps nothing drawn above the background, and any tiled window
+unless `Blur.LiveTiled` is set (Hyprland's `new_optimizations`), blurs over the
+output's shared background chain, so a workspace of translucent tiled windows
+filters its background once, whatever slides or resizes over it.
 
 `drawBlur` records what it needs, an op that names a pending chain, and the ops
 below it. Only once the whole frame is built and culled does `resolveBlurs` draw
