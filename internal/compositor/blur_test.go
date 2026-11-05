@@ -215,3 +215,17 @@ func TestAPartialBlurRedrawAllocatesNothing(t *testing.T) {
 		t.Fatalf("%v allocations per partial blur redraw", allocs)
 	}
 }
+
+func TestOnlyTheFirstLevelOfABlurChainIsCleared(t *testing.T) {
+	r := soft.New()
+	area := image.Rect(0, 0, 64, 48)
+	c := &Compositor{renderer: r}
+	pb := &pendingBlur{cache: &blurCache{}, spec: chainSpec{offset: 2, passes: 3}, area: area}
+	before := r.Counts().Clears
+	if err := c.renderBlur(r.NewTextureTarget, pb, []drawOp{{fill: true, dst: area}}, colorOut{plans: &c.plans}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Counts().Clears - before; got != 1 {
+		t.Fatalf("a chain of %d levels counted %d clears, want 1", len(pb.cache.chain), got)
+	}
+}

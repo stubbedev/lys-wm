@@ -446,7 +446,7 @@ func TestHalvingAtOffsetOneIsTheKawaseOfTheRest(t *testing.T) {
 	}
 }
 
-func TestHalvingKeepsToTheDamageAndBlends(t *testing.T) {
+func TestHalvingKeepsToTheDamageAndOverwrites(t *testing.T) {
 	r := soft.New()
 	half := px(0x40, 0x40, 0x40, 0x80)
 	tex := newTex(t, r, render.ARGB8888, 4, 2, half, half, half, half, half, half, half, half)
@@ -458,8 +458,8 @@ func TestHalvingKeepsToTheDamageAndBlends(t *testing.T) {
 	if got, want := at(b, 0, 0), px(0xff, 0, 0, 0xff); got != want {
 		t.Errorf("outside the damage: %v, want %v", got, want)
 	}
-	if got, want := at(b, 1, 0), px(0x40+0x7f, 0x40, 0x40, 0xff); got != want {
-		t.Errorf("translucent over opaque: %v, want %v", got, want)
+	if got, want := at(b, 1, 0), half; got != want {
+		t.Errorf("translucent over opaque: %v, want the translucent source %v", got, want)
 	}
 }
 
@@ -491,4 +491,8 @@ func BenchmarkKawaseHalving(b *testing.B) {
 func TestTargetsCountAndPassesSubmitNothing(t *testing.T) {
 	r := soft.New()
 	rendertest.TargetsAndSubmitsCount(t, r, soft.NewBuffer(rendertest.Size.X, rendertest.Size.Y), 0)
+}
+
+func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
+	rendertest.KawaseOverwrites(t, soft.New())
 }

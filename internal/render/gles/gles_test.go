@@ -390,3 +390,7 @@ func TestTargetsCountAndAFrameOfPassesIsOneSubmit(t *testing.T) {
 	r := renderer(t)
 	rendertest.TargetsAndSubmitsCount(t, r, framebuffer(t, r, rendertest.Size), 1)
 }
+
+func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
+	rendertest.KawaseOverwrites(t, renderer(t))
+}

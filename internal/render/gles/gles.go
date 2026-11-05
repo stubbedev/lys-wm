@@ -957,6 +957,7 @@ func (p *pass) draw(dst image.Rectangle) {
 }
 
 func (p *pass) Clear(c render.Color) {
+	p.owner.counts.Clears++
 	switch {
 	case !p.active:
 		p.fail(errors.New("gles: Clear outside a pass"))
@@ -1052,6 +1053,7 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 	prog := &p.owner.kawase
 	gl := p.owner.gl
 	p.use(prog)
+	p.setBlending(false)
 	prog.taps.set2(gl, 0.5/float32(tex.size.X)*offset, 0.5/float32(tex.size.Y)*offset)
 	mode := float32(0)
 	if up {

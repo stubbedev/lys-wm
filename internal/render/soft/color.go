@@ -83,6 +83,16 @@ func (p *pass) put(x, y int, c [4]float32) {
 	over(row[x*4:x*4+4], unit(c[2]), unit(c[1]), unit(c[0]), unit(c[3]))
 }
 
+func (p *pass) set(x, y int, c [4]float32) {
+	if p.work != nil {
+		d := p.work.at(x, y)
+		d[0], d[1], d[2], d[3] = c[0], c[1], c[2], c[3]
+		return
+	}
+	row := p.buf.Pix[y*p.buf.Stride:]
+	write(row[x*4:x*4+4], unit(c[2]), unit(c[1]), unit(c[0]), unit(c[3]))
+}
+
 func unit(v float32) byte {
 	return byte(math.Round(float64(min(max(v, 0), 1)) * 255))
 }
@@ -232,7 +242,7 @@ func (p *pass) kawaseFloat(tex *texture, dst image.Rectangle, offset float32, up
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				u := (float32(x-dst.Min.X) + 0.5) / float32(dst.Dx())
 				v := (float32(y-dst.Min.Y) + 0.5) / float32(dst.Dy())
-				p.put(x, y, lgpu.KawaseAt(tex.bilinear, up, u, v, hx, hy))
+				p.set(x, y, lgpu.KawaseAt(tex.bilinear, up, u, v, hx, hy))
 			}
 		}
 	}

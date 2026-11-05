@@ -501,6 +501,7 @@ func (p *pass) SetColor(t *render.ColorTransform) {
 }
 
 func (p *pass) Clear(c render.Color) {
+	p.r.counts.Clears++
 	p.p.Clear(rgba(c))
 }
 

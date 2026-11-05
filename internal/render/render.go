@@ -361,6 +361,7 @@ type Counts struct {
 	GPUWaits uint64
 	Submits  uint64
 	Targets  uint64
+	Clears   uint64
 }
 
 type Renderer interface {

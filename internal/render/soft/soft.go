@@ -223,9 +223,13 @@ func (p *pass) End() error {
 	return p.err
 }
 
+func write(dst []byte, b, g, r, a byte) {
+	dst[0], dst[1], dst[2], dst[3] = b, g, r, a
+}
+
 func over(dst []byte, b, g, r, a byte) {
 	if a == 0xff {
-		dst[0], dst[1], dst[2], dst[3] = b, g, r, a
+		write(dst, b, g, r, a)
 		return
 	}
 	inv := uint32(0xff - a)
@@ -240,6 +244,7 @@ func scale(c byte, a uint32) byte {
 }
 
 func (p *pass) Clear(c render.Color) {
+	p.owner.counts.Clears++
 	if !p.active {
 		p.fail(errors.New("soft: Clear outside a pass"))
 		return
@@ -399,7 +404,7 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 				v := (float32(y-dst.Min.Y) + 0.5) / float32(dst.Dy())
 				c := lgpu.KawaseAt(sample, up, u, v, hx, hy)
 				b := func(f float32) byte { return byte(min(max(math.Round(float64(f)), 0), 255)) }
-				over(row[x*4:x*4+4], b(c[0]), b(c[1]), b(c[2]), b(c[3]))
+				write(row[x*4:x*4+4], b(c[0]), b(c[1]), b(c[2]), b(c[3]))
 			}
 		}
 	}
@@ -415,7 +420,7 @@ func (p *pass) halve(tex *texture, dst image.Rectangle) {
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				at := (x - dst.Min.X) * 8
 				u, v := top[at:at+8:at+8], bottom[at:at+8:at+8]
-				over(row[x*4:x*4+4], mean4(u[0], u[4], v[0], v[4]), mean4(u[1], u[5], v[1], v[5]), mean4(u[2], u[6], v[2], v[6]), mean4(u[3], u[7], v[3], v[7]))
+				write(row[x*4:x*4+4], mean4(u[0], u[4], v[0], v[4]), mean4(u[1], u[5], v[1], v[5]), mean4(u[2], u[6], v[2], v[6]), mean4(u[3], u[7], v[3], v[7]))
 			}
 		}
 	}

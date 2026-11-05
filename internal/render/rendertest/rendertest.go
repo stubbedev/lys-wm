@@ -1221,3 +1221,29 @@ func TargetsAndSubmitsCount(t *testing.T, r render.Renderer, target render.Targe
 		t.Fatalf("painting counted %d new targets", now.Targets-before.Targets)
 	}
 }
+
+func KawaseOverwrites(t *testing.T, r render.Renderer) {
+	t.Helper()
+	src, err := r.NewTextureTarget(image.Pt(16, 16))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst, err := r.NewTextureTarget(image.Pt(8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := errors.Join(src.Destroy(), dst.Destroy()); err != nil {
+			t.Error(err)
+		}
+	})
+	whole := func(size int) render.Region { return render.Region{image.Rect(0, 0, size, size)} }
+	Paint(t, r, src, whole(16), func(p render.Pass) { p.Clear(render.Color{R: 0x40, A: 0x80}) })
+	Paint(t, r, dst, whole(8), func(p render.Pass) { p.Clear(render.Color{B: 0xff, A: 0xff}) })
+	Paint(t, r, dst, whole(8), func(p render.Pass) { p.Kawase(src.Texture(), image.Rect(0, 0, 8, 8), 1.5, false) })
+	want := soft.NewBuffer(8, 8)
+	for i := 0; i < len(want.Pix); i += 4 {
+		copy(want.Pix[i:], []byte{0, 0, 0x40, 0x80})
+	}
+	Compare(t, want, dst, KawaseTolerance)
+}
