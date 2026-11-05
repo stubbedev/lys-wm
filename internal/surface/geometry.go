@@ -30,12 +30,40 @@ func (g geometry) unscaled() image.Point {
 	return image.Pt(size.X/int(g.scale), size.Y/int(g.scale))
 }
 
-func (g geometry) src() render.FRect {
-	if source, ok := g.source.get(); ok {
-		return source
+const sourceTolerance = 1.0
+
+func (g geometry) limit() (x, y float64) {
+	size := g.transform.Size(g.buffer.Size())
+	k := float64(g.scale)
+	return float64(size.X) / k, float64(size.Y) / k
+}
+
+func clampAxis(start, length, limit float64) (float64, float64, bool) {
+	end := start + length
+	if start-limit > sourceTolerance || end-limit > sourceTolerance {
+		return start, length, false
 	}
-	u := g.unscaled()
-	return render.FRect{W: float64(u.X), H: float64(u.Y)}
+	start, end = min(start, limit), min(end, limit)
+	return start, end - start, end > start
+}
+
+func (g geometry) clampedSource(source render.FRect) (render.FRect, bool) {
+	lx, ly := g.limit()
+	x, w, okX := clampAxis(source.X, source.W, lx)
+	y, h, okY := clampAxis(source.Y, source.H, ly)
+	return render.FRect{X: x, Y: y, W: w, H: h}, okX && okY
+}
+
+func (g geometry) src() render.FRect {
+	if g.buffer == nil {
+		return render.FRect{}
+	}
+	if source, ok := g.source.get(); ok {
+		clamped, _ := g.clampedSource(source)
+		return clamped
+	}
+	lx, ly := g.limit()
+	return render.FRect{W: lx, H: ly}
 }
 
 func (g geometry) size() image.Point {
@@ -51,23 +79,23 @@ func (g geometry) size() image.Point {
 	return g.unscaled()
 }
 
-func (g geometry) validate() error {
+func (g geometry) validate(anyScale bool) error {
 	if g.buffer == nil {
 		return nil
 	}
+	source, viewported := g.source.get()
+	_, scaled := g.dest.get()
 	size := g.transform.Size(g.buffer.Size())
-	if size.X%int(g.scale) != 0 || size.Y%int(g.scale) != 0 {
+	if !anyScale && !viewported && !scaled && (size.X%int(g.scale) != 0 || size.Y%int(g.scale) != 0) {
 		return errInvalidSize
 	}
-	source, ok := g.source.get()
-	if !ok {
+	if !viewported {
 		return nil
 	}
-	if _, scaled := g.dest.get(); !scaled && (source.W != math.Trunc(source.W) || source.H != math.Trunc(source.H)) {
+	if !scaled && (source.W != math.Trunc(source.W) || source.H != math.Trunc(source.H)) {
 		return errBadSize
 	}
-	u := g.unscaled()
-	if source.X+source.W > float64(u.X) || source.Y+source.H > float64(u.Y) {
+	if _, ok := g.clampedSource(source); !ok {
 		return errOutOfBuffer
 	}
 	return nil

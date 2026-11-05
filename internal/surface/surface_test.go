@@ -386,6 +386,7 @@ func TestSurfaceProtocolErrors(t *testing.T) {
 		{"bad transform", 6, func(_ *env, s *cw.WlSurface) error { return s.SetBufferTransform(9) }, sw.WlSurfaceErrorInvalidTransform},
 		{"attach offset at v5", 6, func(e *env, s *cw.WlSurface) error { return s.Attach(e.buffer(4, 4), 1, 0) }, sw.WlSurfaceErrorInvalidOffset},
 		{"size not a multiple of scale", 6, func(e *env, s *cw.WlSurface) error {
+			e.withRole(s, "xdg_toplevel")
 			return errors.Join(s.Attach(e.buffer(5, 4), 0, 0), s.SetBufferScale(2), s.Commit())
 		}, sw.WlSurfaceErrorInvalidSize},
 	}
@@ -739,7 +740,7 @@ func TestViewportErrors(t *testing.T) {
 			return errors.Join(s.Attach(e.buffer(10, 10), 0, 0), vp.SetSource(fx(0), fx(0), fx(2.5), fx(2)), s.Commit())
 		}, uint32(svp.WpViewportErrorBadSize)},
 		{"source outside the buffer", func(e *env, s *cw.WlSurface, vp *cvp.WpViewport) error {
-			return errors.Join(s.Attach(e.buffer(10, 10), 0, 0), vp.SetSource(fx(5), fx(5), fx(6), fx(5)), s.Commit())
+			return errors.Join(s.Attach(e.buffer(10, 10), 0, 0), vp.SetSource(fx(5), fx(5), fx(6+1.0/256), fx(5)), vp.SetDestination(5, 5), s.Commit())
 		}, uint32(svp.WpViewportErrorOutOfBuffer)},
 		{"surface destroyed", func(_ *env, s *cw.WlSurface, vp *cvp.WpViewport) error {
 			return errors.Join(s.Destroy(), vp.SetDestination(5, 5))
@@ -1271,4 +1272,57 @@ func TestABarrierOnASurfaceDestroyedInTheMeantimeReleasesQuietly(t *testing.T) {
 			t.Error(err)
 		}
 	})
+}
+
+func (e *env) withRole(s *cw.WlSurface, role string) {
+	e.t.Helper()
+	must(e.t, s.Commit())
+	e.roundtrip()
+	e.on(func() {
+		if err := find(e.t, e.rec.commits, s).s.SetRole(fakeRole{role}); err != nil {
+			e.t.Error(err)
+		}
+	})
+}
+
+func TestASourcePastTheBufferByAtMostOnePixelIsClampedAndDrawn(t *testing.T) {
+	for _, over := range []float64{1.0 / 256, 1} {
+		e := setup(t, 6)
+		s := e.surface()
+		vp, err := e.viewporter.GetViewport(s)
+		must(t, err, s.Attach(e.buffer(10, 10), 0, 0), vp.SetSource(fx(5), fx(4), fx(5+over), fx(6+over)), vp.SetDestination(7, 7), s.Commit())
+		e.roundtrip()
+		c := e.last(s)
+		if c.source != (render.FRect{X: 5, Y: 4, W: 5, H: 6}) || c.size != image.Pt(7, 7) {
+			t.Fatalf("a source %v past the buffer draws %+v at %v, want it clamped to the buffer", over, c.source, c.size)
+		}
+	}
+}
+
+func TestABufferNotAMultipleOfItsScaleIsAcceptedWhereTheSpecAllowsIt(t *testing.T) {
+	cases := []struct {
+		name string
+		role string
+		do   func(s *cw.WlSurface, vp *cvp.WpViewport) error
+	}{
+		{"under a viewport", "xdg_toplevel", func(_ *cw.WlSurface, vp *cvp.WpViewport) error { return vp.SetDestination(4, 3) }},
+		{"as a cursor", CursorRole, func(*cw.WlSurface, *cvp.WpViewport) error { return nil }},
+		{"without a role", "", func(*cw.WlSurface, *cvp.WpViewport) error { return nil }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := setup(t, 6)
+			s := e.surface()
+			vp, err := e.viewporter.GetViewport(s)
+			must(t, err)
+			if c.role != "" {
+				e.withRole(s, c.role)
+			}
+			must(t, c.do(s, vp), s.Attach(e.buffer(7, 5), 0, 0), s.SetBufferScale(2), s.Commit())
+			e.roundtrip()
+			if got := e.last(s).source; got != (render.FRect{W: 7, H: 5}) {
+				t.Fatalf("buffer source %+v, want the whole odd buffer", got)
+			}
+		})
+	}
 }

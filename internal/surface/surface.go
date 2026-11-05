@@ -24,6 +24,8 @@ const (
 	subcompositorVersion = 1
 )
 
+const CursorRole = "wl_pointer-cursor"
+
 type Role interface {
 	RoleName() string
 	Committed(s *Surface) error
@@ -589,14 +591,15 @@ func (s *Surface) unapplied() []*state {
 
 func (s *Surface) checkSize() error {
 	g := s.geometry(s.unapplied()...)
-	err := g.validate()
+	err := g.validate(s.roleName == "" || s.roleName == CursorRole)
 	switch {
 	case errors.Is(err, errInvalidSize):
 		return s.protocolError(sw.WlSurfaceErrorInvalidSize, "buffer %v is not a multiple of scale %d", g.buffer.Size(), g.scale)
 	case errors.Is(err, errBadSize):
 		return s.viewport.badSize(g.src())
 	case errors.Is(err, errOutOfBuffer):
-		return s.viewport.outOfBuffer(g.src(), g.unscaled())
+		source, _ := g.source.get()
+		return s.viewport.outOfBuffer(source, g.unscaled())
 	}
 	return err
 }
