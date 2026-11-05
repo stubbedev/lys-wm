@@ -140,20 +140,20 @@ func (s *Seat) PointerButton(at time.Duration, button uint32, pressed bool) erro
 		return nil
 	}
 	serial := s.eventSerial(c, pressed)
-	var errs []error
+	var errs error
 	for _, ptr := range pointers {
-		errs = append(errs, ptr.SendButton(serial, wire.Millis(at), button, state))
+		errs = errors.Join(errs, ptr.SendButton(serial, wire.Millis(at), button, state))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) PointerAxis(at time.Duration, a Axis) error {
 	_, pointers := s.focusPointers()
-	var errs []error
+	var errs error
 	for _, ptr := range pointers {
-		errs = append(errs, s.sendAxis(ptr, at, a))
+		errs = errors.Join(errs, s.sendAxis(ptr, at, a))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) sendAxis(ptr *sw.WlPointer, at time.Duration, a Axis) error {

@@ -187,8 +187,8 @@ func (r *inputRecorder) DeviceAdded(d backend.Device) error {
 func (r *inputRecorder) DeviceRemoved(backend.Device) error { return nil }
 
 func (r *inputRecorder) Input(_ backend.Device, e backend.Event) error {
-	if a, ok := e.(backend.PointerAxis); ok {
-		r.axes = append(r.axes, a)
+	if a, ok := e.(*backend.PointerAxis); ok {
+		r.axes = append(r.axes, *a)
 	}
 	return nil
 }

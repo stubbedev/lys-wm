@@ -205,6 +205,17 @@ type Libinput struct {
 	swipe   backend.SwipeUpdate
 	pinch   backend.PinchUpdate
 	frame   backend.PointerFrame
+	key     backend.Key
+	abs     backend.PointerMotionAbsolute
+	button  backend.PointerButton
+	axes    [2]backend.PointerAxis
+	touch   struct {
+		down   backend.TouchDown
+		motion backend.TouchMotion
+		up     backend.TouchUp
+		cancel backend.TouchCancel
+		frame  backend.TouchFrame
+	}
 	// suspended: the devices were let go for an inactive session, and a
 	// resume takes them again. A resume without one would take each
 	// device a second time, which logind refuses.
@@ -686,6 +697,13 @@ var gestures = map[int32]backend.Gesture{
 	evHoldBegin: backend.Hold, evHoldEnd: backend.Hold,
 }
 
+var axisSources = map[int32]backend.AxisSource{evScrollWheel: backend.Wheel, evScrollFinger: backend.Finger, evScrollContinuous: backend.Continuous}
+
+var scrollAxes = [2]struct {
+	axis        int32
+	orientation backend.Orientation
+}{{axisVertical, backend.Vertical}, {axisHorizontal, backend.Horizontal}}
+
 func (in *Libinput) pointerFrame(out []backend.Event, at time.Duration) []backend.Event {
 	in.frame.Time = at
 	return append(out, &in.frame)
@@ -696,7 +714,8 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 	switch typ {
 	case evKeyboardKey:
 		k := f.keyboardEvent(ev)
-		return append(out, backend.Key{Time: usec(f.keyTime(k)), Code: f.key(k), Pressed: f.keyState(k) == 1})
+		in.key = backend.Key{Time: usec(f.keyTime(k)), Code: f.key(k), Pressed: f.keyState(k) == 1}
+		return append(out, &in.key)
 	case evPointerMotion:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
@@ -705,23 +724,22 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 	case evPointerAbsolute:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		return in.pointerFrame(append(out, backend.PointerMotionAbsolute{Time: at, X: f.absX(p, 1), Y: f.absY(p, 1)}), at)
+		in.abs = backend.PointerMotionAbsolute{Time: at, X: f.absX(p, 1), Y: f.absY(p, 1)}
+		return in.pointerFrame(append(out, &in.abs), at)
 	case evPointerButton:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		return in.pointerFrame(append(out, backend.PointerButton{Time: at, Button: f.button(p), Pressed: f.buttonState(p) == 1}), at)
+		in.button = backend.PointerButton{Time: at, Button: f.button(p), Pressed: f.buttonState(p) == 1}
+		return in.pointerFrame(append(out, &in.button), at)
 	case evScrollWheel, evScrollFinger, evScrollContinuous:
 		p := f.pointerEvent(ev)
 		at := usec(f.pointerTime(p))
-		source := map[int32]backend.AxisSource{evScrollWheel: backend.Wheel, evScrollFinger: backend.Finger, evScrollContinuous: backend.Continuous}[typ]
-		for _, a := range []struct {
-			axis        int32
-			orientation backend.Orientation
-		}{{axisVertical, backend.Vertical}, {axisHorizontal, backend.Horizontal}} {
+		for i, a := range scrollAxes {
 			if f.hasAxis(p, a.axis) == 0 {
 				continue
 			}
-			ax := backend.PointerAxis{Time: at, Orientation: a.orientation, Source: source, Value: f.scrollValue(p, a.axis) * d.scrollFactor}
+			ax := &in.axes[i]
+			*ax = backend.PointerAxis{Time: at, Orientation: a.orientation, Source: axisSources[typ], Value: f.scrollValue(p, a.axis) * d.scrollFactor}
 			if typ == evScrollWheel {
 				ax.Value120 = int32(math.Round(f.scrollV120(p, a.axis) * d.scrollFactor))
 			}
@@ -732,17 +750,22 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 		t := f.touchEvent(ev)
 		at, id, x, y := usec(f.touchTime(t)), f.touchSlot(t), f.touchX(t, 1), f.touchY(t, 1)
 		if typ == evTouchDown {
-			return append(out, backend.TouchDown{Time: at, ID: id, X: x, Y: y})
+			in.touch.down = backend.TouchDown{Time: at, ID: id, X: x, Y: y}
+			return append(out, &in.touch.down)
 		}
-		return append(out, backend.TouchMotion{Time: at, ID: id, X: x, Y: y})
+		in.touch.motion = backend.TouchMotion{Time: at, ID: id, X: x, Y: y}
+		return append(out, &in.touch.motion)
 	case evTouchUp:
 		t := f.touchEvent(ev)
-		return append(out, backend.TouchUp{Time: usec(f.touchTime(t)), ID: f.touchSlot(t)})
+		in.touch.up = backend.TouchUp{Time: usec(f.touchTime(t)), ID: f.touchSlot(t)}
+		return append(out, &in.touch.up)
 	case evTouchCancel:
 		t := f.touchEvent(ev)
-		return append(out, backend.TouchCancel{Time: usec(f.touchTime(t)), ID: f.touchSlot(t)})
+		in.touch.cancel = backend.TouchCancel{Time: usec(f.touchTime(t)), ID: f.touchSlot(t)}
+		return append(out, &in.touch.cancel)
 	case evTouchFrame:
-		return append(out, backend.TouchFrame{Time: usec(f.touchTime(f.touchEvent(ev)))})
+		in.touch.frame = backend.TouchFrame{Time: usec(f.touchTime(f.touchEvent(ev)))}
+		return append(out, &in.touch.frame)
 	case evSwipeBegin, evPinchBegin, evHoldBegin:
 		g := f.gestureEvent(ev)
 		return append(out, backend.GestureBegin{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Fingers: uint32(max(f.fingers(g), 0))})

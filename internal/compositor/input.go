@@ -156,84 +156,26 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	}
 	switch e := e.(type) {
 	case backend.Key:
-		if e.Pressed && c.overviewHolds() {
-			if taken, err := c.overviewKey(e.Code); taken || err != nil {
-				return err
-			}
-		}
-		if bound, err := c.bindKey(e.Code, e.Pressed); bound || err != nil {
-			return err
-		}
-		if taken, err := c.takeEscape(e.Code, e.Pressed); taken || err != nil {
-			return err
-		}
-		err := c.seat.Key(e.Code, e.Pressed, e.Time)
-		c.syncLEDs()
-		return err
+		return c.inputKey(e)
+	case *backend.Key:
+		return c.inputKey(*e)
 	case *backend.PointerMotion:
 		if err := c.seat.RelativeMotion(e.Time, e.DX, e.DY, e.UnaccelDX, e.UnaccelDY); err != nil {
 			return err
 		}
 		return c.moveCursor(e.Time, c.clampToOutputs(point{X: c.cursor.X + e.DX, Y: c.cursor.Y + e.DY}))
 	case backend.PointerMotionAbsolute:
-		area, ok := c.absoluteArea(e.Output)
-		if !ok {
-			return nil
-		}
-		return c.moveCursor(e.Time, c.inArea(area, e.X, e.Y))
+		return c.inputAbsolute(e)
+	case *backend.PointerMotionAbsolute:
+		return c.inputAbsolute(*e)
 	case backend.PointerButton:
-		if c.pointerDrag() {
-			if e.Pressed {
-				return nil
-			}
-			return c.drag.Drop()
-		}
-		if i := slices.Index(c.consumed, e.Button); !e.Pressed && i >= 0 {
-			c.consumed = slices.Delete(c.consumed, i, i+1)
-			released := c.releaseShortcuts(binds.Button{Code: e.Button})
-			if c.overviewHolds() && c.overview.press != nil && !c.overview.press.touched && c.overview.press.button == e.Button {
-				return errors.Join(released, c.overviewReleased(c.cursor))
-			}
-			if c.interaction != nil && c.interaction.button == e.Button {
-				return errors.Join(released, c.endDrag())
-			}
-			return released
-		}
-		if e.Pressed && !c.seat.PointerGrabbed() && c.outsideGrab(c.seat.PointerFocus()) {
-			c.consumed = append(c.consumed, e.Button)
-			return c.shell.DismissGrab()
-		}
-		if b, ok := c.match(binds.Button{Code: e.Button}); e.Pressed && ok {
-			c.consumed = append(c.consumed, e.Button)
-			c.run(b.Action, binds.Button{Code: e.Button})
-			return nil
-		}
-		if e.Pressed && c.overviewHolds() && c.seat.PointerFocus() == nil {
-			c.consumed = append(c.consumed, e.Button)
-			return c.overviewPressed(e.Button, 0, false, c.cursor)
-		}
-		if e.Pressed {
-			if err := c.clickFocus(c.seat.PointerFocus()); err != nil {
-				return err
-			}
-		}
-		return c.seat.PointerButton(e.Time, e.Button, e.Pressed)
+		return c.inputButton(e)
+	case *backend.PointerButton:
+		return c.inputButton(*e)
 	case backend.PointerAxis:
-		if e.Orientation == backend.Vertical && e.Value != 0 {
-			dir := binds.ScrollDown
-			if e.Value < 0 {
-				dir = binds.ScrollUp
-			}
-			if b, ok := c.match(binds.Scroll{Dir: dir}); ok {
-				c.run(b.Action, binds.Scroll{Dir: dir})
-				return nil
-			}
-		}
-		a := seat.Axis{Orientation: sw.WlPointerAxisVerticalScroll, Source: sw.WlPointerAxisSource(e.Source), Value: e.Value, Value120: e.Value120}
-		if e.Orientation == backend.Horizontal {
-			a.Orientation = sw.WlPointerAxisHorizontalScroll
-		}
-		return c.seat.PointerAxis(e.Time, a)
+		return c.inputAxis(e)
+	case *backend.PointerAxis:
+		return c.inputAxis(*e)
 	case *backend.PointerFrame:
 		return c.seat.PointerFrame()
 	case backend.GestureBegin:
@@ -245,73 +187,20 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case backend.GestureEnd:
 		return c.gestureEnd(e)
 	case backend.TouchDown:
-		area, ok := c.absoluteArea(e.Output)
-		if !ok {
-			return nil
-		}
-		p := c.touchPoint(c.inArea(area, e.X, e.Y))
-		s, local, _ := c.surfaceAt(p)
-		if c.outsideGrab(s) {
-			return c.shell.DismissGrab()
-		}
-		if s == nil {
-			if c.overviewHolds() {
-				c.touches[e.ID] = touchAt{area: area, at: p}
-				return c.overviewPressed(0, e.ID, true, p)
-			}
-			return nil
-		}
-		c.touches[e.ID] = touchAt{area: area, at: p}
-		return c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
+		return c.touchDown(e)
+	case *backend.TouchDown:
+		return c.touchDown(*e)
 	case backend.TouchMotion:
-		t, ok := c.touches[e.ID]
-		if !ok {
-			return nil
-		}
-		t.at = c.touchPoint(c.inArea(t.area, e.X, e.Y))
-		c.touches[e.ID] = t
-		if c.touchDrag(e.ID) {
-			return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
-		}
-		if c.overviewTouching(e.ID) {
-			return c.overviewMoved(t.at)
-		}
-		s := c.seat.TouchSurface(e.ID)
-		if s == nil {
-			return nil
-		}
-		org, found := c.originOf(s)
-		if !found {
-			return nil
-		}
-		local := org.local(t.at)
-		return c.seat.TouchMotion(e.Time, e.ID, local.X, local.Y)
+		return c.touchMotion(e)
+	case *backend.TouchMotion:
+		return c.touchMotion(*e)
 	case backend.TouchUp:
-		if c.overviewTouching(e.ID) {
-			at := c.touches[e.ID].at
-			delete(c.touches, e.ID)
-			return c.overviewReleased(at)
-		}
-		if c.touchDrag(e.ID) {
-			c.seat.DropTouch(e.ID)
-			err := c.drag.Drop()
-			delete(c.touches, e.ID)
-			return err
-		}
-		delete(c.touches, e.ID)
-		return c.seat.TouchUp(e.Time, e.ID)
-	case backend.TouchCancel:
-		var err error
-		if c.overviewHolds() {
-			c.abandonOverviewPress()
-			err = c.scheduleAll()
-		}
-		if c.touchDragging() {
-			err = errors.Join(err, c.drag.Cancel())
-		}
-		clear(c.touches)
-		return errors.Join(err, c.seat.TouchCancel())
-	case backend.TouchFrame:
+		return c.touchUp(e)
+	case *backend.TouchUp:
+		return c.touchUp(*e)
+	case backend.TouchCancel, *backend.TouchCancel:
+		return c.touchCancel()
+	case backend.TouchFrame, *backend.TouchFrame:
 		return c.seat.TouchFrame()
 	case backend.Switch:
 		if e.Kind != backend.SwitchLid || e.On == c.lidClosed {
@@ -323,6 +212,163 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		return err
 	}
 	return nil
+}
+
+func (c *Compositor) inputKey(e backend.Key) error {
+	if e.Pressed && c.overviewHolds() {
+		if taken, err := c.overviewKey(e.Code); taken || err != nil {
+			return err
+		}
+	}
+	if bound, err := c.bindKey(e.Code, e.Pressed); bound || err != nil {
+		return err
+	}
+	if taken, err := c.takeEscape(e.Code, e.Pressed); taken || err != nil {
+		return err
+	}
+	err := c.seat.Key(e.Code, e.Pressed, e.Time)
+	c.syncLEDs()
+	return err
+}
+
+func (c *Compositor) inputAbsolute(e backend.PointerMotionAbsolute) error {
+	area, ok := c.absoluteArea(e.Output)
+	if !ok {
+		return nil
+	}
+	return c.moveCursor(e.Time, c.inArea(area, e.X, e.Y))
+}
+
+func (c *Compositor) inputButton(e backend.PointerButton) error {
+	if c.pointerDrag() {
+		if e.Pressed {
+			return nil
+		}
+		return c.drag.Drop()
+	}
+	if i := slices.Index(c.consumed, e.Button); !e.Pressed && i >= 0 {
+		c.consumed = slices.Delete(c.consumed, i, i+1)
+		released := c.releaseShortcuts(binds.Button{Code: e.Button})
+		if c.overviewHolds() && c.overview.press != nil && !c.overview.press.touched && c.overview.press.button == e.Button {
+			return errors.Join(released, c.overviewReleased(c.cursor))
+		}
+		if c.interaction != nil && c.interaction.button == e.Button {
+			return errors.Join(released, c.endDrag())
+		}
+		return released
+	}
+	if e.Pressed && !c.seat.PointerGrabbed() && c.outsideGrab(c.seat.PointerFocus()) {
+		c.consumed = append(c.consumed, e.Button)
+		return c.shell.DismissGrab()
+	}
+	if b, ok := c.match(binds.Button{Code: e.Button}); e.Pressed && ok {
+		c.consumed = append(c.consumed, e.Button)
+		c.run(b.Action, binds.Button{Code: e.Button})
+		return nil
+	}
+	if e.Pressed && c.overviewHolds() && c.seat.PointerFocus() == nil {
+		c.consumed = append(c.consumed, e.Button)
+		return c.overviewPressed(e.Button, 0, false, c.cursor)
+	}
+	if e.Pressed {
+		if err := c.clickFocus(c.seat.PointerFocus()); err != nil {
+			return err
+		}
+	}
+	return c.seat.PointerButton(e.Time, e.Button, e.Pressed)
+}
+
+func (c *Compositor) inputAxis(e backend.PointerAxis) error {
+	if e.Orientation == backend.Vertical && e.Value != 0 {
+		dir := binds.ScrollDown
+		if e.Value < 0 {
+			dir = binds.ScrollUp
+		}
+		if b, ok := c.match(binds.Scroll{Dir: dir}); ok {
+			c.run(b.Action, binds.Scroll{Dir: dir})
+			return nil
+		}
+	}
+	a := seat.Axis{Orientation: sw.WlPointerAxisVerticalScroll, Source: sw.WlPointerAxisSource(e.Source), Value: e.Value, Value120: e.Value120}
+	if e.Orientation == backend.Horizontal {
+		a.Orientation = sw.WlPointerAxisHorizontalScroll
+	}
+	return c.seat.PointerAxis(e.Time, a)
+}
+
+func (c *Compositor) touchDown(e backend.TouchDown) error {
+	area, ok := c.absoluteArea(e.Output)
+	if !ok {
+		return nil
+	}
+	p := c.touchPoint(c.inArea(area, e.X, e.Y))
+	s, local, _ := c.surfaceAt(p)
+	if c.outsideGrab(s) {
+		return c.shell.DismissGrab()
+	}
+	if s == nil {
+		if c.overviewHolds() {
+			c.touches[e.ID] = touchAt{area: area, at: p}
+			return c.overviewPressed(0, e.ID, true, p)
+		}
+		return nil
+	}
+	c.touches[e.ID] = touchAt{area: area, at: p}
+	return c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
+}
+
+func (c *Compositor) touchMotion(e backend.TouchMotion) error {
+	t, ok := c.touches[e.ID]
+	if !ok {
+		return nil
+	}
+	t.at = c.touchPoint(c.inArea(t.area, e.X, e.Y))
+	c.touches[e.ID] = t
+	if c.touchDrag(e.ID) {
+		return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
+	}
+	if c.overviewTouching(e.ID) {
+		return c.overviewMoved(t.at)
+	}
+	s := c.seat.TouchSurface(e.ID)
+	if s == nil {
+		return nil
+	}
+	org, found := c.originOf(s)
+	if !found {
+		return nil
+	}
+	local := org.local(t.at)
+	return c.seat.TouchMotion(e.Time, e.ID, local.X, local.Y)
+}
+
+func (c *Compositor) touchUp(e backend.TouchUp) error {
+	if c.overviewTouching(e.ID) {
+		at := c.touches[e.ID].at
+		delete(c.touches, e.ID)
+		return c.overviewReleased(at)
+	}
+	if c.touchDrag(e.ID) {
+		c.seat.DropTouch(e.ID)
+		err := c.drag.Drop()
+		delete(c.touches, e.ID)
+		return err
+	}
+	delete(c.touches, e.ID)
+	return c.seat.TouchUp(e.Time, e.ID)
+}
+
+func (c *Compositor) touchCancel() error {
+	var err error
+	if c.overviewHolds() {
+		c.abandonOverviewPress()
+		err = c.scheduleAll()
+	}
+	if c.touchDragging() {
+		err = errors.Join(err, c.drag.Cancel())
+	}
+	clear(c.touches)
+	return errors.Join(err, c.seat.TouchCancel())
 }
 
 func (c *Compositor) moveCursor(at time.Duration, next point) error {

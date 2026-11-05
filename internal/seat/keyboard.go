@@ -150,14 +150,14 @@ func (s *Seat) sendKey(v *VirtualKeyboard, code uint32, pressed, modsChanged boo
 	}
 	ms := wire.Millis(at)
 	serial := s.eventSerial(c, pressed)
-	var errs []error
+	var errs error
 	for _, kb := range r.keyboards {
-		errs = append(errs, s.useKeymap(kb, v), kb.SendKey(serial, ms, code, state))
+		errs = errors.Join(errs, s.useKeymap(kb, v), kb.SendKey(serial, ms, code, state))
 		if modsChanged {
-			errs = append(errs, s.sendModifiers(kb))
+			errs = errors.Join(errs, s.sendModifiers(kb))
 		}
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) sendKeyboardConfig(kb *sw.WlKeyboard) error {

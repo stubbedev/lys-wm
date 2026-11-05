@@ -329,23 +329,21 @@ func (n *native) Presented(o backend.Output, p backend.Presentation) error {
 
 func (n *native) Input(d backend.Device, e backend.Event) error {
 	switch ev := e.(type) {
-	case backend.PointerMotionAbsolute:
+	case *backend.PointerMotionAbsolute:
 		if ev.Output == nil {
 			o, ok := n.firstOutput()
 			if !ok {
 				return nil
 			}
 			ev.Output = o
-			e = ev
 		}
-	case backend.TouchDown:
+	case *backend.TouchDown:
 		if ev.Output == nil {
 			o, ok := n.firstOutput()
 			if !ok {
 				return nil
 			}
 			ev.Output = o
-			e = ev
 		}
 	}
 	return n.handler.Input(d, e)

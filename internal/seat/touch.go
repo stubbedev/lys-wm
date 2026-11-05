@@ -62,11 +62,11 @@ func (s *Seat) TouchDown(at time.Duration, id int32, target *surface.Surface, x,
 	c, touches := s.touchesOf(target)
 	serial := s.eventSerial(c, true)
 	s.touch.points = append(s.touch.points, touchPoint{id: id, surface: target, serial: serial})
-	var errs []error
+	var errs error
 	for _, t := range touches {
-		errs = append(errs, t.SendDown(serial, wire.Millis(at), target.Resource(), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, t.SendDown(serial, wire.Millis(at), target.Resource(), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) TouchMotion(at time.Duration, id int32, x, y float64) error {
@@ -75,11 +75,11 @@ func (s *Seat) TouchMotion(at time.Duration, id int32, x, y float64) error {
 		return nil
 	}
 	_, touches := s.touchesOf(target)
-	var errs []error
+	var errs error
 	for _, t := range touches {
-		errs = append(errs, t.SendMotion(wire.Millis(at), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, t.SendMotion(wire.Millis(at), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) TouchUp(at time.Duration, id int32) error {
@@ -89,24 +89,24 @@ func (s *Seat) TouchUp(at time.Duration, id int32) error {
 	}
 	s.DropTouch(id)
 	_, touches := s.touchesOf(target)
-	var errs []error
+	var errs error
 	for _, t := range touches {
-		errs = append(errs, t.SendUp(s.display.NextSerial(), wire.Millis(at), id))
+		errs = errors.Join(errs, t.SendUp(s.display.NextSerial(), wire.Millis(at), id))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) touchClients(send func(*sw.WlTouch) error) error {
-	var errs []error
+	var errs error
 	for _, c := range s.touch.framed {
 		if r := s.lookup(c); r != nil {
 			for _, t := range r.touches {
-				errs = append(errs, send(t))
+				errs = errors.Join(errs, send(t))
 			}
 		}
 	}
 	s.touch.framed = s.touch.framed[:0]
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) TouchFrame() error {
