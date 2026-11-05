@@ -252,14 +252,34 @@ const gpuGoldenTolerance = 1
 
 func (h *Harness) assertGolden(name string) {
 	h.t.Helper()
-	h.Eventually("labels and cursors loaded before a golden", func(_ *headless.Backend, c *compositor.Compositor) bool {
-		return !c.LabelsPending() && !c.CursorsLoading()
-	})
 	tolerance := gpuGoldenTolerance
 	if _, isSoft := h.backend.Renderer().(*soft.Renderer); isSoft {
 		tolerance = 0
 	}
-	golden.Within(h.t, name, h.Rendered(0), tolerance)
+	golden.Within(h.t, name, h.renderedLoaded(), tolerance)
+}
+
+const loadedFrameTries = 20
+
+func (h *Harness) renderedLoaded() *soft.Buffer {
+	h.t.Helper()
+	loading := func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return c.LabelsPending() || c.CursorsLoading()
+	}
+	for range loadedFrameTries {
+		h.Eventually("labels and cursors loaded", func(b *headless.Backend, c *compositor.Compositor) bool { return !loading(b, c) })
+		frame := h.Rendered(0)
+		stillLoaded := true
+		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+			stillLoaded = !loading(b, c)
+			return nil
+		})
+		if stillLoaded {
+			return frame
+		}
+	}
+	h.t.Fatalf("harness: every one of %d frames asked for a label or cursor it did not have", loadedFrameTries)
+	return nil
 }
 
 func onEachConfiguredRenderer(t *testing.T, test func(t *testing.T, start gpuStarter)) {
