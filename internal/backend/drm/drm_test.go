@@ -1330,7 +1330,7 @@ func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	half := modeOf(o.mode).Interval() / 2
-	r.pinned += half
+	r.pinned += 2*half - backend.PlaneLead
 	if err := r.setCursor(o, image.Point{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1979,7 +1979,7 @@ func TestTheLatchFollowsMeasuredRenderTimeAndGrowsAMarginAfterAMiss(t *testing.T
 	o.lastFlip = backend.Now()
 	half := func() time.Duration {
 		next, _ := backend.NextVblank(o.lastFlip, backend.Now(), interval)
-		return next - o.latchDeadline(backend.Now())
+		return next - o.budget.Latch(o.lastFlip, backend.Now(), interval)
 	}
 	if got := half(); got != interval/2 {
 		t.Fatalf("an output with no measurements latches %v before the vblank, want half a refresh %v", got, interval/2)

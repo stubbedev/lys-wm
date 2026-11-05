@@ -80,7 +80,16 @@ func (f *FrameClock) fire() error {
 const (
 	renderSamples = 32
 	renderMargin  = 3 * time.Millisecond
+	PlaneLead     = 2 * time.Millisecond
 )
+
+func PlaneLatch(last, now, interval time.Duration) time.Duration {
+	if last == 0 || last > now {
+		return now
+	}
+	next, _ := NextVblank(last, now, interval)
+	return next - PlaneLead
+}
 
 type RenderBudget struct {
 	samples  [renderSamples]time.Duration

@@ -462,3 +462,16 @@ func TestAHintedFrameLatchesEarlierInProportionToItsWork(t *testing.T) {
 		t.Fatalf("after its frame started the hint still moves the latch: %v, want %v", got, calm)
 	}
 }
+
+func TestThePlaneLatchLeadsTheVblankByLessThanAFrameCouldStillMake(t *testing.T) {
+	interval := 16 * time.Millisecond
+	if PlaneLead >= renderMargin {
+		t.Fatalf("plane lead %v, want it under the render margin %v", PlaneLead, renderMargin)
+	}
+	if got := PlaneLatch(100*time.Millisecond, 105*time.Millisecond, interval); got != 116*time.Millisecond-PlaneLead {
+		t.Fatalf("the plane latch is %v, want the next vblank less the plane lead", got)
+	}
+	if got := PlaneLatch(0, 105*time.Millisecond, interval); got != 105*time.Millisecond {
+		t.Fatalf("with no flip yet the plane latch is %v, want now", got)
+	}
+}

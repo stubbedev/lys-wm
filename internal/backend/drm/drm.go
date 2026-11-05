@@ -1889,13 +1889,9 @@ func (o *Output) test(flags uint32) error {
 	return nil
 }
 
-func (o *Output) latchDeadline(now time.Duration) time.Duration {
-	return o.budget.Latch(o.lastFlip, now, modeOf(o.mode).Interval())
-}
-
 func (o *Output) planesWait() time.Duration {
 	now := o.b.now()
-	return o.latchDeadline(now) - now
+	return backend.PlaneLatch(o.lastFlip, now, modeOf(o.mode).Interval()) - now
 }
 
 func (o *Output) frameWait() time.Duration {
