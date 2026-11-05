@@ -31,6 +31,8 @@ type Toplevel struct {
 	resource        *sxdg.XdgToplevel
 	title           string
 	appID           string
+	tag             string
+	description     string
 	parent          *Toplevel
 	min, max        image.Point
 	pendingMin      image.Point
@@ -68,6 +70,14 @@ func (t *Toplevel) Title() string {
 
 func (t *Toplevel) AppID() string {
 	return t.appID
+}
+
+func (t *Toplevel) Tag() string {
+	return t.tag
+}
+
+func (t *Toplevel) Description() string {
+	return t.description
 }
 
 func (t *Toplevel) Icon() *Icon {

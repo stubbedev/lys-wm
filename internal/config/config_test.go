@@ -721,3 +721,16 @@ func TestAConfigsTimingsLayOverTheDefaultMotion(t *testing.T) {
 		t.Error("a duration on a spring the config names is accepted")
 	}
 }
+
+func TestARuleCanMatchOnTheTagAlone(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("rules:\n  - {tag: ^settings$, float: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Rules) != 1 || cfg.Rules[0].Tag == nil || !cfg.Rules[0].Tag.MatchString("settings") || cfg.Rules[0].Mode != wm.RuleFloat {
+		t.Fatalf("rules %+v", cfg.Rules)
+	}
+	if _, err := Parse("t.yaml", []byte("rules:\n  - {tag: \"(\", float: true}\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: rules[0].tag:") {
+		t.Fatalf("a bad tag regex: %v", err)
+	}
+}

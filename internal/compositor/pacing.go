@@ -38,7 +38,7 @@ func (c *Compositor) tears(s *surface.Surface) bool {
 	if w == nil {
 		return false
 	}
-	switch wm.Decide(c.rules, w.top.AppID(), w.top.Title()).Tearing {
+	switch wm.DecideTagged(c.rules, w.top.AppID(), w.top.Title(), w.top.Tag()).Tearing {
 	case wm.TearingAllow:
 		return true
 	case wm.TearingDeny:

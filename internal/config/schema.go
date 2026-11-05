@@ -164,6 +164,7 @@ func annotations() map[string]annotation {
 		"rules[].blur_look.tint":           colorAnn(nil),
 		"rules[].app_id":                   formatAnn(regexFormat),
 		"rules[].title":                    formatAnn(regexFormat),
+		"rules[].tag":                      formatAnn(regexFormat),
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
 	}

@@ -26,6 +26,7 @@ type toplevel interface {
 	Geometry() image.Rectangle
 	AppID() string
 	Title() string
+	Tag() string
 	Icon() *shell.Icon
 	pid() int32
 	parent() toplevel

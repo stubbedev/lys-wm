@@ -869,6 +869,10 @@
           "size": {
             "type": "string"
           },
+          "tag": {
+            "type": "string",
+            "format": "regex"
+          },
           "tearing": {
             "type": "boolean"
           },

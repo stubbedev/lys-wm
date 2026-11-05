@@ -39,7 +39,7 @@ The tests hold each format to what the parser accepts.
 | `lys-wm-xkb-model` | `input.keyboard.model` | One xkeyboard-config model name: `pc105` | The rules' default model |
 | `lys-wm-xkb-rules` | `input.keyboard.rules` | One rules file name: `evdev` | `evdev` |
 | `lys-wm-drm-device` | `gpu` | A DRM card, `cardN` or `/dev/dri/cardN`, as listed under `/dev/dri`; never a render node | Refused; leave the key out |
-| `regex` | `rules[].app_id`, `rules[].title` | A Go regular expression | Matches everything |
+| `regex` | `rules[].app_id`, `rules[].title`, `rules[].tag` | A Go regular expression | Matches everything |
 
 The layout, model, rules, variant and options names are the ones
 `/usr/share/X11/xkb/rules/evdev.xml` lists. A name with a space or comma in
@@ -821,8 +821,10 @@ rules:
   - {app_id: ^steam$, title: ^Friends List$, size: 400x900}
 ```
 
-`app_id` and `title` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
-a rule needs at least one. `float: true` or `tile: true` decides where a new
+`app_id`, `title` and `tag` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
+a rule needs at least one. `tag` matches the stable tag a client gives its
+window through `xdg_toplevel_tag_v1` (`main window`, `settings`), and the
+empty string for a window without one, X11 windows included. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
 `decoration.dim_strength`, as for a dialog that should hold the attention.
 `blur: true` or `blur: false` turns `decoration.blur` on or off for the window and its popups; `blur: false` also ignores the blur regions they ask for through `ext_background_effect_v1`, and turns `mica` off.

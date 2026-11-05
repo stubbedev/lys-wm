@@ -95,6 +95,7 @@ func (o LookOverride) then(later LookOverride) LookOverride {
 type Rule struct {
 	AppID     *regexp.Regexp
 	Title     *regexp.Regexp
+	Tag       *regexp.Regexp
 	Mode      RuleMode
 	Size      image.Point
 	Tearing   RuleTearing
@@ -116,14 +117,18 @@ type Decision struct {
 	Mica      *bool
 }
 
-func (r Rule) matches(appID, title string) bool {
-	return (r.AppID == nil || r.AppID.MatchString(appID)) && (r.Title == nil || r.Title.MatchString(title))
+func (r Rule) matches(appID, title, tag string) bool {
+	return (r.AppID == nil || r.AppID.MatchString(appID)) && (r.Title == nil || r.Title.MatchString(title)) && (r.Tag == nil || r.Tag.MatchString(tag))
 }
 
 func Decide(rules []Rule, appID, title string) Decision {
+	return DecideTagged(rules, appID, title, "")
+}
+
+func DecideTagged(rules []Rule, appID, title, tag string) Decision {
 	var d Decision
 	for _, r := range rules {
-		if !r.matches(appID, title) {
+		if !r.matches(appID, title, tag) {
 			continue
 		}
 		if r.Mode != RuleUnset {

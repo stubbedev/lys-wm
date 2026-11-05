@@ -369,6 +369,7 @@ type rawGesture struct {
 type rawRule struct {
 	AppID     *At[string]  `yaml:"app_id"`
 	Title     *At[string]  `yaml:"title"`
+	Tag       *At[string]  `yaml:"tag"`
 	Float     bool         `yaml:"float"`
 	Tile      bool         `yaml:"tile"`
 	Size      *At[string]  `yaml:"size"`
@@ -1191,7 +1192,7 @@ func (p *parser) regexp(a *At[string], key string) *regexp.Regexp {
 func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	r := at.V
 	key := fmt.Sprintf("rules[%d]", i)
-	rule := wm.Rule{AppID: p.regexp(r.AppID, key+".app_id"), Title: p.regexp(r.Title, key+".title")}
+	rule := wm.Rule{AppID: p.regexp(r.AppID, key+".app_id"), Title: p.regexp(r.Title, key+".title"), Tag: p.regexp(r.Tag, key+".tag")}
 	switch {
 	case r.Float && r.Tile:
 		p.fail(at.Line, key, "cannot both float and tile")
@@ -1221,8 +1222,8 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 		o := float32(*v)
 		rule.Opacity = &o
 	}
-	if rule.AppID == nil && rule.Title == nil {
-		p.fail(at.Line, key, "matches every window; give app_id or title")
+	if r.AppID == nil && r.Title == nil && r.Tag == nil {
+		p.fail(at.Line, key, "matches every window; give app_id, title or tag")
 	}
 	return rule
 }

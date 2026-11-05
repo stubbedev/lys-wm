@@ -34,6 +34,10 @@ func (t xToplevel) AppID() string {
 	return t.Class().Class
 }
 
+func (xToplevel) Tag() string {
+	return ""
+}
+
 func (xToplevel) Icon() *shell.Icon {
 	return nil
 }

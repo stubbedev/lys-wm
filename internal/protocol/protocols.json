@@ -308,6 +308,11 @@
       "path": "staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml"
     },
     {
+      "package": "xdgtopleveltag",
+      "source": "wayland-protocols",
+      "path": "staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml"
+    },
+    {
       "package": "lysescape",
       "source": "lys-lib",
       "path": "wlr/lys-escape-v1.xml"

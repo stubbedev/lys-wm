@@ -22,6 +22,7 @@ import (
 	sxf2 "github.com/stubbedev/lys-wm/internal/protocol/server/xdgforeignv2"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
 	sxti "github.com/stubbedev/lys-wm/internal/protocol/server/xdgtoplevelicon"
+	sxtt "github.com/stubbedev/lys-wm/internal/protocol/server/xdgtopleveltag"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -68,6 +69,7 @@ const (
 	ChangedModal
 	ChangedIcon
 	ChangedSizeLimits
+	ChangedTag
 )
 
 type Listener interface {
@@ -134,6 +136,7 @@ func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
 		{sxf2.ZxdgImporterV2Interface, foreignVersion, sh.bindImporterV2},
 		{sxdd.XdgWmDialogV1Interface, dialogVersion, sh.bindDialog},
 		{sxti.XdgToplevelIconManagerV1Interface, iconVersion, sh.bindIcons},
+		{sxtt.XdgToplevelTagManagerV1Interface, tagVersion, bindTags},
 		{skd.OrgKdeKwinServerDecorationManagerInterface, kdeDecorationVersion, bindKDEDecoration},
 	} {
 		if _, err := d.AddGlobal(g.iface, g.version, g.bind); err != nil {

@@ -28,3 +28,19 @@ func TestSteamRules(t *testing.T) {
 		}
 	}
 }
+
+func TestATagRuleAppliesToTheTaggedToplevelOnly(t *testing.T) {
+	rules := []Rule{
+		{AppID: regexp.MustCompile(`^org\.mozilla\.firefox$`), Mode: RuleTile},
+		{Tag: regexp.MustCompile(`^picture-in-picture$`), Mode: RuleFloat, Size: image.Pt(480, 270)},
+	}
+	if got := DecideTagged(rules, "org.mozilla.firefox", "Video", "picture-in-picture"); got != (Decision{Mode: RuleFloat, Size: image.Pt(480, 270)}) {
+		t.Errorf("the tagged window: %+v", got)
+	}
+	if got := DecideTagged(rules, "org.mozilla.firefox", "Video", "main window"); got != (Decision{Mode: RuleTile}) {
+		t.Errorf("another tag: %+v", got)
+	}
+	if got := Decide(rules, "org.mozilla.firefox", "picture-in-picture"); got != (Decision{Mode: RuleTile}) {
+		t.Errorf("an untagged window: %+v", got)
+	}
+}
