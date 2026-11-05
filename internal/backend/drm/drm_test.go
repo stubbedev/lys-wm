@@ -2,6 +2,7 @@ package drm
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -108,6 +109,8 @@ type fakeDevice struct {
 	nonDesktop        map[uint32]bool
 	links             bool
 	linkBad           bool
+	foundBPC          uint64
+	refuseBPC         bool
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -278,7 +281,7 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.hdrConnector {
 			props[propHDRMetadata] = kdrm.Property{ID: propHDRMeta, Value: f.staleHDRBlob}
 			props[propColorspace] = kdrm.Property{ID: propColorspaceID}
-			props[propMaxBPC] = kdrm.Property{ID: propMaxBPCID, Value: 12}
+			props[propMaxBPC] = kdrm.Property{ID: propMaxBPCID, Value: cmp.Or(f.foundBPC, 12)}
 		}
 		return props, nil
 	}
@@ -426,6 +429,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 		return unix.EINVAL
 	}
 	if f.refusesModeset(c) {
+		return unix.EINVAL
+	}
+	if _, bpc := c.values[[2]uint32{20, propMaxBPCID}]; bpc && f.refuseBPC {
 		return unix.EINVAL
 	}
 	active, setsActive := c.values[[2]uint32{10, propActive}]

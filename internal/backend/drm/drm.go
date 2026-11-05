@@ -521,6 +521,7 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 		case c.Connection != kdrm.Connected:
 			errs = append(errs, b.remove(o))
 		default:
+			o.bpcRefused = false
 			errs = append(errs, o.recheckLink(c))
 		}
 	}
@@ -709,6 +710,8 @@ func (b *Backend) add(c kdrm.Connector) error {
 		o.colorEDID, o.colorErr = edid.ParseHDR(data)
 	}
 	o.signal.programmed = props[propHDRMetadata].Value != 0 || props[propColorspace].Value != 0
+	o.bpcFound = props[propMaxBPC].Value
+	o.bpc = o.bpcFound
 	o.bind(cr, p)
 	if o.pacer, err = b.loop.AddTimer(o.paceElapsed); err != nil {
 		return errors.Join(err, o.release())
@@ -923,6 +926,9 @@ type Output struct {
 	extraFlips    int
 	busy          *scanout
 	offBusy       bool
+	bpcFound      uint64
+	bpc           uint64
+	bpcRefused    bool
 }
 
 func (o *Output) Name() string {
@@ -990,7 +996,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 			continue
 		}
 		if !o.b.paused {
-			if restate, err = o.testMode(m, blob, buffers[0], next); err != nil {
+			if restate, err = o.testMode(m, d, blob, buffers[0], next); err != nil {
 				refused = append(refused, fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
 				continue
 			}
@@ -1030,12 +1036,22 @@ func (o *Output) free(buffers []*scanout) error {
 	return errors.Join(errs...)
 }
 
-func (o *Output) testMode(m kdrm.Mode, blob uint32, s *scanout, next signal) (bool, error) {
-	mode, modeBlob, kms, sig, restate := o.mode, o.modeBlob, o.kms, o.signal, o.restate
-	defer func() { o.mode, o.modeBlob, o.kms, o.signal, o.restate = mode, modeBlob, kms, sig, restate }()
-	o.mode, o.modeBlob, o.kms, o.signal, o.restate = m, blob, kmsModeset, next, false
+func (o *Output) testMode(m kdrm.Mode, d backend.BitDepth, blob uint32, s *scanout, next signal) (bool, error) {
+	mode, depth, modeBlob, kms, sig, restate := o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate
+	defer func() { o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate = mode, depth, modeBlob, kms, sig, restate }()
+	o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate = m, d, blob, kmsModeset, next, false
 	o.frame(s, -1)
 	alone := o.test(kdrm.AtomicAllowModeset)
+	if refused(alone) && o.bpcChanges() && o.maxBPC() > o.bpcFound {
+		bpc := o.maxBPC()
+		o.bpcRefused = true
+		o.frame(s, -1)
+		if err := o.test(kdrm.AtomicAllowModeset); err == nil {
+			o.b.report(fmt.Errorf("drm: %s refuses max bpc %d, so its 10-bit frames may reach the panel dithered: %w", o.Name(), bpc, alone))
+			return false, nil
+		}
+		o.bpcRefused = false
+	}
 	if !refused(alone) || len(o.b.litBeside(o)) == 0 {
 		return false, alone
 	}
@@ -1541,6 +1557,9 @@ func (o *Output) commitPresent(s *scanout) error {
 	o.renderFence = fence
 	o.aimedAt, _ = backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
 	o.sentOverlay()
+	if flags&kdrm.AtomicAllowModeset != 0 {
+		o.bpc = o.maxBPC()
+	}
 	o.kms, o.lit, o.flipping, o.torn, o.restate, o.extraFlips = kmsFlip, true, true, false, false, restated
 	o.queued = s
 	return nil

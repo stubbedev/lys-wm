@@ -105,18 +105,31 @@ func (o *Output) newSignal(m backend.HDRMetadata) (signal, error) {
 	return signal{meta: m, blob: blob, colorspace: colorspace, programmed: true}, nil
 }
 
+func (o *Output) maxBPC() uint64 {
+	if (o.depth == backend.Depth10 || o.signal.meta.Active) && !o.bpcRefused {
+		return max(o.bpcFound, hdrBPC)
+	}
+	return o.bpcFound
+}
+
+func (o *Output) bpcChanges() bool {
+	_, ok := o.connector.props[propMaxBPC]
+	return ok && o.maxBPC() != o.bpc
+}
+
 func (o *Output) addSignal(r *kdrm.Request) {
+	if o.bpcChanges() {
+		o.connector.set(r, propMaxBPC, o.maxBPC())
+	}
 	if !o.signal.programmed {
 		return
 	}
-	var colorspace, bpc uint64
-	bpc = o.connector.props[propMaxBPC].Value
+	var colorspace uint64
 	if o.signal.meta.Active {
-		colorspace, bpc = o.signal.colorspace, hdrBPC
+		colorspace = o.signal.colorspace
 	}
 	o.connector.set(r, propColorspace, colorspace)
 	o.connector.set(r, propHDRMetadata, uint64(o.signal.blob))
-	o.connector.set(r, propMaxBPC, bpc)
 }
 
 func (o *Output) releaseSignal() error {

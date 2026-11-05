@@ -88,7 +88,7 @@ func TestTheMetadataBlobIsTheKernelsStruct(t *testing.T) {
 }
 
 func TestAnHDRCommitProgramsTheConnectorAndSDRPutsItBack(t *testing.T) {
-	r, o := bootHDR(t, nil)
+	r, o := bootHDR(t, func(d *fakeDevice) { d.foundBPC = 8 })
 	sdr := o.State()
 	caps, err := o.HDRCapabilities()
 	if err != nil {
@@ -140,7 +140,7 @@ func TestAnHDRCommitProgramsTheConnectorAndSDRPutsItBack(t *testing.T) {
 	}
 	r.committedSince("the first SDR frame", func() *Output { _ = o.ScheduleFrame(); return o }(), 0)
 	back := r.dev.commits[len(r.dev.commits)-1]
-	for prop, want := range map[uint32]uint64{propColorspaceID: 0, propHDRMeta: 0, propMaxBPCID: 12} {
+	for prop, want := range map[uint32]uint64{propColorspaceID: 0, propHDRMeta: 0, propMaxBPCID: 8} {
 		if v, ok := connectorValue(back, prop); !ok || v != want {
 			t.Errorf("back on SDR property %d is %d (%v), want %d", prop, v, ok, want)
 		}
@@ -237,5 +237,88 @@ func TestAnHDROutputReleasesItsBlob(t *testing.T) {
 	}
 	if !slices.Contains(r.dev.destroyed, blob) {
 		t.Fatalf("blob %d was not destroyed: %v", blob, r.dev.destroyed)
+	}
+}
+
+func modesetsSettingBPC(commits []commit) (tests, sets []uint64) {
+	for _, c := range commits {
+		if c.flags&kdrm.AtomicAllowModeset == 0 {
+			continue
+		}
+		v, ok := connectorValue(c, propMaxBPCID)
+		switch {
+		case c.flags&kdrm.AtomicTestOnly != 0 && ok:
+			tests = append(tests, v)
+		case c.flags&kdrm.AtomicTestOnly != 0:
+			tests = append(tests, 0)
+		case ok:
+			sets = append(sets, v)
+		}
+	}
+	return tests, sets
+}
+
+func TestATenBitOutputRaisesMaxBPC(t *testing.T) {
+	r, o := bootHDR(t, func(d *fakeDevice) { d.foundBPC = 8 })
+	deep := o.State()
+	deep.Depth = backend.Depth10
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first 10-bit frame", o, 0)
+	if tests, sets := modesetsSettingBPC(r.dev.commits); !slices.Equal(tests, []uint64{hdrBPC, hdrBPC}) || !slices.Equal(sets, []uint64{hdrBPC}) {
+		t.Fatalf("modesets tested max bpc %v and set %v, want 10 in the mode test, the frame test and the commit", tests, sets)
+	}
+	r.dev.flip(t, 10, 1)
+	r.until("the flip", func() bool { return !o.flipping })
+	r.dev.commits = nil
+	deep.Mode = modeOf(modes[1])
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the next 10-bit modeset", o, 0)
+	if _, sets := modesetsSettingBPC(r.dev.commits); len(sets) != 0 {
+		t.Fatalf("a 10-bit modeset wrote max bpc %v again though it did not change", sets)
+	}
+}
+
+func TestMaxBPCAboveTenIsNeverLowered(t *testing.T) {
+	r, o := bootHDR(t, nil)
+	deep := o.State()
+	deep.Depth = backend.Depth10
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first 10-bit frame", o, 0)
+	for _, c := range r.dev.commits {
+		if v, ok := connectorValue(c, propMaxBPCID); ok {
+			t.Fatalf("a 10-bit modeset on a connector at max bpc 12 set it to %d", v)
+		}
+	}
+}
+
+func TestARefusedMaxBPCIsDroppedAndNotTriedAgain(t *testing.T) {
+	r, o := bootHDR(t, func(d *fakeDevice) { d.foundBPC, d.refuseBPC = 8, true })
+	deep := o.State()
+	deep.Depth = backend.Depth10
+	if err := o.Commit(deep); err != nil {
+		t.Fatalf("a 10-bit modeset whose max bpc is refused: %v", err)
+	}
+	if tests, _ := modesetsSettingBPC(r.dev.commits); !slices.Equal(tests, []uint64{hdrBPC, 0}) || len(r.reports) != 1 {
+		t.Fatalf("modesets tested max bpc %v, reports %v, want 10 then without it", tests, r.reports)
+	}
+	r.dev.commits = nil
+	deep.Mode = modeOf(modes[1])
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	if tests, _ := modesetsSettingBPC(r.dev.commits); !slices.Equal(tests, []uint64{0}) {
+		t.Fatalf("the next 10-bit modeset tested max bpc %v, want it left out at once", tests)
+	}
+	if err := r.hotplug(); err != nil {
+		t.Fatal(err)
+	}
+	if o.bpcRefused {
+		t.Fatal("a hotplug kept the refusal")
 	}
 }
