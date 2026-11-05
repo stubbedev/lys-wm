@@ -513,6 +513,9 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 	}
 	k.done = func(at time.Duration, err error) error {
 		if err == nil {
+			if src, ok := s.source.(windowSource); ok {
+				return errors.Join(f.ready(at, damage), s.c.captured(src.window, at))
+			}
 			return f.ready(at, damage)
 		}
 		s.captured = false

@@ -726,3 +726,29 @@ func testACaptureRepaintsOnlyTheDamageSinceTheLastCapture(t *testing.T, start gp
 		t.Fatal("the partly repainted capture differs from a whole one")
 	}
 }
+
+func TestASharedWindowKeepsDrawingWhileItIsHidden(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.HiddenFrame = time.Hour }, small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("shared", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	r := newCaptureRig(t, h, c)
+	h.dispatch("workspace 2")
+	settle(t, h)
+	session, view := r.windowSession()
+	before := w.Frames
+	for i := range 5 {
+		f, frame, _ := grab(t, c, session, view.size)
+		c.DispatchUntil("a frame of the hidden window", func() bool { return f.ready || f.failed })
+		if f.failed {
+			t.Fatalf("frame %d of the hidden window failed", i)
+		}
+		if err := errors.Join(frame.Destroy(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.Frames - before; got < 4 {
+		t.Fatalf("the hidden shared window got %d frame callbacks over five captures, want one a capture", got)
+	}
+}

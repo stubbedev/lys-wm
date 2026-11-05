@@ -103,3 +103,28 @@ func (c *Compositor) hiddenFrame() error {
 func (c *Compositor) HiddenFrames() uint64 {
 	return c.hidden.fired
 }
+
+func (c *Compositor) captured(w *window, at time.Duration) error {
+	errs := c.capturedTree(w.top.Surface(), at)
+	for _, pp := range c.popups(w) {
+		errs = errors.Join(errs, c.capturedTree(pp.popup.Surface(), at))
+	}
+	return errs
+}
+
+func (c *Compositor) capturedTree(root *surface.Surface, at time.Duration) error {
+	var errs error
+	for member := range root.Stack() {
+		if member != root {
+			errs = errors.Join(errs, c.capturedTree(member, at))
+			continue
+		}
+		if c.drawnAnywhere(member) {
+			continue
+		}
+		delete(c.hidden.waiting, member)
+		member.Latch()
+		errs = errors.Join(errs, member.FrameDone(wire.Millis(at)), member.Presented(nil, at, 0, 0, 0))
+	}
+	return errs
+}
