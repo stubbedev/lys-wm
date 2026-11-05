@@ -53,6 +53,7 @@ type CostSummary struct {
 	Passes      CostStat `json:"passes"`
 	Filters     CostStat `json:"filters"`
 	Uploads     CostStat `json:"uploads"`
+	GPUWaits    CostStat `json:"gpu_waits"`
 	Thumbs      CostStat `json:"thumbs"`
 	DamageRects CostStat `json:"damage_rects"`
 	Allocs      CostStat `json:"allocs"`
@@ -95,6 +96,7 @@ func summarizeCost(runs [][]Frame) CostSummary {
 		Passes:      costStat(runs, func(c *Cost) uint64 { return c.Passes }),
 		Filters:     costStat(runs, func(c *Cost) uint64 { return c.Filters }),
 		Uploads:     costStat(runs, func(c *Cost) uint64 { return c.Uploads }),
+		GPUWaits:    costStat(runs, func(c *Cost) uint64 { return c.GPUWaits }),
 		Thumbs:      costStat(runs, func(c *Cost) uint64 { return c.Thumbs }),
 		DamageRects: costStat(runs, func(c *Cost) uint64 { return c.DamageRects }),
 		Allocs:      costStat(runs, func(c *Cost) uint64 { return c.Allocs }),

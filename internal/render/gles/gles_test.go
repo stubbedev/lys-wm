@@ -56,6 +56,11 @@ func framebuffer(t testing.TB, r *gles.Renderer, size image.Point) *gles.Framebu
 	return f
 }
 
+func TestGPUWaitsCountTheFinishesAndNothingElse(t *testing.T) {
+	r := renderer(t)
+	rendertest.GPUWaitsCountOnlyWaits(t, r, framebuffer(t, r, rendertest.Size))
+}
+
 func TestOverlappingDamageBlendsOnce(t *testing.T) {
 	r := renderer(t)
 	rendertest.OverlappingDamageBlendsOnce(t, r, framebuffer(t, r, rendertest.DamageSize))

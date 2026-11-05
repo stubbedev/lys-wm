@@ -41,6 +41,7 @@ func (c *Compositor) frameCost(o *output.Output) frametrace.Cost {
 		Passes:      now.Passes - c.tracedCounts.Passes,
 		Filters:     now.Filters - c.tracedCounts.Filters,
 		Uploads:     now.Uploads - c.tracedCounts.Uploads,
+		GPUWaits:    now.GPUWaits - c.tracedCounts.GPUWaits,
 		Thumbs:      c.thumbRedraws - c.tracedThumbs,
 		DamageRects: uint64(max(len(sc.damage.Rects()), len(sc.repaint.Rects()))),
 		Overview:    c.OverviewProgress(c.frameTime),

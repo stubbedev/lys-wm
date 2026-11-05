@@ -43,7 +43,9 @@ type Renderer struct {
 }
 
 func (r *Renderer) Counts() render.Counts {
-	return r.counts
+	counts := r.counts
+	counts.GPUWaits = r.d.BlockingWaits()
+	return counts
 }
 
 func Open(node uint64) (*Renderer, error) {

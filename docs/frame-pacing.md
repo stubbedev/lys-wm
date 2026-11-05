@@ -79,6 +79,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
 | `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
+| `gpu_waits_per_frame` | Times the loop waited for the GPU to finish since the last composited frame, at worst, with no slack: a renderer's fence waits on Vulkan, `glFinish` on GLES | A frame or a resize that stalls the loop on the GPU, such as freeing a resource still in use |
 | `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
 | `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
 | `allocs_per_frame` | Heap allocations in the costliest frame of a play, taking the play where that is lowest. What only happens once, as the overview building its blur chain, passes: a median would move with how many frames fall in a step's costly part, which the load decides, and the worst alone would catch a burst from another goroutine | An allocation added to a path every play takes |

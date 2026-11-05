@@ -46,6 +46,7 @@ var metrics = []metric{
 	{name: "filter_passes_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Filters.Worst }, slack: slackCount},
 	{name: "filter_passes_per_run", of: func(c *frametrace.CostSummary) uint64 { return c.Filters.RunWorst }, slack: slackCount, steps: "overview"},
 	{name: "uploads_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Uploads.Worst }, slack: slackCount},
+	{name: "gpu_waits_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.GPUWaits.Worst }},
 	{name: "thumb_draws_per_settle", of: func(c *frametrace.CostSummary) uint64 { return c.Thumbs.RunWorst }, slack: slackCount},
 	{name: "damage_rects_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.DamageRects.Worst }, slack: slackCount, fixed: damageRectCap},
 	{name: "allocs_per_frame", of: func(c *frametrace.CostSummary) uint64 { return c.Allocs.Repeated }, slack: slackAllocs},

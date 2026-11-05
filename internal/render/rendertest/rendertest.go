@@ -1057,3 +1057,32 @@ func ExampleShaders(t *testing.T) []string {
 	}
 	return out
 }
+
+type Finisher interface {
+	render.Renderer
+	Finish() error
+}
+
+func GPUWaitsCountOnlyWaits(t *testing.T, r Finisher, target render.Target) {
+	t.Helper()
+	fill := func(p render.Pass) {
+		p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+	}
+	Paint(t, r, target, render.Region{image.Rect(0, 0, 8, 8)}, fill)
+	if err := r.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	before := r.Counts().GPUWaits
+	for range 3 {
+		Paint(t, r, target, render.Region{image.Rect(0, 0, 8, 8)}, fill)
+	}
+	if got := r.Counts().GPUWaits; got != before {
+		t.Fatalf("three passes counted %d GPU waits, want none", got-before)
+	}
+	if err := r.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Counts().GPUWaits; got <= before {
+		t.Fatalf("a Finish after three passes counted %d GPU waits, want at least one", got-before)
+	}
+}

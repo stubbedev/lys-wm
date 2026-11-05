@@ -355,6 +355,14 @@ var scenarios = []scenario{
 		},
 	},
 	{
+		name:  "resize",
+		setup: twoWindows,
+		steps: []step{
+			{name: "resize-grow", measure: sprung, act: dispatches("resizeactive 120 0")},
+			{name: "resize-shrink", measure: sprung, act: dispatches("resizeactive -120 0")},
+		},
+	},
+	{
 		name:  "workspace",
 		setup: twoWorkspaces,
 		steps: []step{

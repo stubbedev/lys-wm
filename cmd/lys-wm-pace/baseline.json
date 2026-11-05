@@ -7,6 +7,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
@@ -17,6 +18,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -27,6 +29,7 @@
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -37,6 +40,7 @@
         "draws_per_frame": 2,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -47,6 +51,7 @@
         "draws_per_frame": 62,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -57,6 +62,7 @@
         "draws_per_frame": 60,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -67,6 +73,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -77,6 +84,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -87,6 +95,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -98,6 +107,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -109,6 +119,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 10,
         "filter_passes_per_run": 13,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -120,6 +131,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -131,6 +143,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -142,6 +155,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -153,6 +167,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -164,6 +179,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -175,6 +191,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
@@ -186,6 +203,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -197,6 +215,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -208,6 +227,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -219,9 +239,32 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
+      },
+      "resize-grow": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
+      },
+      "resize-shrink": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
       },
       "swipe-follow-back": {
         "allocs_per_frame": 36,
@@ -229,6 +272,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -239,6 +283,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -249,6 +294,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -259,6 +305,7 @@
         "draws_per_frame": 40,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -269,6 +316,7 @@
         "draws_per_frame": 28,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -279,6 +327,7 @@
         "draws_per_frame": 38,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 6
@@ -289,6 +338,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -299,6 +349,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -313,6 +364,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
@@ -323,6 +375,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 5
@@ -333,6 +386,7 @@
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -343,6 +397,7 @@
         "draws_per_frame": 2,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -353,6 +408,7 @@
         "draws_per_frame": 62,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -363,6 +419,7 @@
         "draws_per_frame": 60,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -373,6 +430,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -383,6 +441,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -393,6 +452,7 @@
         "draws_per_frame": 35,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -404,6 +464,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -415,6 +476,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -426,6 +488,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -437,6 +500,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -448,6 +512,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -459,6 +524,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -470,6 +536,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -481,6 +548,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
@@ -492,6 +560,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -503,6 +572,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -514,6 +584,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -525,9 +596,32 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
+      },
+      "resize-grow": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
+      },
+      "resize-shrink": {
+        "allocs_per_frame": 34,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
       },
       "swipe-follow-back": {
         "allocs_per_frame": 34,
@@ -535,6 +629,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -545,6 +640,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -555,6 +651,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -565,6 +662,7 @@
         "draws_per_frame": 40,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -575,6 +673,7 @@
         "draws_per_frame": 28,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -585,6 +684,7 @@
         "draws_per_frame": 38,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 6
@@ -595,6 +695,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -605,6 +706,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -619,6 +721,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -629,6 +732,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -639,6 +743,7 @@
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -649,6 +754,7 @@
         "draws_per_frame": 2,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -659,6 +765,7 @@
         "draws_per_frame": 62,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -669,6 +776,7 @@
         "draws_per_frame": 60,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -679,6 +787,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -689,6 +798,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -699,6 +809,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -710,6 +821,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -721,6 +833,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 10,
         "filter_passes_per_run": 13,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 13,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -732,6 +845,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -743,6 +857,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -754,6 +869,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -765,6 +881,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -776,6 +893,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -787,6 +905,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
@@ -798,6 +917,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -809,6 +929,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -820,6 +941,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -831,9 +953,32 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
+      },
+      "resize-grow": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
+      },
+      "resize-shrink": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
       },
       "swipe-follow-back": {
         "allocs_per_frame": 34,
@@ -841,6 +986,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -851,6 +997,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -861,6 +1008,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -871,6 +1019,7 @@
         "draws_per_frame": 40,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -881,6 +1030,7 @@
         "draws_per_frame": 28,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -891,6 +1041,7 @@
         "draws_per_frame": 38,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -901,6 +1052,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -911,6 +1063,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -925,6 +1078,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -935,6 +1089,7 @@
         "draws_per_frame": 107,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -945,6 +1100,7 @@
         "draws_per_frame": 42,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -955,6 +1111,7 @@
         "draws_per_frame": 2,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 2,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -965,6 +1122,7 @@
         "draws_per_frame": 60,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -975,6 +1133,7 @@
         "draws_per_frame": 60,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 6,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 8,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -985,6 +1144,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -995,6 +1155,7 @@
         "draws_per_frame": 35,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1005,6 +1166,7 @@
         "draws_per_frame": 37,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1016,6 +1178,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1027,6 +1190,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1038,6 +1202,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1049,6 +1214,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1060,6 +1226,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1071,6 +1238,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1082,6 +1250,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1093,6 +1262,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
@@ -1104,6 +1274,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1115,6 +1286,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1126,6 +1298,7 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
         "filter_passes_per_run": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1137,9 +1310,32 @@
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 5,
         "filter_passes_per_run": 5,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 2
+      },
+      "resize-grow": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
+      },
+      "resize-shrink": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 25,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 3,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 7
       },
       "swipe-follow-back": {
         "allocs_per_frame": 34,
@@ -1147,6 +1343,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1157,6 +1354,7 @@
         "draws_per_frame": 45,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
@@ -1167,6 +1365,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -1177,6 +1376,7 @@
         "draws_per_frame": 40,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -1187,6 +1387,7 @@
         "draws_per_frame": 28,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 4,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 3
@@ -1197,6 +1398,7 @@
         "draws_per_frame": 38,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -1207,6 +1409,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
@@ -1217,6 +1420,7 @@
         "draws_per_frame": 55,
         "file_io_per_frame": 2,
         "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 3,
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4

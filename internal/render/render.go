@@ -346,9 +346,10 @@ func SoftwareDevice(name string) bool {
 }
 
 type Counts struct {
-	Passes  uint64
-	Filters uint64
-	Uploads uint64
+	Passes   uint64
+	Filters  uint64
+	Uploads  uint64
+	GPUWaits uint64
 }
 
 type Renderer interface {

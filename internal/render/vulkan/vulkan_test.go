@@ -42,6 +42,11 @@ func TestParityWithTheSoftwareRenderer(t *testing.T) {
 	rendertest.Parity(t, r, target(t, r, rendertest.Size))
 }
 
+func TestGPUWaitsCountTheDevicesWaitsAndNothingElse(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.GPUWaitsCountOnlyWaits(t, r, target(t, r, rendertest.Size))
+}
+
 func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
 	r := testenv.Vulkan(t)
 	rendertest.EveryFormat(t, r, target(t, r, image.Pt(1, 1)))

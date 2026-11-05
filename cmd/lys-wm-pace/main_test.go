@@ -253,6 +253,19 @@ func TestDamageRectsAreLimitedByTheCapWhateverWasObserved(t *testing.T) {
 	}
 }
 
+func TestAGPUWaitIsOverALimitOfNone(t *testing.T) {
+	var none frametrace.CostSummary
+	b := baseline{"gles/software": derive(costReport("resize-grow", none))}
+	if got := b["gles/software"].Steps["resize-grow"]["gpu_waits_per_frame"]; got != 0 {
+		t.Fatalf("gpu wait limit %d from a run without any, want 0", got)
+	}
+	waited := none
+	waited.GPUWaits.Worst = 1
+	if err := checkBaseline(b, costReport("resize-grow", waited)); err == nil || !strings.Contains(err.Error(), "resize-grow: gpu_waits_per_frame 1, limit 0") {
+		t.Fatalf("one GPU wait in a frame: %v", err)
+	}
+}
+
 func TestEveryStepHasEveryLimitInEveryBaseline(t *testing.T) {
 	for _, key := range []string{"gles/software", "vulkan/software"} {
 		if _, ok := checkedInBaseline[key]; !ok {

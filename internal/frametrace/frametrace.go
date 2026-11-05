@@ -64,6 +64,7 @@ type Cost struct {
 	Passes      uint64  `json:"passes"`
 	Filters     uint64  `json:"filters"`
 	Uploads     uint64  `json:"uploads"`
+	GPUWaits    uint64  `json:"gpu_waits"`
 	Thumbs      uint64  `json:"thumbs"`
 	DamageRects uint64  `json:"damage_rects"`
 	Allocs      uint64  `json:"allocs"`
@@ -312,6 +313,7 @@ func (t *track) carry(cost Cost) Cost {
 	cost.Passes += t.carried.Passes
 	cost.Filters += t.carried.Filters
 	cost.Uploads += t.carried.Uploads
+	cost.GPUWaits += t.carried.GPUWaits
 	cost.Thumbs += t.carried.Thumbs
 	if t.frame.Kind == Composited {
 		t.carried = Cost{}

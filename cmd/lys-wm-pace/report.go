@@ -106,10 +106,10 @@ func (r *report) write(out io.Writer) {
 
 func (r *report) writeCost(out io.Writer) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "step\tdraws\tpasses\tfilters\tuploads\tdamage rects\tthumbs/run\tfilters/run\tallocs\tfile io")
+	fmt.Fprintln(w, "step\tdraws\tpasses\tfilters\tuploads\tgpu waits\tdamage rects\tthumbs/run\tfilters/run\tallocs\tfile io")
 	for i := range r.Steps {
 		c := &r.Steps[i].Summary.Cost
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", r.Steps[i].Name, c.Draws.Worst, c.Passes.Worst, c.Filters.Worst, c.Uploads.Worst, c.DamageRects.Worst, c.Thumbs.RunWorst, c.Filters.RunWorst, c.Allocs.Repeated, c.FileIO.P50)
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", r.Steps[i].Name, c.Draws.Worst, c.Passes.Worst, c.Filters.Worst, c.Uploads.Worst, c.GPUWaits.Worst, c.DamageRects.Worst, c.Thumbs.RunWorst, c.Filters.RunWorst, c.Allocs.Repeated, c.FileIO.P50)
 	}
 	_ = w.Flush()
 	for _, g := range r.Growth {

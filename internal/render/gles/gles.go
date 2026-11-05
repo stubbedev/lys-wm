@@ -309,6 +309,7 @@ func (r *Renderer) Finish() error {
 		return err
 	}
 	r.gl.Finish()
+	r.counts.GPUWaits++
 	return r.leave("gles: finish")
 }
 
