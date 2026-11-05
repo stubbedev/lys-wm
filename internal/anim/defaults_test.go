@@ -98,3 +98,27 @@ func TestFrugalMotionDropsOnlyWhatRedrawsAWholeOutput(t *testing.T) {
 		t.Error("window motion went too")
 	}
 }
+
+func TestKeyTriggeredDefaultsMoveVisiblyOnTheirFirstFrame(t *testing.T) {
+	const refresh = time.Second / 60
+	table := MustResolve(DefaultMotion())
+	for _, e := range []Event{WindowsMove, WindowsIn, WindowsOut, Workspaces, LayersIn, LayersOut, Fade} {
+		c := table.Curve(e)
+		if first := c.At(refresh); first < 0.075 {
+			t.Errorf("%s covers %.1f%% of its travel on the first frame at 60 Hz, want at least 7.5%%", e, first*100)
+		}
+		half, nearly := 0, 0
+		for frame := 1; nearly == 0 && frame <= 60; frame++ {
+			v := c.At(time.Duration(frame) * refresh)
+			if half == 0 && v >= 0.5 {
+				half = frame
+			}
+			if v >= 0.95 {
+				nearly = frame
+			}
+		}
+		if half == 0 || half > 4 || nearly == 0 || nearly > 10 {
+			t.Errorf("%s reaches 50%% on frame %d and 95%% on frame %d at 60 Hz, want by 4 and 10", e, half, nearly)
+		}
+	}
+}

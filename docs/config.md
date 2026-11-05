@@ -484,15 +484,15 @@ and how much attention they should draw:
 
 | Event | Spring (stiffness, damping) | Overshoot | 95% there at | Style |
 | --- | --- | --- | --- | --- |
-| `windows_move` | 380, 34 | 0.4% | 197 ms | |
-| `windows_in` | 420, 30 | 3.4% | 149 ms | `popin 92%` |
-| `windows_out` | 700, 48 | 0.1% | 154 ms | `popin 94%` |
+| `windows_move` | 800, 54 | none | 156 ms | |
+| `windows_in` | 700, 40 | 2.7% | 120 ms | `popin 92%` |
+| `windows_out` | 900, 56 | 0.03% | 142 ms | `popin 94%` |
 | `windows_minimize` | 220, 30 | none | 326 ms | `genie` |
-| `workspaces` | 300, 34 | none | 266 ms | `slide` |
+| `workspaces` | 900, 60 | none | 159 ms | `slide` |
 | `overview` | 300, 34 | none | 266 ms | |
-| `layers_in` | 500, 42 | none | 192 ms | `fade` |
-| `layers_out` | 700, 50 | none | 164 ms | `fade` |
-| `fade` | 600, 49 | none | 194 ms | |
+| `layers_in` | 800, 54 | none | 156 ms | `fade` |
+| `layers_out` | 900, 58 | none | 150 ms | `fade` |
+| `fade` | 800, 56 | none | 166 ms | |
 
 `fade_out` shares `windows_out`'s spring, and `borderangle` is off. A fade keeps
 its opacity at 1 when a spring passes its target.

@@ -200,13 +200,23 @@ and plugging it back returns them and shows the one it was showing.
 closed form, tweens that sample a curve at a monotonic time and retarget from
 the value they show, and the event table the config resolves through parent
 events. The compositor keeps a tween per window over its tile, sets it when
-a layout change lands, and samples it once per frame at the frame's start time
-(`Config.Clock`, so tests drive time themselves). A window's draw ops are
+a layout change lands, and samples it once per frame at the vblank the frame
+aims at, the next in the phase of the output's last presentation (#330), or at
+the frame's start time without one (`Config.Clock`, so tests drive time
+themselves). A window's draw ops are
 recorded at its goal geometry and then mapped onto the tile the animation
 shows, so its surfaces, border and popups move as one and the op diff damages
 exactly what moved. After drawing, an output schedules its next frame for as
 long as an animation overlaps it, whether or not the frame changed anything,
 so an animation slower than a pixel per frame still reaches its end.
+
+The default springs are stiff enough that a key-triggered animation reads as
+instant (#331): every key-triggered default covers at least 7.5% of its travel
+on the first frame at 60 Hz, half by the fourth and 95% by the tenth (the
+workspace switch is 900 stiffness at a damping ratio of 1). A spring from rest
+barely moves for its first refreshes, and a stiffer one was chosen over giving
+key-triggered animations an initial velocity, which would make the same event
+move differently depending on what started it.
 
 ### Layout changes land together
 

@@ -3,14 +3,14 @@ package anim
 import "maps"
 
 var (
-	moveSpring     = mustSpring(380, 34)
-	openSpring     = mustSpring(420, 30)
-	closeSpring    = mustSpring(700, 48)
+	moveSpring     = mustSpring(800, 54)
+	openSpring     = mustSpring(700, 40)
+	closeSpring    = mustSpring(900, 56)
 	minimizeSpring = mustSpring(220, 30)
-	switchSpring   = mustSpring(300, 34)
-	layerInSpring  = mustSpring(500, 42)
-	layerOutSpring = mustSpring(700, 50)
-	fadeSpring     = mustSpring(600, 49)
+	switchSpring   = mustSpring(900, 60)
+	layerInSpring  = mustSpring(800, 54)
+	layerOutSpring = mustSpring(900, 58)
+	fadeSpring     = mustSpring(800, 56)
 
 	defaultOpen  = Style{Kind: Popin, Percent: 92}
 	defaultClose = Style{Kind: Popin, Percent: 94}
