@@ -475,3 +475,23 @@ func TestThePlaneLatchLeadsTheVblankByLessThanAFrameCouldStillMake(t *testing.T)
 		t.Fatalf("with no flip yet the plane latch is %v, want now", got)
 	}
 }
+
+func TestRendersOverrunOnlyWhileTheTypicalFrameTakesARefresh(t *testing.T) {
+	interval := 16 * time.Millisecond
+	var b RenderBudget
+	if b.Overruns(interval) {
+		t.Fatal("a budget with no samples overruns")
+	}
+	for range renderSamples / 2 {
+		b.Sample(20 * time.Millisecond)
+	}
+	if !b.Overruns(interval) {
+		t.Fatal("frames of 20 ms on a 16 ms refresh do not overrun")
+	}
+	for range renderSamples {
+		b.Sample(5 * time.Millisecond)
+	}
+	if b.Overruns(interval) {
+		t.Fatal("frames of 5 ms on a 16 ms refresh overrun")
+	}
+}

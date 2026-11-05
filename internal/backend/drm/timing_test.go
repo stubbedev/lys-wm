@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 )
 
@@ -90,5 +92,80 @@ func TestAFrameWithoutACursorCommitsAtOnce(t *testing.T) {
 	r.until("the frame", func() bool { return o.flipping })
 	if o.late != nil || len(r.dev.commits) == 0 {
 		t.Fatalf("a frame with no cursor on screen waited for the plane lead: %d commits", len(r.dev.commits))
+	}
+}
+
+func (r *rig) frames() int {
+	n := 0
+	for _, l := range r.rec.log {
+		if l == "frame" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestTheNextFrameStartsWhileOneFlipsWhenRendersOverrun(t *testing.T) {
+	r := start(t)
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	for range 32 {
+		o.budget.Sample(interval * 3 / 2)
+	}
+	r.rec.log = nil
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first slow frame", o, 0)
+	first := r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}]
+	n := len(r.dev.commits)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the next frame drawn while the first flips", func() bool { return o.late != nil })
+	if len(r.dev.commits) != n || r.frames() != 2 || len(o.buffers) != buffersPerOut+1 {
+		t.Fatalf("%d commits, %d frames and %d buffers while the first frame flips", len(r.dev.commits)-n, r.frames(), len(o.buffers))
+	}
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if r.frames() != 2 {
+		t.Fatalf("%d frames started with one flipping and one waiting, want no third", r.frames())
+	}
+	r.dev.flip(t, 10, 2)
+	r.until("the waiting frame's commit on the flip", func() bool { return o.flipping && o.late == nil })
+	second := r.dev.commits[len(r.dev.commits)-1]
+	if fb := second.values[[2]uint32{40, propFB}]; fb == 0 || fb == first || second.flags&kdrm.AtomicTestOnly != 0 {
+		t.Fatalf("the commit on the flip %+v, want the waiting frame's buffer", second)
+	}
+	if len(r.rec.presents) != 2 || r.rec.presents[1].Seq != 2 {
+		t.Fatalf("presents %+v", r.rec.presents)
+	}
+	r.until("the third frame drawn while the second flips", func() bool { return o.late != nil })
+	r.dev.flip(t, 10, 3)
+	r.until("the third frame's commit on the flip", func() bool { return o.flipping && o.late == nil })
+	if len(r.rec.presents) != 3 || r.rec.presents[2].Seq != 3 {
+		t.Fatalf("presents %+v, want a frame on each consecutive flip", r.rec.presents)
+	}
+}
+
+func TestFramesThatFitTheRefreshWaitForTheFlip(t *testing.T) {
+	r := start(t)
+	o := r.flipFirstFrame()
+	for range 32 {
+		o.budget.Sample(time.Millisecond)
+	}
+	r.rec.log = nil
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first frame", o, 0)
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.settle()
+	if o.late != nil || r.frames() != 1 || len(o.buffers) != buffersPerOut {
+		t.Fatalf("a fast frame started while one flips: %d frames, %d buffers", r.frames(), len(o.buffers))
 	}
 }

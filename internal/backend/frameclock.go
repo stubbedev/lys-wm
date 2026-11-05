@@ -168,6 +168,10 @@ func (b *RenderBudget) Missed(interval time.Duration) {
 	b.Sample(b.Budget(interval))
 }
 
+func (b *RenderBudget) Overruns(interval time.Duration) bool {
+	return b.n > 0 && b.leastToStart() >= interval
+}
+
 func (b *RenderBudget) Budget(interval time.Duration) time.Duration {
 	var slowest, next time.Duration
 	for _, s := range b.samples {

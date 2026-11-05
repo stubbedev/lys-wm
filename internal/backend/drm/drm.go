@@ -75,6 +75,7 @@ type scanout struct {
 	syncRead     bool
 	release      func() error
 	presented    uint64
+	started      time.Duration
 }
 
 func (s *scanout) free(dev device) error {
@@ -813,7 +814,7 @@ func (b *Backend) readEvents(loop.Events) error {
 func (b *Backend) flipped(e kdrm.FlipEvent) error {
 	for _, o := range b.outputs {
 		if o.bound() && uint64(o.crtc.id) == e.UserData {
-			return errors.Join(o.flipped(e), b.commitHeld())
+			return errors.Join(o.flipped(e), o.commitPipelined(), b.commitHeld())
 		}
 	}
 	return nil
@@ -944,6 +945,8 @@ type Output struct {
 	budget        backend.RenderBudget
 	tested        map[planeKey]bool
 	frameStart    time.Duration
+	renderStart   time.Duration
+	layout        layout
 	renderFence   int
 	aimedAt       time.Duration
 	untimed       bool
@@ -969,6 +972,7 @@ type Output struct {
 	commitLatch   *loop.Timer
 	late          *scanout
 	lateFence     int
+	lateTimed     bool
 }
 
 func (o *Output) Name() string {
@@ -1044,7 +1048,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 		if len(refused) > 0 {
 			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refused...)))
 		}
-		return o.adoptMode(m, d, blob, buffers, next, restate)
+		return o.adoptMode(m, d, l, blob, buffers, next, restate)
 	}
 	refused = append(refused, o.b.dev.DestroyBlob(blob), o.dropSignal(next))
 	if hdr.Active {
@@ -1177,14 +1181,14 @@ func stepDown(modes []kdrm.Mode, refusedMode kdrm.Mode) []kdrm.Mode {
 	return next
 }
 
-func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers []*scanout, next signal, restate bool) error {
+func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, l layout, blob uint32, buffers []*scanout, next signal, restate bool) error {
 	clear(o.tested)
 	err := errors.Join(o.freeBuffers(), o.releaseSignal())
 	o.signal = next
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 	}
-	o.buffers, o.mode, o.depth, o.modeBlob, o.enabled, o.kms, o.restate = buffers, m, d, blob, true, kmsModeset, restate
+	o.buffers, o.layout, o.mode, o.depth, o.modeBlob, o.enabled, o.kms, o.restate = buffers, l, m, d, blob, true, kmsModeset, restate
 	return err
 }
 
@@ -1422,7 +1426,12 @@ func (o *Output) testable() bool {
 }
 
 func (o *Output) frameReady() bool {
-	return o.enabled && !o.flipping && o.busy == nil && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
+	return o.enabled && (!o.flipping || o.pipelines()) && o.late == nil && o.busy == nil && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
+}
+
+func (o *Output) pipelines() bool {
+	interval := modeOf(o.mode).Interval()
+	return o.kms == kmsFlip && o.queued != nil && o.queued.client == nil && o.queued.prepare == nil && o.queued.prepareLater == nil && o.budget.Overruns(interval)
 }
 
 func (o *Output) ExpectFrameWork(pixels int) {
@@ -1472,6 +1481,13 @@ func (o *Output) BeginFrame() (backend.Frame, error) {
 		return backend.Frame{}, backend.Broken("drm: %s already has a frame in progress", o.Name())
 	}
 	i := slices.IndexFunc(o.buffers, func(s *scanout) bool { return s != o.front && s != o.queued })
+	if i < 0 && o.flipping {
+		s, err := o.b.alloc.allocate(modeOf(o.mode).Size, o.layout.format, o.layout.modifiers)
+		if err != nil {
+			return backend.Frame{}, fmt.Errorf("drm: a buffer for %s to draw in while one flips: %w", o.Name(), err)
+		}
+		o.buffers, i = append(o.buffers, s), len(o.buffers)
+	}
 	if i < 0 {
 		return backend.Frame{}, fmt.Errorf("drm: every buffer of %s is on screen or queued", o.Name())
 	}
@@ -1496,6 +1512,7 @@ func (o *Output) Present(damage render.Region) error {
 		return backend.Broken("drm: present on %s without BeginFrame", o.Name())
 	}
 	o.drawing = nil
+	s.started = o.frameStart
 	if o.b.paused {
 		return nil
 	}
@@ -1566,9 +1583,13 @@ func (o *Output) commitPresent(s *scanout) error {
 	if err != nil {
 		return err
 	}
+	if o.flipping {
+		o.late, o.lateFence = s, fence
+		return nil
+	}
 	if o.kms == kmsFlip && !o.tearFrame && o.cursor != nil && o.cursor.visible {
 		if wait := o.planesWait(); wait > 0 {
-			o.late, o.lateFence, o.flipping = s, fence, true
+			o.late, o.lateFence, o.lateTimed, o.flipping = s, fence, true, true
 			return o.commitLatch.Arm(wait)
 		}
 	}
@@ -1576,23 +1597,35 @@ func (o *Output) commitPresent(s *scanout) error {
 }
 
 func (o *Output) lateDue() error {
-	s, fence := o.late, o.lateFence
-	if s == nil {
+	if !o.lateTimed {
 		return nil
 	}
-	o.late, o.lateFence, o.flipping = nil, -1, false
+	o.lateTimed, o.flipping = false, false
+	return o.commitLate()
+}
+
+func (o *Output) commitLate() error {
+	s, fence := o.late, o.lateFence
+	o.late, o.lateFence = nil, -1
 	if !o.enabled || o.off || o.b.paused || !slices.Contains(o.buffers, s) {
 		return closeFence(fence)
 	}
 	return o.heldFailed(o.commitFenced(s, fence))
 }
 
+func (o *Output) commitPipelined() error {
+	if o.late == nil || o.lateTimed || o.flipping {
+		return nil
+	}
+	return errors.Join(o.commitLate(), o.clock.Kick())
+}
+
 func (o *Output) dropLate() error {
 	fence := o.lateFence
-	if o.late != nil {
+	if o.lateTimed {
 		o.flipping = false
 	}
-	o.late, o.lateFence = nil, -1
+	o.late, o.lateFence, o.lateTimed = nil, -1, false
 	return closeFence(fence)
 }
 
@@ -1643,7 +1676,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	if err := o.dropRenderFence(); err != nil {
 		return errors.Join(err, unix.Close(fence))
 	}
-	o.renderFence = fence
+	o.renderFence, o.renderStart = fence, s.started
 	o.aimedAt, _ = backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
 	o.sentOverlay()
 	if flags&kdrm.AtomicAllowModeset != 0 {
@@ -1968,8 +2001,8 @@ func (o *Output) timeFrame(flip time.Duration) error {
 		o.untimed = true
 		o.b.report(fmt.Errorf("drm: %s renders on the half-refresh latch, its frame fences report no time: %w", o.Name(), err))
 	}
-	if ok && done > o.frameStart {
-		o.budget.Sample(done - o.frameStart)
+	if ok && done > o.renderStart {
+		o.budget.Sample(done - o.renderStart)
 	}
 	return o.dropRenderFence()
 }
