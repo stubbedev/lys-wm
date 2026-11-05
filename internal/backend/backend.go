@@ -107,11 +107,12 @@ type Frame struct {
 }
 
 type Presentation struct {
-	Time    time.Duration
-	Refresh time.Duration
-	Seq     uint64
-	Torn    bool
-	Idle    bool
+	Time     time.Duration
+	Refresh  time.Duration
+	Seq      uint64
+	Torn     bool
+	Idle     bool
+	Hardware bool
 }
 
 const EmptyFramesPerRefresh = 2

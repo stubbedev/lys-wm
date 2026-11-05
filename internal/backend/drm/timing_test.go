@@ -169,3 +169,25 @@ func TestFramesThatFitTheRefreshWaitForTheFlip(t *testing.T) {
 		t.Fatalf("a fast frame started while one flips: %d frames, %d buffers", r.frames(), len(o.buffers))
 	}
 }
+
+func TestAFlipEventTimesItsPresentationInHardware(t *testing.T) {
+	r := start(t)
+	r.flipFirstFrame()
+	if p := r.rec.presents[len(r.rec.presents)-1]; !p.Hardware || p.Seq != 1 {
+		t.Fatalf("a flip at sequence 1 presented %+v, want it timed in hardware", p)
+	}
+}
+
+func TestAFlipAtSequenceZeroIsNotTimedInHardware(t *testing.T) {
+	r := start(t)
+	o := r.b.Outputs()[0]
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first frame", o, 0)
+	r.dev.flip(t, 10, 0)
+	r.until("the first frame's flip", func() bool { return !o.flipping })
+	if p := r.rec.presents[len(r.rec.presents)-1]; p.Hardware {
+		t.Fatalf("a flip at sequence 0 presented %+v, want it not timed in hardware", p)
+	}
+}

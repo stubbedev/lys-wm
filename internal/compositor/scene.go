@@ -533,6 +533,9 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	case p.Torn:
 		kind = 0
 	}
+	if p.Hardware {
+		kind |= spt.WpPresentationFeedbackKindHwClock | spt.WpPresentationFeedbackKindHwCompletion
+	}
 	if !p.Idle {
 		sc.last = p
 	}

@@ -2160,7 +2160,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 }
 
 func (o *Output) presentation(e kdrm.FlipEvent) backend.Presentation {
-	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn}
+	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn, Hardware: e.Sequence != 0}
 }
 
 func (o *Output) dropScanout(s *scanout) error {

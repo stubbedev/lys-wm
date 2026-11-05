@@ -297,6 +297,7 @@ type Output struct {
 	queuedTorn     bool
 	torn           uint64
 	tearFrame      bool
+	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
 	inherited      bool
@@ -658,6 +659,10 @@ func (o *Output) Torn() uint64 {
 	return o.torn
 }
 
+func (o *Output) EnableHardwareClock() {
+	o.hardwareClock = true
+}
+
 func (o *Output) TearFrame(tear bool) {
 	o.tearFrame = tear
 }
@@ -763,7 +768,7 @@ func (o *Output) present() error {
 	}
 	torn := o.queuedTorn
 	o.queuedTorn = false
-	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Torn: torn})
+	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Torn: torn, Hardware: o.hardwareClock})
 }
 
 type device struct {

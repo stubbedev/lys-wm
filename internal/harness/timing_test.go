@@ -309,3 +309,32 @@ func TestASinglePixelBufferIsAFillThatCostsNoUploadAndCullsWhatItCovers(t *testi
 		t.Fatalf("an opaque single pixel draws %d ops, a translucent one %d: what it covers was not culled", opaque, translucent)
 	}
 }
+
+func TestAHardwareTimedPresentationSaysSo(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		b.Outputs()[0].EnableHardwareClock()
+		return nil
+	})
+	c := testclient.Connect(t, h.Socket())
+	p, err := cpt.NewWpPresentation(c.Display, 2, &presentationEvents{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Bind(p)
+	w := c.Window("timed", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	shown := &feedbackEvents{}
+	if _, err := p.Feedback(w.Surface, shown); err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(w.Surface.Commit(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the feedback answered", func() bool { return len(shown.log) > 0 })
+	want := cpt.WpPresentationFeedbackKindVsync | cpt.WpPresentationFeedbackKindHwClock | cpt.WpPresentationFeedbackKindHwCompletion
+	if !slices.Equal(shown.log, []string{"presented"}) || shown.flags != want {
+		t.Fatalf("feedback %v with flags %#x, want presented with %#x", shown.log, shown.flags, want)
+	}
+}
