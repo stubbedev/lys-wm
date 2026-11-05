@@ -269,3 +269,32 @@ func TestNextLayoutWithOneLayoutChangesNothing(t *testing.T) {
 		t.Fatalf("one layout moved to group %d", st.Modifiers().Group)
 	}
 }
+
+func TestUnshiftedKeysymsComeFromTheFirstLevelOfAnyLayout(t *testing.T) {
+	km := compile(t)
+	const keySemicolon, keyB = 39, 48
+	for _, c := range []struct {
+		code, sym uint32
+		want      bool
+	}{
+		{keyB, 'b', true}, {keyB, 'B', false}, {keySemicolon, ';', true}, {keySemicolon, 0xe6, true}, {keySemicolon, 0xc6, false}, {keyA, 'b', false},
+	} {
+		if got := km.Unshifted(c.code, c.sym); got != c.want {
+			t.Errorf("key %d unshifted %#x: %v, want %v", c.code, c.sym, got, c.want)
+		}
+	}
+}
+
+func TestOnlyKeysThatComposeTextTypeIt(t *testing.T) {
+	for sym, want := range map[uint32]bool{
+		'a': true, ' ': true, 0xff0d: true, 0xfe51: true,
+		0xffbe: false, 0xffb1: false, 0xffeb: false, 0x1008ff14: false, 0xff51: false,
+	} {
+		if got := xkb.TypesText(sym); got != want {
+			t.Errorf("keysym %#x types text: %v, want %v", sym, got, want)
+		}
+	}
+	if !xkb.IsModifier(0xffeb) || xkb.IsModifier('a') {
+		t.Error("Super_L is a modifier keysym and a is not")
+	}
+}

@@ -54,6 +54,7 @@ var refused = map[string]string{
 }
 
 var retired = map[string][]string{
+	"xx_hotkey_v1":                             {"revoked"},
 	"hyprland_focus_grab_v1":                   {"cleared"},
 	"ext_data_control_offer_v1":                {},
 	"ext_data_control_source_v1":               {"cancelled"},
@@ -128,6 +129,7 @@ var dropped = map[string][]string{
 	"wp_presentation":                          {"feedback"},
 	"wp_single_pixel_buffer_manager_v1":        {"create_u32_rgba_buffer"},
 	"xdg_activation_v1":                        {"get_activation_token", "activate"},
+	"xx_hotkey_manager_v1":                     {"create_hotkey"},
 	"xdg_surface":                              {"get_popup", "ack_configure"},
 	"xdg_system_bell_v1":                       {"ring"},
 	"xdg_toplevel":                             {"show_window_menu", "move", "resize", "set_minimized"},

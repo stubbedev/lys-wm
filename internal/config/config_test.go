@@ -756,3 +756,19 @@ func TestARuleCanMatchOnTheTagAlone(t *testing.T) {
 		t.Fatalf("a bad tag regex: %v", err)
 	}
 }
+
+func TestClientHotkeysAreOffUnlessTheConfigTurnsThemOn(t *testing.T) {
+	for text, want := range map[string]bool{"": false, "client_hotkeys: true\n": true} {
+		file, err := Parse("t.yaml", []byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ClientHotkeys != want {
+			t.Errorf("%q: client hotkeys %v, want %v", text, cfg.ClientHotkeys, want)
+		}
+	}
+}

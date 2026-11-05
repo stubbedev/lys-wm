@@ -29,6 +29,11 @@
       "name": "lys-lib",
       "url": "https://raw.githubusercontent.com/stubbedev/lys-lib/{ref}/{path}",
       "ref": "3b712d99de0e6ed983af4511165e39603ce35534"
+    },
+    {
+      "name": "hyprland",
+      "url": "https://raw.githubusercontent.com/hyprwm/Hyprland/{ref}/{path}",
+      "ref": "f389f008228d51fa48bdd69a4c9e2b91f24bb2da"
     }
   ],
   "protocols": [
@@ -331,6 +336,11 @@
       "package": "backgroundeffect",
       "source": "wayland-protocols",
       "path": "staging/ext-background-effect/ext-background-effect-v1.xml"
+    },
+    {
+      "package": "xxhotkey",
+      "source": "hyprland",
+      "path": "protocols/xx-hotkey-v1.xml"
     }
   ]
 }

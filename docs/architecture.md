@@ -767,7 +767,7 @@ Everything lives under `internal/` except the commands.
 | `protocol/...` | Generated bindings, one package per protocol and side; never edited by hand |
 | `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox (#5) |
 | `server` | Display socket, clients, object maps, globals; sandbox sockets whose clients carry a security context and do not see restricted globals (#6, #118) |
-| `securitycontext` | `wp_security_context_manager_v1`: Flatpak and other sandbox engines register a socket for their apps; the compositor restricts screen capture, data control, foreign toplevels, output management, virtual input, session lock, layer shell, workspaces and global shortcuts, gamma and colour-matrix control and input methods to unsandboxed clients (#118, #123, #124, #176) |
+| `securitycontext` | `wp_security_context_manager_v1`: Flatpak and other sandbox engines register a socket for their apps; the compositor restricts screen capture, data control, foreign toplevels, output management, virtual input, session lock, layer shell, workspaces, global shortcuts and client hotkeys, gamma and colour-matrix control and input methods to unsandboxed clients (#118, #123, #124, #176) |
 | `wlclient` | The client side of a connection: object map, zombies and dispatch, for the nested backend and tests (#6, #9) |
 | `wlclient/feedback` | Reads `zwp_linux_dmabuf_feedback_v1` as a client: the device a compositor renders with and each tranche's format and modifier pairs |
 | `backend` | The backend interface: outputs, frames, input devices (#8) |
@@ -856,6 +856,22 @@ whitelisted surfaces (and their subsurfaces) get pointer focus, the keyboard
 stays on a whitelisted surface or moves to the newest one, and a press or touch
 outside clears the grab, sends `cleared` and goes nowhere else. A new grab
 clears the one before it, and locking the session clears it.
+
+## Client hotkeys
+
+`xx_hotkey_v1` (#327) is offered only with `client_hotkeys: true`, since the
+protocol is experimental. A key trigger matches the keysym a key produces at
+the first level of any layout, with exactly its Shift, Ctrl, Alt and Super
+held, so it keeps working after a layout switch. Hotkeys come after
+compositor binds and before everything else: a fired press joins `held` like a
+bind's, so its release is swallowed too, and a button joins `consumed`.
+Triggers are exclusive: a commit that a compositor bind or another hotkey
+already uses is denied `already_bound`, and a reload whose binds take a bound
+trigger revokes it. A lone modifier is a tap: it fires on release when nothing
+else was pressed, scrolled or clicked meanwhile, and is never consumed. The
+policy is the spec's suggested default. A handover revokes every hotkey, as
+replaying a hotkey's requests would rerun the policy against a config the
+client never saw; the client decides whether to bind again.
 
 ## Protocol bindings
 

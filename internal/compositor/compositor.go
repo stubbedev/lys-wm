@@ -85,6 +85,7 @@ type Config struct {
 	Overview        OverviewStyle
 	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
+	ClientHotkeys   bool
 }
 
 type Hooks struct {
@@ -174,6 +175,8 @@ type Compositor struct {
 	colorrep        *colorrep.Manager
 	colorManager    *colormanager.Manager
 	colorManagement bool
+	clientHotkeys   bool
+	hotkeys         hotkeyState
 	plans           colorspace.Plans
 	hdr             map[backend.Output]*hdrColor
 	ctms            map[backend.Output]backend.Matrix
@@ -388,6 +391,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.colorManagement = cfg.ColorManagement
+	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
@@ -549,7 +553,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.addImageCapture(display, offer); err != nil {
 		return err
 	}
-	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display)); err != nil {
+	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display), c.syncHotkeys()); err != nil {
 		return err
 	}
 	if c.data, err = data.New(display, c); err != nil {
@@ -587,7 +591,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.syncHotkeys(), c.applyOutputRules(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

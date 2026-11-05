@@ -282,3 +282,7 @@ func (s *Seat) retire(c *server.Client, out *wire.Conn) error {
 	}
 	return nil
 }
+
+func (s *Seat) ActivationSerial(c *server.Client) uint32 {
+	return s.eventSerial(c, true)
+}

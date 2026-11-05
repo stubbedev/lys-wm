@@ -403,6 +403,17 @@ xwayland_shell_v1.get_xwayland_surface = create
 xwayland_surface_v1 = refused retire=
 xwayland_surface_v1.set_serial = latest
 xwayland_surface_v1.destroy = destructor
+xx_hotkey_manager_v1 = journal retire=
+xx_hotkey_manager_v1.destroy = destructor
+xx_hotkey_manager_v1.set_app_id = latest
+xx_hotkey_manager_v1.create_hotkey = dropped
+xx_hotkey_v1 = inert retire=revoked
+xx_hotkey_v1.destroy = destructor
+xx_hotkey_v1.set_description = latest
+xx_hotkey_v1.set_seat = latest
+xx_hotkey_v1.set_key_trigger = latest
+xx_hotkey_v1.set_button_trigger = latest
+xx_hotkey_v1.commit = latest
 zwlr_data_control_device_v1 = journal retire=selection,primary_selection
 zwlr_data_control_device_v1.set_selection = dropped
 zwlr_data_control_device_v1.destroy = destructor

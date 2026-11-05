@@ -813,6 +813,24 @@ still run, so give the bind that takes focus back from such a window the
 
 Actions are listed in [actions.md](actions.md).
 
+## client_hotkeys
+
+```yaml
+client_hotkeys: true
+```
+
+Lets applications bind their own global hotkeys through the experimental
+`xx_hotkey_v1` protocol: push-to-talk, a launcher's summon key, OBS hotkeys.
+Off by default, as the protocol asks. A hotkey fires whichever window has
+focus, and the focused window does not see the key or button. Applications
+choose the trigger, within this policy: a trigger with `CTRL`, `ALT` or
+`SUPER` is allowed; without them only a key that types no text (function,
+media and navigation keys, the keypad, a lone modifier tapped on its own) or
+an auxiliary mouse button is. A trigger one of the `binds` above uses, or
+another application holds, is refused, and a bind added on reload takes the
+trigger back. Nothing fires while the session is locked or a window inhibits
+shortcuts. Sandboxed applications do not see the protocol.
+
 ## rules
 
 ```yaml

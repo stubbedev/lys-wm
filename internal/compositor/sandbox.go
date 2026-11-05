@@ -21,6 +21,7 @@ import (
 	swop "github.com/stubbedev/lys-wm/internal/protocol/server/wlroutputpower"
 	swsc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrscreencopy"
 	svp "github.com/stubbedev/lys-wm/internal/protocol/server/wlrvirtualpointer"
+	sxh "github.com/stubbedev/lys-wm/internal/protocol/server/xxhotkey"
 	"github.com/stubbedev/lys-wm/internal/securitycontext"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -43,6 +44,7 @@ var privileged = []*wire.Interface{
 	swlr.ZwlrLayerShellV1Interface,
 	sew.ExtWorkspaceManagerV1Interface,
 	shgs.HyprlandGlobalShortcutsManagerV1Interface,
+	sxh.XxHotkeyManagerV1Interface,
 	sksi.ZwpKeyboardShortcutsInhibitManagerV1Interface,
 	sle.LysEscapeManagerV1Interface,
 	securitycontext.Interface,

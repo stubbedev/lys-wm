@@ -115,6 +115,7 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 
 type rawConfig struct {
 	ColorManagement bool                  `yaml:"color_management"`
+	ClientHotkeys   bool                  `yaml:"client_hotkeys"`
 	Outputs         []At[rawOutput]       `yaml:"outputs"`
 	Input           rawInput              `yaml:"input"`
 	Palette         map[string]At[string] `yaml:"palette"`
@@ -414,6 +415,7 @@ type Config struct {
 	Input           session.InputConfig
 	Outputs         compositor.OutputRules
 	ColorManagement bool
+	ClientHotkeys   bool
 	Decor           compositor.Decor
 	Font            string
 	IconTheme       string
@@ -1312,6 +1314,7 @@ func ParseLayers(layers ...Layer) (Config, error) {
 		ZeroScaling:     raw.Xwayland.ZeroScaling == nil || *raw.Xwayland.ZeroScaling,
 		Tearing:         raw.Tearing,
 		ColorManagement: raw.ColorManagement,
+		ClientHotkeys:   raw.ClientHotkeys,
 		LidSuspend:      raw.LidSuspend == nil || *raw.LidSuspend,
 	}
 	if raw.Tabs.Font != nil {
@@ -1430,6 +1433,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
+	cfg.ClientHotkeys = c.ClientHotkeys
 	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {

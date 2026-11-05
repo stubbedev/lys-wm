@@ -54,7 +54,7 @@ func (c *Compositor) bindKey(code uint32, pressed bool) (bool, error) {
 			return false, nil
 		}
 		c.held = slices.Delete(c.held, i, i+1)
-		released := c.releaseShortcuts(binds.Key{Code: code})
+		released := errors.Join(c.releaseShortcuts(binds.Key{Code: code}), c.releaseHotkeys(binds.Key{Code: code}))
 		if h := c.repeat.held; h != nil && h.key == code {
 			return true, errors.Join(released, c.repeat.stop())
 		}
@@ -66,7 +66,14 @@ func (c *Compositor) bindKey(code uint32, pressed bool) (bool, error) {
 	}
 	b, ok := c.match(binds.Key{Code: code})
 	if !ok {
-		return false, nil
+		if !c.hotkeysOpen() {
+			return false, nil
+		}
+		fired, err := c.pressHotkey(binds.Key{Code: code})
+		if fired {
+			c.held = append(c.held, code)
+		}
+		return fired, err
 	}
 	c.held = append(c.held, code)
 	c.run(b.Action, binds.Key{Code: code})

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	lxkb "github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/sys/unix"
@@ -152,6 +153,28 @@ func (k *Keymap) Keycode(keysym string) (uint32, error) {
 		}
 	}
 	return 0, fmt.Errorf("%w: %q", ErrKeysymNotMapped, keysym)
+}
+
+func (k *Keymap) Unshifted(evdev, keysym uint32) bool {
+	key := lxkb.Keycode(evdev + evdevOffset)
+	for layout := range k.keymap.NumLayoutsForKey(key) {
+		if slices.Contains(k.keymap.KeySymsByLevel(key, layout, 0), lxkb.Keysym(keysym)) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsModifier(keysym uint32) bool {
+	return lxkb.KeysymIsModifier(lxkb.Keysym(keysym))
+}
+
+func TypesText(keysym uint32) bool {
+	sym := lxkb.Keysym(keysym)
+	if lxkb.KeysymIsModifier(sym) || lxkb.KeysymIsKeypad(sym) {
+		return false
+	}
+	return strings.HasPrefix(lxkb.KeysymGetName(sym), "dead_") || lxkb.KeysymToUTF32(sym) != 0
 }
 
 func (k *Keymap) ModMask(name string) (uint32, error) {

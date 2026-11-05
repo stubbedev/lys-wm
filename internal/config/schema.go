@@ -150,6 +150,7 @@ func annotations() map[string]annotation {
 		"xwayland.enabled":                 {def: true},
 		"xwayland.zero_scaling":            {def: true},
 		"color_management":                 {def: false},
+		"client_hotkeys":                   {def: false},
 		"tearing":                          {def: false},
 		"lid_suspend":                      {def: true},
 		"gpu":                              formatAnn(drmDeviceFormat),

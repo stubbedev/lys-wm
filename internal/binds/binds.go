@@ -5,6 +5,7 @@ package binds
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -209,4 +210,8 @@ func (m Map) Match(submap string, mods uint32, t Trigger, locked bool) (Bind, bo
 		}
 	}
 	return Bind{}, false
+}
+
+func (m Map) Any(f func(Bind) bool) bool {
+	return slices.ContainsFunc(m.binds, f)
 }

@@ -180,6 +180,10 @@
       },
       "additionalProperties": false
     },
+    "client_hotkeys": {
+      "type": "boolean",
+      "default": false
+    },
     "color_management": {
       "type": "boolean",
       "default": false

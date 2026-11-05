@@ -19,6 +19,7 @@ import (
 	swsc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrscreencopy"
 	sxa "github.com/stubbedev/lys-wm/internal/protocol/server/xdgactivation"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
+	sxh "github.com/stubbedev/lys-wm/internal/protocol/server/xxhotkey"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
@@ -33,6 +34,7 @@ var inertInterfaces = func() map[string]*wire.Interface {
 		sw.WlDataOfferInterface, sw.WlDataSourceInterface,
 		sxa.XdgActivationTokenV1Interface,
 		sxdg.XdgPopupInterface, sxdg.XdgSurfaceInterface,
+		sxh.XxHotkeyManagerV1Interface, sxh.XxHotkeyV1Interface,
 		swdc.ZwlrDataControlOfferV1Interface, swdc.ZwlrDataControlSourceV1Interface,
 		swft.ZwlrForeignToplevelHandleV1Interface,
 		swgc.ZwlrGammaControlV1Interface,

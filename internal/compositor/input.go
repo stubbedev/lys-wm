@@ -218,6 +218,9 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 }
 
 func (c *Compositor) inputKey(e backend.Key) error {
+	if err := c.watchTap(e.Code, e.Pressed); err != nil {
+		return err
+	}
 	if e.Pressed && c.overviewHolds() {
 		if taken, err := c.overviewKey(e.Code); taken || err != nil {
 			return err
@@ -243,6 +246,9 @@ func (c *Compositor) inputAbsolute(e backend.PointerMotionAbsolute) error {
 }
 
 func (c *Compositor) inputButton(e backend.PointerButton) error {
+	if e.Pressed {
+		c.interruptTap()
+	}
 	if c.pointerDrag() {
 		if e.Pressed {
 			return nil
@@ -251,7 +257,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 	}
 	if i := slices.Index(c.consumed, e.Button); !e.Pressed && i >= 0 {
 		c.consumed = slices.Delete(c.consumed, i, i+1)
-		released := c.releaseShortcuts(binds.Button{Code: e.Button})
+		released := errors.Join(c.releaseShortcuts(binds.Button{Code: e.Button}), c.releaseHotkeys(binds.Button{Code: e.Button}))
 		if c.overviewHolds() && c.overview.press != nil && !c.overview.press.touched && c.overview.press.button == e.Button {
 			return errors.Join(released, c.overviewReleased(c.cursor))
 		}
@@ -269,6 +275,12 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 		c.run(b.Action, binds.Button{Code: e.Button})
 		return nil
 	}
+	if e.Pressed && c.hotkeysOpen() {
+		if fired, err := c.pressHotkey(binds.Button{Code: e.Button}); fired || err != nil {
+			c.consumed = append(c.consumed, e.Button)
+			return err
+		}
+	}
 	if e.Pressed && c.overviewHolds() && c.seat.PointerFocus() == nil {
 		c.consumed = append(c.consumed, e.Button)
 		return c.overviewPressed(e.Button, 0, false, c.cursor)
@@ -282,6 +294,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 }
 
 func (c *Compositor) inputAxis(e backend.PointerAxis) error {
+	c.interruptTap()
 	if e.Orientation == backend.Vertical && e.Value != 0 {
 		dir := binds.ScrollDown
 		if e.Value < 0 {
