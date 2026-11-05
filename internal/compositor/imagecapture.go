@@ -419,7 +419,7 @@ func (s *captureSession) CreateFrame(obj *seic.ExtImageCopyCaptureSessionV1, res
 	if s.frame != nil {
 		return nil, obj.ProtocolError(seic.ExtImageCopyCaptureSessionV1ErrorDuplicateFrame, "the session already has a frame")
 	}
-	f := &captureFrame{s: s, res: res}
+	f := &captureFrame{s: s, res: res, damage: region.Capped(maxDamageRects)}
 	s.frame = f
 	server.OnDestroy(res, func() error {
 		f.end(s.c)
@@ -439,6 +439,7 @@ type captureFrame struct {
 	s      *captureSession
 	res    *seic.ExtImageCopyCaptureFrameV1
 	buffer *sw.WlBuffer
+	damage region.Set
 	frameLife
 }
 
@@ -448,9 +449,13 @@ func (f *captureFrame) AttachBuffer(_ *seic.ExtImageCopyCaptureFrameV1, b *sw.Wl
 }
 
 func (f *captureFrame) DamageBuffer(obj *seic.ExtImageCopyCaptureFrameV1, x, y, w, h int32) error {
-	if x < 0 || y < 0 || w <= 0 || h <= 0 {
+	switch {
+	case x < 0 || y < 0 || w <= 0 || h <= 0:
 		return obj.ProtocolError(seic.ExtImageCopyCaptureFrameV1ErrorInvalidBufferDamage, "damage %d,%d %dx%d", x, y, w, h)
+	case f.state != frameIdle:
+		return obj.ProtocolError(seic.ExtImageCopyCaptureFrameV1ErrorAlreadyCaptured, "damage after capture")
 	}
+	f.damage.Add(image.Rect(int(x), int(y), int(x)+int(w), int(y)+int(h)))
 	return nil
 }
 
@@ -500,7 +505,9 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 		damage = []image.Rectangle{{Max: size}}
 		if s.captured {
 			damage = slices.Clone(s.damage.Rects())
-			k.partial, k.repaint = true, damage
+			f.damage.AddSet(&s.damage)
+			f.damage.Clip(image.Rectangle{Max: size})
+			k.partial, k.repaint, k.update = true, damage, slices.Clone(f.damage.Rects())
 		}
 		s.captured = true
 		s.damage.Reset()

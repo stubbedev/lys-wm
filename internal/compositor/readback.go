@@ -36,6 +36,7 @@ func (c *Compositor) asyncReader() (render.AsyncReader, bool) {
 type captureScratch struct {
 	target render.AsyncReadTarget
 	read   *asyncRead
+	pix    []byte
 }
 
 func (s *captureScratch) take(r render.AsyncReader, size image.Point) (t render.AsyncReadTarget, kept bool, err error) {
@@ -58,7 +59,7 @@ func (s *captureScratch) take(r render.AsyncReader, size image.Point) (t render.
 
 func (s *captureScratch) drop() error {
 	t := s.target
-	s.target = nil
+	s.target, s.pix = nil, nil
 	if s.read != nil {
 		s.read.owner, s.read = nil, nil
 		return nil
@@ -90,16 +91,9 @@ func (r *asyncRead) cancel() {
 	r.cancelled.Store(true)
 }
 
-func (r *asyncRead) copyRows(dst frameWriter, pix []byte, stride int, size image.Point) error {
+func (r *asyncRead) copyRows(dst frameWriter, pix []byte, stride int, update render.Region) error {
 	err := dst.Write(func(data []byte, dstStride int) error {
-		row := size.X * 4
-		for y := range size.Y {
-			if r.cancelled.Load() {
-				return nil
-			}
-			copy(data[y*dstStride:y*dstStride+row], pix[y*stride:])
-		}
-		r.c.copiedBytes.Add(uint64(row * size.Y)) //nolint:gosec // a capture size is positive
+		r.c.copiedBytes.Add(copyRegion(data, dstStride, pix, stride, update, r.cancelled.Load))
 		return nil
 	})
 	return errors.Join(err, dst.Close())
@@ -148,9 +142,9 @@ func (r *asyncRead) waited(err error) error {
 	if err != nil {
 		return r.end(err)
 	}
-	size, dst := r.k.size, r.dst
+	update, dst := r.k.updated(), r.dst
 	r.dst = nil
-	r.c.offLoop(func() error { return r.copyRows(dst, pix, stride, size) }, r.end)
+	r.c.offLoop(func() error { return r.copyRows(dst, pix, stride, update) }, r.end)
 	return nil
 }
 

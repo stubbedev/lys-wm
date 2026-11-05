@@ -58,12 +58,24 @@ func (t shmCapture) read(c *Compositor, k *capture) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, target.Destroy()) }()
-	if err := paint(c.renderer, target, k); err != nil {
+	update := k.updated()
+	if err := c.paintRegion(target, k, update); err != nil {
 		return err
 	}
-	return t.b.Write(func(data []byte, stride int) error {
-		c.copiedBytes.Add(uint64(k.size.X * k.size.Y * 4)) //nolint:gosec // a capture size is positive
-		return target.Read(data, stride)
+	stride := k.size.X * 4
+	if k.update == nil {
+		return t.b.Write(func(data []byte, dstStride int) error {
+			c.copiedBytes.Add(uint64(stride * k.size.Y)) //nolint:gosec // a capture size is positive
+			return target.Read(data, dstStride)
+		})
+	}
+	t.scratch.pix = slices.Grow(t.scratch.pix[:0], stride*k.size.Y)[:stride*k.size.Y]
+	if err := target.Read(t.scratch.pix, stride); err != nil {
+		return err
+	}
+	return t.b.Write(func(data []byte, dstStride int) error {
+		c.copiedBytes.Add(copyRegion(data, dstStride, t.scratch.pix, stride, update, func() bool { return false }))
+		return nil
 	})
 }
 
@@ -75,7 +87,7 @@ type dmabufCapture struct {
 func (t dmabufCapture) fill(c *Compositor, k *capture, finish func(error) error) error {
 	target, err := c.captureTarget(t.r, t.b)
 	if err == nil {
-		err = paint(c.renderer, target, k)
+		err = c.paintRegion(target, k, k.updated())
 	}
 	if err != nil || !t.r.NativeFences() {
 		return finish(errors.Join(err, t.r.Finish()))
@@ -109,13 +121,25 @@ func (c *Compositor) paintRegion(target render.Target, k *capture, repaint rende
 	return errors.Join(k.draw(p), p.End())
 }
 
-func paint(r render.Renderer, target render.Target, k *capture) error {
-	p, err := r.Begin(target, render.Region{image.Rectangle{Max: k.size}})
-	if err != nil {
-		return err
+func (k *capture) updated() render.Region {
+	if k.update == nil {
+		return render.Region{image.Rectangle{Max: k.size}}
 	}
-	p.Clear(k.clear)
-	return errors.Join(k.draw(p), p.End())
+	return k.update
+}
+
+func copyRegion(dst []byte, dstStride int, src []byte, stride int, update render.Region, cancelled func() bool) uint64 {
+	var n uint64
+	for _, r := range update {
+		from, to := r.Min.X*4, r.Max.X*4
+		for y := r.Min.Y; y < r.Max.Y; y++ {
+			if cancelled() {
+				return n
+			}
+			n += uint64(copy(dst[y*dstStride+from:y*dstStride+to], src[y*stride+from:])) //nolint:gosec // a copy's length is not negative
+		}
+	}
+	return n
 }
 
 type capture struct {
@@ -130,6 +154,7 @@ type capture struct {
 	read    *asyncRead
 	partial bool
 	repaint render.Region
+	update  render.Region
 }
 
 type frameState uint8

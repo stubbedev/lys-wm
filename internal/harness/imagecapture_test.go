@@ -112,12 +112,21 @@ func captureInto(t *testing.T, c *testclient.Client, session *ceic.ExtImageCopyC
 
 func requestCapture(t *testing.T, session *ceic.ExtImageCopyCaptureSessionV1, wl *cw.WlBuffer, size image.Point) (*capturedFrame, *ceic.ExtImageCopyCaptureFrameV1) {
 	t.Helper()
+	return requestDamagedCapture(t, session, wl, image.Rectangle{Max: size})
+}
+
+func requestDamagedCapture(t *testing.T, session *ceic.ExtImageCopyCaptureSessionV1, wl *cw.WlBuffer, damage ...image.Rectangle) (*capturedFrame, *ceic.ExtImageCopyCaptureFrameV1) {
+	t.Helper()
 	f := &capturedFrame{}
 	frame, err := session.CreateFrame(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := errors.Join(frame.AttachBuffer(wl), frame.DamageBuffer(0, 0, int32(size.X), int32(size.Y)), frame.Capture()); err != nil {
+	errs := []error{frame.AttachBuffer(wl)}
+	for _, d := range damage {
+		errs = append(errs, frame.DamageBuffer(int32(d.Min.X), int32(d.Min.Y), int32(d.Dx()), int32(d.Dy()))) //nolint:gosec // test captures are small
+	}
+	if err := errors.Join(append(errs, frame.Capture())...); err != nil {
 		t.Fatal(err)
 	}
 	return f, frame
@@ -699,15 +708,7 @@ func testACaptureRepaintsOnlyTheDamageSinceTheLastCapture(t *testing.T, start gp
 	r := newCaptureRig(t, h, c)
 	session, view := r.outputSession(0)
 	r.first(session, view.size)
-	pixels := func() uint64 {
-		var n uint64
-		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
-			n = comp.CapturedPixels()
-			return nil
-		})
-		return n
-	}
-	before := pixels()
+	before := capturedPixels(h)
 	next, partial := r.waiting(session, view.size)
 	buf := c.Buffer(w.Logical, 1, testclient.Fill(0, 0xff, 0))
 	if err := errors.Join(w.Surface.Attach(buf, 0, 0), w.Surface.Damage(0, 0, 4, 4), w.Surface.Commit(), c.Display.Flush()); err != nil {
@@ -718,7 +719,7 @@ func testACaptureRepaintsOnlyTheDamageSinceTheLastCapture(t *testing.T, start gp
 		t.Fatalf("the next frame %+v", *next)
 	}
 	area := next.damage.Dx() * next.damage.Dy()
-	if got := pixels() - before; got == 0 || got > uint64(area) {
+	if got := capturedPixels(h) - before; got == 0 || got > uint64(area) {
 		t.Fatalf("a capture repainted %d pixels for damage %v", got, next.damage)
 	}
 	fresh, freshView := r.outputSession(0)
@@ -750,5 +751,105 @@ func TestASharedWindowKeepsDrawingWhileItIsHidden(t *testing.T) {
 	}
 	if got := w.Frames - before; got < 4 {
 		t.Fatalf("the hidden shared window got %d frame callbacks over five captures, want one a capture", got)
+	}
+}
+
+func capturedPixels(h *Harness) uint64 {
+	var n uint64
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		n = comp.CapturedPixels()
+		return nil
+	})
+	return n
+}
+
+func recolorCorner(t *testing.T, c *testclient.Client, w *testclient.Window) {
+	t.Helper()
+	if err := errors.Join(w.Surface.Attach(c.Buffer(w.Logical, 1, testclient.Fill(0, 0xff, 0)), 0, 0), w.Surface.Damage(0, 0, 4, 4), w.Surface.Commit(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAReusedShmBufferIsUpdatedOnlyWhereItIsStale(t *testing.T) {
+	t.Parallel()
+	onEachRenderer(t, func(t *testing.T, start starter) {
+		h := start(t, small)
+		c := testclient.Connect(t, h.Socket())
+		w := c.Window("captured", quadrants)
+		c.DispatchUntil("the window to map", w.Mapped)
+		quiesce(t, h, c, w)
+		r := newCaptureRig(t, h, c)
+		session, view := r.outputSession(0)
+		wl, pix := c.Target(view.size)
+		first, frame := captureInto(t, c, session, wl, view.size)
+		c.DispatchUntil("the first frame", func() bool { return first.ready || first.failed })
+		if err := errors.Join(frame.Destroy(), c.Display.Flush()); first.failed || err != nil {
+			t.Fatalf("the first frame %+v (%v)", *first, err)
+		}
+		const sentinel = 0x5a
+		for i := range pix {
+			pix[i] = sentinel
+		}
+		stale := image.Rect(150, 90, 155, 95)
+		next, _ := requestDamagedCapture(t, session, wl, stale)
+		recolorCorner(t, c, w)
+		c.DispatchUntil("the frame after damage", func() bool { return next.ready || next.failed })
+		if next.failed || next.damage.Empty() || next.damage.Overlaps(stale) {
+			t.Fatalf("the frame after damage %+v", *next)
+		}
+		fresh, freshView := r.outputSession(0)
+		whole := r.first(fresh, freshView.size)
+		stride := view.size.X * 4
+		for y := range view.size.Y {
+			for x := range view.size.X {
+				p, at := image.Pt(x, y), y*stride+x*4
+				got, want := pix[at:at+3], whole[at:at+3]
+				switch {
+				case p.In(stale) && !bytes.Equal(got, want):
+					t.Fatalf("pixel %v the client damaged is %v, want %v", p, got, want)
+				case !p.In(stale) && !p.In(next.damage) && !bytes.Equal(got, []byte{sentinel, sentinel, sentinel}):
+					t.Fatalf("pixel %v neither changed nor stale was copied: %v", p, got)
+				}
+			}
+		}
+	})
+}
+
+func TestADMABUFCaptureRepaintsOnlyWhatChanged(t *testing.T) {
+	onEachDMABUFRenderer(t, testADMABUFCaptureRepaintsOnlyWhatChanged)
+}
+
+func testADMABUFCaptureRepaintsOnlyWhatChanged(t *testing.T, start gpuStarter) {
+	h := start(t, func(*compositor.Config) {}, small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("captured", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	quiesce(t, h, c, w)
+	r := newCaptureRig(t, h, c)
+	session, view := r.outputSession(0)
+	target := c.RenderTarget(view.size, view.modifiers)
+	first, frame := captureInto(t, c, session, target.WL, view.size)
+	c.DispatchUntil("the first frame", func() bool { return first.ready || first.failed })
+	if err := errors.Join(frame.Destroy(), c.Display.Flush()); first.failed || err != nil {
+		t.Fatalf("the first frame %+v (%v)", *first, err)
+	}
+	before := capturedPixels(h)
+	next, _ := requestDamagedCapture(t, session, target.WL)
+	recolorCorner(t, c, w)
+	c.DispatchUntil("the frame after damage", func() bool { return next.ready || next.failed })
+	if next.failed {
+		t.Fatalf("the frame after damage %+v", *next)
+	}
+	if got := capturedPixels(h) - before; got == 0 || got > uint64(next.damage.Dx()*next.damage.Dy()) {
+		t.Fatalf("a capture into a filled dmabuf repainted %d pixels for damage %v", got, next.damage)
+	}
+	fresh, freshView := r.outputSession(0)
+	whole, pix, stride := r.first(fresh, freshView.size), target.Pixels(), view.size.X*4
+	for y := range view.size.Y {
+		for x := range view.size.X {
+			if got, want := rgbAt(pix, stride, x, y), rgbAt(whole, stride, x, y); got != want {
+				t.Fatalf("pixel %d,%d of the dmabuf is %v, a whole capture %v", x, y, got, want)
+			}
+		}
 	}
 }
