@@ -802,7 +802,7 @@ Everything lives under `internal/` except the commands.
 | `outputmanagement` | `zwlr_output_manager_v1`: outputs as heads with their modes for display configuration tools, whose configurations override the config file's output rules until a reload (#107) |
 | `shm` | `wl_shm` pools and buffers, read fault-safely when a client truncates its pool (#12) |
 | `inputmethod` | `zwp_text_input_manager_v3`, `zwp_text_input_manager_v1` (Chromium and Electron default to it; a v1 text input enters when it activates on the keyboard-focused surface, and its `commit_state` serial tags what it receives, #309) and `zwp_input_method_manager_v2`: text inputs follow the keyboard focus, the enabled one activates the seat's single input method, and its text, preedit and deletions reach that text input; the input method's keyboard grab takes the keys pressed while it holds it, and its popups are drawn under the text cursor (#124) |
-| `seat` | `wl_seat`, keyboard, pointer and touch, `wp_cursor_shape_v1`, and touchpad gestures through `zwp_pointer_gestures_v1`, which stay with the surface they began on unless the compositor claims them, when the client gets a cancelled end (#13, #14, #108) |
+| `seat` | `wl_seat`, keyboard, pointer and touch, `wp_cursor_shape_v1`, and touchpad gestures through `zwp_pointer_gestures_v1`, which stay with the surface they began on unless the compositor claims them, when the client gets a cancelled end (#13, #14, #108); drawing tablets through `zwp_tablet_manager_v2`: a tool follows the pointer onto the surface under it, stays on the surface its tip went down on, and clicks as a pointer for a client without the protocol; pads are not announced (#308) |
 | `data` | `wl_data_device_manager` and `zwp_primary_selection_device_manager_v1`: the clipboard and primary selection offered to the keyboard focus, and drag and drop (#18) |
 | `lys-lib/xcursor` | Xcursor files and theme lookup through `XCURSOR_PATH` and `Inherits`, and the built-in arrow, shared with lys-ui (#14) |
 | `xkb` | Keymap compilation, sealed keymap fds and modifier state through lys-lib's `xkb` (#13) |
@@ -815,6 +815,7 @@ Everything lives under `internal/` except the commands.
 | `ipc` | The IPC socket and event stream (#31) |
 | `systemd` | Hands the session's environment to D-Bus activation and the systemd user manager, and runs `lys-wm-session.target` while lys-wm runs |
 | `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42); the `handle-lid-switch` inhibitor, logind's Suspend, and the power supplies' AC state for the lid policy (#179) |
+| `tabletinput` | Drawing tablets and their tools' proximity, motion, tip and button events, from libinput to the compositor (#308) |
 | `harness` | The compositor-in-the-loop harness (#10) |
 | `testclient` | A scripted Wayland client that maps toplevels and animates shm frames, for integration tests |
 | `testenv` | Whether a test skips or fails when a dev-shell tool or library is missing |

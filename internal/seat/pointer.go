@@ -246,11 +246,16 @@ func (s *Seat) PointerEntered(c *server.Client, serial uint32) bool {
 }
 
 func (r pointerRequests) SetCursor(obj *sw.WlPointer, serial uint32, wl *sw.WlSurface, hx, hy int32) error {
-	s := r.s
-	if !s.PointerEntered(r.c, serial) {
+	if !r.s.PointerEntered(r.c, serial) {
 		return nil
 	}
-	cur := clientCursor{client: r.c, want: HiddenCursor{}}
+	return r.s.setCursor(r.c, wl, hx, hy, func(err error) error {
+		return obj.ProtocolError(sw.WlPointerErrorRole, "%v", err)
+	})
+}
+
+func (s *Seat) setCursor(c *server.Client, wl *sw.WlSurface, hx, hy int32, roleError func(error) error) error {
+	cur := clientCursor{client: c, want: HiddenCursor{}}
 	if wl != nil {
 		sf, err := surface.From(wl)
 		if err != nil {
@@ -258,7 +263,7 @@ func (r pointerRequests) SetCursor(obj *sw.WlPointer, serial uint32, wl *sw.WlSu
 		}
 		if !IsCursorSurface(sf) {
 			if err := sf.SetRole(cursorSurface{s}); err != nil {
-				return obj.ProtocolError(sw.WlPointerErrorRole, "%v", err)
+				return roleError(err)
 			}
 		}
 		cur.want = SurfaceCursor{Surface: sf, Hotspot: image.Pt(int(hx), int(hy))}

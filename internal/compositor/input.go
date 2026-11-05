@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -83,12 +84,12 @@ func (c *Compositor) DeviceAdded(d backend.Device) error {
 		c.keyboards = append(c.keyboards, k)
 		k.SetLEDs(c.leds)
 	}
-	return c.seat.AddDevice(wlCaps(d.Capabilities()))
+	return errors.Join(c.seat.AddDevice(wlCaps(d.Capabilities())), c.tabletAdded(d))
 }
 
 func (c *Compositor) DeviceRemoved(d backend.Device) error {
 	c.keyboards = slices.DeleteFunc(c.keyboards, func(k backend.KeyboardLEDs) bool { return any(k) == any(d) })
-	return c.seat.RemoveDevice(wlCaps(d.Capabilities()))
+	return errors.Join(c.seat.RemoveDevice(wlCaps(d.Capabilities())), c.tabletRemoved(d))
 }
 
 func (c *Compositor) syncLEDs() {
@@ -202,6 +203,8 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		return c.touchCancel()
 	case backend.TouchFrame, *backend.TouchFrame:
 		return c.seat.TouchFrame()
+	case *tabletinput.Proximity, *tabletinput.Motion, *tabletinput.Tip, *tabletinput.Button:
+		return c.tabletInput(d, e)
 	case backend.Switch:
 		if e.Kind != backend.SwitchLid || e.On == c.lidClosed {
 			return nil

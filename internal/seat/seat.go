@@ -10,6 +10,7 @@ import (
 	scs "github.com/stubbedev/lys-wm/internal/protocol/server/cursorshape"
 	spg "github.com/stubbedev/lys-wm/internal/protocol/server/pointergestures"
 	srp "github.com/stubbedev/lys-wm/internal/protocol/server/relativepointer"
+	"github.com/stubbedev/lys-wm/internal/protocol/server/tablet"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -68,6 +69,7 @@ type Seat struct {
 	pointer  pointerState
 	gesture  gestureState
 	touch    touchState
+	tablet   tabletState
 }
 
 func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
@@ -87,6 +89,9 @@ func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
 		return nil, err
 	}
 	if _, err := d.AddGlobal(spg.ZwpPointerGesturesV1Interface, gesturesVersion, s.bindGestures); err != nil {
+		return nil, err
+	}
+	if _, err := d.AddGlobal(tablet.ZwpTabletManagerV2Interface, tabletVersion, s.bindTablets); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -229,7 +234,7 @@ func (s *Seat) SurfaceDestroyed(target *surface.Surface) error {
 		s.gesture = gestureState{}
 	}
 	s.touch.points = slices.DeleteFunc(s.touch.points, func(p touchPoint) bool { return p.surface == target })
-	return err
+	return errors.Join(err, s.tabletSurfaceDestroyed(target))
 }
 
 type seatRequests struct {

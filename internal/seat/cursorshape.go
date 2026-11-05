@@ -34,17 +34,18 @@ func (cursorShapeManager) Destroy(*scs.WpCursorShapeManagerV1) error {
 }
 
 func (m cursorShapeManager) GetPointer(_ *scs.WpCursorShapeManagerV1, _ *scs.WpCursorShapeDeviceV1, _ *sw.WlPointer) (scs.WpCursorShapeDeviceV1Handler, error) {
-	return shapeDevice{m.s, m.c, true}, nil
+	return shapeDevice{s: m.s, c: m.c}, nil
 }
 
-func (m cursorShapeManager) GetTabletToolV2(_ *scs.WpCursorShapeManagerV1, _ *scs.WpCursorShapeDeviceV1, _ *tablet.ZwpTabletToolV2) (scs.WpCursorShapeDeviceV1Handler, error) {
-	return shapeDevice{m.s, m.c, false}, nil
+func (m cursorShapeManager) GetTabletToolV2(_ *scs.WpCursorShapeManagerV1, _ *scs.WpCursorShapeDeviceV1, tool *tablet.ZwpTabletToolV2) (scs.WpCursorShapeDeviceV1Handler, error) {
+	r, _ := tool.Handler().(toolRequests)
+	return shapeDevice{s: m.s, c: m.c, tool: r.t}, nil
 }
 
 type shapeDevice struct {
-	s       *Seat
-	c       *server.Client
-	pointer bool
+	s    *Seat
+	c    *server.Client
+	tool *tabletTool
 }
 
 func (shapeDevice) Destroy(*scs.WpCursorShapeDeviceV1) error {
@@ -57,7 +58,10 @@ func (d shapeDevice) SetShape(obj *scs.WpCursorShapeDeviceV1, serial uint32, sha
 		return obj.ProtocolError(scs.WpCursorShapeDeviceV1ErrorInvalidShape, "invalid shape %d", shape)
 	}
 	p := &d.s.pointer
-	if !d.pointer || p.focus == nil || p.focus.Client() != d.c || serial != p.enterSerial {
+	switch {
+	case d.tool != nil && !d.tool.entered(d.c, serial):
+		return nil
+	case d.tool == nil && (p.focus == nil || p.focus.Client() != d.c || serial != p.enterSerial):
 		return nil
 	}
 	p.cursor = clientCursor{client: d.c, want: ShapeCursor{Shape: name}}

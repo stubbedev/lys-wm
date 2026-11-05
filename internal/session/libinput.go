@@ -15,6 +15,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -141,6 +142,7 @@ type libinputFuncs struct {
 	profileDefault   func(dev uintptr) AccelProfile
 	accelSpeed       func(dev uintptr, speed float64) int32
 	speedDefault     func(dev uintptr) float64
+	tablet           tabletFuncs
 }
 
 type Opener interface {
@@ -155,6 +157,8 @@ type InputDevice struct {
 	touchpad     bool
 	scrollFactor float64
 	ledUpdate    func(dev uintptr, leds int32)
+	tablet       bool
+	tabletID     tabletinput.ID
 }
 
 var _ backend.KeyboardLEDs = (*InputDevice)(nil)
@@ -209,6 +213,7 @@ type Libinput struct {
 	abs     backend.PointerMotionAbsolute
 	button  backend.PointerButton
 	axes    [2]backend.PointerAxis
+	tablet  tabletEvents
 	touch   struct {
 		down   backend.TouchDown
 		motion backend.TouchMotion
@@ -320,10 +325,7 @@ func hotCall[R uintptr | int32 | uint64](f *libinputFuncs, sym uintptr) func(uin
 
 func (in *Libinput) bind(path string) error {
 	f := &in.fn
-	for _, s := range []struct {
-		fn   any
-		name string
-	}{
+	for _, s := range []libSymbol{
 		{&f.createContext, "libinput_path_create_context"},
 		{&f.unref, "libinput_unref"},
 		{&f.addDevice, "libinput_path_add_device"},
@@ -407,6 +409,9 @@ func (in *Libinput) bind(path string) error {
 			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
 		}
 		purego.RegisterLibFunc(s.fn, in.lib, s.name)
+	}
+	if err := in.bindTablet(path); err != nil {
+		return err
 	}
 	return in.bindHot(path)
 }
@@ -664,6 +669,9 @@ func (in *Libinput) event(ev uintptr) error {
 				d.caps |= flag
 			}
 		}
+		if f.deviceHasCap(h, capTabletTool) != 0 {
+			d.tablet, d.tabletID = true, tabletinput.ID{Vendor: f.tablet.vendor(h), Product: f.tablet.product(h)}
+		}
 		in.devices[h] = d
 		if err := in.configure(d); err != nil {
 			in.report(err)
@@ -780,6 +788,8 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 	case evSwipeEnd, evPinchEnd, evHoldEnd:
 		g := f.gestureEvent(ev)
 		return append(out, backend.GestureEnd{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Cancelled: f.cancelled(g) != 0})
+	case evTabletToolAxis, evTabletToolProximity, evTabletToolTip, evTabletToolButton:
+		return in.translateTablet(out, ev, typ)
 	case evSwitchToggle:
 		s := f.switchEvent(ev)
 		kind, ok := switchKinds[f.switchKind(s)]
@@ -805,6 +815,7 @@ func (in *Libinput) Close() error {
 		in.fn.deviceUnref(d.h)
 		delete(in.devices, h)
 	}
+	in.dropTabletTools()
 	if in.li != 0 {
 		in.fn.unref(in.li)
 		in.li = 0

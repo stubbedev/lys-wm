@@ -52,6 +52,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/singlepixel"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/syncobj"
+	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/tearingcontrol"
 	"github.com/stubbedev/lys-wm/internal/wm"
 	"github.com/stubbedev/lys-wm/internal/xkb"
@@ -254,6 +255,7 @@ type Compositor struct {
 	entered         []*entered
 	cursor          point
 	touches         map[int32]touchAt
+	tabletButtons   map[*tabletinput.Tool][]uint32
 	cursors         CursorConfig
 	pointers        map[cursorKey]*cursorTexture
 	hwCursors       map[*output.Output]*hwCursor
