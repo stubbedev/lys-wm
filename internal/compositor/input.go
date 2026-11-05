@@ -262,7 +262,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 	}
 	if e.Pressed && !c.seat.PointerGrabbed() && c.outsideGrab(c.seat.PointerFocus()) {
 		c.consumed = append(c.consumed, e.Button)
-		return c.shell.DismissGrab()
+		return c.dismissGrabs()
 	}
 	if b, ok := c.match(binds.Button{Code: e.Button}); e.Pressed && ok {
 		c.consumed = append(c.consumed, e.Button)
@@ -307,7 +307,7 @@ func (c *Compositor) touchDown(e backend.TouchDown) error {
 	p := c.touchPoint(c.inArea(area, e.X, e.Y))
 	s, local, _ := c.surfaceAt(p)
 	if c.outsideGrab(s) {
-		return c.shell.DismissGrab()
+		return c.dismissGrabs()
 	}
 	if s == nil {
 		if c.overviewHolds() {

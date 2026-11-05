@@ -86,6 +86,9 @@ func (c *Compositor) GrabChanged() error {
 }
 
 func (c *Compositor) grabClient() *server.Client {
+	if g := c.focusGrab; g != nil {
+		return g.surfaces[0].Client()
+	}
 	if g := c.shell.Grab(); len(g) > 0 {
 		return g[0].Surface().Client()
 	}
@@ -93,6 +96,9 @@ func (c *Compositor) grabClient() *server.Client {
 }
 
 func (c *Compositor) grabTop() *surface.Surface {
+	if g := c.focusGrab; g != nil {
+		return g.keyboardTarget(c.seat.Focus())
+	}
 	for _, p := range slices.Backward(c.shell.Grab()) {
 		if p.Mapped() {
 			return p.Surface()
@@ -102,6 +108,9 @@ func (c *Compositor) grabTop() *surface.Surface {
 }
 
 func (c *Compositor) outsideGrab(s *surface.Surface) bool {
+	if g := c.focusGrab; g != nil {
+		return !g.has(s)
+	}
 	g := c.grabClient()
 	return g != nil && (s == nil || s.Client() != g)
 }
