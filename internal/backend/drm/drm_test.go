@@ -101,6 +101,7 @@ type fakeDevice struct {
 	loopGoroutine     string
 	refuseModesets    bool
 	modes             []kdrm.Mode
+	connectors        []uint32
 	asyncFlips        bool
 	failCommits       error
 	commits           []commit
@@ -169,6 +170,9 @@ const primeHandles = 1000
 
 func (f *fakeDevice) Resources() (kdrm.Resources, error) {
 	res := kdrm.Resources{CRTCs: []uint32{10, 11}, Connectors: []uint32{20}, Encoders: []uint32{30}}
+	if f.connectors != nil {
+		res.Connectors = f.connectors
+	}
 	if f.unplugged {
 		res.Connectors = nil
 	}
@@ -183,7 +187,7 @@ func (f *fakeDevice) Connector(id uint32) (kdrm.Connector, error) {
 	if f.unplugged {
 		return kdrm.Connector{}, unix.ENOENT
 	}
-	c := kdrm.Connector{ID: id, Type: 10, TypeID: 1, Encoders: []uint32{30}, Connection: kdrm.Disconnected}
+	c := kdrm.Connector{ID: id, Type: 10, TypeID: id - 19, Encoders: []uint32{30}, Connection: kdrm.Disconnected}
 	if f.connected {
 		c.Connection, c.Modes = kdrm.Connected, modes
 		if f.modes != nil {

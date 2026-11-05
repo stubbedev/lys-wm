@@ -238,7 +238,6 @@ func (c *cursor) release() error {
 	for _, b := range c.buffers {
 		errs = append(errs, c.o.b.dev.RemoveFB(b.fb), c.o.b.dev.DestroyDumb(b.dumb))
 	}
-	c.plane.taken = false
 	c.buffers, c.pending, c.queued, c.front, c.drawn, c.drawing = nil, nil, nil, nil, nil, false
 	return errors.Join(errs...)
 }

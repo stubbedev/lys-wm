@@ -167,6 +167,7 @@ type Backend struct {
 	syncReads  uint64
 	probing    bool
 	probeAgain bool
+	starved    bool
 	fenceTime  func(fd int) (time.Duration, bool, error)
 	now        func() time.Duration
 }
@@ -503,6 +504,7 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 	if p.err != nil {
 		return p.err
 	}
+	b.starved = false
 	var errs []error
 	for _, o := range slices.Clone(b.outputs) {
 		if !slices.Contains(p.ids, o.conn.ID) {
@@ -603,7 +605,7 @@ func (b *Backend) pick(c kdrm.Connector, routed uint32) (*crtc, *plane, error) {
 		}
 	}
 	if first == nil {
-		return nil, nil, fmt.Errorf("drm: no free CRTC and primary plane for %s", c.Name())
+		return nil, nil, fmt.Errorf("drm: %s: %w", c.Name(), errNoCRTC)
 	}
 	return first, b.free(primaryPlane, first), nil
 }
@@ -671,10 +673,15 @@ func (b *Backend) add(c kdrm.Connector) error {
 	}
 	routed := uint32(props["CRTC_ID"].Value) //nolint:gosec // KMS object IDs are 32-bit
 	cr, p, err := b.pick(c, routed)
+	if errors.Is(err, errNoCRTC) {
+		b.starved = true
+		b.report(fmt.Errorf("%w; it lights when another output on the device is disabled or unplugged", err))
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, crtc: cr, primary: p, renderFence: -1, tested: map[planeKey]struct{}{}}
+	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, tested: map[planeKey]struct{}{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: o.frameWait,
 		Wake: func(after time.Duration) error {
@@ -696,18 +703,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 		o.colorEDID, o.colorErr = edid.ParseHDR(data)
 	}
 	o.signal.programmed = props[propHDRMetadata].Value != 0 || props[propColorspace].Value != 0
-	cr.output, p.taken = o, true
-	if cp := b.free(cursorPlane, cr); cp != nil {
-		cp.taken = true
-		o.cursor = &cursor{o: o, plane: cp}
-	}
-	for ov := range b.frees(overlayPlane, cr) {
-		if ov.props["zpos"].Value > p.props["zpos"].Value {
-			ov.taken = true
-			o.overlay = ov
-			break
-		}
-	}
+	o.bind(cr, p)
 	if o.pacer, err = b.loop.AddTimer(o.paceElapsed); err != nil {
 		return errors.Join(err, o.release())
 	}
@@ -769,7 +765,7 @@ func (b *Backend) readEvents(loop.Events) error {
 
 func (b *Backend) flipped(e kdrm.FlipEvent) error {
 	for _, o := range b.outputs {
-		if uint64(o.crtc.id) == e.UserData {
+		if o.bound() && uint64(o.crtc.id) == e.UserData {
 			return o.flipped(e)
 		}
 	}
@@ -1039,7 +1035,10 @@ func (o *Output) adoptMode(m kdrm.Mode, d backend.BitDepth, blob uint32, buffers
 
 func (o *Output) Commit(s backend.OutputState) error {
 	if !s.Enabled() {
-		return o.disable()
+		if err := o.disable(); err != nil {
+			return err
+		}
+		return o.b.lightStarved()
 	}
 	i := slices.IndexFunc(o.conn.Modes, func(m kdrm.Mode) bool { return modeOf(m) == s.Mode })
 	if i < 0 {
@@ -1048,7 +1047,17 @@ func (o *Output) Commit(s backend.OutputState) error {
 	if o.enabled && o.conn.Modes[i] == o.mode && s.Depth == o.depth && s.HDR == o.signal.meta {
 		return o.setPower(s.Lit())
 	}
+	if !o.bound() {
+		cr, p, err := o.b.pick(o.conn, 0)
+		if err != nil {
+			return err
+		}
+		o.bind(cr, p)
+	}
 	if err := o.setMode(o.conn.Modes[i], s.Depth, s.HDR); err != nil {
+		if !o.enabled {
+			o.unbind()
+		}
 		return err
 	}
 	o.off = !s.Lit()
@@ -1102,7 +1111,9 @@ func (o *Output) disable() error {
 	}
 	if !o.lit || o.b.paused {
 		o.enabled, o.lit = false, false
-		return o.freeBuffers()
+		err := o.freeBuffers()
+		o.unbind()
+		return err
 	}
 	r := &o.b.req
 	r.Reset()
@@ -1115,7 +1126,63 @@ func (o *Output) disable() error {
 	}
 	o.enabled, o.lit, o.flipping = false, false, false
 	o.clock.Cancel()
-	return o.freeBuffers()
+	err := o.freeBuffers()
+	o.unbind()
+	return err
+}
+
+var errNoCRTC = errors.New("no free CRTC and primary plane")
+
+func (o *Output) bound() bool {
+	return o.crtc != nil && o.crtc.output == o
+}
+
+func (o *Output) bind(cr *crtc, p *plane) {
+	o.crtc, o.primary = cr, p
+	cr.output, p.taken = o, true
+	clear(o.tested)
+	o.overlayTested = nil
+	if cp := o.b.free(cursorPlane, cr); cp != nil {
+		cp.taken = true
+		if o.cursor == nil {
+			o.cursor = &cursor{o: o}
+		}
+		o.cursor.plane = cp
+	} else if c := o.cursor; c != nil {
+		c.refused = fmt.Errorf("drm: %s lost its cursor plane to another output while disabled", o.Name())
+		if err := c.release(); err != nil {
+			o.b.report(fmt.Errorf("drm: free the cursor buffers of %s: %w", o.Name(), err))
+		}
+		o.cursor = nil
+	}
+	for ov := range o.b.frees(overlayPlane, cr) {
+		if ov.props["zpos"].Value > p.props["zpos"].Value {
+			ov.taken = true
+			o.overlay = ov
+			break
+		}
+	}
+}
+
+func (o *Output) unbind() {
+	if !o.bound() {
+		return
+	}
+	o.crtc.output, o.primary.taken = nil, false
+	if o.overlay != nil {
+		o.overlay.taken, o.overlay = false, nil
+	}
+	if o.cursor != nil {
+		o.cursor.plane.taken = false
+	}
+}
+
+func (b *Backend) lightStarved() error {
+	if !b.starved {
+		return nil
+	}
+	b.starved = false
+	return b.rescan()
 }
 
 func (o *Output) commitDisable(r *kdrm.Request) error {
@@ -1758,10 +1825,7 @@ func (o *Output) release() error {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0
 	}
-	o.crtc.output, o.primary.taken = nil, false
-	if o.overlay != nil {
-		o.overlay.taken = false
-	}
+	o.unbind()
 	if o.latch != nil {
 		err = errors.Join(err, o.latch.Remove())
 		o.latch = nil
