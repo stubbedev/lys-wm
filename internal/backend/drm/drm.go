@@ -64,6 +64,7 @@ type device interface {
 	RemoveFB(id uint32) error
 	CloseFB(id uint32) error
 	Commit(r *kdrm.Request, flags uint32, userData uint64) error
+	CRTCSequence(crtc uint32) (kdrm.Vblank, error)
 }
 
 type scanout struct {
@@ -954,6 +955,7 @@ type Output struct {
 	aimedAt       time.Duration
 	untimed       bool
 	lastFlip      time.Duration
+	unanchored    bool
 	presented     uint64
 	color         colorBlobs
 	signal        signal
@@ -1479,7 +1481,7 @@ func (o *Output) emptyFrame() error {
 		return nil
 	}
 	now := o.b.now()
-	at, _ := backend.NextVblank(o.lastFlip, now, modeOf(o.mode).Interval())
+	at, _ := backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
 	if err := o.pacer.Arm(at - now); err != nil {
 		return fmt.Errorf("drm: pace the frames of %s: %w", o.Name(), err)
 	}
@@ -1700,7 +1702,8 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 		return errors.Join(err, unix.Close(fence))
 	}
 	o.renderFence, o.renderStart = fence, s.started
-	o.aimedAt, _ = backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
+	now := o.b.now()
+	o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
 	o.sentOverlay()
 	if flags&kdrm.AtomicAllowModeset != 0 {
 		o.bpc = o.maxBPC()
@@ -1993,12 +1996,29 @@ func (o *Output) test(flags uint32) error {
 
 func (o *Output) planesWait() time.Duration {
 	now := o.b.now()
-	return backend.PlaneLatch(o.lastFlip, now, modeOf(o.mode).Interval()) - now
+	return backend.PlaneLatch(o.vblank(now), now, modeOf(o.mode).Interval()) - now
 }
 
 func (o *Output) frameWait() time.Duration {
 	now := o.b.now()
-	return o.budget.Deadline(o.lastFlip, now, modeOf(o.mode).Interval()) - now
+	return o.budget.Deadline(o.vblank(now), now, modeOf(o.mode).Interval()) - now
+}
+
+func (o *Output) vblank(now time.Duration) time.Duration {
+	if o.lastFlip == 0 || now-o.lastFlip <= modeOf(o.mode).Interval() || o.unanchored || !o.lit || o.off {
+		return o.lastFlip
+	}
+	v, err := o.b.dev.CRTCSequence(o.crtc.id)
+	switch {
+	case errors.Is(err, kdrm.ErrNoVblankSequence):
+		o.unanchored = true
+	case err != nil:
+		o.unanchored = true
+		o.b.report(fmt.Errorf("drm: %s extrapolates its vblanks from its last flip, reading the CRTC's last vblank failed: %w", o.Name(), err))
+	case v.Active && v.Time > o.lastFlip && v.Time <= now:
+		o.lastFlip = v.Time
+	}
+	return o.lastFlip
 }
 
 func (o *Output) dropRenderFence() error {
@@ -2081,7 +2101,8 @@ func (o *Output) frameCarriesPlanes() bool {
 	case !o.clock.Waiting():
 		return false
 	}
-	next, _ := backend.NextVblank(o.lastFlip, o.b.now(), modeOf(o.mode).Interval())
+	now := o.b.now()
+	next, _ := backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
 	return o.frameDue < next
 }
 

@@ -191,3 +191,77 @@ func TestAFlipAtSequenceZeroIsNotTimedInHardware(t *testing.T) {
 		t.Fatalf("a flip at sequence 0 presented %+v, want it not timed in hardware", p)
 	}
 }
+
+func (r *rig) idleUntilTheCRTCDrifts(o *Output) time.Duration {
+	r.t.Helper()
+	interval := modeOf(o.mode).Interval()
+	drifted := o.lastFlip + 1000*interval + 3*time.Millisecond
+	r.dev.vblank = func(crtc uint32) (kdrm.Vblank, error) {
+		if crtc != o.crtc.id {
+			r.t.Fatalf("read the vblank of CRTC %d, want %d", crtc, o.crtc.id)
+		}
+		return kdrm.Vblank{Sequence: 1001, Time: drifted, Active: true}, nil
+	}
+	r.pinned = drifted + time.Millisecond
+	return drifted
+}
+
+func TestTheFirstFrameAfterIdleAimsAtTheCRTCsVblank(t *testing.T) {
+	r := start(t)
+	r.pinned = backend.Now()
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	vblank := r.idleUntilTheCRTCDrifts(o)
+	if wait := o.planesWait(); wait != interval-time.Millisecond-backend.PlaneLead {
+		t.Fatalf("after idle the planes wait %v, want the plane lead before the CRTC's next vblank, %v", wait, interval-time.Millisecond-backend.PlaneLead)
+	}
+	if wait, want := o.frameWait(), o.budget.Latch(vblank, r.pinned, interval)-r.pinned; wait != want {
+		t.Fatalf("after idle the frame waits %v, want %v before the CRTC's next vblank", wait, want)
+	}
+	r.pinned = vblank + interval/2 + time.Millisecond
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first frame after idle", o, 0)
+	if o.aimedAt != vblank+interval {
+		t.Fatalf("the first frame after idle aimed at %v, want the CRTC's next vblank at %v", o.aimedAt, vblank+interval)
+	}
+	if r.dev.vblankReads != 1 {
+		t.Fatalf("read the CRTC's vblank %d times on one wake from idle, want once", r.dev.vblankReads)
+	}
+}
+
+func TestFramesWithinARefreshOfTheirFlipReadNoVblank(t *testing.T) {
+	r := start(t)
+	r.pinned = backend.Now()
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	r.dev.vblank = func(uint32) (kdrm.Vblank, error) {
+		return kdrm.Vblank{Sequence: 1, Time: o.lastFlip, Active: true}, nil
+	}
+	r.pinned = o.lastFlip + interval/2 + time.Millisecond
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the next frame", o, 0)
+	if r.dev.vblankReads != 0 || o.aimedAt != o.lastFlip+interval {
+		t.Fatalf("a frame half a refresh after its flip read the vblank %d times and aimed at %v, want no read and %v", r.dev.vblankReads, o.aimedAt, o.lastFlip+interval)
+	}
+}
+
+func TestADriverWithoutAVblankSequenceExtrapolatesAndIsAskedOnce(t *testing.T) {
+	r := start(t)
+	r.pinned = backend.Now()
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	flip := o.lastFlip
+	r.pinned = flip + 1000*interval + 4*time.Millisecond
+	if wait := o.planesWait(); wait != interval-4*time.Millisecond-backend.PlaneLead {
+		t.Fatalf("without a vblank sequence the planes wait %v, want the extrapolated %v", wait, interval-4*time.Millisecond-backend.PlaneLead)
+	}
+	r.pinned += 10 * interval
+	o.planesWait()
+	if r.dev.vblankReads != 1 || r.reports != nil || o.lastFlip != flip {
+		t.Fatalf("a driver without a vblank sequence was asked %d times, reports %v, last flip moved %v", r.dev.vblankReads, r.reports, o.lastFlip-flip)
+	}
+}

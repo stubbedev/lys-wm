@@ -144,6 +144,8 @@ type fakeDevice struct {
 	closedFBs         []uint32
 	unmapped          map[uint32]bool
 	now               func() time.Duration
+	vblank            func(crtc uint32) (kdrm.Vblank, error)
+	vblankReads       int
 }
 
 var modes = []kdrm.Mode{
@@ -152,6 +154,14 @@ var modes = []kdrm.Mode{
 }
 
 func (f *fakeDevice) FD() int { return f.events }
+
+func (f *fakeDevice) CRTCSequence(crtc uint32) (kdrm.Vblank, error) {
+	f.vblankReads++
+	if f.vblank == nil {
+		return kdrm.Vblank{}, kdrm.ErrNoVblankSequence
+	}
+	return f.vblank(crtc)
+}
 
 func (f *fakeDevice) Number() (uint64, error) { return fakeNumber, nil }
 
