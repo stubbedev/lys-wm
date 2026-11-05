@@ -19,12 +19,13 @@ const version = 1
 
 type Manager struct {
 	shown  func(*surface.Surface) bool
+	hidden func() error
 	fifos  []*fifo
 	waking []*fifo
 }
 
-func New(d *server.Display, shown func(*surface.Surface) bool) (*Manager, error) {
-	m := &Manager{shown: shown}
+func New(d *server.Display, shown func(*surface.Surface) bool, hidden func() error) (*Manager, error) {
+	m := &Manager{shown: shown, hidden: hidden}
 	if _, err := d.AddGlobal(sff.WpFifoManagerV1Interface, version, m.bind); err != nil {
 		return nil, err
 	}
@@ -32,11 +33,24 @@ func New(d *server.Display, shown func(*surface.Surface) bool) (*Manager, error)
 }
 
 func (m *Manager) Latched(latched []*surface.Surface) error {
+	return m.clear(func(f *fifo) bool { return slices.Contains(latched, f.s) && m.shown(f.s) })
+}
+
+func (m *Manager) Expired() error {
+	return m.clear(func(f *fifo) bool { return !m.shown(f.s) })
+}
+
+func (m *Manager) clear(passed func(*fifo) bool) error {
 	m.waking = m.waking[:0]
+	hidden := false
 	for _, f := range m.fifos {
-		if f.barrier && (slices.Contains(latched, f.s) || !m.shown(f.s)) {
+		switch {
+		case !f.barrier:
+		case passed(f):
 			f.barrier = false
 			m.waking = append(m.waking, f)
+		case !m.shown(f.s):
+			hidden = true
 		}
 	}
 	var errs error
@@ -44,6 +58,9 @@ func (m *Manager) Latched(latched []*surface.Surface) error {
 		errs = errors.Join(errs, f.s.Retry())
 	}
 	clear(m.waking)
+	if hidden {
+		errs = errors.Join(errs, m.hidden())
+	}
 	return errs
 }
 
@@ -134,8 +151,11 @@ func (f *fifo) barrierPassed() bool {
 }
 
 func (f *fifo) raiseBarrier() error {
-	f.barrier = f.m.shown(f.s)
-	return nil
+	f.barrier = true
+	if f.m.shown(f.s) {
+		return nil
+	}
+	return f.m.hidden()
 }
 
 func (f *fifo) surfaceGone() error {

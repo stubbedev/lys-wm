@@ -17,7 +17,7 @@ import (
 
 func (c *Compositor) addPacing(l *loop.Loop, display *server.Display) error {
 	var err error
-	if c.fifo, err = fifo.New(display, c.showing); err != nil {
+	if c.fifo, err = fifo.New(display, c.drawnAnywhere, c.armHidden); err != nil {
 		return err
 	}
 	if c.timing, err = committiming.New(display, l, committiming.Clock{Now: backend.Now, NextFlip: c.nextFlip}); err != nil {
@@ -51,15 +51,6 @@ func (c *Compositor) tears(s *surface.Surface) bool {
 		return false
 	}
 	return c.contentTypes.Of(s) == wm.ContentGame
-}
-
-func (c *Compositor) showing(s *surface.Surface) bool {
-	for _, o := range c.outputs {
-		if c.Powered(o) && slices.Contains(c.shown[o], s) {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *Compositor) nextFlip(s *surface.Surface) (time.Duration, bool) {

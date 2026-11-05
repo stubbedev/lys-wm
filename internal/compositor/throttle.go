@@ -65,7 +65,11 @@ func (c *Compositor) throttleFrames(s *surface.Surface) error {
 		c.hidden.waiting = map[*surface.Surface]struct{}{}
 	}
 	c.hidden.waiting[s] = struct{}{}
-	if c.hidden.armed {
+	return c.armHidden()
+}
+
+func (c *Compositor) armHidden() error {
+	if c.hidden.armed || c.hidden.timer == nil {
 		return nil
 	}
 	c.hidden.armed = true
@@ -93,7 +97,7 @@ func (c *Compositor) hiddenFrame() error {
 			errs = errors.Join(errs, s.FrameDone(ms))
 		}
 	}
-	return errs
+	return errors.Join(errs, c.fifo.Expired())
 }
 
 func (c *Compositor) HiddenFrames() uint64 {

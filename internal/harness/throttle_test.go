@@ -30,7 +30,7 @@ func atTheHiddenRate(t *testing.T, what string, frames int) {
 	t.Helper()
 	most := int(hiddenWindow/hiddenFrame) + 3
 	if frames < 3 || frames > most {
-		t.Fatalf("%s got %d frame callbacks in %v, want 3 to %d at one per %v", what, frames, hiddenWindow, most, hiddenFrame)
+		t.Fatalf("%s advanced %d times in %v, want 3 to %d at one per %v", what, frames, hiddenWindow, most, hiddenFrame)
 	}
 }
 
@@ -79,4 +79,27 @@ func TestASurfaceNoOutputShowsGetsFramesAtTheHiddenRate(t *testing.T) {
 	}
 	pump(c, hiddenWindow)
 	atTheHiddenRate(t, "a surface without a role", r.frames)
+}
+
+func TestAFifoSurfaceNoOutputShowsAdvancesAtTheHiddenRate(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, throttled, small)
+	pc := pace(t, h)
+	s := pc.c.Surface()
+	f, err := pc.fifos.GetFifo(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates := make([]*feedbackEvents, 30)
+	for i := range updates {
+		updates[i] = pc.update(t, s, nil, f.SetBarrier, f.WaitBarrier)
+	}
+	pump(pc.c, hiddenWindow)
+	applied := 0
+	for _, fb := range updates {
+		if len(fb.log) > 0 {
+			applied++
+		}
+	}
+	atTheHiddenRate(t, "a hidden fifo surface", applied)
 }
