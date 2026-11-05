@@ -54,17 +54,14 @@ func cursorImage(t *testing.T, o *Output) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, err := cp.BeginCursor()
-	if err != nil {
-		t.Fatal(err)
+	if _, err := cp.BeginCursor(); !errors.Is(err, backend.ErrCursorReadback) {
+		t.Fatalf("%s: a cursor drawn on the GPU renderer: %v, want ErrCursorReadback", o.Name(), err)
 	}
-	p, err := f.Renderer.Begin(f.Target, render.Region{image.Rectangle{Max: cp.CursorSize()}})
-	if err != nil {
-		t.Fatal(err)
+	red := make([]byte, 8*8*4)
+	for i := 0; i < len(red); i += 4 {
+		red[i+2], red[i+3] = 0xff, 0xff
 	}
-	p.Clear(render.Color{})
-	p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
-	if err := errors.Join(p.End(), cp.SetCursor(image.Pt(1, 1)), cp.MoveCursor(image.Pt(50, 50))); err != nil {
+	if err := errors.Join(cp.LoadCursor(red, 8*4, image.Pt(8, 8), image.Pt(1, 1)), cp.MoveCursor(image.Pt(50, 50))); err != nil {
 		t.Fatal(err)
 	}
 	if len(o.cursor.buffers) != cursorBuffers || o.cursor.pending.fb == 0 || o.cursor.refused != nil {
