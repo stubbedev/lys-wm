@@ -13,7 +13,9 @@ import (
 
 type textInputV1Log struct{ log testclient.Log }
 
-func (l *textInputV1Log) Enter(*ctiv1.ZwpTextInputV1, *cw.WlSurface) error { return l.log.Note("enter") }
+func (l *textInputV1Log) Enter(*ctiv1.ZwpTextInputV1, *cw.WlSurface) error {
+	return l.log.Note("enter")
+}
 
 func (l *textInputV1Log) Leave(*ctiv1.ZwpTextInputV1) error { return l.log.Note("leave") }
 
