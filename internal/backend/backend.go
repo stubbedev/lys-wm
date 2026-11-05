@@ -14,6 +14,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/wm"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -197,6 +198,10 @@ type HDRDisplay interface {
 
 type Inheriting interface {
 	Inherited() bool
+}
+
+type ContentTyped interface {
+	SetContentType(t wm.ContentType)
 }
 
 type Capability uint8

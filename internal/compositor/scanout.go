@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type scannedOut struct {
@@ -32,11 +33,12 @@ type filling struct {
 }
 
 func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle) (bool, error) {
+	op, alone := fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
+	c.showContentType(o, op.surface, alone)
 	out, ok := o.Backend().(backend.Scanner)
 	if !ok || c.adopting != nil {
 		return false, nil
 	}
-	op, alone := fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
 	if alone && !colorspace.Passthrough(op.space, c.scanoutTarget(o)) {
 		op, alone = drawOp{}, false
 	}
@@ -65,6 +67,18 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	}
 	held.outputs++
 	return true, nil
+}
+
+func (c *Compositor) showContentType(o *output.Output, s *surface.Surface, alone bool) {
+	ct, ok := o.Backend().(backend.ContentTyped)
+	if !ok {
+		return
+	}
+	t := wm.ContentNone
+	if alone {
+		t = c.contentTypes.Of(s)
+	}
+	ct.SetContentType(t)
 }
 
 func (c *Compositor) takeScannedOut() *scannedOut {

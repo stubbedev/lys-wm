@@ -22,6 +22,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 var deepFormats = []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010}
@@ -946,6 +947,8 @@ type Output struct {
 	bpcFound      uint64
 	bpc           uint64
 	bpcRefused    bool
+	contentType   wm.ContentType
+	contentDirty  bool
 }
 
 func (o *Output) Name() string {
@@ -1666,6 +1669,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if torn {
 		return true, nil
 	}
+	o.contentDirty = false
 	return true, o.colorSent()
 }
 
@@ -1682,7 +1686,7 @@ func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
 }
 
 func (o *Output) tearable(d gpu.DMABUF, fb uint32, flags uint32) bool {
-	if !o.b.async || o.front == nil || o.color.dirty() || o.cursor != nil && o.cursor.dirty {
+	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.cursor != nil && o.cursor.dirty {
 		return false
 	}
 	if o.primary.async != nil && !slices.Contains(o.primary.async, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
@@ -1779,6 +1783,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	if o.cursor != nil {
 		o.cursor.sent()
 	}
+	o.contentDirty = false
 	return o.colorSent()
 }
 
@@ -1820,6 +1825,7 @@ func (o *Output) frame(s *scanout, fence int) {
 		c.add()
 	}
 	o.addColor()
+	o.addContentType(r)
 }
 
 func (p *plane) setPosition(r *kdrm.Request, at image.Point) {

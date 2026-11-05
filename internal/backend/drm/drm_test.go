@@ -58,6 +58,7 @@ const (
 	propLinkStatusID
 	propDegammaID
 	propInFormatsAsync
+	propContentTypeID
 	inFormatsBlob    = 500
 	edidBlob         = 501
 	litModeBlob      = 502
@@ -118,6 +119,7 @@ type fakeDevice struct {
 	staleColorspace   uint64
 	asyncFormats      bool
 	imports           int
+	contentTypes      bool
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -282,6 +284,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.links {
 			props[propLinkStatus] = kdrm.Property{ID: propLinkStatusID, Value: map[bool]uint64{false: linkStatusGood, true: linkStatusBad}[f.linkBad]}
 		}
+		if f.contentTypes {
+			props[propContentType] = kdrm.Property{ID: propContentTypeID}
+		}
 		if f.nonDesktop[object] {
 			props["non-desktop"] = kdrm.Property{ID: propNonDesktop, Value: 1}
 		}
@@ -299,6 +304,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 }
 
 func (f *fakeDevice) PropertyInfo(id uint32) (kdrm.PropertyInfo, error) {
+	if id == propContentTypeID {
+		return kdrm.PropertyInfo{Name: propContentType, Enums: map[string]uint64{"No Data": 0, "Graphics": 1, "Photo": 2, "Cinema": 3, "Game": 4}}, nil
+	}
 	if id == propColorspaceID {
 		enums := map[string]uint64{"Default": 0, "opRGB": 7}
 		if !f.noBT2020Enum {
