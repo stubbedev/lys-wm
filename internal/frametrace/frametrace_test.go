@@ -479,7 +479,7 @@ func TestGoroutinesWaitingToRunAreTheFramesSchedulerLatency(t *testing.T) {
 			var wg sync.WaitGroup
 			for range 4 * runtime.GOMAXPROCS(0) {
 				wg.Go(func() {
-					for i := 0; i < 1000; i++ {
+					for range 1000 {
 						runtime.Gosched()
 					}
 				})

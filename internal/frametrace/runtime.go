@@ -41,8 +41,8 @@ func (s *runtimeStats) worstNew(i int) time.Duration {
 		return 0
 	}
 	var worst time.Duration
-	for b := len(h.Counts) - 1; b >= 0; b-- {
-		if h.Counts[b] > seen[b] {
+	for b, n := range slices.Backward(h.Counts) {
+		if n > seen[b] {
 			worst = bucketTime(h.Buckets, b)
 			break
 		}
