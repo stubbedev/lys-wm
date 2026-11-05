@@ -770,7 +770,7 @@ func (b *Backend) readEvents(loop.Events) error {
 func (b *Backend) flipped(e kdrm.FlipEvent) error {
 	for _, o := range b.outputs {
 		if o.bound() && uint64(o.crtc.id) == e.UserData {
-			return o.flipped(e)
+			return errors.Join(o.flipped(e), b.commitHeld())
 		}
 	}
 	return nil
@@ -797,7 +797,7 @@ func (b *Backend) Resume() error {
 	b.paused = false
 	var errs []error
 	for _, o := range b.outputs {
-		o.kms, o.flipping = kmsModeset, false
+		o.kms, o.flipping, o.busy, o.offDue, o.offBusy = kmsModeset, false, nil, o.offDue || o.offBusy, false
 		errs = append(errs, o.dropScanout(o.queued))
 		o.queued = nil
 		if o.cursor != nil {
@@ -915,6 +915,8 @@ type Output struct {
 	restate       bool
 	restated      []uint32
 	extraFlips    int
+	busy          *scanout
+	offBusy       bool
 }
 
 func (o *Output) Name() string {
@@ -1158,7 +1160,7 @@ func (o *Output) setPower(on bool) error {
 		return nil
 	}
 	if on {
-		o.off, o.offDue, o.kms = false, false, kmsModeset
+		o.off, o.offDue, o.offBusy, o.kms = false, false, false, kmsModeset
 		return o.b.handler.OutputDamaged(o)
 	}
 	if o.lit && o.flipping {
@@ -1175,11 +1177,20 @@ func (o *Output) powerOff() error {
 		r.Reset()
 		o.crtc.set(&o.b.req, "ACTIVE", 0)
 		o.detach()
-		if err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset|kdrm.AtomicNonblock, 0); err != nil {
+		err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset|kdrm.AtomicNonblock, 0)
+		if errors.Is(err, unix.EBUSY) && o.b.flipsPending() {
+			o.off, o.offBusy, o.offDue, o.busy = true, true, false, nil
+			o.clock.Cancel()
+			return nil
+		}
+		if errors.Is(err, unix.EBUSY) {
+			err = o.b.dev.Commit(r, kdrm.AtomicAllowModeset, 0)
+		}
+		if err != nil {
 			return fmt.Errorf("drm: power off %s: %w", o.Name(), err)
 		}
 	}
-	o.off, o.flipping, o.offDue = true, false, false
+	o.off, o.flipping, o.offDue, o.offBusy, o.busy = true, false, false, false, nil
 	o.clock.Cancel()
 	return o.dropScanouts()
 }
@@ -1312,7 +1323,7 @@ func (o *Output) testable() bool {
 }
 
 func (o *Output) frameReady() bool {
-	return o.enabled && !o.flipping && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
+	return o.enabled && !o.flipping && o.busy == nil && o.empties < backend.EmptyFramesPerRefresh && o.drawing == nil && !o.b.paused && !o.b.closed
 }
 
 func (o *Output) ExpectFrameWork(pixels int) {
@@ -1325,7 +1336,7 @@ func (o *Output) runFrame() error {
 	o.framing = true
 	err := o.b.handler.Frame(o)
 	o.framing = false
-	if err == nil && !o.flipping && o.enabled && !o.off {
+	if err == nil && !o.flipping && o.busy == nil && o.enabled && !o.off {
 		err = o.emptyFrame()
 	}
 	return errors.Join(err, o.flushPlanes())
@@ -1406,6 +1417,10 @@ func (o *Output) Present(damage render.Region) error {
 
 func (o *Output) prepared(s *scanout, err error) error {
 	o.flipping = false
+	return o.presentLater(s, err)
+}
+
+func (o *Output) presentLater(s *scanout, err error) error {
 	if !o.enabled || o.off || o.b.paused || !slices.Contains(o.buffers, s) {
 		return err
 	}
@@ -1418,8 +1433,32 @@ func (o *Output) prepared(s *scanout, err error) error {
 	if backend.Fatal(err) {
 		return err
 	}
-	o.b.report(fmt.Errorf("drm: present the copied frame of %s: %w", o.Name(), err))
+	o.b.report(fmt.Errorf("drm: present the frame of %s it held: %w", o.Name(), err))
 	return o.b.handler.OutputDamaged(o)
+}
+
+func (b *Backend) flipsPending() bool {
+	return slices.ContainsFunc(b.outputs, func(o *Output) bool { return o.flipping })
+}
+
+func (b *Backend) commitHeld() error {
+	if b.flipsPending() {
+		return nil
+	}
+	var errs []error
+	for _, o := range slices.Clone(b.outputs) {
+		if s := o.busy; s != nil {
+			o.busy = nil
+			errs = append(errs, o.presentLater(s, nil))
+		}
+		if o.offBusy {
+			o.offBusy = false
+			if err := o.powerOff(); err != nil {
+				o.b.report(fmt.Errorf("%w; the output stays lit until it next changes", err))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (o *Output) commitPresent(s *scanout) error {
@@ -1432,6 +1471,18 @@ func (o *Output) commitPresent(s *scanout) error {
 		flags |= kdrm.AtomicAllowModeset
 	}
 	err = o.submit(s, fence, flags)
+	busy := errors.Is(err, unix.EBUSY) && flags&kdrm.AtomicAllowModeset != 0
+	if busy && o.b.flipsPending() {
+		o.busy = s
+		err = o.dropRestated()
+		if fence >= 0 {
+			err = errors.Join(err, unix.Close(fence))
+		}
+		return err
+	}
+	if busy {
+		err = o.submit(s, fence, flags&^kdrm.AtomicNonblock)
+	}
 	restated := len(o.restated)
 	err = errors.Join(err, o.dropRestated())
 	if err != nil {
@@ -1886,7 +1937,7 @@ func (o *Output) dropScanouts() error {
 
 func (o *Output) freeBuffers() error {
 	err := errors.Join(o.dropScanouts(), o.free(o.buffers))
-	o.buffers, o.drawing, o.queued, o.front = nil, nil, nil, nil
+	o.buffers, o.drawing, o.queued, o.front, o.busy = nil, nil, nil, nil, nil
 	return err
 }
 
