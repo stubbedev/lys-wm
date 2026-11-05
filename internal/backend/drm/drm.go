@@ -251,7 +251,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	}
 	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
 	if a, ok := alloc.(*copyAllocator); ok {
-		a.loop = l
+		a.loop, a.report = l, opts.Report
 	}
 	if a, ok := alloc.(*gbmAllocator); ok && !a.gpu.NativeFences() {
 		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor in glFinish until the GPU is done", a.gpu))
@@ -261,6 +261,9 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support: %w", err)
 	}
 	b.modifiers = modifiers == 1
+	if a, ok := alloc.(*copyAllocator); ok {
+		a.modifiers = b.modifiers
+	}
 	async, err := dev.Cap(kdrm.CapAtomicAsyncFlip)
 	if err != nil && !errors.Is(err, unix.EINVAL) {
 		return nil, fmt.Errorf("drm: atomic async page flip support: %w", err)
@@ -1031,33 +1034,53 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 		return errors.Join(err, o.dropSignal(next))
 	}
 	size := image.Pt(int(m.HDisplay), int(m.VDisplay))
-	refused := make([]error, 0, len(layouts))
-	var restate bool
+	refusals := make([]error, 0, len(layouts))
 	for _, l := range layouts {
-		buffers, err := o.allocateBuffers(size, l)
+		buffers, restate, err := o.tryLayout(m, d, blob, size, l, next)
+		if refused(err) && o.b.fallBack(err) {
+			buffers, restate, err = o.tryLayout(m, d, blob, size, l, next)
+		}
 		if err != nil {
-			refused = append(refused, fmt.Errorf("%v buffers: %w", l.format, err))
+			refusals = append(refusals, err)
 			continue
 		}
-		if !o.b.paused {
-			if restate, err = o.testMode(m, d, blob, buffers[0], next); err != nil {
-				refused = append(refused, fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
-				continue
-			}
-		}
-		if len(refused) > 0 {
-			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refused...)))
+		if len(refusals) > 0 {
+			o.b.report(fmt.Errorf("drm: %s draws %v frames because earlier formats were refused: %w", o.Name(), l.format, errors.Join(refusals...)))
 		}
 		return o.adoptMode(m, d, l, blob, buffers, next, restate)
 	}
-	refused = append(refused, o.b.dev.DestroyBlob(blob), o.dropSignal(next))
+	refusals = append(refusals, o.b.dev.DestroyBlob(blob), o.dropSignal(next))
 	if hdr.Active {
-		return fmt.Errorf("drm: %s takes no HDR signal on any of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrHDRUnsupported, errors.Join(refused...))
+		return fmt.Errorf("drm: %s takes no HDR signal on any of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrHDRUnsupported, errors.Join(refusals...))
 	}
 	if d == backend.Depth8 {
-		return fmt.Errorf("drm: %s keeps its current frames: %w", o.Name(), errors.Join(refused...))
+		return fmt.Errorf("drm: %s keeps its current frames: %w", o.Name(), errors.Join(refusals...))
 	}
-	return fmt.Errorf("drm: %s takes none of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrDepthUnsupported, errors.Join(refused...))
+	return fmt.Errorf("drm: %s takes none of the 10-bit formats its primary plane offers: %w: %w", o.Name(), backend.ErrDepthUnsupported, errors.Join(refusals...))
+}
+
+func (o *Output) tryLayout(m kdrm.Mode, d backend.BitDepth, blob uint32, size image.Point, l layout, next signal) ([]*scanout, bool, error) {
+	buffers, err := o.allocateBuffers(size, l)
+	if err != nil {
+		return nil, false, fmt.Errorf("%v buffers: %w", l.format, err)
+	}
+	if o.b.paused {
+		return buffers, false, nil
+	}
+	restate, err := o.testMode(m, d, blob, buffers[0], next)
+	if err != nil {
+		return nil, false, errors.Join(fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
+	}
+	return buffers, restate, nil
+}
+
+type fallingBack interface {
+	fallBack(err error) bool
+}
+
+func (b *Backend) fallBack(err error) bool {
+	f, ok := b.alloc.(fallingBack)
+	return ok && f.fallBack(err)
 }
 
 func (o *Output) allocateBuffers(size image.Point, l layout) ([]*scanout, error) {

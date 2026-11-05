@@ -9,14 +9,47 @@ import (
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
 
+	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 type copyAllocator struct {
-	dev     device
-	primary render.Renderer
-	loop    *loop.Loop
+	dev       device
+	primary   render.Renderer
+	loop      *loop.Loop
+	report    func(error)
+	modifiers bool
+	linear    *gbmAllocator
+	copies    bool
+}
+
+func (a *copyAllocator) fallBack(err error) bool {
+	if a.linear == nil || a.copies {
+		return false
+	}
+	a.copies = true
+	a.report(fmt.Errorf("drm: a display-only card takes no linear buffer of the primary GPU, so each of its frames is copied on the CPU: %w", err))
+	return true
+}
+
+func (a *copyAllocator) share(size image.Point, format fourcc.Format) (*scanout, error) {
+	bo, err := a.linear.gbm.Allocate(size, format, []fourcc.Modifier{fourcc.Linear}, gpu.UseRendering)
+	if err != nil {
+		return nil, fmt.Errorf("drm: a linear %v buffer on the primary GPU: %w", size, err)
+	}
+	if bo.Modifier != fourcc.Linear {
+		return nil, errors.Join(fmt.Errorf("drm: the primary GPU's linear buffer has modifier %v", bo.Modifier), bo.Close())
+	}
+	target, err := a.linear.gpu.ImportTarget(bo.DMABUF)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: render into a linear buffer on the primary GPU: %w", err), bo.Close())
+	}
+	fb, err := importFB(a.dev, bo.DMABUF, a.modifiers)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: scan out the primary GPU's linear buffer: %w", err), target.Destroy(), bo.Close())
+	}
+	return &scanout{target: target, fb: fb, release: func() error { return errors.Join(target.Destroy(), bo.Close()) }}, nil
 }
 
 func (a *copyAllocator) asyncReader() (render.AsyncReader, bool) {
@@ -40,6 +73,13 @@ func (a *copyAllocator) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
 }
 
 func (a *copyAllocator) allocate(size image.Point, format fourcc.Format, _ []fourcc.Modifier) (*scanout, error) {
+	if a.linear != nil && !a.copies {
+		s, err := a.share(size, format)
+		if err == nil {
+			return s, nil
+		}
+		a.fallBack(err)
+	}
 	async, isAsync := a.asyncReader()
 	var target render.ReadTarget
 	var err error
@@ -135,6 +175,9 @@ func (c *offLoopCopy) start(done func(error) error) error {
 }
 
 func (a *copyAllocator) fence() (int, error) {
+	if a.linear != nil {
+		return a.linear.fence()
+	}
 	return -1, nil
 }
 
@@ -182,10 +225,14 @@ func openLocal(dev *kdrm.Device, stacks []namedStack) (*gbmAllocator, string, er
 func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
 	cpu := &copyAllocator{dev: dev, primary: primary.Renderer()}
 	name := filepath.Base(dev.Path())
+	p, ok := primary.alloc.(*gbmAllocator)
+	if !canRender && ok {
+		cpu.linear = p
+		return cpu, cpu.named("the primary GPU's linear buffers, since " + name + " has no render node, or a CPU copy where it refuses them")
+	}
 	if !canRender {
 		return cpu, cpu.named("a CPU copy, since " + name + " has no render node")
 	}
-	p, ok := primary.alloc.(*gbmAllocator)
 	if !ok {
 		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the primary renders with %T, which shares no buffers", primary.alloc))
 	}
