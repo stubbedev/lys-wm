@@ -147,18 +147,51 @@ func TestAnHDRCommitProgramsTheConnectorAndSDRPutsItBack(t *testing.T) {
 	}
 }
 
-func TestSDRSessionsLeaveTheConnectorAlone(t *testing.T) {
+func TestSDRModesetsStateTheDefaultSignalAndKeepMaxBPC(t *testing.T) {
 	r, o := bootHDR(t, nil)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
 	r.committedSince("the first frame", o, 0)
-	for _, c := range r.dev.commits {
-		for _, prop := range []uint32{propColorspaceID, propHDRMeta, propMaxBPCID} {
-			if _, ok := connectorValue(c, prop); ok {
-				t.Fatalf("an SDR session set connector property %d: %+v", prop, c)
-			}
+	modeset := r.dev.commits[len(r.dev.commits)-1]
+	for prop, want := range map[uint32]uint64{propColorspaceID: 0, propHDRMeta: 0} {
+		if v, ok := connectorValue(modeset, prop); !ok || v != want {
+			t.Errorf("an SDR modeset set connector property %d to %d (%v), want %d", prop, v, ok, want)
 		}
+	}
+	if v, ok := modeset.values[[2]uint32{10, propDegammaID}]; !ok || v != 0 {
+		t.Errorf("an SDR modeset set DEGAMMA_LUT to %d (%v), want it cleared", v, ok)
+	}
+	if v, ok := connectorValue(modeset, propMaxBPCID); ok {
+		t.Errorf("an SDR modeset set max bpc to %d, want the value found kept", v)
+	}
+}
+
+func TestAResumeRestoresTheSignalAnotherMasterLeft(t *testing.T) {
+	r, o := bootHDR(t, func(d *fakeDevice) { d.foundBPC = 8 })
+	deep := o.State()
+	deep.Depth = backend.Depth10
+	if err := o.Commit(deep); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first frame", o, 0)
+	r.dev.flip(t, 10, 1)
+	r.until("the flip", func() bool { return !o.flipping })
+	r.b.Pause()
+	r.dev.staleColorspace, r.dev.staleHDRBlob, r.dev.staleDegamma, r.dev.foundBPC = 7, 77, 88, 6
+	r.dev.commits = nil
+	if err := r.b.Resume(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the modeset after resume", o, 0)
+	modeset := r.dev.commits[len(r.dev.commits)-1]
+	for prop, want := range map[uint32]uint64{propColorspaceID: 0, propHDRMeta: 0, propMaxBPCID: hdrBPC} {
+		if v, ok := connectorValue(modeset, prop); !ok || v != want {
+			t.Errorf("after resume connector property %d is %d (%v), want %d", prop, v, ok, want)
+		}
+	}
+	if v, ok := modeset.values[[2]uint32{10, propDegammaID}]; !ok || v != 0 {
+		t.Errorf("after resume DEGAMMA_LUT is %d (%v), want it cleared", v, ok)
 	}
 }
 

@@ -709,7 +709,6 @@ func (b *Backend) add(c kdrm.Connector) error {
 		}
 		o.colorEDID, o.colorErr = edid.ParseHDR(data)
 	}
-	o.signal.programmed = props[propHDRMetadata].Value != 0 || props[propColorspace].Value != 0
 	o.bpcFound = props[propMaxBPC].Value
 	o.bpc = o.bpcFound
 	o.bind(cr, p)
@@ -813,7 +812,7 @@ func (b *Backend) Resume() error {
 			o.cursor.queued = nil
 		}
 		o.powerOffAfterFlip()
-		errs = append(errs, b.handler.OutputDamaged(o))
+		errs = append(errs, o.bpcLeft(), b.handler.OutputDamaged(o))
 	}
 	return errors.Join(append(errs, b.rescan())...)
 }
@@ -1038,7 +1037,9 @@ func (o *Output) free(buffers []*scanout) error {
 
 func (o *Output) testMode(m kdrm.Mode, d backend.BitDepth, blob uint32, s *scanout, next signal) (bool, error) {
 	mode, depth, modeBlob, kms, sig, restate := o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate
-	defer func() { o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate = mode, depth, modeBlob, kms, sig, restate }()
+	defer func() {
+		o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate = mode, depth, modeBlob, kms, sig, restate
+	}()
 	o.mode, o.depth, o.modeBlob, o.kms, o.signal, o.restate = m, d, blob, kmsModeset, next, false
 	o.frame(s, -1)
 	alone := o.test(kdrm.AtomicAllowModeset)

@@ -18,6 +18,7 @@ const (
 	propHDRMetadata = "HDR_OUTPUT_METADATA"
 	propColorspace  = "Colorspace"
 	propMaxBPC      = "max bpc"
+	propDegammaLUT  = "DEGAMMA_LUT"
 	colorspaceHDR   = "BT2020_RGB"
 	hdrBPC          = 10
 
@@ -32,7 +33,6 @@ type signal struct {
 	meta       backend.HDRMetadata
 	blob       uint32
 	colorspace uint64
-	programmed bool
 }
 
 func clampU16(v float64) uint16 {
@@ -89,7 +89,7 @@ func (o *Output) bt2020() (uint64, error) {
 
 func (o *Output) newSignal(m backend.HDRMetadata) (signal, error) {
 	if !m.Active {
-		return signal{programmed: o.signal.programmed}, nil
+		return signal{}, nil
 	}
 	if _, err := o.HDRCapabilities(); err != nil {
 		return signal{}, err
@@ -102,7 +102,7 @@ func (o *Output) newSignal(m backend.HDRMetadata) (signal, error) {
 	if err != nil {
 		return signal{}, fmt.Errorf("drm: the %s of %s: %w", propHDRMetadata, o.Name(), err)
 	}
-	return signal{meta: m, blob: blob, colorspace: colorspace, programmed: true}, nil
+	return signal{meta: m, blob: blob, colorspace: colorspace}, nil
 }
 
 func (o *Output) maxBPC() uint64 {
@@ -117,12 +117,21 @@ func (o *Output) bpcChanges() bool {
 	return ok && o.maxBPC() != o.bpc
 }
 
+func (o *Output) bpcLeft() error {
+	if _, ok := o.connector.props[propMaxBPC]; !ok {
+		return nil
+	}
+	props, err := o.b.dev.Properties(o.conn.ID, kdrm.ObjectConnector)
+	if err != nil {
+		return fmt.Errorf("drm: read the max bpc another master left on %s: %w", o.Name(), err)
+	}
+	o.bpc = props[propMaxBPC].Value
+	return nil
+}
+
 func (o *Output) addSignal(r *kdrm.Request) {
 	if o.bpcChanges() {
 		o.connector.set(r, propMaxBPC, o.maxBPC())
-	}
-	if !o.signal.programmed {
-		return
 	}
 	var colorspace uint64
 	if o.signal.meta.Active {
@@ -130,6 +139,7 @@ func (o *Output) addSignal(r *kdrm.Request) {
 	}
 	o.connector.set(r, propColorspace, colorspace)
 	o.connector.set(r, propHDRMetadata, uint64(o.signal.blob))
+	o.crtc.set(r, propDegammaLUT, 0)
 }
 
 func (o *Output) releaseSignal() error {

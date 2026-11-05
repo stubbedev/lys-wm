@@ -56,6 +56,7 @@ const (
 	propMaxBPCID
 	propNonDesktop
 	propLinkStatusID
+	propDegammaID
 	inFormatsBlob = 500
 	edidBlob      = 501
 	litModeBlob   = 502
@@ -111,6 +112,8 @@ type fakeDevice struct {
 	linkBad           bool
 	foundBPC          uint64
 	refuseBPC         bool
+	staleDegamma      uint64
+	staleColorspace   uint64
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -258,7 +261,7 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.splash != nil && f.splash.crtc == object {
 			active, mode = 1, litModeBlob
 		}
-		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive, Value: active}, "MODE_ID": {ID: propModeID, Value: mode}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}}
+		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive, Value: active}, "MODE_ID": {ID: propModeID, Value: mode}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}, propDegammaLUT: {ID: propDegammaID, Value: f.staleDegamma}}
 		if !f.noCTM {
 			props["CTM"] = kdrm.Property{ID: propCTM}
 		}
@@ -280,7 +283,7 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		}
 		if f.hdrConnector {
 			props[propHDRMetadata] = kdrm.Property{ID: propHDRMeta, Value: f.staleHDRBlob}
-			props[propColorspace] = kdrm.Property{ID: propColorspaceID}
+			props[propColorspace] = kdrm.Property{ID: propColorspaceID, Value: f.staleColorspace}
 			props[propMaxBPC] = kdrm.Property{ID: propMaxBPCID, Value: cmp.Or(f.foundBPC, 12)}
 		}
 		return props, nil
