@@ -196,8 +196,13 @@ func (c *Compositor) render(o *output.Output) error {
 	for _, s := range shown {
 		s.Latch()
 	}
+	sc.noteDrawn(&sc.cur)
 	sc.cur.clip()
 	c.resolveBlurs(o, &sc.cur, 0)
+	sc.noteKept(&sc.cur)
+	if err := c.throttleLeft(o, sc.shown); err != nil {
+		return err
+	}
 	sc.cur.dropHiddenRims()
 	if err := c.assignOverlay(o, sc, bounds, shading != nil); err != nil {
 		c.report(fmt.Errorf("compositor: an overlay plane on %s: %w", o.Backend().Name(), err))
@@ -526,9 +531,13 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	var errs error
 	for _, s := range c.shown[o] {
 		c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
-		errs = errors.Join(errs,
-			s.FrameDone(wire.Millis(p.Time)),
-			s.Presented(c.outputResources, p.Time, refresh, seq, kind))
+		var frame error
+		if sc.culled[s] {
+			frame = c.throttleFrames(s)
+		} else {
+			frame = s.FrameDone(wire.Millis(p.Time))
+		}
+		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, seq, kind))
 	}
 	if p.Idle {
 		return errs

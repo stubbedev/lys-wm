@@ -557,6 +557,10 @@ func (s *Surface) SetPreferredScale(scale120 uint32) error {
 	return nil
 }
 
+func (s *Surface) WantsFrame() bool {
+	return len(s.current.frames) > 0
+}
+
 func (s *Surface) FrameDone(msec uint32) error {
 	frames := s.current.frames
 	s.current.frames = frames[:0]

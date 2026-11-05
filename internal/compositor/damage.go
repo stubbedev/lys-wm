@@ -483,11 +483,13 @@ type scene struct {
 	working     render.TextureTarget
 	zoom        *outputZoom
 	whole       [1]image.Rectangle
+	culled      map[*surface.Surface]bool
 }
 
 func newScene() *scene {
 	return &scene{
 		content: map[*surface.Surface]*region.Set{},
+		culled:  map[*surface.Surface]bool{},
 		damage:  region.Capped(maxDamageRects),
 		repaint: region.Capped(maxDamageRects),
 	}
@@ -715,6 +717,7 @@ func (sc *scene) invalidate() {
 
 func (sc *scene) forget(s *surface.Surface) {
 	delete(sc.content, s)
+	delete(sc.culled, s)
 }
 
 func (c *Compositor) FrameCost(o *output.Output) (draws, pixels int) {

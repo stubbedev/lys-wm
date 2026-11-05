@@ -75,6 +75,7 @@ type Config struct {
 	Hooks           Hooks
 	InheritTimeout  time.Duration
 	HoldBound       time.Duration
+	HiddenFrame     time.Duration
 	Animations      anim.Table
 	BlurLayers      []string
 	Gestures        Gestures
@@ -134,6 +135,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Icons:          icontheme.New("", nil),
 		InheritTimeout: DefaultInheritTimeout,
 		HoldBound:      DefaultHoldBound,
+		HiddenFrame:    DefaultHiddenFrame,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
 		Overview:       DefaultOverviewStyle(),
@@ -196,6 +198,7 @@ type Compositor struct {
 	txn             *transaction
 	txnStore        transaction
 	holdTimer       *loop.Timer
+	hidden          throttle
 	holdBound       time.Duration
 	holds           HoldStats
 	awaited         []*window
@@ -347,6 +350,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.HoldBound <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: layout hold bound %v is not positive", cfg.HoldBound)
 	}
+	if cfg.HiddenFrame <= 0 {
+		return binds.Map{}, fmt.Errorf("compositor: hidden surfaces' frame interval %v is not positive", cfg.HiddenFrame)
+	}
 	if cfg.InheritTimeout <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
 	}
@@ -379,6 +385,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
+	c.hidden.every = cfg.HiddenFrame
 	c.overviewStyle = cfg.Overview
 	c.rulesGen++
 }
@@ -446,6 +453,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.holdTimer, err = l.AddTimer(c.holdExpired); err != nil {
+		return err
+	}
+	if c.hidden.timer, err = l.AddTimer(c.hiddenFrame); err != nil {
 		return err
 	}
 	if c.layout, err = output.New(display); err != nil {
@@ -643,6 +653,10 @@ func (c *Compositor) Close() error {
 	if c.holdTimer != nil {
 		errs = append(errs, c.holdTimer.Remove())
 		c.holdTimer = nil
+	}
+	if c.hidden.timer != nil {
+		errs = append(errs, c.hidden.timer.Remove())
+		c.hidden.timer = nil
 	}
 	return errors.Join(errs...)
 }

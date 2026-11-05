@@ -93,9 +93,15 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 		if !shows && !reach {
 			continue
 		}
+		if !reach && c.sceneOf(o).culled[s] {
+			continue
+		}
 		if e := c.schedule(o); e != nil {
 			err = errors.Join(err, e)
 		}
+	}
+	if !c.drawnAnywhere(s) {
+		err = errors.Join(err, c.throttleFrames(s))
 	}
 	return err
 }
@@ -353,6 +359,7 @@ func (c *Compositor) Destroyed(s *surface.Surface) error {
 	}
 	delete(c.footprints, s)
 	delete(c.cursorPixels, s)
+	delete(c.hidden.waiting, s)
 	for _, sc := range c.scenes {
 		sc.forget(s)
 	}

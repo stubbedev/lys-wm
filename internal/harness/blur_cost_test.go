@@ -39,7 +39,6 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 		glass.Stop()
 		cover := c.Window("cover", testclient.Fill(0, 0xff, 0))
 		c.DispatchUntil("the cover to map", cover.Mapped)
-		cover.Stop()
 		h.Eventually("the cover shown over the glass", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return pixel(snapshot(b.Outputs()[0]), 100, 60) == [3]byte{0, 0xff, 0}
 		})
@@ -47,7 +46,7 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 		pumpFrames(h, c, 12)
 		f1, r1 := framesAndBlurs(h)
 		if f1 == f0 {
-			t.Fatal("the animated window behind presented no frame")
+			t.Fatal("the animated cover presented no frame")
 		}
 		if r1 != r0 {
 			t.Errorf("%d blur redraws over %d frames behind an opaque window", r1-r0, f1-f0)
@@ -78,7 +77,6 @@ func TestABlurBehindAnOpaqueWindowIgnoresWhatThatWindowHides(t *testing.T) {
 		wall.Stop()
 		glass := c.Window("glass", testclient.Fill(0, 0, 0))
 		c.DispatchUntil("the glass to map", glass.Mapped)
-		glass.Stop()
 		h.Eventually("the glass over the wall", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return near(pixel(snapshot(b.Outputs()[0]), 100, 60), [3]byte{0xff, 0, 0})
 		})
@@ -87,7 +85,7 @@ func TestABlurBehindAnOpaqueWindowIgnoresWhatThatWindowHides(t *testing.T) {
 		f0 := frames(h)
 		pumpFrames(h, c, 6)
 		if frames(h) == f0 {
-			t.Fatal("the window behind presented no frame")
+			t.Fatal("the animated glass presented no frame")
 		}
 		if r := blurRedraws(h); r != r0 {
 			t.Errorf("%d blur redraws for a window hidden behind the wall the glass blurs", r-r0)
