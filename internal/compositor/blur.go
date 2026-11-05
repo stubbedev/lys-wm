@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/region"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -50,11 +51,13 @@ type blurCache struct {
 	below   []drawOp
 	chain   []render.TextureTarget
 	version uint64
+	touched uint64
+	partial bool
 	used    bool
 	to      colorOut
 	spec    chainSpec
 	sizes   []image.Point
-	whole   [1]image.Rectangle
+	levels  []render.Region
 }
 
 func (b *blurCache) destroy() error {
@@ -232,11 +235,8 @@ func (c *Compositor) micaSpec(o *output.Output) chainSpec {
 	return chainSpec{offset: deviceLength(o, m.Size), passes: m.Passes}
 }
 
-func blurChanged(sc *scene, cache *blurCache, spec chainSpec, area image.Rectangle, below []drawOp, to colorOut) bool {
-	if cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0 {
-		return true
-	}
-	return sc.contentChanged(below, area)
+func blurStale(cache *blurCache, spec chainSpec, area image.Rectangle, below []drawOp, to colorOut) bool {
+	return cache.area != area || cache.spec != spec || cache.to != to || !slices.Equal(cache.below, below) || len(cache.chain) == 0
 }
 
 func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Surface, org origin, m render.Mask, look *wm.Look) {
@@ -412,10 +412,26 @@ func (c *Compositor) resolveBlurs(o *output.Output, f *frame, from int) {
 		below := f.settle(f.below[p.from:p.to])
 		p.to = p.from + len(below)
 		p.cache.used = true
-		if blurChanged(sc, p.cache, p.spec, p.area, below, to) {
-			if err := c.renderBlur(func(size image.Point) (render.TextureTarget, error) { return c.newSceneTarget(o, size) }, p, below, to); err != nil {
-				p.failed = true
-				c.report(fmt.Errorf("compositor: redraw a blur: %w", err))
+		var damage *region.Set
+		if !blurStale(p.cache, p.spec, p.area, below, to) {
+			damage = &sc.blurScratch
+			damage.Reset()
+			sc.contentDamage(below, p.area, func(r image.Rectangle) bool {
+				damage.Add(r.Sub(p.area.Min))
+				return true
+			})
+			if damage.Empty() {
+				continue
+			}
+		}
+		if err := c.renderBlur(func(size image.Point) (render.TextureTarget, error) { return c.newSceneTarget(o, size) }, p, below, to, damage); err != nil {
+			p.failed = true
+			c.report(fmt.Errorf("compositor: redraw a blur: %w", err))
+			continue
+		}
+		if p.cache.partial {
+			for _, r := range p.cache.levels[0] {
+				sc.blurDamage.Add(r.Add(p.area.Min))
 			}
 		}
 	}
@@ -435,14 +451,14 @@ func (f *frame) settle(ops []drawOp) []drawOp {
 			if p.failed || len(p.cache.chain) == 0 {
 				continue
 			}
-			op.tex, op.version, op.pending = p.cache.chain[0].Texture(), p.cache.version, 0
+			op.tex, op.version, op.touched, op.pending = p.cache.chain[0].Texture(), p.cache.version, p.cache.touched, 0
 		}
 		kept = append(kept, op)
 	}
 	return kept
 }
 
-func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarget, error), pb *pendingBlur, below []drawOp, to colorOut) error {
+func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarget, error), pb *pendingBlur, below []drawOp, to colorOut, damage *region.Set) error {
 	b, area := pb.cache, pb.area
 	sizes := append(b.sizes[:0], area.Size())
 	for range pb.spec.passes {
@@ -451,6 +467,7 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 	}
 	b.sizes = sizes
 	if b.area.Size() != area.Size() || len(b.chain) != len(sizes) || b.to != to {
+		damage = nil
 		if err := b.destroy(); err != nil {
 			return err
 		}
@@ -462,8 +479,8 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 			b.chain = append(b.chain, t)
 		}
 	}
-	b.whole[0] = image.Rectangle{Max: sizes[0]}
-	p, err := c.renderer.Begin(b.chain[0], b.whole[:])
+	b.levelsFor(damage, pb.spec)
+	p, err := c.renderer.Begin(b.chain[0], b.levels[0])
 	if err != nil {
 		return err
 	}
@@ -473,13 +490,12 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 		return err
 	}
 	step := func(from, into int, up bool) error {
-		b.whole[0] = image.Rectangle{Max: sizes[into]}
-		p, err := c.renderer.Begin(b.chain[into], b.whole[:])
+		p, err := c.renderer.Begin(b.chain[into], b.levels[into])
 		if err != nil {
 			return err
 		}
 		p.Clear(render.Color{})
-		c.kawase(p, b.chain[from].Texture(), image.Rectangle{Max: sizes[into]}, b.whole[:], pb.spec.offset, up)
+		c.kawase(p, b.chain[from].Texture(), image.Rectangle{Max: sizes[into]}, b.levels[into], pb.spec.offset, up)
 		return p.End()
 	}
 	for i := 1; i < len(sizes); i++ {
@@ -493,8 +509,42 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 		}
 	}
 	c.blurGen++
-	b.area, b.below, b.version, b.to, b.spec = area, append(b.below[:0], below...), c.blurGen, to, pb.spec
+	b.touched, b.partial = c.blurGen, damage != nil
+	if !b.partial {
+		b.version = c.blurGen
+	}
+	b.area, b.below, b.to, b.spec = area, append(b.below[:0], below...), to, pb.spec
 	return nil
+}
+
+func (b *blurCache) levelsFor(damage *region.Set, spec chainSpec) {
+	b.levels = slices.Grow(b.levels[:0], len(b.sizes))[:len(b.sizes)]
+	for i := range b.levels {
+		b.levels[i] = b.levels[i][:0]
+	}
+	if damage == nil {
+		for i, s := range b.sizes {
+			b.levels[i] = append(b.levels[i], image.Rectangle{Max: s})
+		}
+		return
+	}
+	margin := int(math.Ceil(float64(spec.offset))) + 2
+	last := len(b.sizes) - 1
+	for _, d := range damage.Rects() {
+		r := halved(d.Inset(-spec.reach()), last).Intersect(image.Rectangle{Max: b.sizes[last]})
+		b.levels[last] = append(b.levels[last], r)
+		for i := last; i > 0; i-- {
+			r = image.Rectangle{Min: r.Min.Mul(2), Max: r.Max.Mul(2)}.Inset(-margin).Intersect(image.Rectangle{Max: b.sizes[i-1]})
+			b.levels[i-1] = append(b.levels[i-1], r)
+		}
+	}
+}
+
+func halved(r image.Rectangle, times int) image.Rectangle {
+	k := 1 << times
+	floor := func(v int) int { return int(math.Floor(float64(v) / float64(k))) }
+	ceil := func(v int) int { return int(math.Ceil(float64(v) / float64(k))) }
+	return image.Rect(floor(r.Min.X), floor(r.Min.Y), ceil(r.Max.X), ceil(r.Max.Y))
 }
 
 func anyOverlaps(ops []drawOp, area image.Rectangle) bool {

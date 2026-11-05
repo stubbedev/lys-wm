@@ -34,6 +34,7 @@ type drawOp struct {
 	gradient  render.Gradient
 	goo       render.Goo
 	version   uint64
+	touched   uint64
 	space     *colorspace.Description
 	glass     unique.Handle[render.Glass]
 	pending   int32
@@ -198,6 +199,7 @@ func sameContent(a, b *drawOp) bool {
 	x, y := *a, *b
 	x.whole, y.whole = a.mapped(), b.mapped()
 	x.dst, y.dst = image.Rectangle{}, image.Rectangle{}
+	x.touched, y.touched = 0, 0
 	return x == y
 }
 
@@ -489,14 +491,18 @@ type scene struct {
 	whole       [1]image.Rectangle
 	culled      map[*surface.Surface]bool
 	zeroCopy    [2]*surface.Surface
+	blurDamage  region.Set
+	blurScratch region.Set
 }
 
 func newScene() *scene {
 	return &scene{
-		content: map[*surface.Surface]*region.Set{},
-		culled:  map[*surface.Surface]bool{},
-		damage:  region.Capped(maxDamageRects),
-		repaint: region.Capped(maxDamageRects),
+		content:     map[*surface.Surface]*region.Set{},
+		culled:      map[*surface.Surface]bool{},
+		damage:      region.Capped(maxDamageRects),
+		repaint:     region.Capped(maxDamageRects),
+		blurDamage:  region.Capped(maxDamageRects),
+		blurScratch: region.Capped(maxDamageRects),
 	}
 }
 
@@ -528,6 +534,15 @@ func (sc *scene) addSurfaceDamage(op drawOp, d *region.Set) {
 }
 
 func (sc *scene) contentChanged(ops []drawOp, area image.Rectangle) bool {
+	changed := false
+	sc.contentDamage(ops, area, func(image.Rectangle) bool {
+		changed = true
+		return false
+	})
+	return changed
+}
+
+func (sc *scene) contentDamage(ops []drawOp, area image.Rectangle, add func(image.Rectangle) bool) {
 	for i := range ops {
 		op := &ops[i]
 		if op.surface == nil || op.size.X <= 0 || op.size.Y <= 0 {
@@ -538,12 +553,11 @@ func (sc *scene) contentChanged(ops []drawOp, area image.Rectangle) bool {
 			continue
 		}
 		for _, r := range content.Rects() {
-			if op.deviceDamage(r).Overlaps(area) {
-				return true
+			if d := op.deviceDamage(r).Intersect(area); !d.Empty() && !add(d) {
+				return
 			}
 		}
 	}
-	return false
 }
 
 func (op *drawOp) deviceDamage(r image.Rectangle) image.Rectangle {
@@ -560,9 +574,11 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 	if sc.drawn {
 		sc.diffOps()
 		sc.addContentDamage()
+		sc.damage.AddSet(&sc.blurDamage)
 	} else {
 		sc.damage.Add(bounds)
 	}
+	sc.blurDamage.Reset()
 	for _, content := range sc.content {
 		content.Reset()
 	}

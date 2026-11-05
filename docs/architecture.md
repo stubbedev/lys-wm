@@ -477,10 +477,13 @@ target, and the target's texture takes no uploads.
 Blur (#234) renders the ops already recorded under a window, within the
 blur's reach, into an offscreen target, halves it through `passes` dual Kawase
 steps and doubles it back, and draws the result under the window through its
-mask. The blurred ops and their surfaces' pending damage are kept per window;
-the chain is redrawn only when they change, and then the blur op's version
-changes, so the op diff repaints the whole window: damage below a blurred
-window grows to the window by the blur's reach.
+mask. The blurred ops and their surfaces' pending damage are kept per window.
+When what lies below changes, coverage or settings, the chain is redrawn whole
+and the blur op's version changes, so the op diff repaints the whole window.
+When only content below is damaged, each level is refiltered only over that
+damage grown by the blur's reach and halved per level, growing coarse to fine
+by a Kawase tap so no level reads a stale neighbour, and the blur op keeps its
+version and adds that grown damage to the frame's.
 
 Every blur is one `drawBlur`, whatever asked for it: a shape in device pixels,
 drawn as one op per rectangle, sampling one chain. `decoration.blur` asks for

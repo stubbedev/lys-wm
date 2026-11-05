@@ -399,7 +399,7 @@ func TestABlurRedrawAllocatesNothingOnceItsChainExists(t *testing.T) {
 	pb := &pendingBlur{cache: &blurCache{}, spec: chainSpec{offset: 2, passes: 2}, area: area}
 	below := []drawOp{{tex: tex, src: render.FRect{W: 64, H: 48}, dst: area, alpha: 1}}
 	redraw := func() {
-		if err := c.renderBlur(r.NewTextureTarget, pb, below, colorOut{plans: &c.plans}); err != nil {
+		if err := c.renderBlur(r.NewTextureTarget, pb, below, colorOut{plans: &c.plans}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
