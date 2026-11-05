@@ -65,17 +65,22 @@ func (b *blurCache) destroy() error {
 	return errors.Join(errs...)
 }
 
-func (b *blurCache) areaFor(needed, extent image.Rectangle) image.Rectangle {
-	pixels := func(r image.Rectangle) int { return r.Dx() * r.Dy() }
-	switch {
-	case len(b.chain) == 0:
-		return needed
-	case needed.In(b.area) && pixels(b.area) <= 4*pixels(needed):
-		return b.area
-	case !needed.In(b.area) && needed.In(extent):
-		return extent
+func (b *blurCache) areaFor(needed, bounds image.Rectangle) image.Rectangle {
+	if len(b.chain) > 0 {
+		if needed.In(b.area) && b.area.Dx()*b.area.Dy() <= textureMostUnused*needed.Dx()*needed.Dy() {
+			return b.area
+		}
+		if size := b.area.Size(); textureHolds(size, needed.Size()) && size.In(image.Rectangle{Max: bounds.Size().Add(image.Pt(1, 1))}) {
+			return placed(size, needed, bounds)
+		}
 	}
-	return needed
+	roomy := roomyTextureSize(needed.Size())
+	return placed(image.Pt(min(roomy.X, bounds.Dx()), min(roomy.Y, bounds.Dy())), needed, bounds)
+}
+
+func placed(size image.Point, needed, bounds image.Rectangle) image.Rectangle {
+	at := image.Pt(max(min(needed.Min.X, bounds.Max.X-size.X), bounds.Min.X), max(min(needed.Min.Y, bounds.Max.Y-size.Y), bounds.Min.Y))
+	return image.Rectangle{Min: at, Max: at.Add(size)}
 }
 
 type blurCaches struct {
@@ -91,11 +96,10 @@ func (b *blurCache) trim() error {
 		return nil
 	}
 	var errs []error
-	last := len(b.chain) - 1
-	for _, t := range b.chain[:last] {
+	for _, t := range b.chain[1:] {
 		errs = append(errs, t.Destroy())
 	}
-	b.chain = append(b.chain[:0], b.chain[last])
+	b.chain = b.chain[:1]
 	return errors.Join(errs...)
 }
 
@@ -340,7 +344,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 		b = sc.blurs.shared()
 	default:
 		b = sc.blurs.of(g.surface)
-		area = b.areaFor(area, g.extent.Inset(-reach).Intersect(bounds))
+		area = b.areaFor(area, bounds)
 	}
 	if shared {
 		area, ops = bounds, pass.ops[:pass.background]
@@ -429,7 +433,7 @@ func (f *frame) settle(ops []drawOp) []drawOp {
 			if p.failed || len(p.cache.chain) == 0 {
 				continue
 			}
-			op.tex, op.version, op.pending = p.cache.chain[len(p.cache.chain)-1].Texture(), p.cache.version, 0
+			op.tex, op.version, op.pending = p.cache.chain[0].Texture(), p.cache.version, 0
 		}
 		kept = append(kept, op)
 	}
@@ -442,9 +446,6 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 	for range pb.spec.passes {
 		last := sizes[len(sizes)-1]
 		sizes = append(sizes, image.Pt(max(last.X/2, 1), max(last.Y/2, 1)))
-	}
-	for i := len(sizes) - 2; i >= 0; i-- {
-		sizes = append(sizes, sizes[i])
 	}
 	b.sizes = sizes
 	if b.area.Size() != area.Size() || len(b.chain) != len(sizes) || b.to != to {
@@ -469,15 +470,23 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 	if err := p.End(); err != nil {
 		return err
 	}
-	for i := 1; i < len(sizes); i++ {
-		b.whole[0] = image.Rectangle{Max: sizes[i]}
-		p, err := c.renderer.Begin(b.chain[i], b.whole[:])
+	step := func(from, into int, up bool) error {
+		b.whole[0] = image.Rectangle{Max: sizes[into]}
+		p, err := c.renderer.Begin(b.chain[into], b.whole[:])
 		if err != nil {
 			return err
 		}
 		p.Clear(render.Color{})
-		c.kawase(p, b.chain[i-1].Texture(), image.Rectangle{Max: sizes[i]}, b.whole[:], pb.spec.offset, i > pb.spec.passes)
-		if err := p.End(); err != nil {
+		c.kawase(p, b.chain[from].Texture(), image.Rectangle{Max: sizes[into]}, b.whole[:], pb.spec.offset, up)
+		return p.End()
+	}
+	for i := 1; i < len(sizes); i++ {
+		if err := step(i-1, i, false); err != nil {
+			return err
+		}
+	}
+	for i := len(sizes) - 1; i > 0; i-- {
+		if err := step(i, i-1, true); err != nil {
 			return err
 		}
 	}

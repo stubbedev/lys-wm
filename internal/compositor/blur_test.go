@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
@@ -45,24 +46,54 @@ func TestABlurNotDrawnInAFrameIsDropped(t *testing.T) {
 }
 
 func TestABlurAreaFollowsAShapeWithoutReallocating(t *testing.T) {
-	extent := image.Rect(0, 0, 200, 200)
+	bounds := image.Rect(0, 0, 1000, 600)
 	var b blurCache
 	small := image.Rect(10, 10, 60, 60)
-	if got := b.areaFor(small, extent); got != small {
-		t.Errorf("the first draw takes area %v, want what it needs, %v", got, small)
+	first := b.areaFor(small, bounds)
+	if first.Size() != image.Pt(textureRoundUp, textureRoundUp) || !small.In(first) {
+		t.Errorf("the first draw takes area %v, want a rounded-up area holding %v", first, small)
 	}
-	b.chain, b.area = []render.TextureTarget{countedTarget{}}, small
+	b.chain, b.area = []render.TextureTarget{countedTarget{}}, first
 	grown := image.Rect(10, 10, 60, 80)
-	if got := b.areaFor(grown, extent); got != extent {
-		t.Errorf("a growing shape takes area %v, want its surface's %v", got, extent)
+	if got := b.areaFor(grown, bounds); got != first {
+		t.Errorf("a growing shape takes area %v, want the area it fits, %v", got, first)
 	}
-	b.area = extent
-	if got := b.areaFor(image.Rect(10, 10, 150, 150), extent); got != extent {
-		t.Errorf("a shape within the area takes area %v, want it kept", got)
+	moved := image.Rect(400, 300, 480, 380)
+	if got := b.areaFor(moved, bounds); got.Size() != first.Size() || !moved.In(got) {
+		t.Errorf("a moved shape takes area %v, want one of the same size around %v", got, moved)
 	}
+	edge := image.Rect(950, 550, 1000, 600)
+	if got := b.areaFor(edge, bounds); got.Size() != first.Size() || !edge.In(got) || !got.In(bounds) {
+		t.Errorf("a shape at the edge takes area %v, want one of the same size inside the output", got)
+	}
+	b.area = image.Rect(0, 0, 512, 512)
 	tiny := image.Rect(10, 10, 20, 20)
-	if got := b.areaFor(tiny, extent); got != tiny {
-		t.Errorf("a shape far smaller than the area takes area %v, want %v", got, tiny)
+	if got := b.areaFor(tiny, bounds); got.Size() != image.Pt(textureRoundUp, textureRoundUp) {
+		t.Errorf("a shape far smaller than the area takes area %v, want a new rounded-up one", got)
+	}
+}
+
+func TestAGrowingBlurAllocatesItsChainABoundedNumberOfTimes(t *testing.T) {
+	r := soft.New()
+	c := &Compositor{renderer: r}
+	bounds := image.Rect(0, 0, 1000, 600)
+	spec := chainSpec{offset: 2, passes: 3}
+	b := &blurCache{}
+	newTarget := func(size image.Point) (render.TextureTarget, error) { return r.NewTextureTarget(size) }
+	before := r.Counts().Targets
+	frames := 0
+	for w := 100; w <= 400; w += 6 {
+		frames++
+		pb := &pendingBlur{cache: b, spec: spec, area: b.areaFor(image.Rect(100, 100, 100+w, 100+w/2), bounds)}
+		if err := c.renderBlur(newTarget, pb, nil, colorOut{}); err != nil {
+			t.Fatal(err)
+		}
+		if len(b.chain) != spec.passes+1 {
+			t.Fatalf("a chain of %d passes holds %d targets, want %d", spec.passes, len(b.chain), spec.passes+1)
+		}
+	}
+	if got := (r.Counts().Targets - before) / uint64(spec.passes+1); got > 4 {
+		t.Fatalf("a blur growing over %d frames allocated its chain %d times", frames, got)
 	}
 }
 
