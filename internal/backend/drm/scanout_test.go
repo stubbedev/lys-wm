@@ -153,3 +153,31 @@ func TestARememberedAsyncFlipCarriesItsOwnBuffer(t *testing.T) {
 		t.Fatalf("the second async flip of a tested buffer committed %+v", last)
 	}
 }
+
+func TestACompositedFrameOfATearingSurfaceFlipsAsync(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.asyncFlips = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.b.Outputs()[0]
+	o.TearFrame(true)
+	if first := r.nextFrame(o); first.flags&kdrm.AtomicPageFlipAsync != 0 {
+		t.Fatalf("the modeset flipped async: %+v", first)
+	}
+	torn := r.nextFrame(o)
+	if torn.flags != planeFlags|kdrm.AtomicPageFlipAsync || len(torn.values) != 2 || torn.values[[2]uint32{40, propFB}] == 0 || torn.values[[2]uint32{40, propInFence}] != uint64(r.alloc.fences[len(r.alloc.fences)-1]) {
+		t.Fatalf("a composited frame of a tearing surface committed %+v, want an async flip of FB_ID and its fence", torn)
+	}
+	if p := r.rec.presents[len(r.rec.presents)-1]; !p.Torn {
+		t.Fatalf("the async frame was presented as %+v, not torn", p)
+	}
+	o.TearFrame(false)
+	if vsync := r.nextFrame(o); vsync.flags&kdrm.AtomicPageFlipAsync != 0 || r.rec.presents[len(r.rec.presents)-1].Torn {
+		t.Fatalf("a frame after tearing stopped flipped async: %+v", vsync)
+	}
+	o.TearFrame(true)
+	r.dev.refuseAsync = true
+	if refused := r.nextFrame(o); refused.flags&kdrm.AtomicPageFlipAsync != 0 || refused.values[[2]uint32{40, propFB}] == 0 {
+		t.Fatalf("a composited async flip the driver refuses did not fall back to a vblank flip: %+v", refused)
+	}
+}

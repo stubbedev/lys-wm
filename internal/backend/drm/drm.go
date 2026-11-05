@@ -142,8 +142,9 @@ func (p *plane) layouts(d backend.BitDepth) []layout {
 }
 
 var (
-	_ backend.Scanner    = (*Output)(nil)
-	_ backend.Inheriting = (*Output)(nil)
+	_ backend.Scanner      = (*Output)(nil)
+	_ backend.Inheriting   = (*Output)(nil)
+	_ backend.FrameTearing = (*Output)(nil)
 )
 
 type Backend struct {
@@ -949,6 +950,7 @@ type Output struct {
 	bpcRefused    bool
 	contentType   wm.ContentType
 	contentDirty  bool
+	tearFrame     bool
 }
 
 func (o *Output) Name() string {
@@ -1549,7 +1551,14 @@ func (o *Output) commitPresent(s *scanout) error {
 	if o.kms == kmsModeset {
 		flags |= kdrm.AtomicAllowModeset
 	}
-	err = o.submit(s, fence, flags)
+	torn := o.tearFrame && flags == planeFlags && o.tearable(s.fb, flags|kdrm.AtomicPageFlipAsync, fence)
+	if torn {
+		err = o.commitFrame(flags | kdrm.AtomicPageFlipAsync)
+		torn = !refused(err)
+	}
+	if !torn {
+		err = o.submit(s, fence, flags)
+	}
 	busy := errors.Is(err, unix.EBUSY) && flags&kdrm.AtomicAllowModeset != 0
 	if busy && o.b.flipsPending() {
 		o.busy = s
@@ -1582,7 +1591,7 @@ func (o *Output) commitPresent(s *scanout) error {
 	if flags&kdrm.AtomicAllowModeset != 0 {
 		o.bpc = o.maxBPC()
 	}
-	o.kms, o.lit, o.flipping, o.torn, o.restate, o.extraFlips = kmsFlip, true, true, false, false, restated
+	o.kms, o.lit, o.flipping, o.torn, o.restate, o.extraFlips = kmsFlip, true, true, torn, false, restated
 	o.queued = s
 	return nil
 }
@@ -1642,7 +1651,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	}
 	s := o.takeScanout(cf, release)
 	flags := planeFlags
-	torn := tear && o.tearable(d, cf.fb, flags|kdrm.AtomicPageFlipAsync)
+	torn := tear && o.asyncFormat(d) && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync, -1)
 	if torn {
 		flags |= kdrm.AtomicPageFlipAsync
 	} else {
@@ -1685,17 +1694,24 @@ func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
 	return s
 }
 
-func (o *Output) tearable(d gpu.DMABUF, fb uint32, flags uint32) bool {
-	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.cursor != nil && o.cursor.dirty {
-		return false
-	}
-	if o.primary.async != nil && !slices.Contains(o.primary.async, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
+func (o *Output) asyncFormat(d gpu.DMABUF) bool {
+	return o.primary.async == nil || slices.Contains(o.primary.async, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier})
+}
+
+func (o *Output) tearable(fb uint32, flags uint32, fence int) bool {
+	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
 		return false
 	}
 	key := planeKey{primary: fb, flags: flags}
 	r := &o.b.req
 	r.Reset()
-	o.primary.set(&o.b.req, "FB_ID", uint64(fb))
+	o.primary.set(r, "FB_ID", uint64(fb))
+	if fence >= 0 {
+		o.primary.set(r, "IN_FENCE_FD", uint64(fence))
+		if _, ok := o.primary.props["FB_DAMAGE_CLIPS"]; ok {
+			o.primary.set(r, "FB_DAMAGE_CLIPS", uint64(o.damageBlob))
+		}
+	}
 	if ok, seen := o.tested[key]; seen {
 		return ok
 	}
@@ -1704,6 +1720,10 @@ func (o *Output) tearable(d gpu.DMABUF, fb uint32, flags uint32) bool {
 		o.remember(key, err == nil)
 	}
 	return err == nil
+}
+
+func (o *Output) TearFrame(tear bool) {
+	o.tearFrame = tear
 }
 
 type planeKey struct {

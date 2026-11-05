@@ -204,6 +204,10 @@ type ContentTyped interface {
 	SetContentType(t wm.ContentType)
 }
 
+type FrameTearing interface {
+	TearFrame(tear bool)
+}
+
 type Capability uint8
 
 const (

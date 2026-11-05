@@ -35,6 +35,9 @@ type filling struct {
 func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle) (bool, error) {
 	op, alone := fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
 	c.showContentType(o, op.surface, alone)
+	if ft, ok := o.Backend().(backend.FrameTearing); ok {
+		ft.TearFrame(alone && c.tears(op.surface))
+	}
 	out, ok := o.Backend().(backend.Scanner)
 	if !ok || c.adopting != nil {
 		return false, nil
