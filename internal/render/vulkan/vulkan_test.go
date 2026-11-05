@@ -18,7 +18,7 @@ import (
 
 var _ render.Renderer = (*vulkan.Renderer)(nil)
 
-func target(t *testing.T, r *vulkan.Renderer, size image.Point) render.ReadTarget {
+func target(t testing.TB, r *vulkan.Renderer, size image.Point) render.ReadTarget {
 	t.Helper()
 	tg, err := r.NewTarget(size)
 	if err != nil {
@@ -45,6 +45,11 @@ func TestParityWithTheSoftwareRenderer(t *testing.T) {
 func TestGPUWaitsCountTheDevicesWaitsAndNothingElse(t *testing.T) {
 	r := testenv.Vulkan(t)
 	rendertest.GPUWaitsCountOnlyWaits(t, r, target(t, r, rendertest.Size))
+}
+
+func TestOpaqueOpsDrawWithoutBlendingAndTranslucentOnesWithIt(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.OpaqueRunsWithoutBlending(t, r, target(t, r, image.Pt(64, 64)), func() uint64 { return vulkan.OpaqueRuns(r) })
 }
 
 func TestEveryTextureFormatDrawsItsColour(t *testing.T) {
@@ -180,7 +185,7 @@ func TestChromaSitingReachesTheDevice(t *testing.T) {
 	}
 }
 
-func hardware(t *testing.T) (*vulkan.Renderer, string) {
+func hardware(t testing.TB) (*vulkan.Renderer, string) {
 	t.Helper()
 	nodes, err := filepath.Glob("/dev/dri/renderD*")
 	if err != nil {
