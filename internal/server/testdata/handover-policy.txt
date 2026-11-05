@@ -78,6 +78,14 @@ hyprland_ctm_control_manager_v1 = journal retire=
 hyprland_ctm_control_manager_v1.set_ctm_for_output = latest-keyed
 hyprland_ctm_control_manager_v1.commit = latest
 hyprland_ctm_control_manager_v1.destroy = destructor
+hyprland_focus_grab_manager_v1 = journal retire=
+hyprland_focus_grab_manager_v1.create_grab = create
+hyprland_focus_grab_manager_v1.destroy = destructor
+hyprland_focus_grab_v1 = inert retire=cleared
+hyprland_focus_grab_v1.add_surface = latest
+hyprland_focus_grab_v1.remove_surface = latest
+hyprland_focus_grab_v1.commit = latest
+hyprland_focus_grab_v1.destroy = destructor
 hyprland_global_shortcut_v1 = journal retire=
 hyprland_global_shortcut_v1.destroy = destructor
 hyprland_global_shortcuts_manager_v1 = journal retire=

@@ -5,6 +5,7 @@ import (
 	sftl "github.com/stubbedev/lys-wm/internal/protocol/server/extforeigntoplevellist"
 	sicc "github.com/stubbedev/lys-wm/internal/protocol/server/extimagecopycapture"
 	sws "github.com/stubbedev/lys-wm/internal/protocol/server/extworkspace"
+	shfg "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandfocusgrab"
 	sim "github.com/stubbedev/lys-wm/internal/protocol/server/inputmethod"
 	sld "github.com/stubbedev/lys-wm/internal/protocol/server/linuxdmabuf"
 	sps "github.com/stubbedev/lys-wm/internal/protocol/server/primaryselection"
@@ -28,6 +29,7 @@ var inertInterfaces = func() map[string]*wire.Interface {
 		sftl.ExtForeignToplevelHandleV1Interface,
 		sicc.ExtImageCopyCaptureCursorSessionV1Interface, sicc.ExtImageCopyCaptureFrameV1Interface, sicc.ExtImageCopyCaptureSessionV1Interface,
 		sws.ExtWorkspaceGroupHandleV1Interface, sws.ExtWorkspaceHandleV1Interface,
+		shfg.HyprlandFocusGrabV1Interface,
 		sw.WlDataOfferInterface, sw.WlDataSourceInterface,
 		sxa.XdgActivationTokenV1Interface,
 		sxdg.XdgPopupInterface, sxdg.XdgSurfaceInterface,

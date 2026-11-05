@@ -54,6 +54,7 @@ var refused = map[string]string{
 }
 
 var retired = map[string][]string{
+	"hyprland_focus_grab_v1":                   {"cleared"},
 	"ext_data_control_offer_v1":                {},
 	"ext_data_control_source_v1":               {"cancelled"},
 	"ext_foreign_toplevel_handle_v1":           {"closed"},
