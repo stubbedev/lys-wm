@@ -276,7 +276,11 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 		return false, hw.hide()
 	}
 	if !hw.holds || hw.loaded != want {
-		if err := c.loadCursor(hw, o, box, want.hotspot); err != nil {
+		err := c.loadCursor(hw, o, box, want.hotspot)
+		if errors.Is(err, backend.ErrCursorReadback) {
+			return false, hw.hide()
+		}
+		if err != nil {
 			return false, c.dropCursorPlane(o, err)
 		}
 		hw.loaded, hw.holds = want, true

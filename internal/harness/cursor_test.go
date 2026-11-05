@@ -261,6 +261,37 @@ func TestCursorsCopyToThePlaneUnlessTheyAreScaled(t *testing.T) {
 	}
 }
 
+func TestADrawnCursorThatWouldReadBackStaysInTheFrameAndKeepsThePlane(t *testing.T) {
+	t.Parallel()
+	reports := make(chan error, 4)
+	r := inputOn(t, StartWithCursorPlanes(t, plane, func(cfg *compositor.Config) { cfg.Report = func(err error) { reports <- err } }, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		b.Outputs()[0].Cursor().ReadsBack()
+		return nil
+	})
+	cursor := r.c.Surface()
+	if err := errors.Join(cursor.SetBufferScale(2), cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(0, 0, 0xff)), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit(), r.in.Pointer.SetCursor(r.in.Serial, cursor, 2, 2)); err != nil {
+		t.Fatal(err)
+	}
+	r.c.Sync()
+	r.h.Eventually("the scaled client cursor drawn in the frame", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return !b.Outputs()[0].Cursor().Visible() && showing(79, 49, [3]byte{0xff, 0, 0})(b, c)
+	})
+	if err := errors.Join(cursor.SetBufferScale(1), cursor.Attach(r.c.Buffer(image.Pt(8, 8), 0, testclient.Fill(0, 0xff, 0)), 0, 0), cursor.DamageBuffer(0, 0, 8, 8), cursor.Commit()); err != nil {
+		t.Fatal(err)
+	}
+	r.c.Sync()
+	r.h.Eventually("a 1:1 cursor back on the plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return b.Outputs()[0].Cursor().Visible()
+	})
+	select {
+	case err := <-reports:
+		t.Fatalf("a cursor left to the frame was reported: %v", err)
+	default:
+	}
+}
+
 func TestThemeCursorsAtAFractionalScaleCopyAResampledImage(t *testing.T) {
 	t.Parallel()
 	theme := testenv.CursorTheme(t)

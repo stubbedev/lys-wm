@@ -9,7 +9,10 @@ import (
 	"github.com/stubbedev/lys-lib/fourcc"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
 func testCommits(commits []commit) int {
@@ -199,5 +202,38 @@ func TestAScanoutTheKernelRefusesForTheCursorIsComposited(t *testing.T) {
 	}
 	if len(o.tested) != 0 {
 		t.Fatalf("the refused state stayed cached: %v", o.tested)
+	}
+}
+
+func TestACursorDrawnOnTheCPURendersIntoItsBufferWithoutAReadback(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	for i, hotspot := range []image.Point{{}, {2, 3}, {1, 1}} {
+		if err := r.setCursor(o, hotspot); err != nil {
+			t.Fatalf("cursor change %d: %v", i, err)
+		}
+		if pix := o.cursor.pending.dumb.Pix; [4]byte(pix[:4]) != [4]byte{0, 0, 0xff, 0xff} || pix[4] != 0 {
+			t.Fatalf("cursor change %d: the buffer starts %v", i, pix[:8])
+		}
+	}
+	if got := r.b.SyncReads(); got != 0 {
+		t.Fatalf("%d synchronous reads through three cursor changes", got)
+	}
+}
+
+func TestAGPURendererWithoutAsyncReadsLeavesADrawnCursorToTheFrame(t *testing.T) {
+	gpu := struct{ render.Renderer }{soft.New()}
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: gpu} })
+	o := r.lit()
+	before := r.b.SyncReads()
+	if err := r.setCursor(o, image.Point{}); !errors.Is(err, backend.ErrCursorReadback) {
+		t.Fatalf("a cursor drawn by a renderer that reads back synchronously: %v, want ErrCursorReadback", err)
+	}
+	if got := r.b.SyncReads() - before; got != 0 {
+		t.Fatalf("%d synchronous reads for a cursor change", got)
+	}
+	cp, _ := o.CursorPlane()
+	if err := cp.LoadCursor(make([]byte, 4*4*4), 16, image.Pt(4, 4), image.Point{}); err != nil {
+		t.Fatalf("a CPU image after the refusal: %v", err)
 	}
 }

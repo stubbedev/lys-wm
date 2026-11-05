@@ -19,6 +19,7 @@ type Cursor struct {
 	images, moves    uint64
 	copies           uint64
 	refused          error
+	readsBack        bool
 }
 
 func (b *Backend) SetCursorPlanes(size image.Point) error {
@@ -51,9 +52,16 @@ func (c *Cursor) Refuse(err error) {
 	c.refused, c.visible = err, false
 }
 
+func (c *Cursor) ReadsBack() {
+	c.readsBack = true
+}
+
 func (c *Cursor) BeginCursor() (backend.Frame, error) {
 	if c.refused != nil {
 		return backend.Frame{}, c.refused
+	}
+	if c.readsBack {
+		return backend.Frame{}, backend.ErrCursorReadback
 	}
 	if c.drawing {
 		return backend.Frame{}, fmt.Errorf("headless: %s already has a cursor image in progress", c.o.name)

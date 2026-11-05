@@ -357,12 +357,15 @@ shell sets `__EGL_VENDOR_LIBRARY_DIRS` to Mesa's vendor and
 locally and in CI. Run them with both unset to exercise the machine's
 driver: the dmabuf test only runs where a vendor drives a render node.
 
-The pointer rides a cursor plane where the output has one (#83). The
-compositor renders the cursor image, a theme cursor or a client's cursor
-surface, into an offscreen target, and the drm backend copies it into a
-linear ARGB8888 dumb buffer, the only buffer every cursor plane takes:
-NVIDIA's cursor planes scan out linear only, and its EGL renders to no
-linear modifier. Pointer motion then moves the plane in an atomic commit of
+The pointer rides a cursor plane where the output has one (#83). The plane
+takes a linear ARGB8888 dumb buffer, the only buffer every cursor plane
+takes: NVIDIA's cursor planes scan out linear only, and its EGL renders to no
+linear modifier. A theme cursor or a 1:1 shm cursor surface is copied into it
+from CPU pixels. A cursor that needs drawing, scaled or transformed, is
+rendered on the GPU and read back off the loop where the renderer reads
+asynchronously; the software renderer draws straight into the dumb buffer;
+a GPU renderer without async reads leaves such a cursor in the frame rather
+than stall the loop on a readback (#271). Pointer motion then moves the plane in an atomic commit of
 its own, or in the next frame's commit, and repaints nothing. A move waits
 for a requested frame only when that frame is due before the next vblank; a
 frame deferred past it (#257) does not hold the cursor back a refresh (#276).

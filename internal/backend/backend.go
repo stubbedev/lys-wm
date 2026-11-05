@@ -117,6 +117,8 @@ const EmptyFramesPerRefresh = 2
 
 var ErrNoCursorPlanes = errors.New("backend: this backend draws the cursor in the frame")
 
+var ErrCursorReadback = errors.New("backend: drawing this cursor image on the plane would read it back from the GPU synchronously")
+
 var ErrDepthUnsupported = errors.New("backend: the output cannot show frames at this bit depth")
 
 var ErrHDRUnsupported = errors.New("backend: the output cannot carry an HDR signal")

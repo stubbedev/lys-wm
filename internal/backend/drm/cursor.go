@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
 type cursorBuffer struct {
@@ -20,9 +21,9 @@ type cursorBuffer struct {
 type cursor struct {
 	o                       *Output
 	plane                   *plane
-	target                  render.ReadTarget
 	buffers                 []*cursorBuffer
 	pending, queued, front  *cursorBuffer
+	drawn                   *cursorBuffer
 	hotspot, at             image.Point
 	drawing, visible, dirty bool
 	refused                 error
@@ -53,22 +54,21 @@ func (c *cursor) BeginCursor() (backend.Frame, error) {
 	case c.drawing:
 		return backend.Frame{}, fmt.Errorf("drm: %s already has a cursor image in progress", c.o.Name())
 	}
+	r, ok := c.o.b.alloc.renderer().(*soft.Renderer)
+	if !ok {
+		return backend.Frame{}, backend.ErrCursorReadback
+	}
 	if err := c.allocate(); err != nil {
 		return backend.Frame{}, err
 	}
-	c.drawing = true
-	return backend.Frame{Renderer: c.o.b.alloc.renderer(), Target: c.target}, nil
+	c.drawing, c.drawn = true, c.idle()
+	size := c.o.b.cursor
+	clear(c.drawn.dumb.Pix)
+	return backend.Frame{Renderer: r, Target: &soft.Buffer{Pix: c.drawn.dumb.Pix, Stride: int(c.drawn.dumb.Pitch), W: size.X, H: size.Y}}, nil
 }
 
 func (c *cursor) allocate() error {
 	b := c.o.b
-	if c.target == nil {
-		t, err := b.alloc.renderer().NewTarget(b.cursor)
-		if err != nil {
-			return fmt.Errorf("drm: cursor target for %s: %w", c.o.Name(), err)
-		}
-		c.target = t
-	}
 	for len(c.buffers) < cursorBuffers {
 		dumb, err := b.dev.CreateDumb(b.cursor)
 		if err != nil {
@@ -87,12 +87,8 @@ func (c *cursor) SetCursor(hotspot image.Point) error {
 	if !c.drawing {
 		return fmt.Errorf("drm: SetCursor on %s without BeginCursor", c.o.Name())
 	}
-	c.drawing = false
-	b := c.idle()
-	c.o.b.syncReads++
-	if err := c.target.Read(b.dumb.Pix, int(b.dumb.Pitch)); err != nil {
-		return fmt.Errorf("drm: copy the cursor image of %s: %w", c.o.Name(), err)
-	}
+	b := c.drawn
+	c.drawing, c.drawn = false, nil
 	return c.show(b, hotspot)
 }
 
@@ -242,10 +238,7 @@ func (c *cursor) release() error {
 	for _, b := range c.buffers {
 		errs = append(errs, c.o.b.dev.RemoveFB(b.fb), c.o.b.dev.DestroyDumb(b.dumb))
 	}
-	if c.target != nil {
-		errs = append(errs, c.target.Destroy())
-	}
 	c.plane.taken = false
-	c.target, c.buffers, c.pending, c.queued, c.front = nil, nil, nil, nil, nil
+	c.buffers, c.pending, c.queued, c.front, c.drawn, c.drawing = nil, nil, nil, nil, nil, false
 	return errors.Join(errs...)
 }
