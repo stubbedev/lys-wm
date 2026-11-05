@@ -221,13 +221,14 @@ func (c *Compositor) render(o *output.Output) error {
 	if sc.diff(bounds).Empty() && !viewMoved && (shading == nil || !shading.animated) {
 		return c.lockBlanked(o)
 	}
+	op, alone := c.showFrameHints(o, sc, bounds, shading == nil && sc.zoom == nil)
 	if shading != nil {
 		return c.renderShaded(o, sc, shading, bounds)
 	}
 	if sc.zoom != nil {
 		return c.renderZoomed(o, sc, bounds)
 	}
-	if direct, err := c.scanout(o, sc, bounds); err != nil || direct {
+	if direct, err := c.scanout(o, sc, bounds, op, alone); err != nil || direct {
 		if err != nil {
 			return err
 		}

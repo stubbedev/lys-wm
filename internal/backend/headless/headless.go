@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render/gles"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
+	"github.com/stubbedev/lys-wm/internal/wm"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -295,6 +296,8 @@ type Output struct {
 	ctm            backend.Matrix
 	queuedTorn     bool
 	torn           uint64
+	tearFrame      bool
+	contentType    wm.ContentType
 	failPresents   error
 	inherited      bool
 	takeover       *soft.Buffer
@@ -653,6 +656,22 @@ func (o *Output) Scanout(_ backend.ScanoutKey, d gpu.DMABUF, release func() erro
 
 func (o *Output) Torn() uint64 {
 	return o.torn
+}
+
+func (o *Output) TearFrame(tear bool) {
+	o.tearFrame = tear
+}
+
+func (o *Output) TearsFrames() bool {
+	return o.tearFrame
+}
+
+func (o *Output) SetContentType(t wm.ContentType) {
+	o.contentType = t
+}
+
+func (o *Output) ContentType() wm.ContentType {
+	return o.contentType
 }
 
 func (o *Output) FailPresents(err error) {

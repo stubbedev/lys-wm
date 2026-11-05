@@ -158,3 +158,45 @@ func TestAFullscreenGameTearsLikeARuleWouldMakeIt(t *testing.T) {
 		})
 	}
 }
+
+func frameHints(tear bool, content wm.ContentType) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(b *headless.Backend, _ *compositor.Compositor) bool {
+		o := b.Outputs()[0]
+		return o.TearsFrames() == tear && o.ContentType() == content
+	}
+}
+
+func tearingGame(t *testing.T) *scanoutScene {
+	t.Helper()
+	s := fullscreenScanout(t, StartGLES, func(cfg *compositor.Config) {
+		zoomConfig(cfg)
+		cfg.Tearing = true
+	})
+	ct, err := contentTypeManager(t, s.c).GetSurfaceContentType(s.w.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ct.SetContentType(cct.WpContentTypeV1TypeGame); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestACompositedFullscreenGameStatesItsFrameHints(t *testing.T) {
+	s := tearingGame(t)
+	if err := errors.Join(s.w.Redraw(), s.c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	s.h.Eventually("the composited game tearing as a game", frameHints(true, wm.ContentGame))
+}
+
+func TestZoomOverATearingGameResetsTheFrameHints(t *testing.T) {
+	s := tearingGame(t)
+	s.show(t, "the game", s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0xff, 0, 0)))
+	s.h.Eventually("the game tearing as a game", frameHints(true, wm.ContentGame))
+	movePointer(s.h, 80, 50)
+	s.h.dispatch("zoom set 2")
+	s.h.Eventually("the zoomed frame neither tearing nor a game", frameHints(false, wm.ContentNone))
+	s.h.dispatch("zoom reset")
+	s.h.Eventually("the game tearing as a game again", frameHints(true, wm.ContentGame))
+}
