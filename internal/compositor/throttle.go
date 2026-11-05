@@ -76,6 +76,23 @@ func (c *Compositor) armHidden() error {
 	return c.hidden.timer.Arm(c.hidden.every)
 }
 
+func (c *Compositor) drawnNow(o *output.Output, shown []*surface.Surface) error {
+	if len(c.hidden.waiting) == 0 && !c.hidden.armed {
+		return nil
+	}
+	culled := c.sceneOf(o).culled
+	for _, s := range shown {
+		if !culled[s] {
+			delete(c.hidden.waiting, s)
+		}
+	}
+	if len(c.hidden.waiting) > 0 || !c.hidden.armed || c.fifo.Hidden() {
+		return nil
+	}
+	c.hidden.armed = false
+	return c.hidden.timer.Disarm()
+}
+
 func (c *Compositor) throttleLeft(o *output.Output, was []*surface.Surface) error {
 	var errs error
 	for _, s := range was {

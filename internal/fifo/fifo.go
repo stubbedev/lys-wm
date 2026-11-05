@@ -40,6 +40,10 @@ func (m *Manager) Expired() error {
 	return m.clear(func(f *fifo) bool { return !m.shown(f.s) })
 }
 
+func (m *Manager) Hidden() bool {
+	return slices.ContainsFunc(m.fifos, func(f *fifo) bool { return f.barrier && !m.shown(f.s) })
+}
+
 func (m *Manager) clear(passed func(*fifo) bool) error {
 	m.waking = m.waking[:0]
 	hidden := false

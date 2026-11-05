@@ -201,6 +201,9 @@ func (c *Compositor) render(o *output.Output) error {
 	sc.cur.clip()
 	c.resolveBlurs(o, &sc.cur, 0)
 	sc.noteKept(&sc.cur)
+	if err := c.drawnNow(o, shown); err != nil {
+		return err
+	}
 	if err := c.throttleLeft(o, sc.shown); err != nil {
 		return err
 	}

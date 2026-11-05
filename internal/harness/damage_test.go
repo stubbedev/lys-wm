@@ -305,3 +305,19 @@ func TestAPartlyOpaqueLayerHidesWhatItsOpaqueRegionCovers(t *testing.T) {
 		t.Fatalf("the frame draws %d px with all but one row of the layer opaque, want at most the layer's %d and a row of each op below", pixels, layerPixels)
 	}
 }
+
+func TestAWindowDrawnBeforeTheHiddenFrameIntervalLeavesNoHiddenFrame(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.HiddenFrame = 200 * time.Millisecond }, desktop)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("drawn", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	settle(t, h)
+	time.Sleep(250 * time.Millisecond)
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		if n := comp.HiddenFrames(); n != 0 {
+			t.Errorf("a window drawn as it mapped left %d hidden frames to fire", n)
+		}
+		return nil
+	})
+}
