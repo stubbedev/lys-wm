@@ -123,6 +123,10 @@ type Recorder struct {
 	ioStat *os.File
 	ioBuf  [ioStatSize]byte
 	mem    runtime.MemStats
+	// ownWaits counts the GPU waits the recorder made itself, timing a
+	// frame on a renderer without native fences, not yet taken out of a
+	// frame's cost.
+	ownWaits uint64
 }
 
 func Create(path string, h Header, sync Sync, clock Clock, report func(error)) (*Recorder, error) {
@@ -252,6 +256,7 @@ func (r *Recorder) Submit(output string) {
 			r.report(fmt.Errorf("frametrace: wait for the frame on %s: %w", output, err))
 			return
 		}
+		r.ownWaits++
 		r.waited(t)
 		return
 	}
@@ -304,6 +309,8 @@ func (r *Recorder) End(output string, animating bool, cost Cost) {
 	t.frame.Animating = animating
 	allocs, fileIO := r.usage(output)
 	cost.Allocs, cost.FileIO = allocs-t.allocs, fileIO-t.fileIO-ownIOReads
+	cost.GPUWaits -= min(cost.GPUWaits, r.ownWaits)
+	r.ownWaits = 0
 	t.frame.Cost = t.carry(cost)
 	t.queue = append(t.queue, t.frame)
 	r.settle(t)

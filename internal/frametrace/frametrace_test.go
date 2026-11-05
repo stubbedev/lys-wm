@@ -316,6 +316,40 @@ func TestSummaryCountsEachRunOnItsOwn(t *testing.T) {
 	}
 }
 
+func TestTheRecordersOwnWaitIsNotAFrameCost(t *testing.T) {
+	sync := &fakeSync{cost: time.Millisecond}
+	g := newRig(t, func(g *rig) Sync {
+		sync.now = &g.now
+		return sync
+	})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{GPUWaits: 1})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{GPUWaits: 3})
+	g.flip(time.Second)
+	frames := g.frames()
+	if len(frames) != 2 || frames[0].Cost.GPUWaits != 0 || frames[1].Cost.GPUWaits != 2 {
+		t.Fatalf("frames %+v, want the recorder's one wait per frame left out", frames)
+	}
+}
+
+func TestAFencedFrameKeepsEveryGPUWait(t *testing.T) {
+	sync := &fakeSync{native: true, cost: time.Millisecond}
+	g := newRig(t, func(g *rig) Sync {
+		sync.now = &g.now
+		return sync
+	})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{GPUWaits: 1})
+	g.flip(time.Second)
+	if frames := g.frames(); len(frames) != 1 || frames[0].Cost.GPUWaits != 1 {
+		t.Fatalf("frames %+v, want the renderer's wait counted", frames)
+	}
+}
+
 func TestCountsFromFramesThatDrewNothingReachTheNextOneThatDid(t *testing.T) {
 	g := newRig(t, nil)
 	g.r.Begin("A")
