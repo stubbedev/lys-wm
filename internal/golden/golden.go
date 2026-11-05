@@ -4,6 +4,7 @@ package golden
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -64,6 +65,9 @@ func Within(t testing.TB, name string, b *soft.Buffer, tolerance int) {
 			want.Set(x, y, decoded.At(x, y))
 		}
 	}
+	var off image.Rectangle
+	count := 0
+	first := ""
 	for y := range b.H {
 		row := y * img.Stride
 		if bytes.Equal(img.Pix[row:row+b.W*4], want.Pix[row:row+b.W*4]) {
@@ -71,11 +75,25 @@ func Within(t testing.TB, name string, b *soft.Buffer, tolerance int) {
 		}
 		for x := range b.W {
 			got, wanted := img.Pix[row+x*4:row+x*4+4], want.Pix[row+x*4:row+x*4+4]
-			for c := range got {
-				if d := int(got[c]) - int(wanted[c]); d > tolerance || d < -tolerance {
-					t.Fatalf("golden %s: pixel (%d, %d) is %v, golden has %v", name, x, y, got, wanted)
+			if !within(got, wanted, tolerance) {
+				if count == 0 {
+					first = fmt.Sprintf("pixel (%d, %d) is %v, golden has %v", x, y, got, wanted)
 				}
+				count++
+				off = off.Union(image.Rect(x, y, x+1, y+1))
 			}
 		}
 	}
+	if count > 0 {
+		t.Fatalf("golden %s: %s; %d pixels off within %v", name, first, count, off)
+	}
+}
+
+func within(got, wanted []byte, tolerance int) bool {
+	for c := range got {
+		if d := int(got[c]) - int(wanted[c]); d > tolerance || d < -tolerance {
+			return false
+		}
+	}
+	return true
 }
