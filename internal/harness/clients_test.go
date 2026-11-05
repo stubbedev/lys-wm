@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/shell"
+	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
 const clientTimeout = 20 * time.Second
@@ -154,19 +155,41 @@ func TestLysUIPopoverAndNestedMenu(t *testing.T) {
 		return x, y
 	}
 	mx, my := center("menu")
+	before := h.keyboardFocus()
 	h.click(0, mx, my, btnLeft)
 	popover.Expect(t, "demo: menu depth 1", clientTimeout)
+	h.Eventually("the menu to take the keyboard", keyboardMovedFrom(before))
+	menu := h.keyboardFocus()
 	h.tap(keyDown, keyRight)
 	popover.Expect(t, "demo: menu depth 2", clientTimeout)
+	h.Eventually("the submenu to take the keyboard", keyboardMovedFrom(menu))
 	h.tap(keyDown, keyEnter)
 	popover.Expect(t, "demo: menu leaf a", clientTimeout)
 	popover.Expect(t, "demo: menu depth 0", clientTimeout)
 	ox, oy := center("open")
+	before = h.keyboardFocus()
 	h.click(0, ox, oy, btnLeft)
 	popover.Expect(t, "demo: popover open", clientTimeout)
+	h.Eventually("the popover to take the keyboard", keyboardMovedFrom(before))
 	h.tap(keyH, keyI)
 	popover.Expect(t, "demo: popover text hi", clientTimeout)
 	popover.Expect(t, "demo: popover grew", clientTimeout)
 	h.click(0, 1200, 700, btnLeft)
 	popover.Expect(t, "demo: popover closed", clientTimeout)
+}
+
+func (h *Harness) keyboardFocus() *surface.Surface {
+	var focus *surface.Surface
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		focus = c.Seat().Focus()
+		return nil
+	})
+	return focus
+}
+
+func keyboardMovedFrom(prev *surface.Surface) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(_ *headless.Backend, c *compositor.Compositor) bool {
+		focus := c.Seat().Focus()
+		return focus != nil && focus != prev
+	}
 }
