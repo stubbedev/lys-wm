@@ -16,7 +16,6 @@ import (
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 
-	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -782,22 +781,13 @@ func TestAnXwaylandThatLostItsWindowManagerIsRestarted(t *testing.T) {
 
 func TestAnXWindowWhoseSurfaceGoesBeforeItsUnmapNotifyStillCloses(t *testing.T) {
 	t.Parallel()
-	slowClose := func(cfg *compositor.Config) {
-		d, on, off := time.Minute, true, false
-		table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.FadeOut: {Enabled: &on, Shape: anim.Linear, Duration: &d}})
-		if len(errs) != 0 {
-			t.Error(errs)
-		}
-		cfg.Animations = table
-	}
-	h := StartXwaylandWith(t, slowClose, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+	h := StartXwaylandWith(t, slowFadeOut(t), func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	win := xc.window(image.Rect(0, 0, 50, 50), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("gone\x00gone\x00")})
 	h.Eventually("the X window on screen", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		return len(windowsOf(c)) == 1
 	})
 	h.Eventually("the X window drawn", showing(150, 90, [3]byte{0xff, 0, 0}))
-	settle(t, h)
 	checks := []interface{ Check() error }{
 		xproto.GrabServerChecked(xc.x),
 		xproto.ChangePropertyChecked(xc.x, xproto.PropModeReplace, win, xc.atoms["WM_NAME"], xproto.AtomString, 8, 4, []byte("busy")),

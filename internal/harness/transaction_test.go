@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -1063,4 +1064,31 @@ func TestAnOpeningWindowShowsWithoutWaitingForItsNeighbours(t *testing.T) {
 		t.Fatalf("holds %+v, holding %v: want the opening window shown on the first frame after it mapped, holding nothing", s, h.compositorHolding())
 	}
 	h.Eventually("the mute neighbour stretched into its new tile", showing(75, 50, greenColor))
+}
+
+func slowFadeOut(t *testing.T) func(*compositor.Config) {
+	t.Helper()
+	d, on, off := time.Minute, true, false
+	table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.FadeOut: {Enabled: &on, Shape: anim.Linear, Duration: &d}})
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	return func(cfg *compositor.Config) { cfg.Animations = table }
+}
+
+func TestAWindowUnmappedWhileItsResizeIsInFlightClosesAsItWasShown(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, slowFadeOut(t), small)
+	c, w := open(t, h, "mute", fillRed)
+	w.Answer = testclient.AnswerNever
+	_, _ = open(t, h, "right", fillBlue)
+	c.DispatchUntil("the resize sent", func() bool { return w.Configures > 1 })
+	h.Eventually("the mute window stretched into its new tile", showing(75, 50, redColor))
+	if err := errors.Join(w.Destroy(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the mute window gone", func(_ *headless.Backend, comp *compositor.Compositor) bool { return len(windowsOf(comp)) == 1 })
+	if got := pixel(h.Rendered(0), 75, 50); got[0] < 0x80 || got[1] != 0 || got[2] != 0 {
+		t.Errorf("the closing window is not where it was shown: the output shows %v", got)
+	}
 }

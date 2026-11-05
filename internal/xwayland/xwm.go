@@ -662,7 +662,7 @@ func (m *wm) hide(w *Window) error {
 	if !w.shown {
 		return nil
 	}
-	w.shown, w.applied = false, State{}
+	w.shown = false
 	w.syncWanted, w.syncMissed = 0, false
 	if m.focused == w.id {
 		m.focused = 0
@@ -672,7 +672,9 @@ func (m *wm) hide(w *Window) error {
 		m.changeWindows(m.root, atomNetClientList, m.clients)
 		m.restack(w.id, false)
 	}
-	return m.listener.XWindowUnmapped(w)
+	err := m.listener.XWindowUnmapped(w)
+	w.applied = State{}
+	return err
 }
 
 func (m *wm) close() error {
