@@ -180,7 +180,7 @@ func (c *Compositor) enterOverview(now time.Duration) error {
 }
 
 func (c *Compositor) prepareFirstFrame() error {
-	c.frameTime = c.clock()
+	c.frameTime = c.aimedAny(c.clock())
 	var errs []error
 	for _, o := range c.outputs {
 		v, ok := c.overview.views[o]

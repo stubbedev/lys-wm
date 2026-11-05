@@ -144,7 +144,7 @@ func (c *Compositor) sceneOf(o *output.Output) *scene {
 }
 
 func (c *Compositor) render(o *output.Output) error {
-	c.frameTime = c.clock()
+	c.frameTime = c.aimed(o, c.clock())
 	c.prepareSwitch(o)
 	if err := c.settleOverview(c.frameTime); err != nil {
 		return err
