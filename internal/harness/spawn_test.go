@@ -18,10 +18,10 @@ func TestSpawnedCommandsReportHowTheyExited(t *testing.T) {
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Report = r.report }, small)
 	h.dispatch("exec true")
 	h.dispatch("exec exit 3")
-	h.dispatch(`exec kill -SEGV "$$"`)
+	h.dispatch(`exec ulimit -c 0; kill -SEGV "$$"`)
 	want := []string{
 		`compositor: "exit 3" exited with status 3`,
-		`compositor: "kill -SEGV \"$$\"" was killed by signal SIGSEGV`,
+		`compositor: "ulimit -c 0; kill -SEGV \"$$\"" was killed by signal SIGSEGV`,
 	}
 	var got []string
 	h.Eventually("both failures reported", func(*headless.Backend, *compositor.Compositor) bool {

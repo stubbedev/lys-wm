@@ -278,7 +278,7 @@ func TestAFailedUpgradeLeavesTheSessionRunningAndSaysWhy(t *testing.T) {
 		"another format":      {script(t, `echo '{"format":999}'`+"\n"), "format 999"},
 		"rejects the config":  {script(t, `echo '{"format":1,"config_error":"c.yaml:1: nope"}'`+"\n"), "c.yaml:1: nope"},
 		"exits at once":       {script(t, info+"echo it broke >&2\nexit 3\n"), "it broke"},
-		"crashes mid restore": {script(t, info+"echo reading >&2\ncat <&4 >/dev/null &\nsleep 0.1\nkill -SEGV $$\n"), "did not take over"},
+		"crashes mid restore": {script(t, info+"echo reading >&2\ncat <&4 >/dev/null &\nsleep 0.1\nulimit -c 0\nkill -SEGV $$\n"), "did not take over"},
 	}
 	for name, tc := range cases {
 		_, err := s.upgrade(tc.binary)
