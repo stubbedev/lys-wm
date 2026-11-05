@@ -159,6 +159,7 @@ var appended = map[string][]string{
 }
 
 var keyed = map[string][]string{
+	"xdg_toplevel_tag_manager_v1":     {"set_toplevel_tag", "set_toplevel_description"},
 	"hyprland_ctm_control_manager_v1": {"set_ctm_for_output"},
 	"xdg_toplevel_icon_manager_v1":    {"set_icon"},
 }

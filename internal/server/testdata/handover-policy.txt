@@ -385,6 +385,10 @@ xdg_toplevel_icon_v1 = journal retire=
 xdg_toplevel_icon_v1.destroy = destructor
 xdg_toplevel_icon_v1.set_name = latest
 xdg_toplevel_icon_v1.add_buffer = append
+xdg_toplevel_tag_manager_v1 = journal retire=
+xdg_toplevel_tag_manager_v1.destroy = destructor
+xdg_toplevel_tag_manager_v1.set_toplevel_tag = latest-keyed
+xdg_toplevel_tag_manager_v1.set_toplevel_description = latest-keyed
 xdg_wm_base = journal retire=
 xdg_wm_base.destroy = destructor
 xdg_wm_base.create_positioner = create
