@@ -1,8 +1,8 @@
-// Package inputmethod implements zwp_text_input_manager_v3 and
-// zwp_input_method_manager_v2: the focused client's enabled text input and
-// the seat's input method relay state, text, preedit and deletions to each
-// other, the input method can grab the keyboard, and its popups follow the
-// text cursor.
+// Package inputmethod implements zwp_text_input_manager_v3,
+// zwp_text_input_manager_v1 and zwp_input_method_manager_v2: the focused
+// client's enabled text input and the seat's input method relay state, text,
+// preedit and deletions to each other, the input method can grab the
+// keyboard, and its popups follow the text cursor.
 package inputmethod
 
 import (
@@ -12,6 +12,7 @@ import (
 
 	sim "github.com/stubbedev/lys-wm/internal/protocol/server/inputmethod"
 	stix "github.com/stubbedev/lys-wm/internal/protocol/server/textinput"
+	stiv1 "github.com/stubbedev/lys-wm/internal/protocol/server/textinputv1"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -22,6 +23,7 @@ import (
 
 const (
 	textInputVersion   = 1
+	textInputV1Version = 1
 	inputMethodVersion = 1
 	popupRole          = "zwp_input_popup_surface_v2"
 )
@@ -49,6 +51,9 @@ type Manager struct {
 func New(d *server.Display, keyboard Keyboard, listener Listener) (*Manager, error) {
 	m := &Manager{keyboard: keyboard, listener: listener}
 	if _, err := d.AddGlobal(stix.ZwpTextInputManagerV3Interface, textInputVersion, m.bindTextInput); err != nil {
+		return nil, err
+	}
+	if _, err := d.AddGlobal(stiv1.ZwpTextInputManagerV1Interface, textInputV1Version, m.bindTextInputV1); err != nil {
 		return nil, err
 	}
 	if _, err := d.AddGlobal(Interface, inputMethodVersion, m.bindInputMethod); err != nil {
@@ -87,8 +92,8 @@ func (m *Manager) Focus(s *surface.Surface) error {
 	if old := m.focus; old != nil {
 		for _, ti := range m.inputs {
 			if ti.focus == old {
-				ti.focus, ti.current.enabled = nil, false
-				errs = append(errs, ti.res.SendLeave(old.Resource()))
+				ti.focus, ti.current.enabled, ti.pending.enabled = nil, false, false
+				errs = append(errs, ti.out.leave(old))
 			}
 		}
 		if m.active != nil {
@@ -136,12 +141,44 @@ func (textInputManager) Destroy(*stix.ZwpTextInputManagerV3) error { return nil 
 
 func (r textInputManager) GetTextInput(_ *stix.ZwpTextInputManagerV3, res *stix.ZwpTextInputV3, _ *sw.WlSeat) (stix.ZwpTextInputV3Handler, error) {
 	ti := &textInput{m: r.m, c: r.c, res: res}
-	r.m.inputs = append(r.m.inputs, ti)
+	ti.out = v3Client{ti}
+	return ti, r.m.add(ti, res)
+}
+
+func (m *Manager) add(ti *textInput, res wire.Resource) error {
+	m.inputs = append(m.inputs, ti)
 	server.OnDestroy(res, ti.gone)
-	if f := r.m.focus; f != nil {
-		return ti, ti.enter(f)
+	if f := m.focus; f != nil {
+		return ti.enter(f)
 	}
-	return ti, nil
+	return nil
+}
+
+type textInputClient interface {
+	enter(s *surface.Surface) error
+	leave(s *surface.Surface) error
+	relay(st imState) error
+}
+
+type v3Client struct{ ti *textInput }
+
+func (c v3Client) enter(s *surface.Surface) error { return c.ti.res.SendEnter(s.Resource()) }
+
+func (c v3Client) leave(s *surface.Surface) error { return c.ti.res.SendLeave(s.Resource()) }
+
+func (c v3Client) relay(st imState) error {
+	res := c.ti.res
+	var errs []error
+	if p := st.preedit; p != nil {
+		errs = append(errs, res.SendPreeditString(&p.text, p.begin, p.end))
+	}
+	if st.before != 0 || st.after != 0 {
+		errs = append(errs, res.SendDeleteSurroundingText(st.before, st.after))
+	}
+	if st.commit != nil {
+		errs = append(errs, res.SendCommitString(st.commit))
+	}
+	return errors.Join(append(errs, res.SendDone(c.ti.commits))...)
 }
 
 type surrounding struct {
@@ -166,6 +203,7 @@ type textInput struct {
 	m       *Manager
 	c       *server.Client
 	res     *stix.ZwpTextInputV3
+	out     textInputClient
 	focus   *surface.Surface
 	pending textInputState
 	current textInputState
@@ -177,7 +215,7 @@ func (ti *textInput) enter(s *surface.Surface) error {
 		return nil
 	}
 	ti.focus = s
-	return ti.res.SendEnter(s.Resource())
+	return ti.out.enter(s)
 }
 
 func (ti *textInput) gone() error {
@@ -218,12 +256,20 @@ func (ti *textInput) SetContentType(_ *stix.ZwpTextInputV3, hint stix.ZwpTextInp
 }
 
 func (ti *textInput) SetCursorRectangle(_ *stix.ZwpTextInputV3, x, y, w, h int32) error {
-	ti.pending.cursor = image.Rect(int(x), int(y), int(x)+int(max(w, 0)), int(y)+int(max(h, 0)))
+	ti.pending.cursor = cursorRect(x, y, w, h)
 	return nil
+}
+
+func cursorRect(x, y, w, h int32) image.Rectangle {
+	return image.Rect(int(x), int(y), int(x)+int(max(w, 0)), int(y)+int(max(h, 0)))
 }
 
 func (ti *textInput) Commit(*stix.ZwpTextInputV3) error {
 	ti.commits++
+	return ti.apply()
+}
+
+func (ti *textInput) apply() error {
 	if ti.focus == nil {
 		return nil
 	}
@@ -379,17 +425,7 @@ func (im *inputMethod) Commit(_ *sim.ZwpInputMethodV2, serial uint32) error {
 }
 
 func (ti *textInput) relay(st imState) error {
-	var errs []error
-	if p := st.preedit; p != nil {
-		errs = append(errs, ti.res.SendPreeditString(&p.text, p.begin, p.end))
-	}
-	if st.before != 0 || st.after != 0 {
-		errs = append(errs, ti.res.SendDeleteSurroundingText(st.before, st.after))
-	}
-	if st.commit != nil {
-		errs = append(errs, ti.res.SendCommitString(st.commit))
-	}
-	return errors.Join(append(errs, ti.res.SendDone(ti.commits))...)
+	return ti.out.relay(st)
 }
 
 func (im *inputMethod) GetInputPopupSurface(obj *sim.ZwpInputMethodV2, res *sim.ZwpInputPopupSurfaceV2, wl *sw.WlSurface) (sim.ZwpInputPopupSurfaceV2Handler, error) {
