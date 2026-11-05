@@ -171,13 +171,16 @@ func TestUpgradeKeepsClientsWindowsAndLayout(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	a := c.Window("first", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the first window to map", a.Mapped)
+	c.Sync()
 	b := c.Window("second", testclient.Fill(0, 0xff, 0))
 	c.DispatchUntil("the second window to map", b.Mapped)
+	c.Sync()
 	if _, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindDispatch, Action: "workspace 3"}); err != nil {
 		t.Fatal(err)
 	}
 	third := c.Window("third", testclient.Fill(0, 0, 0xff))
 	c.DispatchUntil("the third window to map", third.Mapped)
+	c.Sync()
 	before := stable(s.windows())
 	if len(before) != 3 {
 		t.Fatalf("%d windows before the upgrade: %+v", len(before), before)
@@ -269,6 +272,7 @@ func TestAFailedUpgradeLeavesTheSessionRunningAndSaysWhy(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	w := c.Window("kept", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	before := stable(s.windows())
 
 	info := `case "$1" in --handover-info) echo '{"format":1}'; exit 0;; esac` + "\n"
@@ -308,6 +312,7 @@ func TestUpgradeTwiceThenTheSessionEndsCleanly(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	w := c.Window("kept", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	before := stable(s.windows())
 	var last ipc.UpgradeResult
 	for i := range 2 {
@@ -385,10 +390,13 @@ func TestUpgradeKeepsEveryRoleAClientHolds(t *testing.T) {
 	source := c.DataSource(map[string]string{"text/plain": "copied"})
 	w := c.Window("main", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	bar := c.Layer(testclient.LayerSpec{Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight, Size: image.Pt(0, 30), ExclusiveZone: 30}, testclient.Fill(0, 0xff, 0))
 	c.DispatchUntil("the bar to map", bar.Mapped)
+	c.Sync()
 	menu := c.Popup(w, testclient.Placement{Size: image.Pt(40, 30), Anchor: image.Rect(10, 10, 11, 11), Edge: cxdg.XdgPositionerAnchorBottomRight, Gravity: cxdg.XdgPositionerGravityBottomRight}, nil, testclient.Fill(0x80, 0x80, 0x80))
 	c.DispatchUntil("the menu to map", menu.Mapped)
+	c.Sync()
 	child := c.Surface()
 	sub, err := c.Subcompositor.GetSubsurface(child, w.Surface)
 	if err != nil {
@@ -455,6 +463,7 @@ func TestUpgradeKeepsEveryRoleAClientHolds(t *testing.T) {
 	}
 	opened := c.Window("after", testclient.Fill(0, 0xff, 0))
 	c.DispatchUntil("a new window to map", opened.Mapped)
+	c.Sync()
 	if ws := stable(s.windows()); len(ws) != 2 {
 		t.Fatalf("after a new window: %+v", ws)
 	}
@@ -539,6 +548,7 @@ func TestUpgradeKeepsAWindowOfDMABUFs(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	w := c.WindowWith("gpu", testclient.Fill(0xff, 0, 0), nil)
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	w.Stop()
 	show := func(what string, b *testclient.DMABUF) {
 		t.Helper()
@@ -580,6 +590,7 @@ func TestWithoutTheSwitchNoHolderRunsAndUpgradeSaysHowToTurnItOn(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	w := c.Window("kept", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	_, err = s.upgrade(buildCopy(t, binary))
 	if err == nil || !strings.Contains(err.Error(), "refused, nothing changed") || !strings.Contains(err.Error(), "--holder") {
 		t.Fatalf("an upgrade without a holder: %v", err)
@@ -653,6 +664,7 @@ func TestUpgradeKeepsWindowsWhoseObjectsAreNumberedOutOfOrder(t *testing.T) {
 	c.Sync()
 	second := c.Window("second", testclient.Fill(0, 0xff, 0))
 	c.DispatchUntil("the second window to map", second.Mapped)
+	c.Sync()
 	if second.Surface.Base().ID() >= first.Surface.Base().ID() {
 		t.Fatalf("the later window's surface is %d, the first's %d; the test needs them out of order", second.Surface.Base().ID(), first.Surface.Base().ID())
 	}
@@ -671,6 +683,7 @@ func TestUpgradeKeepsWindowsWhoseObjectsAreNumberedOutOfOrder(t *testing.T) {
 	}
 	opened := c.Window("third", testclient.Fill(0, 0, 0xff))
 	c.DispatchUntil("a new window to map", opened.Mapped)
+	c.Sync()
 	for _, w := range s.windows() {
 		if w.Title == "third" && w.ID <= before[len(before)-1].ID {
 			t.Errorf("a new window took the used id %d", w.ID)
@@ -684,9 +697,11 @@ func TestUpgradeSurvivesAClientLeavingWhileTheNewBinaryStarts(t *testing.T) {
 	stays := testclient.Connect(t, s.waylandSocket())
 	kept := stays.Window("stays", testclient.Fill(0xff, 0, 0))
 	stays.DispatchUntil("the kept window to map", kept.Mapped)
+	stays.Sync()
 	leaves := testclient.Connect(t, s.waylandSocket())
 	gone := leaves.Window("leaves", testclient.Fill(0, 0xff, 0))
 	leaves.DispatchUntil("the other window to map", gone.Mapped)
+	leaves.Sync()
 	gate := t.TempDir()
 	next := buildCopy(t, binary)
 	wrapper := script(t, `case "$1" in --handover-info) exec `+next+` "$@";; esac
@@ -731,6 +746,7 @@ func TestANewBinaryFailingAfterItAdoptedLeavesTheSocketsInPlace(t *testing.T) {
 	c := testclient.Connect(t, s.waylandSocket())
 	w := c.Window("kept", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("the window to map", w.Mapped)
+	c.Sync()
 	next := buildCopy(t, binary)
 	wrapper := script(t, `case "$1" in --handover-info) exec `+next+` "$@";; esac
 XDG_RUNTIME_DIR= exec `+next+` "$@"
@@ -741,6 +757,7 @@ XDG_RUNTIME_DIR= exec `+next+` "$@"
 	later := testclient.Connect(t, s.waylandPath)
 	opened := later.Window("later", testclient.Fill(0, 0xff, 0))
 	later.DispatchUntil("a client that connects after the failure to map", opened.Mapped)
+	later.Sync()
 	if ws := s.windows(); len(ws) != 2 {
 		t.Fatalf("windows %+v", ws)
 	}
@@ -755,6 +772,7 @@ func TestUpgradeUnderClientChurn(t *testing.T) {
 	stays := testclient.Connect(t, s.waylandSocket())
 	kept := stays.Window("stays", testclient.Fill(0xff, 0, 0))
 	stays.DispatchUntil("the kept window to map", kept.Mapped)
+	stays.Sync()
 	for round := range 6 {
 		churn := make([]*testclient.Client, 6)
 		for i := range churn {
