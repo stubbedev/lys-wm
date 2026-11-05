@@ -165,9 +165,9 @@ func TestAnXWindowThatNeverFinishesADropReleasesTheSource(t *testing.T) {
 	x.release()
 	x.xc.xdnd("XdndDrop")
 	x.a.seen(t, "the unfinished drop given up", func() bool { return slices.Contains(x.src.Log, "cancelled") })
-	mu.Lock()
-	defer mu.Unlock()
-	if !slices.ContainsFunc(reported, func(err error) bool { return strings.Contains(err.Error(), "did not finish a drop") }) {
-		t.Fatalf("reported %v", reported)
-	}
+	x.h.Eventually("the unfinished drop reported", func(*headless.Backend, *compositor.Compositor) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.ContainsFunc(reported, func(err error) bool { return strings.Contains(err.Error(), "did not finish a drop") })
+	})
 }
