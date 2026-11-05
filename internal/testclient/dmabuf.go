@@ -298,14 +298,14 @@ func (c *Client) udmabuf(size image.Point, modifier fourcc.Modifier) memory {
 	return m
 }
 
-func (c *Client) DMABUFOutside(size image.Point, excluded []fourcc.Modifier) *DMABUF {
+func (c *Client) DMABUFOutside(size image.Point, excluded []fourcc.Modifier) (*DMABUF, bool) {
 	c.t.Helper()
 	g := c.bindDMABUF()
 	if g.feedback == nil {
 		if !g.legacy.implicit {
 			c.t.Skipf("testclient: the compositor takes no %v dmabufs with an implicit modifier", dmabufFormat)
 		}
-		return c.share(g, c.udmabuf(size, fourcc.Invalid), size)
+		return c.share(g, c.udmabuf(size, fourcc.Invalid), size), true
 	}
 	var mods []fourcc.Modifier
 	for _, m := range g.feedback.Modifiers(dmabufFormat) {
@@ -314,9 +314,9 @@ func (c *Client) DMABUFOutside(size image.Point, excluded []fourcc.Modifier) *DM
 		}
 	}
 	if len(mods) == 0 {
-		c.t.Skipf("testclient: the compositor imports %v only with the modifiers %v", dmabufFormat, excluded)
+		return nil, false
 	}
-	return c.share(g, c.gbmMemory(*g.feedback, dmabufFormat, size, mods, 0), size)
+	return c.share(g, c.gbmMemory(*g.feedback, dmabufFormat, size, mods, 0), size), true
 }
 
 func (c *Client) DMABUF(size image.Point, paint Painter) *DMABUF {

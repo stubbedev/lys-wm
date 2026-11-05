@@ -339,7 +339,17 @@ func TestACaptureIntoADMABUFTheRendererCannotDrawIntoBreaksTheConstraints(t *tes
 
 func testACaptureIntoADMABUFTheRendererCannotDrawIntoBreaksTheConstraints(t *testing.T, start gpuStarter) {
 	c, session, view := dmabufCapture(t, start)
-	f, _ := captureInto(t, c, session, c.DMABUFOutside(view.size, view.modifiers).WL, view.size)
+	undrawable, ok := c.DMABUFOutside(view.size, view.modifiers)
+	if !ok {
+		t.Logf("the renderer draws into every modifier it imports %v with, so no buffer it imports breaks the constraints", view.modifiers)
+		f, _ := captureInto(t, c, session, c.RenderTarget(view.size, view.modifiers).WL, view.size)
+		c.DispatchUntil("the frame", func() bool { return f.ready || f.failed })
+		if f.failed {
+			t.Fatalf("frame into a drawable modifier %+v, want it ready", *f)
+		}
+		return
+	}
+	f, _ := captureInto(t, c, session, undrawable.WL, view.size)
 	c.DispatchUntil("the frame", func() bool { return f.ready || f.failed })
 	if !f.failed || f.reason != ceic.ExtImageCopyCaptureFrameV1FailureReasonBufferConstraints {
 		t.Fatalf("frame %+v, want it failed for its buffer constraints", *f)

@@ -272,10 +272,14 @@ func TestAScreencopyIntoADMABUFTheRendererCannotDrawIntoFailsAndKeepsTheClient(t
 
 func testAScreencopyIntoADMABUFTheRendererCannotDrawIntoFailsAndKeepsTheClient(t *testing.T, start gpuStarter) {
 	c, mgr, view := dmabufScreencopy(t, start)
-	refused := copyDMABUF(t, c, mgr, c.DMABUFOutside(view.size, view.modifiers).WL)
-	c.DispatchUntil("the refused copy", func() bool { return refused.ready || refused.failed })
-	if !refused.failed {
-		t.Fatalf("copy into an undrawable modifier %+v, want it failed", *refused)
+	if undrawable, ok := c.DMABUFOutside(view.size, view.modifiers); ok {
+		refused := copyDMABUF(t, c, mgr, undrawable.WL)
+		c.DispatchUntil("the refused copy", func() bool { return refused.ready || refused.failed })
+		if !refused.failed {
+			t.Fatalf("copy into an undrawable modifier %+v, want it failed", *refused)
+		}
+	} else {
+		t.Logf("the renderer draws into every modifier it imports %v with, so no buffer it imports is refused", view.modifiers)
 	}
 	next := copyDMABUF(t, c, mgr, c.RenderTarget(view.size, view.modifiers).WL)
 	c.DispatchUntil("the next copy", func() bool { return next.ready || next.failed })
