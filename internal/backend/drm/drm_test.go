@@ -59,6 +59,8 @@ const (
 	propDegammaID
 	propInFormatsAsync
 	propContentTypeID
+	propColorEncodingID
+	propColorRangeID
 	inFormatsBlob    = 500
 	edidBlob         = 501
 	litModeBlob      = 502
@@ -120,6 +122,7 @@ type fakeDevice struct {
 	asyncFormats      bool
 	imports           int
 	contentTypes      bool
+	overlayYUV        bool
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -258,6 +261,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.damageClips {
 			props["FB_DAMAGE_CLIPS"] = kdrm.Property{ID: propDamageClips}
 		}
+		if f.overlayYUV && object == 42 {
+			props[propColorEncoding], props[propColorRange] = kdrm.Property{ID: propColorEncodingID}, kdrm.Property{ID: propColorRangeID}
+		}
 		if f.overlayZpos != 0 {
 			props["zpos"] = kdrm.Property{ID: propZpos, Value: map[uint32]uint64{40: 0, 41: 0, 42: f.overlayZpos}[object]}
 		}
@@ -304,6 +310,12 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 }
 
 func (f *fakeDevice) PropertyInfo(id uint32) (kdrm.PropertyInfo, error) {
+	switch id {
+	case propColorEncodingID:
+		return kdrm.PropertyInfo{Name: propColorEncoding, Enums: map[string]uint64{"ITU-R BT.601 YCbCr": 0, "ITU-R BT.709 YCbCr": 1, "ITU-R BT.2020 YCbCr": 2}}, nil
+	case propColorRangeID:
+		return kdrm.PropertyInfo{Name: propColorRange, Enums: map[string]uint64{"YCbCr limited range": 0, "YCbCr full range": 1}}, nil
+	}
 	if id == propContentTypeID {
 		return kdrm.PropertyInfo{Name: propContentType, Enums: map[string]uint64{"No Data": 0, "Graphics": 1, "Photo": 2, "Cinema": 3, "Game": 4}}, nil
 	}
@@ -414,7 +426,7 @@ func (f *fakeDevice) AddFB2(fb kdrm.FB) (uint32, error) {
 	if f.refuseAddFB {
 		return 0, fmt.Errorf("add a framebuffer: %w", unix.EINVAL)
 	}
-	prime := fb.Handles[0] >= primeHandles && fb.Format == scanoutFormat
+	prime := fb.Handles[0] >= primeHandles && (fb.Format == scanoutFormat || fb.Format == fourcc.NV12)
 	if !prime && ((fb.Format != cursorFormat && fb.Format != scanoutFormat) || fb.WithModifier || !f.live[fb.Handles[0]]) {
 		return 0, fmt.Errorf("unexpected framebuffer %+v", fb)
 	}

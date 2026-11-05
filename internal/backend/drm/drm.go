@@ -9,6 +9,8 @@ import (
 	"image"
 	"iter"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -152,6 +154,7 @@ type Backend struct {
 	modifiers    bool
 	async        bool
 	number       uint64
+	driver       string
 	vendors      edid.Vendors
 	report       func(error)
 	dev          device
@@ -265,6 +268,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	if b.number, err = dev.Number(); err != nil {
 		return nil, err
 	}
+	b.driver = driverOf(b.number)
 	res, err := dev.Resources()
 	if err != nil {
 		return nil, err
@@ -312,6 +316,14 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, err
 	}
 	return b, nil
+}
+
+func driverOf(number uint64) string {
+	link, err := os.Readlink(fmt.Sprintf("/sys/dev/char/%d:%d/device/driver", unix.Major(number), unix.Minor(number)))
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(link)
 }
 
 func deepLayouts(formats []fourcc.Format, blob []byte, renderable []layout) ([]layout, error) {
@@ -1739,7 +1751,7 @@ const testedPlaneStates = 16
 func (o *Output) planeKey(fb, flags uint32) planeKey {
 	k := planeKey{primary: fb, flags: flags}
 	if u := o.overlayNext; u != nil {
-		k.overlay = overlayTest{u.client.fb, u.dst}
+		k.overlay = overlayTest{fb: u.client.fb, dst: u.dst, yuv: u.yuv}
 	}
 	if c := o.cursor; c != nil && c.visible {
 		k.cursor, k.cursorClipped, k.hotspot = c.pending.fb, c.clipped(), c.hotspot

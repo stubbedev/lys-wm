@@ -237,10 +237,8 @@ func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rec
 	if !shading && sc.zoom == nil && c.adopting == nil && c.hdr[o.Backend()] == nil {
 		if i := overlayCandidate(sc.cur.ops, sc.cur.cursorFrom, bounds); i >= 0 {
 			op = &sc.cur.ops[i]
-			if t, isImported := c.textures[op.surface].(imported); isImported {
-				d := t.buffer.DMABUF()
-				d.Format = d.Format.Opaque()
-				if out.TestOverlay(t.buffer, d, op.dst) {
+			if t, isImported := c.textures[op.surface].(imported); isImported && colorspace.Passthrough(op.space, c.scanoutTarget(o)) {
+				if out.TestOverlay(t.buffer, c.overlayBuffer(t.buffer, op.surface), op.dst) {
 					want = overlayShown{t.buffer, op.dst}
 				}
 			}
@@ -260,9 +258,7 @@ func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rec
 	if c.overlays == nil {
 		c.overlays = map[*output.Output]overlayShown{}
 	}
-	d := want.buffer.DMABUF()
-	d.Format = d.Format.Opaque()
-	if err := out.SetOverlay(want.buffer, d, want.dst, c.imported[want.buffer].left); err != nil {
+	if err := out.SetOverlay(want.buffer, c.overlayBuffer(want.buffer, op.surface), want.dst, c.imported[want.buffer].left); err != nil {
 		op.overlay, sc.zeroCopy[1] = false, nil
 		return err
 	}
@@ -274,6 +270,15 @@ func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rec
 	held.outputs++
 	c.overlays[o] = want
 	return nil
+}
+
+func (c *Compositor) overlayBuffer(b *dmabuf.Buffer, s *surface.Surface) gpu.DMABUF {
+	d := b.DMABUF()
+	d.Format = d.Format.Opaque()
+	if d.Format.YUV() {
+		d.YUV = c.colorrep.Of(s)
+	}
+	return d
 }
 
 func (c *Compositor) flipOverlay(o *output.Output, sc *scene) (bool, error) {
