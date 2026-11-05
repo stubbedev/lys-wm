@@ -2063,14 +2063,22 @@ func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.committedSince("the cursor", o, 0)
+	r.pinned = backend.Now()
 	r.dev.flip(t, 10, 2)
 	r.until("the cursor's flip", func() bool { return !o.flipping })
+	interval := modeOf(o.mode).Interval()
+	r.pinned = o.lastFlip + interval/2
 	presents := len(r.rec.presents)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(40, 30)); err != nil {
+		t.Fatal(err)
+	}
+	r.until("the empty frame, its move waiting for the plane latch", func() bool { return o.planesWaiting })
+	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	if err := o.planesDue(); err != nil {
 		t.Fatal(err)
 	}
 	r.until("the empty frame's refresh", func() bool {
