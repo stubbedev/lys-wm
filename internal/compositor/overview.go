@@ -151,7 +151,7 @@ func (c *Compositor) takeOverviewInput() error {
 	if c.interaction != nil {
 		errs = append(errs, c.endDrag())
 	}
-	errs = append(errs, c.shell.DismissGrab(), c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
+	errs = append(errs, c.dismissGrabs(), c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
 	if len(c.touches) > 0 {
 		clear(c.touches)
 		errs = append(errs, c.seat.TouchCancel())

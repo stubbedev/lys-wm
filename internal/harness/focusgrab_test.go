@@ -85,3 +85,27 @@ func TestAFocusGrabKeepsInputOnItsSurfacesUntilAClickOutside(t *testing.T) {
 	clickTitled(t, h, "b")
 	b.seen(t, "the next click reaching b", logged(&b.in.Log, "button 272 1"))
 }
+
+func TestOpeningTheOverviewClearsAFocusGrab(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	a := join(t, h, "a")
+	m, err := cfg.NewHyprlandFocusGrabManagerV1(a.c.Display, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.c.Bind(m)
+	events := &grabEvents{}
+	grab, err := m.CreateGrab(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send(t, func() error { return grab.AddSurface(a.w.Surface) }, grab.Commit, a.c.Display.Flush)
+	a.seen(t, "the keyboard entering the whitelisted a", logged(&a.in.Log, "kb_enter a"))
+	a.c.Sync()
+	if events.cleared != 0 {
+		t.Fatalf("a grab cleared %d times before the overview opened", events.cleared)
+	}
+	h.dispatch("overview show")
+	a.seen(t, "the overview clearing the grab", func() bool { return events.cleared == 1 })
+}
