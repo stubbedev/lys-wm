@@ -112,7 +112,11 @@
           "flags": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "locked",
+                "repeating"
+              ]
             }
           }
         },
@@ -233,7 +237,8 @@
                   "type": "integer"
                 },
                 "tint": {
-                  "type": "string"
+                  "type": "string",
+                  "format": "lys-wm-color"
                 }
               },
               "additionalProperties": false
@@ -511,7 +516,8 @@
       "additionalProperties": false
     },
     "gpu": {
-      "type": "string"
+      "type": "string",
+      "format": "lys-wm-drm-device"
     },
     "input": {
       "type": "object",
@@ -522,13 +528,24 @@
             "type": "object",
             "properties": {
               "accel_profile": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "adaptive",
+                  "flat"
+                ]
               },
               "accel_speed": {
-                "type": "number"
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
               },
               "click_method": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "button_areas",
+                  "clickfinger",
+                  "none"
+                ]
               },
               "disable_while_typing": {
                 "type": "boolean"
@@ -543,10 +560,18 @@
                 "type": "boolean"
               },
               "scroll_factor": {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 100
               },
               "scroll_method": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "edge",
+                  "none",
+                  "on_button_down",
+                  "two_finger"
+                ]
               },
               "tap": {
                 "type": "boolean"
@@ -559,13 +584,16 @@
           "type": "object",
           "properties": {
             "layout": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-xkb-layout"
             },
             "model": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-xkb-model"
             },
             "options": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-xkb-options"
             },
             "repeat_delay": {
               "type": "integer",
@@ -580,10 +608,12 @@
               "default": 50
             },
             "rules": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-xkb-rules"
             },
             "variant": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-xkb-variant"
             }
           },
           "additionalProperties": false
@@ -772,7 +802,8 @@
         "type": "object",
         "properties": {
           "app_id": {
-            "type": "string"
+            "type": "string",
+            "format": "regex"
           },
           "blur": {
             "type": "boolean"
@@ -817,7 +848,8 @@
                 "additionalProperties": false
               },
               "tint": {
-                "type": "string"
+                "type": "string",
+                "format": "lys-wm-color"
               }
             },
             "additionalProperties": false
@@ -844,7 +876,8 @@
             "type": "boolean"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "format": "regex"
           }
         },
         "additionalProperties": false
@@ -866,7 +899,11 @@
             "flags": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "locked",
+                  "repeating"
+                ]
               }
             }
           },
@@ -881,16 +918,19 @@
           "type": "object",
           "properties": {
             "background": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             },
             "text": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             }
           },
           "additionalProperties": false
         },
         "font": {
-          "type": "string"
+          "type": "string",
+          "format": "lys-wm-font-file"
         },
         "height": {
           "type": "integer",
@@ -898,16 +938,19 @@
           "default": 24
         },
         "icon_theme": {
-          "type": "string"
+          "type": "string",
+          "format": "lys-wm-icon-theme"
         },
         "inactive": {
           "type": "object",
           "properties": {
             "background": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             },
             "text": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             }
           },
           "additionalProperties": false
@@ -931,10 +974,12 @@
           "type": "object",
           "properties": {
             "background": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             },
             "text": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-color"
             }
           },
           "additionalProperties": false

@@ -15,7 +15,18 @@ import (
 	"github.com/stubbedev/lys-wm/internal/seat"
 )
 
-const colorFormat = "lys-wm-color"
+const (
+	colorFormat     = "lys-wm-color"
+	fontFileFormat  = "lys-wm-font-file"
+	iconThemeFormat = "lys-wm-icon-theme"
+	layoutFormat    = "lys-wm-xkb-layout"
+	variantFormat   = "lys-wm-xkb-variant"
+	optionsFormat   = "lys-wm-xkb-options"
+	modelFormat     = "lys-wm-xkb-model"
+	rulesFormat     = "lys-wm-xkb-rules"
+	drmDeviceFormat = "lys-wm-drm-device"
+	regexFormat     = "regex"
+)
 
 type schemaNode struct {
 	Schema               string                 `json:"$schema,omitempty"`
@@ -54,6 +65,10 @@ func atLeastAnn(lo float64, def any) annotation {
 }
 
 func colorAnn(def any) annotation { return annotation{format: colorFormat, def: def} }
+
+func formatAnn(format string) annotation { return annotation{format: format} }
+
+var bindFlags = annotation{enum: []string{"locked", "repeating"}}
 
 func hexColor(c render.Color) string {
 	if c.A == 0xff {
@@ -137,11 +152,30 @@ func annotations() map[string]annotation {
 		"color_management":                 {def: false},
 		"tearing":                          {def: false},
 		"lid_suspend":                      {def: true},
+		"gpu":                              formatAnn(drmDeviceFormat),
+		"tabs.font":                        formatAnn(fontFileFormat),
+		"tabs.icon_theme":                  formatAnn(iconThemeFormat),
+		"input.keyboard.layout":            formatAnn(layoutFormat),
+		"input.keyboard.variant":           formatAnn(variantFormat),
+		"input.keyboard.options":           formatAnn(optionsFormat),
+		"input.keyboard.model":             formatAnn(modelFormat),
+		"input.keyboard.rules":             formatAnn(rulesFormat),
+		"decoration.blur.mica.tint":        colorAnn(nil),
+		"rules[].blur_look.tint":           colorAnn(nil),
+		"rules[].app_id":                   formatAnn(regexFormat),
+		"rules[].title":                    formatAnn(regexFormat),
+		"binds[].flags[]":                  bindFlags,
+		"submaps.*[].flags[]":              bindFlags,
+	}
+	for _, state := range []string{"active", "inactive", "urgent"} {
+		out["tabs."+state+".background"] = colorAnn(nil)
+		out["tabs."+state+".text"] = colorAnn(nil)
 	}
 	saturation := short(d.Blur.Look.SaturationShift + 1)
 	for _, group := range []map[string]annotation{
 		device("input.pointer"),
 		device("input.touchpad"),
+		device("input.devices.*"),
 		lookAnnotations("decoration.blur", saturation),
 	} {
 		maps.Copy(out, group)

@@ -24,6 +24,28 @@ what the parser does. Defaults are the GPU renderers'. These flags are the
 contract other programs use, lys-settings among them, instead of the parser's
 Go package.
 
+A string key whose value comes from a set the system can list carries a
+`format`, so a settings program can offer a picker instead of a text entry.
+The tests hold each format to what the parser accepts.
+
+| Format | Keys | Value | Empty |
+| --- | --- | --- | --- |
+| `lys-wm-color` | every colour | A palette name or `#rrggbb[aa]` | Refused |
+| `lys-wm-font-file` | `tabs.font` | A TrueType or OpenType file, as fontconfig's `fc-list` lists them; a relative path is from lys-wm's working directory | `LYS_WM_FONT`, then the built-in font |
+| `lys-wm-icon-theme` | `tabs.icon_theme` | The directory name of an installed freedesktop icon theme, under `icons` in an XDG data directory; never a path | `Adwaita` |
+| `lys-wm-xkb-layout` | `input.keyboard.layout` | xkeyboard-config layout names, separated by commas without spaces: `us,dk` | The `XKB_DEFAULT_*` variables, when every keyboard key is empty |
+| `lys-wm-xkb-variant` | `input.keyboard.variant` | Variant names, comma-separated, one per layout in order and at most as many as layouts; an empty item is that layout's default: `,nodeadkeys` | Each layout's default variant |
+| `lys-wm-xkb-options` | `input.keyboard.options` | Option names (`group:option`), comma-separated without spaces: `grp:alt_shift_toggle,caps:escape` | No options |
+| `lys-wm-xkb-model` | `input.keyboard.model` | One xkeyboard-config model name: `pc105` | The rules' default model |
+| `lys-wm-xkb-rules` | `input.keyboard.rules` | One rules file name: `evdev` | `evdev` |
+| `lys-wm-drm-device` | `gpu` | A DRM card, `cardN` or `/dev/dri/cardN`, as listed under `/dev/dri`; never a render node | Refused; leave the key out |
+| `regex` | `rules[].app_id`, `rules[].title` | A Go regular expression | Matches everything |
+
+The layout, model, rules, variant and options names are the ones
+`/usr/share/X11/xkb/rules/evdev.xml` lists. A name with a space or comma in
+it, or an empty item in a layout or options list, is an error at the key's
+line.
+
 `SIGHUP` and the `reload` action read the file again. A file that does not
 parse, or whose chords, layout or font do not load, is rejected whole and the
 running config stays. Nothing reloads when the file changes.

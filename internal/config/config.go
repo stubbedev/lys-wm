@@ -179,13 +179,13 @@ type rawDevice struct {
 }
 
 type rawKeyboard struct {
-	Rules       string   `yaml:"rules"`
-	Model       string   `yaml:"model"`
-	Layout      string   `yaml:"layout"`
-	Variant     string   `yaml:"variant"`
-	Options     string   `yaml:"options"`
-	RepeatRate  *At[int] `yaml:"repeat_rate"`
-	RepeatDelay *At[int] `yaml:"repeat_delay"`
+	Rules       At[string] `yaml:"rules"`
+	Model       At[string] `yaml:"model"`
+	Layout      At[string] `yaml:"layout"`
+	Variant     At[string] `yaml:"variant"`
+	Options     At[string] `yaml:"options"`
+	RepeatRate  *At[int]   `yaml:"repeat_rate"`
+	RepeatDelay *At[int]   `yaml:"repeat_delay"`
 }
 
 type rawBorders struct {
@@ -473,6 +473,47 @@ func (p *parser) card(a At[string]) string {
 		p.fail(a.Line, "gpu", "%q is not a DRM card such as card1 or /dev/dri/card1", a.V)
 	}
 	return name
+}
+
+var xkbItem = regexp.MustCompile(`^[^\s,]+$`)
+
+func (p *parser) xkbList(a At[string], key string, blanks bool) []string {
+	if a.V == "" {
+		return nil
+	}
+	items := strings.Split(a.V, ",")
+	for _, item := range items {
+		if !xkbItem.MatchString(item) && (!blanks || item != "") {
+			p.fail(a.Line, key, "%q is not a comma-separated list of XKB names without spaces", a.V)
+			return nil
+		}
+	}
+	return items
+}
+
+func (p *parser) xkbName(a At[string], key string) {
+	if a.V != "" && !xkbItem.MatchString(a.V) {
+		p.fail(a.Line, key, "%q is not one XKB name without spaces or commas", a.V)
+	}
+}
+
+func (p *parser) keyboard(r rawKeyboard) xkb.Names {
+	p.xkbName(r.Rules, "input.keyboard.rules")
+	p.xkbName(r.Model, "input.keyboard.model")
+	layouts := p.xkbList(r.Layout, "input.keyboard.layout", false)
+	variants := p.xkbList(r.Variant, "input.keyboard.variant", true)
+	p.xkbList(r.Options, "input.keyboard.options", false)
+	if len(layouts) > 0 && len(variants) > len(layouts) {
+		p.fail(r.Variant.Line, "input.keyboard.variant", "%q names %d variants for %d layouts", r.Variant.V, len(variants), len(layouts))
+	}
+	return xkb.Names{Rules: r.Rules.V, Model: r.Model.V, Layout: r.Layout.V, Variant: r.Variant.V, Options: r.Options.V}
+}
+
+func (p *parser) iconTheme(a At[string]) string {
+	if strings.ContainsAny(a.V, "/\x00") || a.V == "." || a.V == ".." {
+		p.fail(a.Line, "tabs.icon_theme", "%q is not an icon theme's directory name", a.V)
+	}
+	return a.V
 }
 
 func parseHex(s string) (render.Color, bool) {
@@ -1249,11 +1290,8 @@ func Parse(file string, data []byte) (Config, error) {
 	}
 	look := compositor.DefaultLook(render.GPU)
 	cfg := Config{
-		File: file,
-		Keyboard: xkb.Names{
-			Rules: raw.Input.Keyboard.Rules, Model: raw.Input.Keyboard.Model, Layout: raw.Input.Keyboard.Layout,
-			Variant: raw.Input.Keyboard.Variant, Options: raw.Input.Keyboard.Options,
-		},
+		File:            file,
+		Keyboard:        p.keyboard(raw.Input.Keyboard),
 		RepeatRate:      p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
 		RepeatDelay:     p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
 		Input:           p.input(raw.Input),
@@ -1269,7 +1307,7 @@ func Parse(file string, data []byte) (Config, error) {
 		cfg.Font = raw.Tabs.Font.V
 	}
 	if raw.Tabs.IconTheme != nil {
-		cfg.IconTheme = raw.Tabs.IconTheme.V
+		cfg.IconTheme = p.iconTheme(*raw.Tabs.IconTheme)
 	}
 	if raw.GPU != nil {
 		cfg.GPU = p.card(*raw.GPU)
