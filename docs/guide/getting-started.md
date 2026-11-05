@@ -49,8 +49,8 @@ which is the full list.
 | Chord | Action |
 | --- | --- |
 | `SUPER + Return` | Run `foot` |
-| `SUPER + Space` | Open or close lys-shell's search panel |
-| `SUPER + A` | Open or close lys-shell's dashboard |
+| `SUPER + Space` | Open or close lys-shell's search panel, through the global shortcut lys-shell registers |
+| `SUPER + A` | Open or close lys-shell's dashboard, through the global shortcut lys-shell registers |
 | `SUPER + Q` | Close the focused window |
 | `SUPER + H`, `J`, `K`, `L` or the arrows | Move focus |
 | `SUPER + SHIFT + H`, `J`, `K`, `L` or the arrows | Move the focused window |

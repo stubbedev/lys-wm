@@ -376,6 +376,28 @@ func TestTheBuiltInConfigCanLeaveTheSession(t *testing.T) {
 	}
 }
 
+func TestTheBuiltInConfigPressesLysShellsGlobalShortcuts(t *testing.T) {
+	file, err := Parse("default.yaml", Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]wm.Action{
+		"SUPER + Space": wm.GlobalAction{AppID: "dev.stubbe.lys.shell", ID: "launcher"},
+		"SUPER + A":     wm.GlobalAction{AppID: "dev.stubbe.lys.shell", ID: "dashboard"},
+	}
+	for _, b := range file.Binds {
+		if a, ok := want[b.Chord]; ok && b.Submap == "" {
+			if b.Action != a {
+				t.Errorf("%s runs %v, want %v", b.Chord, b.Action, a)
+			}
+			delete(want, b.Chord)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("unbound: %v", want)
+	}
+}
+
 func TestOutputShadersResolveAgainstTheConfig(t *testing.T) {
 	t.Setenv("HOME", "/home/me")
 	cfg, err := Parse("/etc/lys/wm.yaml", []byte("outputs:\n  - match: '*'\n    shader: grade.frag\n  - match: A\n    shader: /abs.frag\n  - match: B\n    shader: ~/mine.frag\n"))
