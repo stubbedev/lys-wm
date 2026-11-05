@@ -720,7 +720,7 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
-	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, tested: map[planeKey]bool{}}
+	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, lateFence: -1, tested: map[planeKey]bool{}}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: o.frameWait,
 		Wake: func(after time.Duration) error {
@@ -751,6 +751,9 @@ func (b *Backend) add(c kdrm.Connector) error {
 		return errors.Join(err, o.release())
 	}
 	if o.planesLatch, err = b.loop.AddTimer(o.planesDue); err != nil {
+		return errors.Join(err, o.release())
+	}
+	if o.commitLatch, err = b.loop.AddTimer(o.lateDue); err != nil {
 		return errors.Join(err, o.release())
 	}
 	if err := o.lightBest(); err != nil {
@@ -838,7 +841,7 @@ func (b *Backend) Resume() error {
 	var errs []error
 	for _, o := range b.outputs {
 		o.kms, o.flipping, o.busy, o.offDue, o.offBusy = kmsModeset, false, nil, o.offDue || o.offBusy, false
-		errs = append(errs, o.dropScanout(o.queued))
+		errs = append(errs, o.dropLate(), o.dropScanout(o.queued))
 		o.queued = nil
 		if o.cursor != nil {
 			o.cursor.queued = nil
@@ -963,6 +966,9 @@ type Output struct {
 	contentType   wm.ContentType
 	contentDirty  bool
 	tearFrame     bool
+	commitLatch   *loop.Timer
+	late          *scanout
+	lateFence     int
 }
 
 func (o *Output) Name() string {
@@ -1520,10 +1526,11 @@ func (o *Output) presentLater(s *scanout, err error) error {
 	if err == nil {
 		err = o.commitPresent(s)
 	}
-	if err == nil {
-		return nil
-	}
-	if backend.Fatal(err) {
+	return o.heldFailed(err)
+}
+
+func (o *Output) heldFailed(err error) error {
+	if err == nil || backend.Fatal(err) {
 		return err
 	}
 	o.b.report(fmt.Errorf("drm: present the frame of %s it held: %w", o.Name(), err))
@@ -1559,6 +1566,45 @@ func (o *Output) commitPresent(s *scanout) error {
 	if err != nil {
 		return err
 	}
+	if o.kms == kmsFlip && !o.tearFrame && o.cursor != nil && o.cursor.visible {
+		if wait := o.planesWait(); wait > 0 {
+			o.late, o.lateFence, o.flipping = s, fence, true
+			return o.commitLatch.Arm(wait)
+		}
+	}
+	return o.commitFenced(s, fence)
+}
+
+func (o *Output) lateDue() error {
+	s, fence := o.late, o.lateFence
+	if s == nil {
+		return nil
+	}
+	o.late, o.lateFence, o.flipping = nil, -1, false
+	if !o.enabled || o.off || o.b.paused || !slices.Contains(o.buffers, s) {
+		return closeFence(fence)
+	}
+	return o.heldFailed(o.commitFenced(s, fence))
+}
+
+func (o *Output) dropLate() error {
+	fence := o.lateFence
+	if o.late != nil {
+		o.flipping = false
+	}
+	o.late, o.lateFence = nil, -1
+	return closeFence(fence)
+}
+
+func closeFence(fd int) error {
+	if fd < 0 {
+		return nil
+	}
+	return unix.Close(fd)
+}
+
+func (o *Output) commitFenced(s *scanout, fence int) error {
+	var err error
 	flags := planeFlags
 	if o.kms == kmsModeset {
 		flags |= kdrm.AtomicAllowModeset
@@ -2075,7 +2121,7 @@ func (o *Output) dropScanouts() error {
 }
 
 func (o *Output) freeBuffers() error {
-	err := errors.Join(o.dropScanouts(), o.free(o.buffers))
+	err := errors.Join(o.dropLate(), o.dropScanouts(), o.free(o.buffers))
 	o.buffers, o.drawing, o.queued, o.front, o.busy = nil, nil, nil, nil, nil
 	return err
 }
@@ -2125,6 +2171,10 @@ func (o *Output) release() error {
 	if o.planesLatch != nil {
 		err = errors.Join(err, o.planesLatch.Remove())
 		o.planesLatch = nil
+	}
+	if o.commitLatch != nil {
+		err = errors.Join(err, o.commitLatch.Remove())
+		o.commitLatch = nil
 	}
 	if o.cursor != nil {
 		err = errors.Join(err, o.cursor.release())

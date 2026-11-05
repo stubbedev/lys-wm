@@ -1356,7 +1356,7 @@ func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 		t.Fatalf("a frame requested before the latch committed: %+v", r.dev.commits)
 	}
 	r.pinned += half
-	r.until("the frame after the latch", func() bool { return o.flipping })
+	r.until("the frame after the latch", func() bool { return o.flipping && o.late == nil })
 	var flips []commit
 	for _, c := range r.dev.commits {
 		if c.flags&kdrm.AtomicTestOnly == 0 {
