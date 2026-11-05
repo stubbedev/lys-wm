@@ -53,6 +53,8 @@ const (
 	propHDRMeta
 	propColorspaceID
 	propMaxBPCID
+	propNonDesktop
+	propLinkStatus
 	inFormatsBlob = 500
 	edidBlob      = 501
 	litModeBlob   = 502
@@ -103,6 +105,7 @@ type fakeDevice struct {
 	refuseModesets    bool
 	modes             []kdrm.Mode
 	connectors        []uint32
+	nonDesktop        map[uint32]bool
 	refuseLone        bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -261,6 +264,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 			routed = uint64(f.splash.crtc)
 		}
 		props := map[string]kdrm.Property{"CRTC_ID": {ID: propConnCRTC, Value: routed}}
+		if f.nonDesktop[object] {
+			props["non-desktop"] = kdrm.Property{ID: propNonDesktop, Value: 1}
+		}
 		if f.badEDID || f.sinkEDID != nil {
 			props["EDID"] = kdrm.Property{ID: propEDID, Value: edidBlob}
 		}

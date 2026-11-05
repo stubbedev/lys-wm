@@ -189,3 +189,17 @@ func TestEveryModesetIsTestedBeforeItIsAdopted(t *testing.T) {
 		t.Fatalf("the refused mode was adopted: %+v", modeOf(o.mode))
 	}
 }
+
+func TestANonDesktopConnectorIsNotLit(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.connectors = []uint32{20, 21}
+		d.nonDesktop = map[uint32]bool{21: true}
+		return &fakeAlloc{soft: soft.New()}
+	})
+	if len(r.b.Outputs()) != 1 || r.b.Outputs()[0].Name() != "DP-1" || !slices.Equal(r.rec.log, []string{"added DP-1"}) {
+		t.Fatalf("outputs %v beside a non-desktop DP-2", r.rec.log)
+	}
+	if len(r.reports) != 1 || !strings.Contains(r.reports[0].Error(), "DP-2 is a non-desktop display") {
+		t.Fatalf("reports %v, want DP-2 named once", r.reports)
+	}
+}

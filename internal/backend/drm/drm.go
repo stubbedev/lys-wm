@@ -671,6 +671,10 @@ func (b *Backend) add(c kdrm.Connector) error {
 	if err != nil {
 		return err
 	}
+	if props["non-desktop"].Value != 0 {
+		b.report(fmt.Errorf("drm: %s is a non-desktop display, such as a VR headset, and is not lit as an output", c.Name()))
+		return nil
+	}
 	routed := uint32(props["CRTC_ID"].Value) //nolint:gosec // KMS object IDs are 32-bit
 	cr, p, err := b.pick(c, routed)
 	if errors.Is(err, errNoCRTC) {
