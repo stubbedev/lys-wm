@@ -476,7 +476,7 @@ func (c *Compositor) renderBlur(newTarget func(image.Point) (render.TextureTarge
 			return err
 		}
 		p.Clear(render.Color{})
-		p.Kawase(b.chain[i-1].Texture(), image.Rectangle{Max: sizes[i]}, pb.spec.offset, i > pb.spec.passes)
+		c.kawase(p, b.chain[i-1].Texture(), image.Rectangle{Max: sizes[i]}, b.whole[:], pb.spec.offset, i > pb.spec.passes)
 		if err := p.End(); err != nil {
 			return err
 		}

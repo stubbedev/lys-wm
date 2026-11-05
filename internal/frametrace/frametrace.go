@@ -57,6 +57,8 @@ type Frame struct {
 	Refresh   time.Duration `json:"refresh_ns"`
 	Torn      bool          `json:"torn"`
 	Animating bool          `json:"animating"`
+	Sched     time.Duration `json:"sched_latency_ns"`
+	GCPause   time.Duration `json:"gc_pause_ns"`
 	Cost      Cost          `json:"cost"`
 }
 
@@ -70,6 +72,11 @@ type Cost struct {
 	DamageRects uint64  `json:"damage_rects"`
 	Allocs      uint64  `json:"allocs"`
 	FileIO      uint64  `json:"file_io"`
+	Submits     uint64  `json:"submits"`
+	Targets     uint64  `json:"targets"`
+	FilterPx    uint64  `json:"filter_pixels"`
+	RepaintPx   uint64  `json:"repaint_pixels"`
+	Copied      uint64  `json:"copied_bytes"`
 	Overview    float64 `json:"overview"`
 }
 
@@ -125,6 +132,7 @@ type Recorder struct {
 	ioStat *os.File
 	ioBuf  [ioStatSize]byte
 	mem    runtime.MemStats
+	stats  *runtimeStats
 	// ownWaits counts the GPU waits the recorder made itself, timing a
 	// frame where the renderer has no fence to hand, not yet taken out of
 	// a frame's cost.
@@ -148,7 +156,7 @@ func Create(path string, h Header, sync Sync, clock Clock, report func(error)) (
 		return nil, errors.Join(fmt.Errorf("frametrace: write the header of %s: %w", path, err), f.Close(), ioStat.Close())
 	}
 	r := &Recorder{
-		clock: clock, sync: sync, report: report, file: f, ioStat: ioStat, tracks: map[string]*track{},
+		clock: clock, sync: sync, report: report, file: f, ioStat: ioStat, tracks: map[string]*track{}, stats: newRuntimeStats(),
 		chunk: make([]Frame, 0, chunkFrames), full: make(chan []Frame, writerChunks), free: make(chan []Frame, writerChunks), done: make(chan error, 1),
 	}
 	go r.write()
@@ -310,6 +318,7 @@ func (r *Recorder) End(output string, animating bool, cost Cost) {
 	t.open = false
 	t.frame.CPU = r.clock.Now() - t.frame.Start - t.frame.wait
 	t.frame.Animating = animating
+	t.frame.Sched, t.frame.GCPause = r.stats.read()
 	allocs, fileIO := r.usage(output)
 	cost.Allocs, cost.FileIO = allocs-t.allocs, fileIO-t.fileIO-ownIOReads
 	cost.GPUWaits -= min(cost.GPUWaits, r.ownWaits)
@@ -325,6 +334,11 @@ func (t *track) carry(cost Cost) Cost {
 	cost.Uploads += t.carried.Uploads
 	cost.GPUWaits += t.carried.GPUWaits
 	cost.Thumbs += t.carried.Thumbs
+	cost.Submits += t.carried.Submits
+	cost.Targets += t.carried.Targets
+	cost.FilterPx += t.carried.FilterPx
+	cost.RepaintPx += t.carried.RepaintPx
+	cost.Copied += t.carried.Copied
 	if t.frame.Kind == Composited {
 		t.carried = Cost{}
 	} else {

@@ -99,6 +99,7 @@ func (r *asyncRead) copyRows(dst frameWriter, pix []byte, stride int, size image
 			}
 			copy(data[y*dstStride:y*dstStride+row], pix[y*stride:])
 		}
+		r.c.copiedBytes.Add(uint64(row * size.Y)) //nolint:gosec // a capture size is positive
 		return nil
 	})
 	return errors.Join(err, dst.Close())

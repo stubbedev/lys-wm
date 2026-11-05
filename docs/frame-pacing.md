@@ -94,6 +94,16 @@ busy to reach 60 Hz draws fewer frames that each cost the same.
 The trace takes these with `runtime.ReadMemStats` and a read of `/proc/self/io`
 at both ends of each frame, outside the `cpu` column.
 
+The cost table also reports, ungated, the worst frame's `submits` (pass ends
+that flush or submit to the GPU), `targets` (render targets created),
+`filter px` (pixels a Kawase pass covered within its damage), `repaint px`
+(pixels of the output repainted) and `copied bytes` (capture bytes copied to
+clients). The time table adds `sched`, the worst wait of a runnable goroutine
+for a processor, and `gc`, the worst GC stop-the-world pause, each frame
+taking the slowest bucket that gained a sample since the frame before from
+`/sched/latencies:seconds` and `/sched/pauses/total/gc:seconds` in
+`runtime/metrics`. Reading them allocates nothing.
+
 `just pace-gate gles` and `just pace-gate vulkan` run the gate in the dev shell on
 the software rasterisers, as CI does, and `just hardware` runs it on the GPU.
 A change that means to cost more updates its limits and commits the difference:

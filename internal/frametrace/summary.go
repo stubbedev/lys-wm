@@ -37,6 +37,8 @@ type Summary struct {
 	CPU           Stat        `json:"cpu"`
 	GPU           Stat        `json:"gpu"`
 	Latency       Stat        `json:"latency"`
+	Sched         Stat        `json:"sched_latency"`
+	GCPause       Stat        `json:"gc_pause"`
 	Cost          CostSummary `json:"cost"`
 }
 
@@ -58,6 +60,11 @@ type CostSummary struct {
 	DamageRects CostStat `json:"damage_rects"`
 	Allocs      CostStat `json:"allocs"`
 	FileIO      CostStat `json:"file_io"`
+	Submits     CostStat `json:"submits"`
+	Targets     CostStat `json:"targets"`
+	FilterPx    CostStat `json:"filter_pixels"`
+	RepaintPx   CostStat `json:"repaint_pixels"`
+	Copied      CostStat `json:"copied_bytes"`
 }
 
 func costStat(runs [][]Frame, of func(*Cost) uint64) CostStat {
@@ -101,6 +108,11 @@ func summarizeCost(runs [][]Frame) CostSummary {
 		DamageRects: costStat(runs, func(c *Cost) uint64 { return c.DamageRects }),
 		Allocs:      costStat(runs, func(c *Cost) uint64 { return c.Allocs }),
 		FileIO:      costStat(runs, func(c *Cost) uint64 { return c.FileIO }),
+		Submits:     costStat(runs, func(c *Cost) uint64 { return c.Submits }),
+		Targets:     costStat(runs, func(c *Cost) uint64 { return c.Targets }),
+		FilterPx:    costStat(runs, func(c *Cost) uint64 { return c.FilterPx }),
+		RepaintPx:   costStat(runs, func(c *Cost) uint64 { return c.RepaintPx }),
+		Copied:      costStat(runs, func(c *Cost) uint64 { return c.Copied }),
 	}
 }
 
@@ -120,13 +132,14 @@ func (f *Frame) SkippedVblanks() int {
 
 func Summarize(runs [][]Frame, continuous bool) Summary {
 	var s Summary
-	var interval, cpu, gpu, latency []time.Duration
+	var interval, cpu, gpu, latency, sched, gcPause []time.Duration
 	for _, frames := range runs {
 		s.Frames += len(frames)
 		last := map[string]*Frame{}
 		for i := range frames {
 			f := &frames[i]
 			cpu = append(cpu, f.CPU)
+			sched, gcPause = append(sched, f.Sched), append(gcPause, f.GCPause)
 			prev := last[f.Output]
 			last[f.Output] = f
 			switch f.Kind {
@@ -159,6 +172,7 @@ func Summarize(runs [][]Frame, continuous bool) Summary {
 		s.LatePercent = float64(s.Late) * 100 / float64(s.Presented)
 	}
 	s.Interval, s.CPU, s.GPU, s.Latency = NewStat(interval), NewStat(cpu), NewStat(gpu), NewStat(latency)
+	s.Sched, s.GCPause = NewStat(sched), NewStat(gcPause)
 	s.Cost = summarizeCost(runs)
 	return s
 }

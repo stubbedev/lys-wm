@@ -399,7 +399,7 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 			return err
 		}
 		step.Clear(render.Color{})
-		step.Kawase(from.Texture(), image.Rectangle{Max: to.Size()}, 1, false)
+		c.kawase(step, from.Texture(), image.Rectangle{Max: to.Size()}, region, 1, false)
 		if err := step.End(); err != nil {
 			return err
 		}
@@ -407,7 +407,7 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 	c.jellyGen++
 	t.version, t.dirty, t.rough = c.jellyGen, false, !filtered
 	t.next = c.frameTime + min(thumbShare*(c.clock()-started), thumbMaxWait)
-	c.thumbRedraws++
+	c.tallied.thumbs++
 	return nil
 }
 

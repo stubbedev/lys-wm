@@ -33,20 +33,36 @@ func (c *Compositor) Frame(b backend.Output) error {
 	return err
 }
 
+type tally struct {
+	thumbs, filterPx, repaintPx, copied uint64
+}
+
+func (c *Compositor) kawase(p render.Pass, from render.Texture, dst image.Rectangle, damage render.Region, offset float32, up bool) {
+	c.tallied.filterPx += uint64(damage.AreaIn(dst)) //nolint:gosec // an area is not negative
+	p.Kawase(from, dst, offset, up)
+}
+
 func (c *Compositor) frameCost(o *output.Output) frametrace.Cost {
 	sc := c.sceneOf(o)
 	now := c.renderer.Counts()
+	copied := c.copiedBytes.Load()
 	cost := frametrace.Cost{
 		Draws:       uint64(len(sc.prev.ops)),
 		Passes:      now.Passes - c.tracedCounts.Passes,
 		Filters:     now.Filters - c.tracedCounts.Filters,
 		Uploads:     now.Uploads - c.tracedCounts.Uploads,
 		GPUWaits:    now.GPUWaits - c.tracedCounts.GPUWaits,
-		Thumbs:      c.thumbRedraws - c.tracedThumbs,
+		Thumbs:      c.tallied.thumbs - c.traced.thumbs,
 		DamageRects: uint64(max(len(sc.damage.Rects()), len(sc.repaint.Rects()))),
+		Submits:     now.Submits - c.tracedCounts.Submits,
+		Targets:     now.Targets - c.tracedCounts.Targets,
+		FilterPx:    c.tallied.filterPx - c.traced.filterPx,
+		RepaintPx:   c.tallied.repaintPx - c.traced.repaintPx,
+		Copied:      copied - c.traced.copied,
 		Overview:    c.OverviewProgress(c.frameTime),
 	}
-	c.tracedCounts, c.tracedThumbs = now, c.thumbRedraws
+	c.tracedCounts, c.traced = now, c.tallied
+	c.traced.copied = copied
 	return cost
 }
 

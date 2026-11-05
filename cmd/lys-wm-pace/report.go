@@ -91,11 +91,11 @@ func (r *report) write(out io.Writer) {
 	}
 	fmt.Fprintf(out, "%d rounds; times in ms as p50 / p95 / p99 / worst\n\n", r.Rounds)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "step\tframes\tempty\tdropped\tlate\tskipped\tinterval\tcpu\tgpu\tlatency")
+	fmt.Fprintln(w, "step\tframes\tempty\tdropped\tlate\tskipped\tinterval\tcpu\tgpu\tlatency\tsched\tgc")
 	for i := range r.Steps {
 		st := &r.Steps[i]
 		s := &st.Summary
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d (%.1f%%)\t%d\t%s\t%s\t%s\t%s\n", st.Name, s.Frames, s.Empty, s.Dropped, s.Late, s.LatePercent, s.SkippedVblank, spread(s.Interval), spread(s.CPU), spread(s.GPU), spread(s.Latency))
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d (%.1f%%)\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n", st.Name, s.Frames, s.Empty, s.Dropped, s.Late, s.LatePercent, s.SkippedVblank, spread(s.Interval), spread(s.CPU), spread(s.GPU), spread(s.Latency), spread(s.Sched), spread(s.GCPause))
 	}
 	_ = w.Flush()
 	fmt.Fprintln(out)
@@ -106,10 +106,10 @@ func (r *report) write(out io.Writer) {
 
 func (r *report) writeCost(out io.Writer) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "step\tdraws\tpasses\tfilters\tuploads\tgpu waits\tdamage rects\tthumbs/run\tfilters/run\tallocs\tfile io")
+	fmt.Fprintln(w, "step\tdraws\tpasses\tfilters\tuploads\tgpu waits\tdamage rects\tthumbs/run\tfilters/run\tallocs\tfile io\tsubmits\ttargets\tfilter px\trepaint px\tcopied bytes")
 	for i := range r.Steps {
 		c := &r.Steps[i].Summary.Cost
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", r.Steps[i].Name, c.Draws.Worst, c.Passes.Worst, c.Filters.Worst, c.Uploads.Worst, c.GPUWaits.Worst, c.DamageRects.Worst, c.Thumbs.RunWorst, c.Filters.RunWorst, c.Allocs.Repeated, c.FileIO.P50)
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", r.Steps[i].Name, c.Draws.Worst, c.Passes.Worst, c.Filters.Worst, c.Uploads.Worst, c.GPUWaits.Worst, c.DamageRects.Worst, c.Thumbs.RunWorst, c.Filters.RunWorst, c.Allocs.Repeated, c.FileIO.P50, c.Submits.Worst, c.Targets.Worst, c.FilterPx.Worst, c.RepaintPx.Worst, c.Copied.Worst)
 	}
 	_ = w.Flush()
 	for _, g := range r.Growth {

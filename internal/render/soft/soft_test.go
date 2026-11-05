@@ -487,3 +487,8 @@ func BenchmarkKawaseHalving(b *testing.B) {
 		}
 	}
 }
+
+func TestTargetsCountAndPassesSubmitNothing(t *testing.T) {
+	r := soft.New()
+	rendertest.TargetsAndSubmitsCount(t, r, soft.NewBuffer(rendertest.Size.X, rendertest.Size.Y), 0)
+}

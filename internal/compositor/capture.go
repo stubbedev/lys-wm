@@ -61,7 +61,10 @@ func (t shmCapture) read(c *Compositor, k *capture) (err error) {
 	if err := paint(c.renderer, target, k); err != nil {
 		return err
 	}
-	return t.b.Write(func(data []byte, stride int) error { return target.Read(data, stride) })
+	return t.b.Write(func(data []byte, stride int) error {
+		c.copiedBytes.Add(uint64(k.size.X * k.size.Y * 4)) //nolint:gosec // a capture size is positive
+		return target.Read(data, stride)
+	})
 }
 
 type dmabufCapture struct {

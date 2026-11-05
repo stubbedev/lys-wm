@@ -629,10 +629,12 @@ func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
+	r.counts.Targets++
 	return r.NewFramebuffer(size)
 }
 
 func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	switch {
 	case !r.floatTargets:
 		return nil, fmt.Errorf("%w: %s has no float render targets: they take GLES 3 and GL_EXT_color_buffer_float or GL_EXT_color_buffer_half_float", gpu.ErrUnsupported, r.name)
@@ -682,6 +684,7 @@ func (t *TextureTarget) Destroy() error {
 }
 
 func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	f, err := r.NewFramebuffer(size)
 	if err != nil {
 		return nil, err
@@ -850,6 +853,7 @@ func (p *pass) End() error {
 	gl.Disable(gpu.Blend)
 	gl.BindFramebuffer(gpu.Framebuffer, 0)
 	gl.Flush()
+	p.owner.counts.Submits++
 	p.active, p.fb = false, nil
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }

@@ -144,6 +144,7 @@ func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (rend
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
+	r.counts.Targets++
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("soft: cannot make a %v target", size)
 	}
@@ -165,6 +166,7 @@ func (t *TextureTarget) Destroy() error {
 }
 
 func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("soft: cannot make a %v target", size)
 	}

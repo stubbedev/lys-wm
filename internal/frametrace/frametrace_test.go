@@ -2,8 +2,11 @@ package frametrace
 
 import (
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -436,5 +439,80 @@ func TestWhatOneRunAloneCostsIsNotRepeated(t *testing.T) {
 	s := summarizeCost([][]Frame{{frame(337), frame(4)}, {frame(5), frame(4)}, {frame(6)}})
 	if s.Allocs.Worst != 337 || s.Allocs.Repeated != 5 {
 		t.Fatalf("worst %d, repeated %d: want 337 and 5", s.Allocs.Worst, s.Allocs.Repeated)
+	}
+}
+
+func TestNewCountsFromFramesThatDrewNothingReachTheNextOneThatDid(t *testing.T) {
+	g := newRig(t, nil)
+	g.r.Begin("A")
+	g.r.End("A", false, Cost{Submits: 1, Targets: 2, FilterPx: 300, RepaintPx: 40, Copied: 5000})
+	g.r.Begin("A")
+	g.r.Submit("A")
+	g.r.End("A", false, Cost{Submits: 1, RepaintPx: 60})
+	g.flip(time.Second)
+	frames := g.frames()
+	if len(frames) != 2 {
+		t.Fatalf("frames = %+v", frames)
+	}
+	c := frames[1].Cost
+	if c.Submits != 2 || c.Targets != 2 || c.FilterPx != 300 || c.RepaintPx != 100 || c.Copied != 5000 {
+		t.Fatalf("cost = %+v", c)
+	}
+}
+
+func TestAGCDuringAFrameIsItsPause(t *testing.T) {
+	g := newRig(t, nil)
+	g.frame(func() {})
+	g.flip(time.Second)
+	g.frame(runtime.GC)
+	g.flip(2 * time.Second)
+	frames := g.frames()
+	if frames[1].GCPause <= 0 {
+		t.Fatalf("a frame that collected garbage reports a pause of %v", frames[1].GCPause)
+	}
+}
+
+func TestGoroutinesWaitingToRunAreTheFramesSchedulerLatency(t *testing.T) {
+	g := newRig(t, nil)
+	g.frame(func() {
+		for range 64 {
+			var wg sync.WaitGroup
+			for range 4 * runtime.GOMAXPROCS(0) {
+				wg.Go(func() {
+					for i := 0; i < 1000; i++ {
+						runtime.Gosched()
+					}
+				})
+			}
+			wg.Wait()
+		}
+	})
+	g.flip(time.Second)
+	if f := g.frames()[0]; f.Sched <= 0 {
+		t.Fatalf("a frame whose goroutines queued reports a scheduler latency of %v", f.Sched)
+	}
+}
+
+func TestReadingRuntimeStatsAllocatesNothing(t *testing.T) {
+	s := newRuntimeStats()
+	s.read()
+	if n := testing.AllocsPerRun(100, func() { s.read() }); n != 0 {
+		t.Fatalf("reading the runtime stats allocates %v times", n)
+	}
+}
+
+func TestTheWorstNewSampleIsTheUpperEdgeOfItsBucket(t *testing.T) {
+	if got := bucketTime([]float64{0, 0.001, 0.002}, 1); got != 2*time.Millisecond {
+		t.Fatalf("bucketTime = %v", got)
+	}
+	if got := bucketTime([]float64{0, 0.001, math.Inf(1)}, 1); got != time.Millisecond {
+		t.Fatalf("bucketTime of the open bucket = %v", got)
+	}
+}
+
+func TestSummaryReportsSchedulerLatencyAndGCPauses(t *testing.T) {
+	s := Summarize([][]Frame{{{Kind: Empty, Sched: time.Millisecond, GCPause: 2 * time.Millisecond}, {Kind: Composited, Sched: 3 * time.Millisecond}}}, false)
+	if s.Sched.Worst != 3*time.Millisecond || s.GCPause.Worst != 2*time.Millisecond || s.Sched.Samples != 2 {
+		t.Fatalf("sched %+v, gc %+v", s.Sched, s.GCPause)
 	}
 }

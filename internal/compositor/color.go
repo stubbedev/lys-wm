@@ -83,6 +83,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 	hc := c.hdr[o.Backend()]
 	if hc == nil {
 		repaint := render.Region(sc.repaintFor(f, bounds).Rects())
+		c.tallied.repaintPx += uint64(repaint.Area()) //nolint:gosec // an area is not negative
 		p, err := f.Renderer.Begin(f.Target, repaint)
 		if err != nil {
 			return nil, err
@@ -94,6 +95,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 		return nil, err
 	}
 	repaint := render.Region(sc.repaintFor(f, bounds).Rects())
+	c.tallied.repaintPx += uint64(repaint.Area()) //nolint:gosec // an area is not negative
 	p, err := f.Renderer.Begin(sc.working, render.Region(sc.damage.Rects()))
 	if err != nil {
 		return nil, err

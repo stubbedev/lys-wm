@@ -737,7 +737,7 @@ func (c *Compositor) overviewKeyboardTarget() *surface.Surface {
 }
 
 func (c *Compositor) OverviewThumbRedraws() uint64 {
-	return c.thumbRedraws
+	return c.tallied.thumbs
 }
 
 func (c *Compositor) OverviewSlots(o *output.Output) []image.Rectangle {

@@ -47,6 +47,7 @@ func (t *workingTarget) at(x, y int) []float32 {
 }
 
 func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("soft: cannot make a %v working target", size)
 	}

@@ -258,6 +258,15 @@ func (g Region) Area() int {
 	return n
 }
 
+func (g Region) AreaIn(bounds image.Rectangle) int {
+	n := 0
+	for _, r := range g {
+		r = r.Intersect(bounds)
+		n += r.Dx() * r.Dy()
+	}
+	return n
+}
+
 func (g Region) ClipInto(dst *region.Set, bounds image.Rectangle) {
 	dst.Reset()
 	for _, r := range g {
@@ -350,6 +359,8 @@ type Counts struct {
 	Filters  uint64
 	Uploads  uint64
 	GPUWaits uint64
+	Submits  uint64
+	Targets  uint64
 }
 
 type Renderer interface {

@@ -253,3 +253,8 @@ func TestColorParityWithTheSoftwareRenderer(t *testing.T) {
 	r := testenv.Vulkan(t)
 	rendertest.ColorParity(t, r, target(t, r, rendertest.Size))
 }
+
+func TestTargetsCountAndEachPassIsASubmit(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.TargetsAndSubmitsCount(t, r, target(t, r, rendertest.Size), 1)
+}

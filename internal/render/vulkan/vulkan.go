@@ -224,6 +224,7 @@ func (t *Target) Destroy() error {
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
+	r.counts.Targets++
 	t, err := r.d.NewOffscreen(size.X, size.Y)
 	if err != nil {
 		return nil, err
@@ -241,6 +242,7 @@ func (t *TextureTarget) Texture() render.Texture {
 }
 
 func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	t, err := r.d.NewOffscreen(size.X, size.Y)
 	if err != nil {
 		return nil, err
@@ -254,6 +256,7 @@ func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, err
 }
 
 func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
+	r.counts.Targets++
 	t, err := r.d.NewOffscreenFloat(size.X, size.Y)
 	if err != nil {
 		return nil, fmt.Errorf("vulkan: a %v working target: %w", size, err)
@@ -622,5 +625,6 @@ func (p *pass) End() error {
 	}
 	p.r.pass = nil
 	err := p.p.End()
+	p.r.counts.Submits++
 	return errors.Join(p.err, err)
 }

@@ -1181,3 +1181,35 @@ func OpaqueRunsWithoutBlending(t *testing.T, r render.Renderer, target render.Re
 		t.Fatalf("the background changed: B = %#x", got)
 	}
 }
+
+func TargetsAndSubmitsCount(t *testing.T, r render.Renderer, target render.Target, submitsPerPass uint64) {
+	t.Helper()
+	before := r.Counts()
+	rt, err := r.NewTarget(image.Pt(8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt, err := r.NewTextureTarget(image.Pt(8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(rt.Destroy(), tt.Destroy()); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Counts().Targets - before.Targets; got != 2 {
+		t.Fatalf("two new targets counted %d", got)
+	}
+	before = r.Counts()
+	for range 3 {
+		Paint(t, r, target, render.Region{image.Rect(0, 0, 8, 8)}, func(p render.Pass) {
+			p.FillRect(image.Rect(0, 0, 8, 8), render.Color{R: 0xff, A: 0xff}, render.Mask{})
+		})
+	}
+	now := r.Counts()
+	if got := now.Submits - before.Submits; got != 3*submitsPerPass {
+		t.Fatalf("three passes counted %d submits, want %d", got, 3*submitsPerPass)
+	}
+	if now.Targets != before.Targets {
+		t.Fatalf("painting counted %d new targets", now.Targets-before.Targets)
+	}
+}

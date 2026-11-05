@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/stubbedev/lys-lib/drm"
@@ -304,9 +305,10 @@ type Compositor struct {
 	overview        *overview
 	overviewStyle   OverviewStyle
 	keptBackdrop    bool
-	thumbRedraws    uint64
+	tallied         tally
+	traced          tally
+	copiedBytes     atomic.Uint64
 	tracedCounts    render.Counts
-	tracedThumbs    uint64
 	shmSyncReads    uint64
 	switches        map[*output.Output]*workspaceSwitch
 	drawnSwitch     *workspaceSwitch
