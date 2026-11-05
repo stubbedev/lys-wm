@@ -283,6 +283,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 		}
 	}
 	c.trackSwitches(now)
+	c.stateChanged()
 	return err
 }
 

@@ -155,3 +155,22 @@ func TestEveryOutputFieldButWorkspaceAndFocusCountsAsAChange(t *testing.T) {
 		t.Error("the workspace and focus, which have their own events, counted as an output change")
 	}
 }
+
+func TestAWindowsStackChangeIsAnEvent(t *testing.T) {
+	top, below := 0, 1
+	a := Window{ID: 1, Stack: &top}
+	b := Window{ID: 2, Stack: &below}
+	c := Window{ID: 3, Stack: &below}
+	prev := Snapshot{Windows: []Window{a, b, c}}
+	b2, c2 := b, c
+	b2.Stack = &top
+	c2.Stack = nil
+	a2 := a
+	same := 0
+	a2.Stack = &same
+	next := Snapshot{Windows: []Window{a2, b2, c2}}
+	want := []string{`{"event":"stack","window":2,"stack":0}`, `{"event":"stack","window":3,"stack":null}`}
+	if got := names(Diff(prev, next)); !slices.Equal(got, want) {
+		t.Fatalf("diff\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))
+	}
+}

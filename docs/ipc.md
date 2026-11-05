@@ -66,8 +66,14 @@ focused one, or `null`:
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
  "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
- "content_type":"none","icon":{"serial":3,"name":"foot","sizes":[32,64]}}
+ "content_type":"none","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
 ```
+
+`stack` is the window's front-to-back index among the windows its output
+shows, 0 on top: fullscreen windows, then floating, then tiled, each in the
+order they are drawn. It is left out for a window no output shows, on a hidden
+workspace or minimized. A client can tell which window is on top at a point
+from one `windows` request.
 
 Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
@@ -138,6 +144,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |
+| `stack` | `window`, `stack` (index or `null`) | A window's front-to-back index on its output changed, or it was shown or hidden |
 | `focus` | `window` (ID or `null`) | Keyboard focus moved to another window, or to none |
 | `submap` | `submap` (`""` for the default binds) | The bind submap changed |
 | `layout` | `layout` (`index`, `name`) | The keyboard layout group changed |

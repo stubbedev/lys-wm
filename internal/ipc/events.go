@@ -62,6 +62,10 @@ type (
 		Window       wm.WindowID `json:"window"`
 		Unresponsive bool        `json:"unresponsive"`
 	}
+	StackEvent struct {
+		Window wm.WindowID `json:"window"`
+		Stack  *int        `json:"stack"`
+	}
 	FocusEvent struct {
 		Window *wm.WindowID `json:"window"`
 	}
@@ -99,6 +103,7 @@ func (IconEvent) Name() string           { return "icon" }
 func (UrgentEvent) Name() string         { return "urgent" }
 func (MinimizedEvent) Name() string      { return "minimized" }
 func (UnresponsiveEvent) Name() string   { return "unresponsive" }
+func (StackEvent) Name() string          { return "stack" }
 func (FocusEvent) Name() string          { return "focus" }
 func (SubmapEvent) Name() string         { return "submap" }
 func (LayoutEvent) Name() string         { return "layout" }
@@ -196,6 +201,9 @@ func Diff(prev, next Snapshot) []Event {
 		if p.Unresponsive != w.Unresponsive {
 			out = append(out, UnresponsiveEvent{Window: w.ID, Unresponsive: w.Unresponsive})
 		}
+		if !sameStack(p.Stack, w.Stack) {
+			out = append(out, StackEvent{Window: w.ID, Stack: w.Stack})
+		}
 	}
 	was, hadFocus := prev.active()
 	is, hasFocus := next.active()
@@ -225,4 +233,8 @@ func Diff(prev, next Snapshot) []Event {
 		out = append(out, ConfigProblemsEvent{ConfigProblems{Rejected: next.ConfigProblems.Rejected, Messages: nonNil(next.ConfigProblems.Messages)}})
 	}
 	return out
+}
+
+func sameStack(a, b *int) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }

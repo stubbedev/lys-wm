@@ -170,6 +170,7 @@ type Window struct {
 	Focused      bool           `json:"focused"`
 	ContentType  wm.ContentType `json:"content_type"`
 	Icon         *Icon          `json:"icon"`
+	Stack        *int           `json:"stack,omitempty"`
 }
 
 type Icon struct {

@@ -3,6 +3,7 @@ package compositor
 import (
 	"fmt"
 	"image"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -62,6 +63,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		})
 	}
 	focused, hasFocus := s.Focused()
+	stack := c.stacking()
 	for _, w := range c.windows {
 		id, ok := s.WorkspaceOf(w.id)
 		if !ok {
@@ -84,6 +86,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Focused:      hasFocus && w.id == focused,
 			ContentType:  c.contentTypes.Of(w.top.Surface()),
 			Icon:         ipcIcon(w.top.Icon()),
+			Stack:        stackOf(stack, w.id),
 		})
 	}
 	return snap
@@ -151,4 +154,29 @@ func (c *Compositor) stateChanged() {
 
 func (c *Compositor) KeyboardStateChanged() {
 	c.stateChanged()
+}
+
+var stackLayers = [...]wm.PlacementLayer{wm.LayerFullscreen, wm.LayerFloating, wm.LayerTiled}
+
+func (c *Compositor) stacking() map[wm.WindowID]int {
+	order := map[wm.WindowID]int{}
+	for _, o := range c.outputs {
+		n := 0
+		for _, layer := range stackLayers {
+			for _, w := range slices.Backward(c.stack) {
+				if w.layer == layer && w.visible && !w.minimized && w.output == o {
+					order[w.id] = n
+					n++
+				}
+			}
+		}
+	}
+	return order
+}
+
+func stackOf(order map[wm.WindowID]int, id wm.WindowID) *int {
+	if n, ok := order[id]; ok {
+		return &n
+	}
+	return nil
 }

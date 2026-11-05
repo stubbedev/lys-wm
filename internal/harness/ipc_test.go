@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -355,4 +357,56 @@ func TestCapsLockShowsInTheLocksQuery(t *testing.T) {
 	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{}) {
 		t.Fatalf("after a second Caps Lock the locks are %+v", got)
 	}
+}
+
+func TestWindowsReportTheirStackingOrder(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Rules = []wm.Rule{
+			{Title: regexp.MustCompile(`^float`), Mode: wm.RuleFloat, Size: image.Pt(60, 40)},
+		}
+	}, desktop)
+	c := testclient.Connect(t, h.Socket())
+	dispatch := func(action string) {
+		t.Helper()
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: action}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, title := range []string{"tiled", "float a", "float b"} {
+		w := c.Window(title, quadrants)
+		c.DispatchUntil(title+" to map", w.Mapped)
+	}
+	dispatch("workspace 2")
+	hidden := c.Window("hidden", quadrants)
+	c.DispatchUntil("hidden to map", hidden.Mapped)
+	dispatch("workspace 1")
+	stacks := func() (map[string]*int, map[string]wm.WindowID) {
+		s, ids := map[string]*int{}, map[string]wm.WindowID{}
+		for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+			s[w.Title], ids[w.Title] = w.Stack, w.ID
+		}
+		return s, ids
+	}
+	at := func(s map[string]*int, title string) int {
+		t.Helper()
+		if s[title] == nil {
+			t.Fatalf("%s, shown, has no stack: %v", title, s)
+		}
+		return *s[title]
+	}
+	s, ids := stacks()
+	if at(s, "float b") != 0 || at(s, "float a") != 1 || at(s, "tiled") != 2 {
+		t.Fatalf("stack b %d, a %d, tiled %d: want the newest float on top and the tiled window below both", at(s, "float b"), at(s, "float a"), at(s, "tiled"))
+	}
+	if s["hidden"] != nil {
+		t.Fatalf("a window on a hidden workspace has stack %d", *s["hidden"])
+	}
+	lines := h.watch()
+	dispatch(fmt.Sprintf("focuswindow %d", ids["float a"]))
+	s, _ = stacks()
+	if at(s, "float a") != 0 || at(s, "float b") != 1 {
+		t.Fatalf("after raising float a the stack is a %d, b %d, want them swapped", at(s, "float a"), at(s, "float b"))
+	}
+	expectEvent(t, lines, fmt.Sprintf(`{"event":"stack","window":%d,"stack":0}`, ids["float a"]))
 }
