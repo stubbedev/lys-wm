@@ -382,6 +382,7 @@ decoration:
 | `passes` | 2: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
 | `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups | fade |
 | `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
+| `live_tiled` | `false`: a tiled window blurs over the output's shared background blur, as `xray` does, so sliding or resizing tiles never refilters it; `true` blurs what lies behind each tiled window, as floating windows always do, at a filter per window whenever its area moves; a window with only the background behind it uses the shared blur either way |
 
 A window rule's `blur: true` or `blur: false` overrides `enabled` for the
 windows it matches and their popups. The blur follows the window's rounded
@@ -925,6 +926,28 @@ through `wp_content_type_v1`. A rule with `tearing: false` keeps a window on
 vblank whatever it asks, and so does a vsync hint without a rule. Drivers without atomic async flips (Linux before
 6.8), and frames that change more than the buffer, flip at vblank as
 usual.
+
+## hidden_frame_rate
+
+```yaml
+hidden_frame_rate: 5
+```
+
+15 by default: the frame callbacks a second that a surface gets while opaque
+windows cover it whole or no output shows it, so a client drawing under them
+draws and uploads at this rate instead of the output's refresh. A positive
+whole number.
+
+## hold_opening
+
+```yaml
+hold_opening: true
+```
+
+Off by default: a window that opens fades in at once, and neighbours that
+resize for it are stretched until they draw their new size. With `true`, the
+layout change waits for those neighbours to draw, up to 100 ms, before the
+new window shows.
 
 ## lid_suspend
 

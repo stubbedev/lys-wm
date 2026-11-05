@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -131,6 +132,7 @@ func annotations() map[string]annotation {
 		"decoration.blur.size":             atLeastAnn(1, d.Blur.Size),
 		"decoration.blur.passes":           at(1, 4, d.Blur.Passes),
 		"decoration.blur.xray":             {def: d.Blur.XRay},
+		"decoration.blur.live_tiled":       {def: d.Blur.LiveTiled},
 		"drag_preview.enabled":             {def: d.DragPreview.Enabled},
 		"drag_preview.opacity":             at(0, 1, short(d.DragPreview.Opacity)),
 		"drag_preview.blur":                {def: d.DragPreview.Blur},
@@ -151,6 +153,8 @@ func annotations() map[string]annotation {
 		"xwayland.zero_scaling":            {def: true},
 		"color_management":                 {def: false},
 		"client_hotkeys":                   {def: false},
+		"hidden_frame_rate":                atLeastAnn(1, int(time.Second/compositor.DefaultHiddenFrame)),
+		"hold_opening":                     {def: false},
 		"tearing":                          {def: false},
 		"lid_suspend":                      {def: true},
 		"gpu":                              formatAnn(drmDeviceFormat),

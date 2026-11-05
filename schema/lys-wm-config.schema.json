@@ -228,6 +228,10 @@
                 "type": "string"
               }
             },
+            "live_tiled": {
+              "type": "boolean",
+              "default": false
+            },
             "mica": {
               "type": "object",
               "properties": {
@@ -522,6 +526,15 @@
     "gpu": {
       "type": "string",
       "format": "lys-wm-drm-device"
+    },
+    "hidden_frame_rate": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 15
+    },
+    "hold_opening": {
+      "type": "boolean",
+      "default": false
     },
     "input": {
       "type": "object",

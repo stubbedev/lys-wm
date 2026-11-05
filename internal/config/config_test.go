@@ -759,16 +759,48 @@ func TestARuleCanMatchOnTheTagAlone(t *testing.T) {
 
 func TestClientHotkeysAreOffUnlessTheConfigTurnsThemOn(t *testing.T) {
 	for text, want := range map[string]bool{"": false, "client_hotkeys: true\n": true} {
-		file, err := Parse("t.yaml", []byte(text))
-		if err != nil {
-			t.Fatal(err)
+		if got := compositorOf(t, text).ClientHotkeys; got != want {
+			t.Errorf("%q: client hotkeys %v, want %v", text, got, want)
 		}
-		cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
-		if err != nil {
-			t.Fatal(err)
+	}
+}
+
+func compositorOf(t *testing.T, text string) compositor.Config {
+	t.Helper()
+	file, err := Parse("t.yaml", []byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+func TestHiddenSurfacesGetFrameCallbacksAtTheConfiguredRate(t *testing.T) {
+	for text, want := range map[string]time.Duration{"": compositor.DefaultHiddenFrame, "hidden_frame_rate: 5\n": 200 * time.Millisecond, "hidden_frame_rate: 9999999999\n": time.Nanosecond} {
+		if got := compositorOf(t, text).HiddenFrame; got != want {
+			t.Errorf("%q: hidden surfaces' frame interval %v, want %v", text, got, want)
 		}
-		if cfg.ClientHotkeys != want {
-			t.Errorf("%q: client hotkeys %v, want %v", text, cfg.ClientHotkeys, want)
+	}
+	if _, err := Parse("t.yaml", []byte("hidden_frame_rate: 0\n")); err == nil || !strings.Contains(err.Error(), "hidden_frame_rate") {
+		t.Fatalf("a rate of 0: %v", err)
+	}
+}
+
+func TestAnOpeningWindowWaitsForItsNeighboursOnlyWhenTheConfigHoldsIt(t *testing.T) {
+	for text, want := range map[string]bool{"": false, "hold_opening: true\n": true} {
+		if got := compositorOf(t, text).HoldOpening; got != want {
+			t.Errorf("%q: hold opening %v, want %v", text, got, want)
+		}
+	}
+}
+
+func TestTiledWindowsBlurLiveOnlyWhenTheConfigAsks(t *testing.T) {
+	for text, want := range map[string]bool{"": false, "decoration:\n  blur:\n    enabled: true\n    live_tiled: true\n": true} {
+		if got := compositorOf(t, text).Decor.Blur.LiveTiled; got != want {
+			t.Errorf("%q: live tiled blur %v, want %v", text, got, want)
 		}
 	}
 }

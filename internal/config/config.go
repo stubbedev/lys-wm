@@ -116,6 +116,8 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 type rawConfig struct {
 	ColorManagement bool                  `yaml:"color_management"`
 	ClientHotkeys   bool                  `yaml:"client_hotkeys"`
+	HiddenFrameRate *At[int]              `yaml:"hidden_frame_rate"`
+	HoldOpening     bool                  `yaml:"hold_opening"`
 	Outputs         []At[rawOutput]       `yaml:"outputs"`
 	Input           rawInput              `yaml:"input"`
 	Palette         map[string]At[string] `yaml:"palette"`
@@ -251,13 +253,14 @@ type rawDragPreview struct {
 }
 
 type rawBlur struct {
-	Enabled *bool        `yaml:"enabled"`
-	Size    *At[int]     `yaml:"size"`
-	Passes  *At[int]     `yaml:"passes"`
-	Layers  []At[string] `yaml:"layers"`
-	XRay    *bool        `yaml:"xray"`
-	Mica    rawMica      `yaml:"mica"`
-	rawLook `yaml:",inline"`
+	Enabled   *bool        `yaml:"enabled"`
+	Size      *At[int]     `yaml:"size"`
+	Passes    *At[int]     `yaml:"passes"`
+	Layers    []At[string] `yaml:"layers"`
+	XRay      *bool        `yaml:"xray"`
+	LiveTiled *bool        `yaml:"live_tiled"`
+	Mica      rawMica      `yaml:"mica"`
+	rawLook   `yaml:",inline"`
 }
 
 type rawLook struct {
@@ -416,6 +419,8 @@ type Config struct {
 	Outputs         compositor.OutputRules
 	ColorManagement bool
 	ClientHotkeys   bool
+	HiddenFrame     time.Duration
+	HoldOpening     bool
 	Decor           compositor.Decor
 	Font            string
 	IconTheme       string
@@ -771,6 +776,11 @@ func (p *parser) border(a *At[rawBorder], key string, fallback compositor.Border
 		return fallback
 	}
 	return b
+}
+
+func (p *parser) hiddenFrame(a *At[int]) time.Duration {
+	rate := p.positive(a, "hidden_frame_rate", int(time.Second/compositor.DefaultHiddenFrame))
+	return time.Second / time.Duration(min(rate, int(time.Second)))
 }
 
 func (p *parser) blurPasses(a *At[int], fallback int) int {
@@ -1241,12 +1251,13 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 		},
 		Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
 		Blur: compositor.Blur{
-			Enabled:  raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
-			Withhold: def.Blur.Withhold && raw.Decoration.Blur.Enabled == nil && len(raw.Decoration.Blur.Layers) == 0,
-			Size:     p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
-			Passes:   p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
-			XRay:     raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
-			Look:     p.look(raw.Decoration.Blur.rawLook, "decoration.blur").Over(def.Blur.Look),
+			Enabled:   raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
+			Withhold:  def.Blur.Withhold && raw.Decoration.Blur.Enabled == nil && len(raw.Decoration.Blur.Layers) == 0,
+			Size:      p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
+			Passes:    p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
+			XRay:      raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
+			LiveTiled: raw.Decoration.Blur.LiveTiled != nil && *raw.Decoration.Blur.LiveTiled,
+			Look:      p.look(raw.Decoration.Blur.rawLook, "decoration.blur").Over(def.Blur.Look),
 			Mica: compositor.Mica{
 				Enabled: raw.Decoration.Blur.Mica.Enabled != nil && *raw.Decoration.Blur.Mica.Enabled,
 				Size:    p.positive(raw.Decoration.Blur.Mica.Size, "decoration.blur.mica.size", 0),
@@ -1315,6 +1326,8 @@ func ParseLayers(layers ...Layer) (Config, error) {
 		Tearing:         raw.Tearing,
 		ColorManagement: raw.ColorManagement,
 		ClientHotkeys:   raw.ClientHotkeys,
+		HiddenFrame:     p.hiddenFrame(raw.HiddenFrameRate),
+		HoldOpening:     raw.HoldOpening,
 		LidSuspend:      raw.LidSuspend == nil || *raw.LidSuspend,
 	}
 	if raw.Tabs.Font != nil {
@@ -1434,6 +1447,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
 	cfg.ClientHotkeys = c.ClientHotkeys
+	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
 	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
