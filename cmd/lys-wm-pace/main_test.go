@@ -306,6 +306,27 @@ func TestTheReportShowsSchedulerLatencyGCPausesAndTheNewCounts(t *testing.T) {
 	}
 }
 
+func TestTiledGlassFiltersNothingAfterTheFirstFrameOfItsAnimation(t *testing.T) {
+	var settled frametrace.CostSummary
+	settled.Filters.Worst, settled.Passes.Worst, settled.Passes.AfterFirst = 4, 6, 1
+	b := baseline{"gles/software": derive(costReport("glass-tiles-slide-back", settled))}
+	l := b["gles/software"].Steps["glass-tiles-slide-back"]
+	if l["filter_passes_after_first_frame"] != 0 || l["render_passes_after_first_frame"] != 1 {
+		t.Fatalf("limits %v: want no filter and only the frame's own pass after the first frame", l)
+	}
+	again := settled
+	again.Filters.AfterFirst, again.Passes.AfterFirst = 4, 6
+	err := checkBaseline(b, costReport("glass-tiles-slide-back", again))
+	for _, want := range []string{"filter_passes_after_first_frame 4, limit 0", "render_passes_after_first_frame 6, limit 1"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("a chain refiltered on every frame: %v, want %q", err, want)
+		}
+	}
+	if _, ok := derive(costReport("glass-slide-back", settled)).Steps["glass-slide-back"]["filter_passes_after_first_frame"]; ok {
+		t.Error("a floating glass window blurs live and is held to no limit after the first frame")
+	}
+}
+
 func TestASecondSubmitInAFrameIsOverTheLimitOfOne(t *testing.T) {
 	var one frametrace.CostSummary
 	one.Submits.Worst = 1

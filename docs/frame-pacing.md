@@ -29,7 +29,8 @@ The steps cover opening and closing a window, moving one on a spring and
 interrupting that, switching workspaces, a three-finger swipe following the
 fingers and its release, the genie, and glass: over a client redrawing every
 frame, over nothing moving (which must draw nothing), and sliding with a
-workspace, and the overview with 10 and 30 overlapping floating windows, by action
+workspace, three translucent tiled windows sliding with a workspace and
+resizing, and the overview with 10 and 30 overlapping floating windows, by action
 and scrubbed by three fingers. Swipes come from the headless backend's fake touchpad, through
 `lys-wm -headless-swipes`; `-backend drm` has no fingers to fake, and says it did
 not measure them.
@@ -78,6 +79,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `render_passes_per_frame` | `Renderer.Begin` calls since the last composited frame, at worst | A new offscreen pass on every frame |
 | `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
 | `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
+| `render_passes_after_first_frame`, `filter_passes_after_first_frame` | In the `glass-tiles` steps, the worst `Renderer.Begin` calls and Kawase passes of any composited frame but the first of a play, with no slack: 1 and 0, the frame's own pass and no filter, since tiled windows blur over the output's shared background chain | A tiled window that refilters its own chain on every frame of a slide or a resize |
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
 | `gpu_waits_per_frame` | Times the loop waited for the GPU to finish since the last composited frame, at worst, with no slack: a renderer's fence waits on Vulkan, `glFinish` on GLES | A frame or a resize that stalls the loop on the GPU, such as freeing a resource still in use |
 | `submits_per_frame` | GPU submissions since the last composited frame, at worst, with no slack: Vulkan queue submits from `Device.Submissions`, GLES flushes of ended passes at a fence export, `glFinish` or a read back. A frame is one, plus an upload flush when it uploads past the batch bound | A pass that submits on its own, as `glFlush` at every pass end did |

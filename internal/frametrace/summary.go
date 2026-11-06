@@ -43,11 +43,12 @@ type Summary struct {
 }
 
 type CostStat struct {
-	P50      uint64  `json:"p50"`
-	Worst    uint64  `json:"worst"`
-	Mean     float64 `json:"mean"`
-	RunWorst uint64  `json:"run_worst"`
-	Repeated uint64  `json:"repeated"`
+	P50        uint64  `json:"p50"`
+	Worst      uint64  `json:"worst"`
+	AfterFirst uint64  `json:"after_first"`
+	Mean       float64 `json:"mean"`
+	RunWorst   uint64  `json:"run_worst"`
+	Repeated   uint64  `json:"repeated"`
 }
 
 type CostSummary struct {
@@ -74,6 +75,7 @@ func costStat(runs [][]Frame, of func(*Cost) uint64) CostStat {
 	seen := false
 	for _, frames := range runs {
 		var run, runWorst uint64
+		first := true
 		for i := range frames {
 			if frames[i].Kind != Composited {
 				continue
@@ -82,6 +84,10 @@ func costStat(runs [][]Frame, of func(*Cost) uint64) CostStat {
 			all = append(all, v)
 			run += v
 			runWorst = max(runWorst, v)
+			if !first {
+				s.AfterFirst = max(s.AfterFirst, v)
+			}
+			first = false
 		}
 		total += run
 		s.RunWorst = max(s.RunWorst, run)

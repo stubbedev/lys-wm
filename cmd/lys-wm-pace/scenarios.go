@@ -40,9 +40,13 @@ animations:
 rules:
   - {title: ^glass$, float: true, size: 1000x600, opacity: 0.6}
   - {title: ^pile$, float: true, size: 1000x700}
+  - {title: ^tile$, opacity: 0.6}
 `
 
-const pileTitle = "pile"
+const (
+	pileTitle = "pile"
+	tileTitle = "tile"
+)
 
 const (
 	eased        = 400 * time.Millisecond
@@ -423,6 +427,24 @@ var scenarios = []scenario{
 		steps: []step{
 			{name: "glass-slide-there", measure: eased, act: dispatches("workspace 2")},
 			{name: "glass-slide-back", measure: eased, act: dispatches("workspace 1")},
+		},
+	},
+	{
+		name: "glass-tiles",
+		setup: func(s *session) {
+			s.still(tileTitle, 0x40, 0x30, 0x20)
+			s.still(tileTitle, 0x20, 0x40, 0x30)
+			s.still(tileTitle, 0x20, 0x30, 0x40)
+			s.dispatch("workspace 2")
+			s.pump(eased)
+			s.still("second", 0x20, 0x30, 0x40)
+			s.dispatch("workspace 1")
+		},
+		steps: []step{
+			{name: "glass-tiles-slide-there", measure: eased, act: dispatches("workspace 2")},
+			{name: "glass-tiles-slide-back", measure: eased, act: dispatches("workspace 1")},
+			{name: "glass-tiles-resize-grow", measure: sprung, act: dispatches("resizeactive 120 0")},
+			{name: "glass-tiles-resize-shrink", measure: sprung, act: dispatches("resizeactive -120 0")},
 		},
 	},
 	overviewByAction(10),

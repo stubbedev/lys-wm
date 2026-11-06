@@ -442,6 +442,17 @@ func TestWhatOneRunAloneCostsIsNotRepeated(t *testing.T) {
 	}
 }
 
+func TestTheFirstComposedFrameOfARunIsLeftOutOfAfterFirst(t *testing.T) {
+	frame := func(kind Kind, filters uint64) Frame { return Frame{Kind: kind, Cost: Cost{Filters: filters}} }
+	s := summarizeCost([][]Frame{
+		{frame(Empty, 0), frame(Composited, 9), frame(Composited, 2), frame(Composited, 1)},
+		{frame(Composited, 7), frame(Dropped, 0), frame(Composited, 3)},
+	})
+	if s.Filters.Worst != 9 || s.Filters.AfterFirst != 3 {
+		t.Fatalf("worst %d, after the first frame %d: want 9 and 3", s.Filters.Worst, s.Filters.AfterFirst)
+	}
+}
+
 func TestNewCountsFromFramesThatDrewNothingReachTheNextOneThatDid(t *testing.T) {
 	g := newRig(t, nil)
 	g.r.Begin("A")
