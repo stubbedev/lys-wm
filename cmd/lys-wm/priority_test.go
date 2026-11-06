@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -66,13 +68,67 @@ func TestTheCompositorThreadReadsBackThePriorityItTook(t *testing.T) {
 	}
 }
 
+func demotionUnavailable(start uint32, probe error) (reason string, err error) {
+	switch {
+	case probe == nil:
+		return "", nil
+	case !errors.Is(probe, unix.EPERM):
+		return "", fmt.Errorf("probe a move from policy %d to SCHED_BATCH: %w", start, probe)
+	case start == unix.SCHED_IDLE:
+		return "this thread starts under SCHED_IDLE (a nix-daemon with daemonCPUSchedPolicy idle), which an unprivileged thread without an RLIMIT_NICE allowance cannot leave for SCHED_NORMAL", nil
+	default:
+		return fmt.Sprintf("this thread may not move from policy %d to SCHED_BATCH or SCHED_NORMAL: %v", start, probe), nil
+	}
+}
+
+func TestTheDemotionTestSkipsOnlyWhereTheThreadCannotBeDemoted(t *testing.T) {
+	cases := []struct {
+		name  string
+		start uint32
+		probe error
+		skip  bool
+		fail  bool
+	}{
+		{"a demotable thread runs", unix.SCHED_NORMAL, nil, false, false},
+		{"an idle thread that may leave runs", unix.SCHED_IDLE, nil, false, false},
+		{"an idle thread refused skips", unix.SCHED_IDLE, unix.EPERM, true, false},
+		{"a normal thread refused skips", unix.SCHED_NORMAL, unix.EPERM, true, false},
+		{"another error fails", unix.SCHED_NORMAL, unix.EINVAL, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reason, err := demotionUnavailable(c.start, c.probe)
+			if (err != nil) != c.fail {
+				t.Fatalf("error %v, want failure %v", err, c.fail)
+			}
+			if (reason != "") != c.skip {
+				t.Fatalf("skip reason %q, want skip %v", reason, c.skip)
+			}
+			if c.start == unix.SCHED_IDLE && c.skip && !strings.Contains(reason, "SCHED_IDLE") {
+				t.Fatalf("the reason does not name SCHED_IDLE: %q", reason)
+			}
+		})
+	}
+}
+
 func TestARealtimeTimeoutDemotesTheThreadToNormal(t *testing.T) {
+	type probe struct {
+		reason string
+		err    error
+	}
+	probed := make(chan probe, 1)
 	done := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
+		start, err := unix.SchedGetAttr(0, 0)
+		if err != nil {
+			probed <- probe{err: err}
+			return
+		}
 		batch := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_BATCH, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
-		if err := unix.SchedSetAttr(0, &batch, 0); err != nil {
-			done <- err
+		reason, err := demotionUnavailable(start.Policy, unix.SchedSetAttr(0, &batch, 0))
+		probed <- probe{reason, err}
+		if reason != "" || err != nil {
 			return
 		}
 		release := demoteOnRTTimeout(unix.Gettid())
@@ -90,6 +146,13 @@ func TestARealtimeTimeoutDemotesTheThreadToNormal(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}()
+	p := <-probed
+	if p.err != nil {
+		t.Fatal(p.err)
+	}
+	if p.reason != "" {
+		t.Skip(p.reason)
+	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
