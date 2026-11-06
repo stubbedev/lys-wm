@@ -106,7 +106,7 @@ func deepFrames(t *testing.T, o *Output) {
 	}
 	size := image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))
 	for _, l := range layouts {
-		s, err := o.b.alloc.allocate(size, l.format, l.modifiers)
+		s, err := o.b.alloc.allocate(size, l)
 		if err != nil {
 			t.Logf("%s offers %v with %v for 10-bit frames, but they do not allocate: %v", o.Name(), l.format, l.modifiers, err)
 			continue

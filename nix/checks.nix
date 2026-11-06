@@ -55,6 +55,10 @@
         devices = ["virtio-gpu-pci"];
         kernelModules = ["vkms"];
         outputs = ["Virtual-1" "Virtual-2"];
+        extraTest = _: ''
+          machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'reach the screen through the primary GPU.s linear buffers'")
+          machine.fail("journalctl -b --no-pager -t lys-wm | grep 'scans out no linear buffer'")
+        '';
       };
       vm-hdr-refused = vm {
         name = "lys-wm-hdr-refused";

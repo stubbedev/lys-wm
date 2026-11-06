@@ -5,6 +5,7 @@ import (
 	"image"
 	"testing"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
@@ -16,7 +17,7 @@ func bootDisplayOnly(t *testing.T, setup func(*fakeDevice)) (*rig, *gbmAllocator
 		if setup != nil {
 			setup(dev)
 		}
-		return &copyAllocator{dev: dev, primary: linear.gpu, linear: linear}
+		return &linearFirst{dev: dev, primary: linear, own: &copyAllocator{dev: dev, primary: linear.gpu}, ownHow: "a CPU copy"}
 	})
 	return r, linear
 }
@@ -69,5 +70,35 @@ func TestADisplayOnlyCardThatRefusesTheLinearBufferGetsTheCopy(t *testing.T) {
 	}
 	if len(r.reports) != 1 {
 		t.Fatalf("reports %v, want the fallback named once", r.reports)
+	}
+}
+
+func TestADisplayOnlyCardRefusedOnceForTheModeTakesTheLinearBufferAgainOnTheNextModeset(t *testing.T) {
+	refusals := 1
+	var r *rig
+	r, _ = bootDisplayOnly(t, func(dev *fakeDevice) {
+		dev.refuseFrames = func(fb uint64) bool {
+			if refusals == 0 || dev.scanouts[uint32(fb)] < primeHandles {
+				return false
+			}
+			refusals--
+			return true
+		}
+	})
+	o := r.b.Outputs()[0]
+	if fb := r.drawRed(o); r.dev.scanouts[uint32(fb)] >= primeHandles || len(r.reports) != 1 {
+		t.Fatalf("framebuffer %d after the refusal is handle %d with reports %v, want the CPU copy named once", fb, r.dev.scanouts[uint32(fb)], r.reports)
+	}
+	r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
+	r.until("the copied frame's flip", func() bool { return !o.flipping })
+	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: modeOf(modes[1])}); err != nil {
+		t.Fatal(err)
+	}
+	reads := r.b.SyncReads()
+	if fb := r.drawRed(o); r.dev.scanouts[uint32(fb)] < primeHandles || r.b.SyncReads() != reads {
+		t.Fatalf("framebuffer %d after the next modeset is handle %d with %d more CPU reads, want the primary's linear buffer again", fb, r.dev.scanouts[uint32(fb)], r.b.SyncReads()-reads)
+	}
+	if o.layout.route != primaryBuffer || len(r.reports) != 1 {
+		t.Fatalf("route %d, reports %v", o.layout.route, r.reports)
 	}
 }

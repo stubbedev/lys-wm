@@ -42,7 +42,7 @@ func (l *lazyBlit) renderable(format fourcc.Format) ([]fourcc.Modifier, error) {
 	return mods, nil
 }
 
-func (l *lazyBlit) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
+func (l *lazyBlit) allocate(size image.Point, lay layout) (*scanout, error) {
 	if l.blit == nil {
 		b, err := l.open()
 		if err != nil {
@@ -50,7 +50,7 @@ func (l *lazyBlit) allocate(size image.Point, format fourcc.Format, modifiers []
 		}
 		l.blit = b
 	}
-	s, err := l.blit.allocate(size, format, modifiers)
+	s, err := l.blit.allocate(size, lay)
 	if err != nil {
 		return nil, errors.Join(err, l.idle())
 	}
@@ -71,13 +71,6 @@ func (l *lazyBlit) idle() error {
 	b := l.blit
 	l.blit = nil
 	return b.close()
-}
-
-func (l *lazyBlit) fence() (int, error) {
-	if l.blit == nil {
-		return -1, nil
-	}
-	return l.blit.fence()
 }
 
 func (l *lazyBlit) close() error {

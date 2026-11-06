@@ -570,7 +570,8 @@ func (a *fakeAlloc) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
 	return []fourcc.Modifier{0, 7, 9}, nil
 }
 
-func (a *fakeAlloc) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
+func (a *fakeAlloc) allocate(size image.Point, l layout) (*scanout, error) {
+	format, modifiers := l.format, l.modifiers
 	if !slices.Equal(modifiers, []fourcc.Modifier{0, 7}) {
 		return nil, fmt.Errorf("allocated with modifiers %v", modifiers)
 	}
@@ -584,7 +585,7 @@ func (a *fakeAlloc) allocate(size image.Point, format fourcc.Format, modifiers [
 	if a.fbFormats != nil {
 		a.fbFormats[uint64(900+a.next)] = format
 	}
-	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, release: func() error { a.freed++; return nil }}, nil
+	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, fence: a.fence, release: func() error { a.freed++; return nil }}, nil
 }
 
 func (a *fakeAlloc) fence() (int, error) {

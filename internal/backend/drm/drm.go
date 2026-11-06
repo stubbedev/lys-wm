@@ -32,7 +32,15 @@ var deepFormats = []fourcc.Format{fourcc.XRGB2101010, fourcc.XBGR2101010}
 type layout struct {
 	format    fourcc.Format
 	modifiers []fourcc.Modifier
+	route     route
 }
+
+type route uint8
+
+const (
+	primaryBuffer route = iota
+	ownBuffer
+)
 
 const (
 	scanoutFormat = fourcc.XRGB8888
@@ -71,6 +79,7 @@ type scanout struct {
 	target       render.Target
 	client       *clientFB
 	fb           uint32
+	fence        func() (int, error)
 	prepare      func() error
 	prepareLater func(done func(error) error) error
 	syncRead     bool
@@ -97,8 +106,7 @@ func (s *scanout) keepOnScreen(dev device) error {
 type allocator interface {
 	renderer() render.Renderer
 	renderable(format fourcc.Format) ([]fourcc.Modifier, error)
-	allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error)
-	fence() (int, error)
+	allocate(size image.Point, l layout) (*scanout, error)
 	close() error
 }
 
@@ -254,9 +262,6 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, fmt.Errorf("drm: Options.Master %d is neither HoldsMaster nor WithoutMaster", opts.Master)
 	}
 	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, paused: opts.Master == WithoutMaster, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
-	if a, ok := alloc.(*copyAllocator); ok {
-		a.loop, a.report = l, opts.Report
-	}
 	if a, ok := alloc.(*gbmAllocator); ok && !a.gpu.NativeFences() {
 		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor in glFinish until the GPU is done", a.gpu))
 	}
@@ -265,8 +270,8 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, fmt.Errorf("drm: ADDFB2 modifier support: %w", err)
 	}
 	b.modifiers = modifiers == 1
-	if a, ok := alloc.(*copyAllocator); ok {
-		a.modifiers = b.modifiers
+	if a, ok := alloc.(attachable); ok {
+		a.attach(l, b.modifiers)
 	}
 	async, err := dev.Cap(kdrm.CapAtomicAsyncFlip)
 	if err != nil && !errors.Is(err, unix.EINVAL) {
@@ -1042,7 +1047,9 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 	refusals := make([]error, 0, len(layouts))
 	for _, l := range layouts {
 		buffers, restate, err := o.tryLayout(m, d, blob, size, l, next)
-		if refused(err) && o.b.fallBack(err) {
+		if own, how, ok := o.b.fallBack(l, err); ok {
+			o.b.report(fmt.Errorf("drm: %s in %+v scans out no linear buffer of the primary GPU, so its frames take %s: %w", o.Name(), modeOf(m), how, err))
+			l = own
 			buffers, restate, err = o.tryLayout(m, d, blob, size, l, next)
 		}
 		if err != nil {
@@ -1080,18 +1087,21 @@ func (o *Output) tryLayout(m kdrm.Mode, d backend.BitDepth, blob uint32, size im
 }
 
 type fallingBack interface {
-	fallBack(err error) bool
+	fallBack(l layout, err error) (layout, string, bool)
 }
 
-func (b *Backend) fallBack(err error) bool {
+func (b *Backend) fallBack(l layout, err error) (layout, string, bool) {
 	f, ok := b.alloc.(fallingBack)
-	return ok && f.fallBack(err)
+	if !ok || err == nil {
+		return l, "", false
+	}
+	return f.fallBack(l, err)
 }
 
 func (o *Output) allocateBuffers(size image.Point, l layout) ([]*scanout, error) {
 	buffers := make([]*scanout, 0, buffersPerOut)
 	for range buffersPerOut {
-		s, err := o.b.alloc.allocate(size, l.format, l.modifiers)
+		s, err := o.b.alloc.allocate(size, l)
 		if err != nil {
 			return nil, errors.Join(err, o.free(buffers))
 		}
@@ -1510,7 +1520,7 @@ func (o *Output) BeginFrame() (backend.Frame, error) {
 	}
 	i := slices.IndexFunc(o.buffers, func(s *scanout) bool { return s != o.front && s != o.queued })
 	if i < 0 && o.flipping {
-		s, err := o.b.alloc.allocate(modeOf(o.mode).Size, o.layout.format, o.layout.modifiers)
+		s, err := o.b.alloc.allocate(modeOf(o.mode).Size, o.layout)
 		if err != nil {
 			return backend.Frame{}, fmt.Errorf("drm: a buffer for %s to draw in while one flips: %w", o.Name(), err)
 		}
@@ -1607,7 +1617,7 @@ func (b *Backend) commitHeld() error {
 }
 
 func (o *Output) commitPresent(s *scanout) error {
-	fence, err := o.b.alloc.fence()
+	fence, err := s.fence()
 	if err != nil {
 		return err
 	}

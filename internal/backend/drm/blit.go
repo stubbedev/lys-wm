@@ -54,17 +54,11 @@ func (a *blitAllocator) share(size image.Point, format fourcc.Format) (*shared, 
 	if a.vk != nil {
 		return a.shareCopied(size, format)
 	}
-	s := &shared{}
-	b, err := a.primary.gbm.Allocate(size, format, []fourcc.Modifier{fourcc.Linear}, gpu.UseRendering)
+	b, target, err := a.primary.linearTarget(size, format)
 	if err != nil {
-		return nil, fmt.Errorf("a linear buffer on the primary GPU: %w", err)
+		return nil, err
 	}
-	s.free = append(s.free, b.Close)
-	target, err := a.primary.gpu.ImportTarget(b.DMABUF)
-	if err != nil {
-		return s.fail(fmt.Errorf("render into it on the primary GPU: %w", err))
-	}
-	s.target, s.free = target, append(s.free, target.Destroy)
+	s := &shared{target: target, free: []func() error{b.Close, target.Destroy}}
 	if err := a.importOnLocal(s, b.DMABUF); err != nil {
 		return s.fail(err)
 	}
@@ -212,18 +206,19 @@ func (a *blitAllocator) closeCopier() {
 	a.vk, a.closeVK, a.sameVK = nil, nil, false
 }
 
-func (a *blitAllocator) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
-	out, err := a.local.allocate(size, format, modifiers)
+func (a *blitAllocator) allocate(size image.Point, l layout) (*scanout, error) {
+	out, err := a.local.allocate(size, l)
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.share(size, format)
+	s, err := a.share(size, l.format)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: a %v frame shared with %s: %w", size, a.local.path, err), out.free(a.local.dev))
 	}
 	return &scanout{
 		target:  s.target,
 		fb:      out.fb,
+		fence:   a.local.fence,
 		prepare: func() error { return a.blit(s, out.target, size) },
 		release: func() error { return errors.Join(s.release(), out.release()) },
 	}, nil
@@ -250,10 +245,6 @@ func (a *blitAllocator) blit(s *shared, dst render.Target, size image.Point) err
 	}
 	p.DrawTexture(s.tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, all, render.Normal, 1, render.Mask{})
 	return p.End()
-}
-
-func (a *blitAllocator) fence() (int, error) {
-	return a.local.fence()
 }
 
 func (a *blitAllocator) close() error {

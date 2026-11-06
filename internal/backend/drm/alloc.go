@@ -144,8 +144,8 @@ func (a *gbmAllocator) renderable(format fourcc.Format) ([]fourcc.Modifier, erro
 	return a.gpu.RenderableModifiers(format)
 }
 
-func (a *gbmAllocator) allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (*scanout, error) {
-	bo, err := a.gbm.Allocate(size, format, modifiers, gpu.UseRendering|gpu.UseScanout)
+func (a *gbmAllocator) allocate(size image.Point, l layout) (*scanout, error) {
+	bo, err := a.gbm.Allocate(size, l.format, l.modifiers, gpu.UseRendering|gpu.UseScanout)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +157,32 @@ func (a *gbmAllocator) allocate(size image.Point, format fourcc.Format, modifier
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.path, err), target.Destroy(), bo.Close())
 	}
-	return &scanout{target: target, fb: id, release: func() error {
+	return &scanout{target: target, fb: id, fence: a.fence, release: func() error {
 		return errors.Join(target.Destroy(), bo.Close())
 	}}, nil
+}
+
+func (a *gbmAllocator) linearTarget(size image.Point, format fourcc.Format) (*gpu.Buffer, render.ReadTarget, error) {
+	bo, err := a.gbm.Allocate(size, format, []fourcc.Modifier{fourcc.Linear}, gpu.UseRendering)
+	if err != nil {
+		return nil, nil, fmt.Errorf("a linear %v buffer on the primary GPU: %w", size, err)
+	}
+	if bo.Modifier != fourcc.Linear {
+		return nil, nil, errors.Join(fmt.Errorf("the primary GPU's linear buffer has modifier %v", bo.Modifier), bo.Close())
+	}
+	target, err := a.gpu.ImportTarget(bo.DMABUF)
+	if err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("the primary GPU renders into no linear buffer: %w", err), bo.Close())
+	}
+	return bo, target, nil
+}
+
+func (a *gbmAllocator) rendersLinear() error {
+	bo, target, err := a.linearTarget(image.Pt(16, 16), scanoutFormat)
+	if err != nil {
+		return err
+	}
+	return errors.Join(target.Destroy(), bo.Close())
 }
 
 func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, error) {

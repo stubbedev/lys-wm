@@ -68,7 +68,7 @@ func blitPair(t *testing.T, a *blitAllocator, size image.Point) (*scanout, *shar
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := a.local.allocate(size, scanoutFormat, mods)
+	out, err := a.local.allocate(size, layout{format: scanoutFormat, modifiers: mods})
 	if err != nil {
 		t.Fatal(err)
 	}
