@@ -2057,16 +2057,16 @@ const planeFlags = uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
 
 func (o *Output) planesDue() error {
 	o.planesWaiting = false
-	return o.flushPlanes()
+	cursor, pending := o.pendingPlanes()
+	if !pending {
+		return nil
+	}
+	return o.sendPlanes(cursor)
 }
 
 func (o *Output) flushPlanes() error {
-	c := o.cursor
-	cursor := c != nil && c.dirty
-	if cursor && c.settled() {
-		c.dirty, cursor = false, false
-	}
-	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.frameCarriesPlanes() {
+	cursor, pending := o.pendingPlanes()
+	if !pending {
 		return nil
 	}
 	if !o.color.dirty() {
@@ -2078,6 +2078,23 @@ func (o *Output) flushPlanes() error {
 			return o.planesLatch.Arm(wait)
 		}
 	}
+	return o.sendPlanes(cursor)
+}
+
+func (o *Output) pendingPlanes() (cursor, pending bool) {
+	c := o.cursor
+	cursor = c != nil && c.dirty
+	if cursor && c.settled() {
+		c.dirty, cursor = false, false
+	}
+	if !cursor && !o.color.dirty() || !o.lit || o.kms != kmsFlip || o.off || o.b.paused || o.flipping || o.frameCarriesPlanes() {
+		return cursor, false
+	}
+	return cursor, true
+}
+
+func (o *Output) sendPlanes(cursor bool) error {
+	c := o.cursor
 	err := o.commitPlanes(cursor)
 	if cursor && err != nil && o.cursorRefused(err) {
 		c.refused, c.visible, cursor = fmt.Errorf("drm: the cursor plane of %s refuses the cursor at %v: %w", o.Name(), c.at, err), false, false

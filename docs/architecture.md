@@ -382,6 +382,9 @@ than stall the loop on a readback (#271). Pointer motion then moves the plane in
 its own, or in the next frame's commit, and repaints nothing. A move waits
 for a requested frame only when that frame is due before the next vblank; a
 frame deferred past it (#257) does not hold the cursor back a refresh (#276).
+A cursor-only commit is sent at the plane lead before the vblank; a latch
+that fires late, even past that vblank, commits at once for the next one
+rather than aiming a refresh further on (#340).
 A cursor commit
 sets only what changed against what the last accepted commit left on the
 plane; a modeset, a resume or a cursor coming back from hidden sets it all. An image

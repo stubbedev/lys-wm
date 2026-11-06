@@ -49,6 +49,46 @@ func TestACursorOnlyCommitLeadsTheVblankByThePlaneLead(t *testing.T) {
 	}
 }
 
+func TestAPlaneLatchFiringPastItsVblankCommitsInThatRefresh(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	c := r.shownCursor(o, image.Pt(4, 6))
+	interval := modeOf(o.mode).Interval()
+	r.dev.commits = nil
+	const refreshes = 6
+	slipped := 0
+	for i := range refreshes {
+		vblank := o.lastFlip + interval
+		r.pinned = vblank - interval/2
+		at := image.Pt(100+3*i, 50)
+		if err := c.MoveCursor(at); err != nil {
+			t.Fatal(err)
+		}
+		if !o.planesWaiting {
+			t.Fatalf("refresh %d: a move half a refresh before the vblank did not wait for the plane latch: %d commits", i, len(r.dev.commits))
+		}
+		r.pinned = vblank + time.Millisecond
+		n := len(r.dev.commits)
+		if err := o.planesDue(); err != nil {
+			t.Fatal(err)
+		}
+		if len(r.dev.commits) == n {
+			slipped++
+			r.pinned = vblank + interval - backend.PlaneLead
+			r.until("the slipped latch", func() bool { return len(r.dev.commits) > n })
+		}
+		if _, got, _ := cursorAt(r.dev.commits[len(r.dev.commits)-1]); got != at.Sub(image.Pt(4, 6)) {
+			t.Fatalf("refresh %d: the late latch put the plane at %v", i, got)
+		}
+		r.pinned = vblank + interval
+		r.dev.flip(t, 10, uint32(len(r.dev.commits)+1))
+		r.until("the late latch's flip", func() bool { return !o.flipping })
+	}
+	if slipped != 0 || len(r.dev.commits) != refreshes {
+		t.Fatalf("%d plane latches firing 1 ms past their vblank slipped %d refreshes and issued %d atomic requests, want none slipped and one each", refreshes, slipped, len(r.dev.commits))
+	}
+}
+
 func TestAFrameCommitCarriesTheCursorAsOfThePlaneLead(t *testing.T) {
 	r := start(t)
 	r.pinned = backend.Now()
