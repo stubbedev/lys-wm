@@ -84,6 +84,7 @@ type Settings struct {
 	NewOverCover CoverPolicy
 	Scratchpads  map[ScratchpadName]ScratchpadSpec
 	Peek         int
+	FloatStep    int
 }
 
 type WorkspaceTarget interface {
@@ -436,7 +437,7 @@ func (a FocusAction) apply(s State, _ Settings) (State, []Effect, error) {
 }
 
 func (a MoveAction) apply(s State, settings Settings) (State, []Effect, error) {
-	next, err := s.MoveDirection(a.Dir, settings.Collapse)
+	next, err := s.MoveDirection(a.Dir, settings.Collapse, settings.FloatStep)
 	return next, nil, err
 }
 
@@ -672,7 +673,7 @@ var Actions = []ActionSpec{
 	},
 	{
 		Name: "move", Args: "<left|right|up|down>",
-		Summary: "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows.",
+		Summary: "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output.",
 		parse:   directional(func(d Direction) Action { return MoveAction{Dir: d} }),
 	},
 	{
@@ -923,6 +924,16 @@ var Actions = []ActionSpec{
 		Name:    "togglefloating",
 		Summary: "Float the focused window centred at half the output, or tile it again.",
 		parse:   bare(FloatAction{}),
+	},
+	{
+		Name: "place", Args: "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+		Summary: "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap.",
+		parse:   parsePlace,
+	},
+	{
+		Name: "focusfloating", Args: "[toggle|on|off]",
+		Summary: "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told.",
+		parse:   parseFocusFloating,
 	},
 	{
 		Name: "fullscreen", Args: "[toggle|on|off] [fake]",

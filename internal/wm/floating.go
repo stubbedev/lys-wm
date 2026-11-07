@@ -262,32 +262,57 @@ type SharedEdges struct {
 	Left, Right, Top, Bottom bool
 }
 
+type side uint8
+
+const (
+	sideWhole side = iota
+	sideLow
+	sideHigh
+)
+
+func halfRect(area image.Rectangle, gaps Gaps, x, y side) image.Rectangle {
+	r := gaps.Outer.shrink(area)
+	whole := r
+	midX, midY := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
+	lead, trail := gaps.Inner/2, gaps.Inner-gaps.Inner/2
+	switch x {
+	case sideLow:
+		r.Max.X = midX - lead
+	case sideHigh:
+		r.Min.X = midX + trail
+	}
+	switch y {
+	case sideLow:
+		r.Max.Y = midY - lead
+	case sideHigh:
+		r.Min.Y = midY + trail
+	}
+	if r.Empty() {
+		return whole
+	}
+	return r
+}
+
 func SnapRect(area image.Rectangle, at image.Point, distance int, gaps Gaps, shared SharedEdges) (image.Rectangle, bool) {
 	left, right := !shared.Left && at.X-area.Min.X < distance, !shared.Right && area.Max.X-at.X <= distance
 	top, bottom := !shared.Top && at.Y-area.Min.Y < distance, !shared.Bottom && area.Max.Y-at.Y <= distance
 	if !left && !right && !top && !bottom || !at.In(area) {
 		return image.Rectangle{}, false
 	}
-	r := gaps.Outer.shrink(area)
-	whole := r
-	midX, midY := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
-	lead, trail := gaps.Inner/2, gaps.Inner-gaps.Inner/2
+	x, y := sideWhole, sideWhole
 	switch {
 	case left:
-		r.Max.X = midX - lead
+		x = sideLow
 	case right:
-		r.Min.X = midX + trail
+		x = sideHigh
 	}
 	switch {
 	case top && (left || right):
-		r.Max.Y = midY - lead
+		y = sideLow
 	case bottom:
-		r.Min.Y = midY + trail
+		y = sideHigh
 	}
-	if r.Empty() {
-		return whole, true
-	}
-	return r, true
+	return halfRect(area, gaps, x, y), true
 }
 
 func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, distance int, gaps Gaps, shared SharedEdges) (image.Rectangle, bool) {

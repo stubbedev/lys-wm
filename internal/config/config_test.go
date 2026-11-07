@@ -136,7 +136,7 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("animations:\n  enabled: true\n")); err != nil || c.Animations.Reduced() {
 		t.Errorf("reduced motion is on unasked: %v", err)
 	}
-	if c, err := Parse("t.yaml", []byte("drag_preview:\n  enabled: false\n  opacity: 0.5\n  blur: true\n  snap_distance: 8\n")); err != nil || c.Decor.DragPreview != (compositor.DragPreview{Opacity: 0.5, Blur: true, SnapDistance: 8}) {
+	if c, err := Parse("t.yaml", []byte("drag_preview:\n  enabled: false\n  opacity: 0.5\n  blur: true\n  snap_distance: 8\n  snap_windows: true\n")); err != nil || c.Decor.DragPreview != (compositor.DragPreview{Opacity: 0.5, Blur: true, SnapDistance: 8, SnapWindows: true}) {
 		t.Errorf("drag_preview: %+v, %v", c.Decor.DragPreview, err)
 	}
 	if c, err := Parse("t.yaml", nil); err != nil || !c.Decor.DragPreview.Enabled {
@@ -144,6 +144,15 @@ func TestExampleConfig(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("drag_preview:\n  snap_distance: 0\n")); err == nil || !strings.Contains(err.Error(), "drag_preview.snap_distance") {
 		t.Errorf("snap_distance 0: %v", err)
+	}
+	if c, err := Parse("t.yaml", []byte("floating:\n  step: 25\n")); err != nil || c.WM.FloatStep != 25 {
+		t.Errorf("floating.step: %d, %v", c.WM.FloatStep, err)
+	}
+	if c, err := Parse("t.yaml", nil); err != nil || c.WM.FloatStep != wm.DefaultFloatStep {
+		t.Errorf("floating.step defaults to %d, %v", c.WM.FloatStep, err)
+	}
+	if _, err := Parse("t.yaml", []byte("floating:\n  step: 0\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: floating.step") {
+		t.Errorf("floating.step 0: %v", err)
 	}
 	if cfg.WM.Gaps != (wm.Gaps{Inner: 6, Outer: wm.Insets{Top: 12, Right: 8, Bottom: 12, Left: 8}}) {
 		t.Errorf("gaps %+v", cfg.WM.Gaps)

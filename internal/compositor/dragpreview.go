@@ -18,6 +18,7 @@ type DragPreview struct {
 	Opacity      float32
 	Blur         bool
 	SnapDistance int
+	SnapWindows  bool
 }
 
 type dragPreview struct {
@@ -179,5 +180,14 @@ func (c *Compositor) endDrop(it *interaction) error {
 	if err != nil || !ok || it.w.layer != wm.LayerFloating {
 		return err
 	}
-	return c.update(c.wm.SetFloatingRect(it.w.id, target))
+	return c.update(c.wm.SnapFloating(it.w.id, target, it.rect))
+}
+
+func (c *Compositor) snapToWindows(id wm.WindowID, r image.Rectangle) image.Rectangle {
+	cfg := c.decor.DragPreview
+	if !cfg.Enabled || !cfg.SnapWindows {
+		return r
+	}
+	c.snapRects = c.wm.FloatingNeighbours(id, c.snapRects[:0])
+	return wm.SnapToWindows(r, c.snapRects, cfg.SnapDistance, c.settings.Gaps.Inner)
 }

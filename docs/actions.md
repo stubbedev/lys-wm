@@ -5,7 +5,7 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | Action | Arguments | Effect |
 | --- | --- | --- |
 | `focus` | `<left\|right\|up\|down>` | Move focus to the neighbouring window, or to the next output at the edge. |
-| `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. |
+| `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output. |
 | `workspace` | `<n\|name\|e+n\|e-n\|m+n\|m-n\|empty\|previous>` | Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it. |
 | `movetoworkspace` | `<n\|name\|e+n\|e-n\|m+n\|m-n\|empty\|previous> [follow]` | Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch. |
 | `focusoutput` | `<left\|right\|up\|down\|name>` | Focus the neighbouring output in that direction, or the output with that name, and the window focused there. |
@@ -40,6 +40,8 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `locktab` | `[toggle\|on\|off]` | Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told. |
 | `submap` | `<name\|reset>` | Switch binds to the named submap, or back to the default ones. |
 | `togglefloating` |  | Float the focused window centred at half the output, or tile it again. |
+| `place` | `<left\|right\|top\|bottom\|topleft\|topright\|bottomleft\|bottomright\|fill\|center\|restore>` | Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap. |
+| `focusfloating` | `[toggle\|on\|off]` | Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told. |
 | `fullscreen` | `[toggle\|on\|off] [fake]` | Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile. |
 | `setprop` | `<id> <key> <value>` | Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file. |
 | `showdesktop` | `[toggle\|on\|off] [all]` | Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told. |

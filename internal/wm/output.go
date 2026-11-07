@@ -79,10 +79,7 @@ func (t *Tree) insertEdge(n Node, d Direction, area image.Rectangle) {
 }
 
 func rehomed(r, from, to image.Rectangle) image.Rectangle {
-	r = r.Add(to.Min.Sub(from.Min))
-	shift := image.Pt(min(0, to.Max.X-r.Max.X), min(0, to.Max.Y-r.Max.Y))
-	r = r.Add(shift)
-	return r.Add(image.Pt(max(0, to.Min.X-r.Min.X), max(0, to.Min.Y-r.Min.Y)))
+	return clampInto(r.Add(to.Min.Sub(from.Min)), to)
 }
 
 func (s *State) rehome(w *Workspace, output string) {

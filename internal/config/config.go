@@ -149,6 +149,7 @@ type rawConfig struct {
 	Fullscreen      rawFullscreen                `yaml:"fullscreen"`
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
 	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
+	Floating        rawFloating                  `yaml:"floating"`
 	LayerRules      []At[rawLayerRule]           `yaml:"layer_rules"`
 	Workspaces      []At[rawWorkspaceRule]       `yaml:"workspaces"`
 }
@@ -181,6 +182,10 @@ type rawWorkspaceRule struct {
 
 type rawWorkspaceBorders struct {
 	Width *At[int] `yaml:"width"`
+}
+
+type rawFloating struct {
+	Step *At[int] `yaml:"step"`
 }
 
 type rawShowDesktop struct {
@@ -342,6 +347,7 @@ type rawDragPreview struct {
 	Opacity      *At[float64] `yaml:"opacity"`
 	Blur         *bool        `yaml:"blur"`
 	SnapDistance *At[int]     `yaml:"snap_distance"`
+	SnapWindows  *bool        `yaml:"snap_windows"`
 }
 
 type rawBlur struct {
@@ -852,6 +858,9 @@ func (p *parser) dragPreview(r rawDragPreview, def compositor.DragPreview) compo
 	}
 	out.Opacity = p.opacity(r.Opacity, "drag_preview.opacity", def.Opacity)
 	out.SnapDistance = p.positive(r.SnapDistance, "drag_preview.snap_distance", def.SnapDistance)
+	if r.SnapWindows != nil {
+		out.SnapWindows = *r.SnapWindows
+	}
 	return out
 }
 
@@ -1591,6 +1600,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
 	cfg.LayerRules = p.layerRules(raw.LayerRules)
 	cfg.WorkspaceRules = p.workspaceRules(raw.Workspaces, cfg.WM.Gaps)
+	cfg.WM.FloatStep = p.positive(raw.Floating.Step, "floating.step", cfg.WM.FloatStep)
 	if v := raw.ShowDesktop.Peek; v != nil {
 		if v.V < 1 || v.V > 50 {
 			p.fail(v.Line, "showdesktop.peek", "%d is not a percentage from 1 to 50", v.V)

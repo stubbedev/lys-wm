@@ -126,9 +126,10 @@ var SlowerSpeeds = [...]render.Speed{render.CPUDriver, render.Software}
 
 func PlainSettings() wm.Settings {
 	return wm.Settings{
-		Collapse: wm.CollapseEmptySplits,
-		Autotile: wm.Autotile{Enabled: true, Ephemeral: true, MinTrigger: 400, Divisor: 3},
-		Peek:     wm.DefaultPeek,
+		Collapse:  wm.CollapseEmptySplits,
+		Autotile:  wm.Autotile{Enabled: true, Ephemeral: true, MinTrigger: 400, Divisor: 3},
+		Peek:      wm.DefaultPeek,
+		FloatStep: wm.DefaultFloatStep,
 	}
 }
 
@@ -245,6 +246,7 @@ type Compositor struct {
 	outputResources    []*sw.WlOutput
 	tabBars            []wm.TabBar
 	rings              []wm.GroupRing
+	snapRects          []image.Rectangle
 	binds              binds.Map
 	submap             string
 	held               []uint32

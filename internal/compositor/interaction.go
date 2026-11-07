@@ -125,7 +125,7 @@ func (c *Compositor) dragTo(it *interaction) error {
 	floating := it.w.layer == wm.LayerFloating
 	switch {
 	case floating && it.mode == wm.DragMove:
-		return c.dragged(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
+		return c.dragged(c.wm.SetFloatingRect(it.w.id, c.snapToWindows(it.w.id, it.rect.Add(total))))
 	case floating:
 		edges := it.edges
 		if k := c.decision(it.w).KeepAspect; k != nil && *k {

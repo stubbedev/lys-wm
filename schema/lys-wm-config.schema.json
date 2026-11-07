@@ -115,7 +115,7 @@
               {
                 "name": "move",
                 "args": "<left|right|up|down>",
-                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
+                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
               },
               {
                 "name": "workspace",
@@ -277,6 +277,16 @@
               {
                 "name": "togglefloating",
                 "summary": "Float the focused window centred at half the output, or tile it again."
+              },
+              {
+                "name": "place",
+                "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+              },
+              {
+                "name": "focusfloating",
+                "args": "[toggle|on|off]",
+                "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
               },
               {
                 "name": "fullscreen",
@@ -626,6 +636,10 @@
           "type": "integer",
           "minimum": 1,
           "default": 16
+        },
+        "snap_windows": {
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false
@@ -635,6 +649,17 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "floating": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 40
+        }
+      },
+      "additionalProperties": false
     },
     "focus": {
       "type": "object",
@@ -715,7 +740,7 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
                   },
                   {
                     "name": "workspace",
@@ -877,6 +902,16 @@
                   {
                     "name": "togglefloating",
                     "summary": "Float the focused window centred at half the output, or tile it again."
+                  },
+                  {
+                    "name": "place",
+                    "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                    "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                  },
+                  {
+                    "name": "focusfloating",
+                    "args": "[toggle|on|off]",
+                    "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
                   },
                   {
                     "name": "fullscreen",
@@ -956,7 +991,7 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
                   },
                   {
                     "name": "workspace",
@@ -1118,6 +1153,16 @@
                   {
                     "name": "togglefloating",
                     "summary": "Float the focused window centred at half the output, or tile it again."
+                  },
+                  {
+                    "name": "place",
+                    "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                    "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                  },
+                  {
+                    "name": "focusfloating",
+                    "args": "[toggle|on|off]",
+                    "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
                   },
                   {
                     "name": "fullscreen",
@@ -1197,7 +1242,7 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
                   },
                   {
                     "name": "workspace",
@@ -1359,6 +1404,16 @@
                   {
                     "name": "togglefloating",
                     "summary": "Float the focused window centred at half the output, or tile it again."
+                  },
+                  {
+                    "name": "place",
+                    "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                    "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                  },
+                  {
+                    "name": "focusfloating",
+                    "args": "[toggle|on|off]",
+                    "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
                   },
                   {
                     "name": "fullscreen",
@@ -2167,7 +2222,7 @@
                 {
                   "name": "move",
                   "args": "<left|right|up|down>",
-                  "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
+                  "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
                 },
                 {
                   "name": "workspace",
@@ -2329,6 +2384,16 @@
                 {
                   "name": "togglefloating",
                   "summary": "Float the focused window centred at half the output, or tile it again."
+                },
+                {
+                  "name": "place",
+                  "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                  "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                },
+                {
+                  "name": "focusfloating",
+                  "args": "[toggle|on|off]",
+                  "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
                 },
                 {
                   "name": "fullscreen",

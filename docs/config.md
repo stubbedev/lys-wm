@@ -492,6 +492,7 @@ drag_preview:
   opacity: 0.25
   blur: false
   snap_distance: 16
+  snap_windows: false
 ```
 
 While a window is dragged with `movewindow`, a translucent rounded rectangle with a
@@ -518,8 +519,21 @@ The rectangle moves on the [`snap` event](#animations) and fades on `fade_snap`.
 | `opacity` | 0.25: of the fill; the border is drawn at full strength |
 | `blur` | `false`: blur what is behind the rectangle with `decoration.blur`'s `size`, `passes` and look |
 | `snap_distance` | 16: logical pixels |
+| `snap_windows` | `false`. On, a dragged floating window also snaps to the other floating windows of its workspace: flush beside one, `gaps.inner` apart, or aligned with its edge, when within `snap_distance`. `place restore` takes a window snapped at an edge back to where the drag began |
 
 It costs nothing outside a drag.
+
+## floating
+
+```yaml
+floating:
+  step: 40
+```
+
+`move <dir>` on a floating window moves it `step` logical pixels, never past the
+usable area; from that edge it crosses to the neighbouring output. `place` puts it
+on a half, quarter or the whole usable area, where a drag to that edge would snap,
+or in the centre, and `place restore` takes it back; see [actions](./actions.md).
 
 ## gaps
 

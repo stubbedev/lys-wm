@@ -113,7 +113,7 @@ func TestClosingReturnsToThePreviousFocus(t *testing.T) {
 	if f, _ := s.Focused(); f != 1 {
 		t.Fatalf("closing 3 focused %d, want 1, which had focus before it", f)
 	}
-	s = ok(t)(s.MoveDirection(Right, CollapseEmptySplits))
+	s = ok(t)(s.MoveDirection(Right, CollapseEmptySplits, DefaultFloatStep))
 	if f, _ := s.Focused(); f != 1 {
 		t.Fatalf("after a move focus is on %d", f)
 	}

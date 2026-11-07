@@ -124,6 +124,7 @@ type State struct {
 	focused    string
 	remembered map[string]WorkspaceID
 	limits     map[WindowID]Limits
+	restore    map[WindowID]restorePoint
 	fake       map[WindowID]struct{}
 	pinned     map[WindowID]struct{}
 	wsRules    []WorkspaceRule
@@ -141,6 +142,7 @@ func (s State) clone() State {
 		focused:    s.focused,
 		remembered: make(map[string]WorkspaceID, len(s.remembered)),
 		limits:     maps.Clone(s.limits),
+		restore:    maps.Clone(s.restore),
 		fake:       maps.Clone(s.fake),
 		pinned:     maps.Clone(s.pinned),
 		wsRules:    s.wsRules,
@@ -457,6 +459,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 		return State{}, err
 	}
 	delete(s.limits, id)
+	delete(s.restore, id)
 	delete(s.fake, id)
 	delete(s.pinned, id)
 	s.vacated(w.ID)

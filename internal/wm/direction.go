@@ -334,9 +334,15 @@ func (s State) FocusDirection(d Direction) (State, error) {
 	return s.FocusOutput(name)
 }
 
-func (s State) MoveDirection(d Direction, policy CollapsePolicy) (State, error) {
+func (s State) MoveDirection(d Direction, policy CollapsePolicy, step int) (State, error) {
 	w := s.activeWorkspace()
-	if w == nil || !w.treeFocused() {
+	if w == nil {
+		return s, nil
+	}
+	if id, ok := w.focused(); ok && w.floatingIndex(id) >= 0 {
+		return s.stepFloating(w, id, d, step)
+	}
+	if !w.treeFocused() {
 		return s, nil
 	}
 	tree, result := w.Tree.MoveFocused(d, policy)
