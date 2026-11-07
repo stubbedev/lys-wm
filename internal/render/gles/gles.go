@@ -184,14 +184,108 @@ type Renderer struct {
 	ringAt       int
 	band         []byte
 	floatTargets bool
+	robust       bool
+	lost         error
+	textures     map[*texture]struct{}
+	framebuffers map[*Framebuffer]struct{}
+	shaders      map[*screenShader]struct{}
 }
 
 func (r *Renderer) enter() error {
-	return r.d.Enter()
+	return r.note(r.d.Enter())
 }
 
 func (r *Renderer) leave(op string) error {
-	return errors.Join(r.gl.Check(op), r.d.Leave())
+	return r.note(errors.Join(r.gl.Check(op), r.d.Leave()))
+}
+
+func (r *Renderer) note(err error) error {
+	if !errors.Is(err, gpu.ErrContextLost) {
+		return err
+	}
+	if r.lost == nil {
+		r.lost = err
+	}
+	return nil
+}
+
+func (r *Renderer) Lost() error {
+	if r.lost != nil || !r.robust {
+		return r.lost
+	}
+	if err := r.enter(); err != nil {
+		return err
+	}
+	r.counts.ResetChecks++
+	status := r.gl.ResetStatus()
+	if err := r.leave("gles: ask for a GPU reset"); err != nil {
+		return err
+	}
+	if status != nil && r.lost == nil {
+		r.lost = fmt.Errorf("gles: %w", status)
+	}
+	return r.lost
+}
+
+func (r *Renderer) LoseDevice() {
+	r.lost = fmt.Errorf("gles: a GPU reset raised by LoseDevice: %w", gpu.ErrContextLost)
+}
+
+func (r *Renderer) Recover() error {
+	if r.pass.active {
+		return errors.New("gles: Recover during a pass")
+	}
+	if err := r.d.Renew(); err != nil {
+		return fmt.Errorf("gles: renew the context lost to a GPU reset: %w", err)
+	}
+	r.lost = nil
+	for _, p := range r.programs() {
+		*p.prog = program{}
+	}
+	r.vbo, r.unpack, r.ringCap, r.ringAt = 0, 0, 0, 0
+	var errs []error
+	for t := range r.textures {
+		if t.imported {
+			errs = append(errs, r.reimport(&t.img, t.dmabuf))
+		}
+	}
+	for f := range r.framebuffers {
+		if f.imported {
+			errs = append(errs, r.reimport(&f.img, f.dmabuf))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("gles: import the dmabufs again after a GPU reset: %w", err)
+	}
+	if err := r.enter(); err != nil {
+		return err
+	}
+	errs = append(errs, r.setup())
+	for t := range r.textures {
+		t.make()
+	}
+	for f := range r.framebuffers {
+		errs = append(errs, f.make())
+	}
+	for s := range r.shaders {
+		errs = append(errs, s.link())
+	}
+	return errors.Join(append(errs, r.leave("gles: rebuild after a GPU reset"))...)
+}
+
+func (r *Renderer) reimport(img **gpu.Image, b gpu.DMABUF) error {
+	var err error
+	if *img != nil {
+		err = (*img).Destroy()
+	}
+	fresh, ierr := r.d.ImportDMABUF(b)
+	if ierr != nil {
+		*img = nil
+		return errors.Join(err, ierr)
+	}
+	*img = fresh
+	r.counts.Imports++
+	return err
 }
 
 func (r *Renderer) flushed() {
@@ -202,7 +296,10 @@ func (r *Renderer) flushed() {
 }
 
 func New(d *gpu.Display) (*Renderer, error) {
-	r := &Renderer{d: d, gl: d.GL(), modifiers: map[fourcc.Format][]gpu.ModifierSupport{}}
+	r := &Renderer{
+		d: d, gl: d.GL(), modifiers: map[fourcc.Format][]gpu.ModifierSupport{},
+		textures: map[*texture]struct{}{}, framebuffers: map[*Framebuffer]struct{}{}, shaders: map[*screenShader]struct{}{},
+	}
 	r.pass.owner = r
 	if err := r.enter(); err != nil {
 		return nil, err
@@ -267,6 +364,7 @@ func (r *Renderer) setup() error {
 	r.async = r.es3 && r.d.Has("EGL_KHR_fence_sync")
 	r.nativeFences = r.d.Has("EGL_ANDROID_native_fence_sync")
 	r.floatTargets = r.es3 && (slices.Contains(exts, "GL_EXT_color_buffer_float") || slices.Contains(exts, "GL_EXT_color_buffer_half_float"))
+	r.robust = r.d.Robust() && (slices.Contains(exts, "GL_KHR_robustness") || slices.Contains(exts, "GL_EXT_robustness"))
 	return nil
 }
 
@@ -313,6 +411,9 @@ func (r *Renderer) DeviceName() string {
 }
 
 func (r *Renderer) Finish() error {
+	if r.lost != nil {
+		return nil
+	}
 	if err := r.enter(); err != nil {
 		return err
 	}
@@ -357,15 +458,51 @@ func uploadOf(f render.Format) pixelUpload {
 }
 
 type texture struct {
-	r      *Renderer
-	id     uint32
-	size   image.Point
-	opaque bool
-	target uint32
-	img    *gpu.Image
-	filter int32
-	upload pixelUpload
-	drawn  *Framebuffer
+	r        *Renderer
+	id       uint32
+	size     image.Point
+	opaque   bool
+	target   uint32
+	img      *gpu.Image
+	dmabuf   gpu.DMABUF
+	imported bool
+	filter   int32
+	upload   pixelUpload
+	drawn    *Framebuffer
+}
+
+func (t *texture) make() {
+	gl := t.r.gl
+	gl.GenTextures(1, &t.id)
+	gl.BindTexture(t.target, t.id)
+	gl.TexParameteri(t.target, gpu.TextureWrapS, gpu.ClampToEdge)
+	gl.TexParameteri(t.target, gpu.TextureWrapT, gpu.ClampToEdge)
+	t.filter = 0
+	if t.imported {
+		gl.EGLImageTargetTexture2D(t.target, t.img)
+		return
+	}
+	if t.upload.swapRB {
+		gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleR, gpu.Blue)
+		gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleB, gpu.Red)
+	}
+	u := t.upload
+	gl.TexImage2D(gpu.Texture2D, u.internal, int32(t.size.X), int32(t.size.Y), u.format, u.typ, nil) //nolint:gosec // texture sizes fit GLsizei
+}
+
+func (r *Renderer) build(t *texture, op string) error {
+	r.textures[t] = struct{}{}
+	if r.lost != nil {
+		return nil
+	}
+	if err := r.enter(); err != nil {
+		return errors.Join(err, t.Destroy())
+	}
+	t.make()
+	if err := r.leave(op); err != nil {
+		return errors.Join(err, t.Destroy())
+	}
+	return nil
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -395,22 +532,9 @@ func (r *Renderer) newBlank(format render.Format, size image.Point) (render.Text
 	if !slices.Contains(r.Formats(), format) {
 		return nil, fmt.Errorf("gles: unsupported texture format %d", format)
 	}
-	if err := r.enter(); err != nil {
-		return nil, err
-	}
 	t := &texture{r: r, size: size, opaque: format.Opaque(), target: gpu.Texture2D, upload: uploadOf(format)}
-	r.gl.GenTextures(1, &t.id)
-	r.gl.BindTexture(gpu.Texture2D, t.id)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
-	if t.upload.swapRB {
-		r.gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleR, gpu.Blue)
-		r.gl.TexParameteri(gpu.Texture2D, gpu.TextureSwizzleB, gpu.Red)
-	}
-	u := t.upload
-	r.gl.TexImage2D(gpu.Texture2D, u.internal, int32(size.X), int32(size.Y), u.format, u.typ, nil) //nolint:gosec // texture sizes fit GLsizei
-	if err := r.leave("gles: new texture"); err != nil {
-		return nil, errors.Join(err, t.Destroy())
+	if err := r.build(t, "gles: new texture"); err != nil {
+		return nil, err
 	}
 	return t, nil
 }
@@ -486,6 +610,9 @@ func (r *Renderer) RenderNode() (string, error) {
 }
 
 func (r *Renderer) SyncFile() (int, error) {
+	if r.lost != nil {
+		return -1, nil
+	}
 	if err := r.enter(); err != nil {
 		return -1, err
 	}
@@ -503,6 +630,9 @@ func (r *Renderer) SyncFile() (int, error) {
 }
 
 func (r *Renderer) WaitFence(fd int) error {
+	if r.lost != nil {
+		return unix.Close(fd)
+	}
 	if err := r.enter(); err != nil {
 		return errors.Join(err, unix.Close(fd))
 	}
@@ -548,41 +678,38 @@ func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
 	if external && r.external.id == 0 {
 		return nil, fmt.Errorf("%w: %s samples format %v with modifier %v only through GL_OES_EGL_image_external", gpu.ErrUnsupported, r.name, b.Format, b.Modifier)
 	}
-	img, err := r.d.ImportDMABUF(b)
-	if err != nil {
-		return nil, err
-	}
-	if err := r.enter(); err != nil {
-		return nil, errors.Join(err, img.Destroy())
-	}
-	t := &texture{r: r, size: b.Size, target: gpu.Texture2D, img: img}
+	t := &texture{r: r, size: b.Size, target: gpu.Texture2D, dmabuf: b, imported: true}
 	if external {
 		t.target = gpu.TextureExternalOES
 	}
-	r.gl.GenTextures(1, &t.id)
-	r.gl.BindTexture(t.target, t.id)
-	r.gl.TexParameteri(t.target, gpu.TextureWrapS, gpu.ClampToEdge)
-	r.gl.TexParameteri(t.target, gpu.TextureWrapT, gpu.ClampToEdge)
-	r.gl.EGLImageTargetTexture2D(t.target, img)
-	if err := r.leave("gles: import a dmabuf texture"); err != nil {
-		return nil, errors.Join(err, t.Destroy())
+	if r.lost == nil {
+		if t.img, err = r.d.ImportDMABUF(b); err != nil {
+			return nil, err
+		}
+		r.counts.Imports++
+	}
+	if err := r.build(t, "gles: import a dmabuf texture"); err != nil {
+		return nil, err
 	}
 	return t, nil
 }
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) (err error) {
 	t.r.counts.Uploads++
-	if t.id == 0 {
-		return errors.New("gles: update of a destroyed texture")
-	}
-	if t.img != nil {
-		return errors.New("gles: a dmabuf texture is updated by its client, not uploaded")
-	}
 	if t.drawn != nil {
 		return errors.New("gles: a target's texture is drawn by a pass, not uploaded")
 	}
+	if _, live := t.r.textures[t]; !live {
+		return errors.New("gles: update of a destroyed texture")
+	}
+	if t.imported {
+		return errors.New("gles: a dmabuf texture is updated by its client, not uploaded")
+	}
 	if err := render.CheckUpdate(t.size, dst, stride, len(data)); err != nil {
 		return err
+	}
+	if t.r.lost != nil {
+		return nil
 	}
 	if err := t.r.enter(); err != nil {
 		return err
@@ -593,13 +720,16 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) (err erro
 }
 
 func (t *texture) Destroy() error {
-	if t.id == 0 || t.drawn != nil {
+	if _, live := t.r.textures[t]; !live || t.drawn != nil {
 		return nil
 	}
-	err := t.r.enter()
-	if err == nil {
-		t.r.gl.DeleteTextures(1, &t.id)
-		err = t.r.leave("gles: destroy texture")
+	delete(t.r.textures, t)
+	var err error
+	if t.r.lost == nil && t.id != 0 {
+		if err = t.r.enter(); err == nil {
+			t.r.gl.DeleteTextures(1, &t.id)
+			err = t.r.leave("gles: destroy texture")
+		}
 	}
 	t.id = 0
 	if t.img != nil {
@@ -610,32 +740,83 @@ func (t *texture) Destroy() error {
 }
 
 type Framebuffer struct {
-	r       *Renderer
-	size    image.Point
-	fbo     uint32
-	tex     uint32
-	rb      uint32
-	pbo     uint32
-	reading bool
-	img     *gpu.Image
-	float   bool
+	r        *Renderer
+	size     image.Point
+	fbo      uint32
+	tex      uint32
+	rb       uint32
+	pbo      uint32
+	reading  bool
+	img      *gpu.Image
+	dmabuf   gpu.DMABUF
+	imported bool
+	float    bool
+	texture  *texture
+}
+
+func (f *Framebuffer) make() error {
+	gl := f.r.gl
+	f.pbo = 0
+	if f.imported {
+		gl.GenRenderbuffers(1, &f.rb)
+		gl.BindRenderbuffer(gpu.Renderbuffer, f.rb)
+		gl.EGLImageTargetRenderbuffer(f.img)
+		gl.GenFramebuffers(1, &f.fbo)
+		gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
+		gl.FramebufferRenderbuffer(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Renderbuffer, f.rb)
+	} else {
+		internal, typ := int32(gpu.RGBA), uint32(gpu.UnsignedByte)
+		if f.float {
+			internal, typ = gpu.RGBA16F, gpu.HalfFloat
+		}
+		gl.GenTextures(1, &f.tex)
+		gl.BindTexture(gpu.Texture2D, f.tex)
+		gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
+		gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
+		gl.TexImage2D(gpu.Texture2D, internal, int32(f.size.X), int32(f.size.Y), gpu.RGBA, typ, nil) //nolint:gosec // framebuffer sizes fit GLsizei
+		gl.GenFramebuffers(1, &f.fbo)
+		gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
+		gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, f.tex, 0)
+		if f.texture != nil {
+			f.texture.id, f.texture.filter = f.tex, 0
+		}
+	}
+	status := gl.CheckFramebufferStatus(gpu.Framebuffer)
+	if status == gpu.FramebufferComplete && f.float {
+		gl.ClearColor(0, 0, 0, 0)
+		gl.Clear(gpu.ColorBufferBit)
+	}
+	gl.BindFramebuffer(gpu.Framebuffer, 0)
+	if status != gpu.FramebufferComplete {
+		return fmt.Errorf("gles: %v framebuffer is incomplete: %#x", f.size, status)
+	}
+	return nil
+}
+
+func (r *Renderer) buildFramebuffer(f *Framebuffer) (*Framebuffer, error) {
+	r.framebuffers[f] = struct{}{}
+	if r.lost != nil {
+		return f, nil
+	}
+	if err := r.enter(); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	if err := errors.Join(f.make(), r.leave("gles: make a framebuffer")); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	return f, nil
 }
 
 func (r *Renderer) NewFramebuffer(size image.Point) (*Framebuffer, error) {
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("gles: cannot make a %v framebuffer", size)
 	}
-	if err := r.enter(); err != nil {
-		return nil, err
-	}
-	f := &Framebuffer{r: r, size: size}
-	r.gl.GenTextures(1, &f.tex)
-	r.gl.BindTexture(gpu.Texture2D, f.tex)
-	r.gl.TexImage2D(gpu.Texture2D, gpu.RGBA, int32(size.X), int32(size.Y), gpu.RGBA, gpu.UnsignedByte, nil) //nolint:gosec // framebuffer sizes fit GLsizei
-	r.gl.GenFramebuffers(1, &f.fbo)
-	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
-	r.gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, f.tex, 0)
-	return f, f.complete()
+	return r.buildFramebuffer(&Framebuffer{r: r, size: size})
+}
+
+func (r *Renderer) textureTarget(f *Framebuffer) *TextureTarget {
+	f.texture = &texture{r: r, id: f.tex, size: f.size, target: gpu.Texture2D, drawn: f}
+	return &TextureTarget{Framebuffer: f, tex: f.texture}
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
@@ -651,32 +832,11 @@ func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, err
 	case size.X <= 0 || size.Y <= 0:
 		return nil, fmt.Errorf("gles: cannot make a %v working target", size)
 	}
-	if err := r.enter(); err != nil {
+	f, err := r.buildFramebuffer(&Framebuffer{r: r, size: size, float: true})
+	if err != nil {
 		return nil, err
 	}
-	f := &Framebuffer{r: r, size: size, float: true}
-	r.gl.GenTextures(1, &f.tex)
-	r.gl.BindTexture(gpu.Texture2D, f.tex)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
-	r.gl.TexImage2D(gpu.Texture2D, gpu.RGBA16F, int32(size.X), int32(size.Y), gpu.RGBA, gpu.HalfFloat, nil) //nolint:gosec // framebuffer sizes fit GLsizei
-	r.gl.GenFramebuffers(1, &f.fbo)
-	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
-	r.gl.FramebufferTexture2D(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Texture2D, f.tex, 0)
-	if err := f.complete(); err != nil {
-		return nil, err
-	}
-	if err := r.enter(); err != nil {
-		return nil, errors.Join(err, f.Destroy())
-	}
-	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
-	r.gl.ClearColor(0, 0, 0, 0)
-	r.gl.Clear(gpu.ColorBufferBit)
-	r.gl.BindFramebuffer(gpu.Framebuffer, 0)
-	if err := r.leave("gles: clear a working target"); err != nil {
-		return nil, errors.Join(err, f.Destroy())
-	}
-	return &TextureTarget{Framebuffer: f, tex: &texture{r: r, id: f.tex, size: size, target: gpu.Texture2D, drawn: f}}, nil
+	return r.textureTarget(f), nil
 }
 
 type TextureTarget struct {
@@ -699,16 +859,7 @@ func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, err
 	if err != nil {
 		return nil, err
 	}
-	if err := r.enter(); err != nil {
-		return nil, errors.Join(err, f.Destroy())
-	}
-	r.gl.BindTexture(gpu.Texture2D, f.tex)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapS, gpu.ClampToEdge)
-	r.gl.TexParameteri(gpu.Texture2D, gpu.TextureWrapT, gpu.ClampToEdge)
-	if err := r.leave("gles: a texture target"); err != nil {
-		return nil, errors.Join(err, f.Destroy())
-	}
-	return &TextureTarget{Framebuffer: f, tex: &texture{r: r, id: f.tex, size: size, target: gpu.Texture2D, drawn: f}}, nil
+	return r.textureTarget(f), nil
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
@@ -730,34 +881,16 @@ func (r *Renderer) RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier,
 }
 
 func (r *Renderer) ImportFramebuffer(b gpu.DMABUF) (*Framebuffer, error) {
-	img, err := r.d.ImportDMABUF(b)
-	if err != nil {
-		return nil, err
+	f := &Framebuffer{r: r, size: b.Size, dmabuf: b, imported: true}
+	if r.lost == nil {
+		img, err := r.d.ImportDMABUF(b)
+		if err != nil {
+			return nil, err
+		}
+		f.img = img
+		r.counts.Imports++
 	}
-	if err := r.enter(); err != nil {
-		return nil, errors.Join(err, img.Destroy())
-	}
-	f := &Framebuffer{r: r, size: b.Size, img: img}
-	r.gl.GenRenderbuffers(1, &f.rb)
-	r.gl.BindRenderbuffer(gpu.Renderbuffer, f.rb)
-	r.gl.EGLImageTargetRenderbuffer(img)
-	r.gl.GenFramebuffers(1, &f.fbo)
-	r.gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
-	r.gl.FramebufferRenderbuffer(gpu.Framebuffer, gpu.ColorAttachment0, gpu.Renderbuffer, f.rb)
-	return f, f.complete()
-}
-
-func (f *Framebuffer) complete() error {
-	status := f.r.gl.CheckFramebufferStatus(gpu.Framebuffer)
-	f.r.gl.BindFramebuffer(gpu.Framebuffer, 0)
-	err := f.r.leave("gles: make a framebuffer")
-	if status != gpu.FramebufferComplete {
-		err = errors.Join(fmt.Errorf("gles: %v framebuffer is incomplete: %#x", f.size, status), err)
-	}
-	if err != nil {
-		return errors.Join(err, f.Destroy())
-	}
-	return nil
+	return r.buildFramebuffer(f)
 }
 
 func (f *Framebuffer) Size() image.Point {
@@ -775,6 +908,9 @@ func (f *Framebuffer) ReadRows(pix []byte, stride int, rows render.Rows) error {
 	if err := render.CheckRows(f.size, stride, len(pix), rows); err != nil {
 		return err
 	}
+	if f.r.lost != nil {
+		return nil
+	}
 	if err := f.r.enter(); err != nil {
 		return err
 	}
@@ -789,19 +925,23 @@ func (f *Framebuffer) ReadRows(pix []byte, stride int, rows render.Rows) error {
 }
 
 func (f *Framebuffer) Destroy() error {
-	if f.fbo == 0 && f.tex == 0 && f.rb == 0 && f.pbo == 0 && f.img == nil {
+	if _, live := f.r.framebuffers[f]; !live {
 		return nil
 	}
-	if err := f.r.enter(); err != nil {
-		return err
+	delete(f.r.framebuffers, f)
+	var err error
+	if f.r.lost == nil {
+		if err = f.r.enter(); err != nil {
+			return err
+		}
+		gl := f.r.gl
+		gl.DeleteFramebuffers(1, &f.fbo)
+		gl.DeleteTextures(1, &f.tex)
+		gl.DeleteRenderbuffers(1, &f.rb)
+		gl.DeleteBuffers(1, &f.pbo)
+		err = f.r.leave("gles: destroy a framebuffer")
 	}
-	gl := f.r.gl
-	gl.DeleteFramebuffers(1, &f.fbo)
-	gl.DeleteTextures(1, &f.tex)
-	gl.DeleteRenderbuffers(1, &f.rb)
-	gl.DeleteBuffers(1, &f.pbo)
 	f.fbo, f.tex, f.rb, f.pbo = 0, 0, 0, 0
-	err := f.r.leave("gles: destroy a framebuffer")
 	if f.img != nil {
 		err = errors.Join(err, f.img.Destroy())
 		f.img = nil
@@ -830,10 +970,16 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	switch {
 	case !ok:
 		return nil, fmt.Errorf("gles: cannot render into %T", target)
-	case fb.r != r || fb.fbo == 0:
-		return nil, errors.New("gles: the framebuffer belongs to another renderer or was destroyed")
+	case fb.r != r:
+		return nil, errors.New("gles: the framebuffer belongs to another renderer")
 	case r.pass.active:
 		return nil, errors.New("gles: Begin while a pass is active")
+	}
+	if _, live := r.framebuffers[fb]; !live {
+		return nil, errors.New("gles: Begin on a destroyed framebuffer")
+	}
+	if r.lost != nil {
+		return render.LostPass{}, nil
 	}
 	if err := r.enter(); err != nil {
 		return nil, err

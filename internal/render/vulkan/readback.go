@@ -15,11 +15,7 @@ func (r *Renderer) AsyncReads() bool {
 }
 
 func (r *Renderer) NewAsyncTarget(size image.Point) (render.AsyncReadTarget, error) {
-	t, err := r.d.NewOffscreen(size.X, size.Y)
-	if err != nil {
-		return nil, err
-	}
-	return &Target{r: r, t: t}, nil
+	return r.buildTarget(&Target{r: r, kind: offscreenTarget, size: size})
 }
 
 type pendingRead struct {
@@ -32,6 +28,9 @@ type pendingRead struct {
 func (t *Target) ReadAsync() (render.PendingRead, error) {
 	if t.reading != nil {
 		return nil, fmt.Errorf("vulkan: a read of the %v target is still pending", t.Size())
+	}
+	if t.r.lost != nil {
+		return render.NewLostRead(t.size), nil
 	}
 	if t.back == nil {
 		size := t.Size()

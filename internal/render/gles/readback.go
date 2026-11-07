@@ -48,6 +48,8 @@ func (f *Framebuffer) ReadAsync() (render.PendingRead, error) {
 		return nil, fmt.Errorf("%w: %s reads framebuffers back only synchronously", gpu.ErrUnsupported, r.name)
 	case f.reading:
 		return nil, fmt.Errorf("gles: a read of the %v framebuffer is still pending", f.size)
+	case r.lost != nil:
+		return render.NewLostRead(f.size), nil
 	}
 	if err := r.enter(); err != nil {
 		return nil, err

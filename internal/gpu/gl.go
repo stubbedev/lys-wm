@@ -75,12 +75,16 @@ const (
 	glOutOfMemory                 = 0x0505
 	glInvalidFramebufferOperation = 0x0506
 	glContextLost                 = 0x0507
+	glGuiltyContextReset          = 0x8253
+	glInnocentContextReset        = 0x8254
+	glUnknownContextReset         = 0x8255
 )
 
 var glErrorNames = map[uint32]string{
 	glInvalidEnum: "GL_INVALID_ENUM", glInvalidValue: "GL_INVALID_VALUE", glInvalidOperation: "GL_INVALID_OPERATION",
 	glOutOfMemory: "GL_OUT_OF_MEMORY", glInvalidFramebufferOperation: "GL_INVALID_FRAMEBUFFER_OPERATION",
-	glContextLost: "GL_CONTEXT_LOST",
+	glContextLost: "GL_CONTEXT_LOST", glGuiltyContextReset: "GL_GUILTY_CONTEXT_RESET",
+	glInnocentContextReset: "GL_INNOCENT_CONTEXT_RESET", glUnknownContextReset: "GL_UNKNOWN_CONTEXT_RESET",
 }
 
 type GLError struct {
@@ -89,7 +93,14 @@ type GLError struct {
 }
 
 func (e *GLError) Is(target error) bool {
-	return target == ErrContextLost && e.Code == glContextLost
+	if target != ErrContextLost {
+		return false
+	}
+	switch e.Code {
+	case glContextLost, glGuiltyContextReset, glInnocentContextReset, glUnknownContextReset:
+		return true
+	}
+	return false
 }
 
 func (e *GLError) Error() string {
@@ -166,6 +177,7 @@ type GL struct {
 	mapBufferRange           uintptr
 	unmapBuffer              uintptr
 	pFlush                   uintptr
+	pGetGraphicsResetStatus  uintptr
 	Finish                   func()
 	imageTargetTexture2D     func(target uint32, image uintptr)
 	imageTargetRenderbuffer  func(target uint32, image uintptr)
@@ -243,7 +255,16 @@ func (gl *GL) load(l *Library, path string) error {
 		l.proc(symbol{&gl.imageTargetRenderbuffer, "glEGLImageTargetRenderbufferStorageOES"}),
 		l.proc(symbol{&gl.mapBufferRange, "glMapBufferRange"}),
 		l.proc(symbol{&gl.unmapBuffer, "glUnmapBuffer"}),
+		l.proc(symbol{&gl.pGetGraphicsResetStatus, "glGetGraphicsResetStatusKHR"}),
 	)
+}
+
+func (gl *GL) ResetStatus() error {
+	r, _, _ := purego.SyscallN(gl.pGetGraphicsResetStatus, gl.args[:0]...)
+	if code := uint32(r); code != NoError { //nolint:gosec // a GLenum fits uint32
+		return &GLError{Op: "glGetGraphicsResetStatus", Code: code}
+	}
+	return nil
 }
 
 const maxErrorFlags = 16

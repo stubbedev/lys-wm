@@ -10,8 +10,10 @@ import (
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
@@ -305,4 +307,40 @@ type failingOnAllocate struct{ t *testing.T }
 func (f failingOnAllocate) Allocate(image.Point, fourcc.Format, []fourcc.Modifier, gpu.Usage) (*gpu.Buffer, error) {
 	f.t.Error("a software stack tried to allocate on the render node, which makes Mesa log the refusal")
 	return nil, errors.New("gbm refuses")
+}
+
+func TestASecondaryGPUResetRebuildsItsRendererAndAFourthEndsTheSession(t *testing.T) {
+	size := image.Pt(16, 16)
+	world := &blitWorld{memory: map[int]*soft.Buffer{}}
+	a := &blitAllocator{primary: fakeStack(world, "primary", true), local: fakeStack(world, "local", true)}
+	s, err := a.share(size, scanoutFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.release(); err != nil {
+			t.Error(err)
+		}
+	})
+	dst := soft.NewBuffer(size.X, size.Y)
+	if err := a.blit(s, dst, size); err != nil {
+		t.Fatal(err)
+	}
+	for i := range lgpu.LossLimit {
+		a.local.gpu.LoseDevice()
+		err := a.blit(s, dst, size)
+		if !backend.GPULost(err) || backend.Fatal(err) || !strings.Contains(err.Error(), "renderer rebuilt") {
+			t.Fatalf("loss %d: the blit gave %v, want a recovered reset", i, err)
+		}
+		if err := a.local.gpu.Lost(); err != nil {
+			t.Fatalf("loss %d: the local renderer is still lost: %v", i, err)
+		}
+		if err := a.blit(s, dst, size); err != nil {
+			t.Fatalf("loss %d: the blit after the reset: %v", i, err)
+		}
+	}
+	a.local.gpu.LoseDevice()
+	if err := a.blit(s, dst, size); !backend.Fatal(err) || strings.Count(err.Error(), "raised by LoseDevice") != lgpu.LossLimit+1 {
+		t.Fatalf("the fourth loss gave %v, want a fatal error naming all four", err)
+	}
 }

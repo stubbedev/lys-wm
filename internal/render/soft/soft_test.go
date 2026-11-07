@@ -500,3 +500,7 @@ func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
 func TestReadRowsWritesOnlyThoseRows(t *testing.T) {
 	rendertest.ReadRowsWritesOnlyThoseRows(t, soft.New(), soft.NewBuffer(5, 3))
 }
+
+func TestTheFakeDeviceLosesItsTexturesAndRecovers(t *testing.T) {
+	rendertest.SurvivesALostDevice(t, soft.New())
+}

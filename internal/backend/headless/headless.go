@@ -302,6 +302,7 @@ type Output struct {
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
+	loseInFrame    bool
 	inherited      bool
 	takeover       *soft.Buffer
 }
@@ -504,6 +505,10 @@ func (o *Output) BeginFrame() (backend.Frame, error) {
 		return backend.Frame{}, backend.Broken("headless: %s already has a frame in progress", o.name)
 	}
 	o.inFrame = true
+	if o.loseInFrame {
+		o.loseInFrame = false
+		o.backend.renderer.LoseDevice()
+	}
 	age := 0
 	if o.drawn {
 		age = 1
@@ -700,6 +705,10 @@ func (o *Output) ContentType() wm.ContentType {
 
 func (o *Output) FailPresents(err error) {
 	o.failPresents = err
+}
+
+func (o *Output) LoseDeviceInFrame() {
+	o.loseInFrame = true
 }
 
 func (o *Output) Presents() uint64 {

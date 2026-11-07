@@ -267,3 +267,7 @@ func TestTargetsCountAndAFrameOfPassesIsOneSubmit(t *testing.T) {
 func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
 	rendertest.KawaseOverwrites(t, testenv.Vulkan(t))
 }
+
+func TestALostDeviceIsReplacedAndEveryObjectRemade(t *testing.T) {
+	rendertest.SurvivesALostDevice(t, testenv.Vulkan(t))
+}

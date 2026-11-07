@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/drm"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-ui/icontheme"
@@ -328,6 +329,9 @@ type Compositor struct {
 	traced          tally
 	copiedBytes     atomic.Uint64
 	tracedCounts    render.Counts
+	gpuLosses       lgpu.Losses
+	gpuResets       uint64
+	reuploads       uint64
 	shmSyncReads    uint64
 	switches        map[*output.Output]*workspaceSwitch
 	drawnSwitch     *workspaceSwitch

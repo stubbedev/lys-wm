@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/fourcc"
 	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
@@ -35,18 +36,105 @@ var formats = []struct {
 }
 
 type Renderer struct {
-	d      *lgpu.Device
-	node   uint64
-	pass   *pass
-	idle   pass
-	counts render.Counts
+	d        *lgpu.Device
+	node     uint64
+	pass     *pass
+	idle     pass
+	counts   render.Counts
+	waits    uint64
+	submits  uint64
+	lost     error
+	textures map[*texture]struct{}
+	targets  map[*Target]struct{}
+	linears  map[*linearCopy]struct{}
+	shaders  map[*screenShader]struct{}
+}
+
+func newRenderer(d *lgpu.Device, node uint64) *Renderer {
+	return &Renderer{
+		d: d, node: node,
+		textures: map[*texture]struct{}{}, targets: map[*Target]struct{}{}, linears: map[*linearCopy]struct{}{}, shaders: map[*screenShader]struct{}{},
+	}
 }
 
 func (r *Renderer) Counts() render.Counts {
 	counts := r.counts
-	counts.GPUWaits = r.d.BlockingWaits()
-	counts.Submits = r.d.Submissions()
+	counts.GPUWaits = r.waits + r.d.BlockingWaits()
+	counts.Submits = r.submits + r.d.Submissions()
 	return counts
+}
+
+func (r *Renderer) note(err error) error {
+	if !errors.Is(err, lgpu.ErrDeviceLost) {
+		return err
+	}
+	if r.lost == nil {
+		r.lost = err
+	}
+	return nil
+}
+
+func (r *Renderer) Lost() error {
+	return r.lost
+}
+
+func (r *Renderer) LoseDevice() {
+	r.lost = fmt.Errorf("vulkan: a device loss raised by LoseDevice: %w", lgpu.ErrDeviceLost)
+}
+
+func (r *Renderer) open() (*lgpu.Device, error) {
+	if r.node == 0 {
+		return lgpu.Open()
+	}
+	return lgpu.OpenNode(r.node)
+}
+
+func (r *Renderer) Recover() error {
+	if r.pass != nil {
+		return errors.New("vulkan: Recover during a pass")
+	}
+	for t := range r.targets {
+		if err := t.keepDmabuf(); err != nil {
+			return err
+		}
+		t.dropReads()
+	}
+	for l := range r.linears {
+		if err := l.keepDmabuf(); err != nil {
+			return err
+		}
+		l.dst.Close()
+	}
+	for s := range r.shaders {
+		if s.s == nil {
+			continue
+		}
+		if err := s.s.Close(); err != nil {
+			return fmt.Errorf("vulkan: close a screen shader of the lost device: %w", err)
+		}
+	}
+	r.waits += r.d.BlockingWaits()
+	r.submits += r.d.Submissions()
+	r.d.Close()
+	d, err := r.open()
+	if err != nil {
+		return fmt.Errorf("vulkan: a new device after a device loss: %w", err)
+	}
+	r.d, r.lost = d, nil
+	var errs []error
+	for t := range r.textures {
+		errs = append(errs, t.make())
+	}
+	for t := range r.targets {
+		errs = append(errs, t.make())
+	}
+	for l := range r.linears {
+		errs = append(errs, l.make())
+	}
+	for s := range r.shaders {
+		errs = append(errs, s.make())
+	}
+	return errors.Join(errs...)
 }
 
 func Open(node uint64) (*Renderer, error) {
@@ -54,7 +142,7 @@ func Open(node uint64) (*Renderer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vulkan: %w", err)
 	}
-	return &Renderer{d: d, node: node}, nil
+	return newRenderer(d, node), nil
 }
 
 func OpenDefault() (*Renderer, error) {
@@ -72,7 +160,7 @@ func OpenDefault() (*Renderer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vulkan: %w", err)
 	}
-	return &Renderer{d: d}, nil
+	return newRenderer(d, 0), nil
 }
 
 func OpenRenderNode(path string) (*Renderer, error) {
@@ -87,11 +175,24 @@ func (r *Renderer) Device() *lgpu.Device {
 	return r.d
 }
 
+func (r *Renderer) CopyToLinear(dst *lgpu.Linear, src *lgpu.Target, rects []image.Rectangle) error {
+	if r.lost != nil {
+		return nil
+	}
+	return r.note(r.d.CopyToLinear(dst, src, rects))
+}
+
 func (r *Renderer) DeviceName() string {
 	return r.d.Name()
 }
 
 func (r *Renderer) Close() error {
+	for t := range r.targets {
+		t.closeDmabuf()
+	}
+	for l := range r.linears {
+		l.closeDmabuf()
+	}
 	r.d.Close()
 	return nil
 }
@@ -116,9 +217,37 @@ func fourccOf(f render.Format) (fourcc.Format, error) {
 }
 
 type texture struct {
-	r       *Renderer
-	t       *lgpu.Texture
-	working bool
+	r        *Renderer
+	t        *lgpu.Texture
+	working  bool
+	format   fourcc.Format
+	size     image.Point
+	dmabuf   gpu.DMABUF
+	imported bool
+}
+
+func (t *texture) make() error {
+	r := t.r
+	var err error
+	if t.imported {
+		t.t, err = r.d.ImportTextureYCbCr(t.dmabuf.Dmabuf(), ycbcrOf(t.dmabuf.YUV))
+		r.counts.Imports++
+	} else {
+		t.t, err = r.d.NewTexture(t.format, t.size.X, t.size.Y)
+	}
+	return r.note(err)
+}
+
+func (r *Renderer) build(t *texture) (*texture, error) {
+	if r.lost != nil {
+		r.textures[t] = struct{}{}
+		return t, nil
+	}
+	if err := t.make(); err != nil {
+		return nil, err
+	}
+	r.textures[t] = struct{}{}
+	return t, nil
 }
 
 func (t *texture) Working() bool {
@@ -126,7 +255,7 @@ func (t *texture) Working() bool {
 }
 
 func (t *texture) Size() image.Point {
-	return t.t.Size()
+	return t.size
 }
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
@@ -134,11 +263,21 @@ func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	if err := render.CheckUpdate(t.Size(), dst, stride, len(data)); err != nil {
 		return err
 	}
-	return t.t.Update(dst, stride, data)
+	return t.update(dst, stride, data)
+}
+
+func (t *texture) update(dst image.Rectangle, stride int, data []byte) error {
+	if t.r.lost != nil {
+		return nil
+	}
+	return t.r.note(t.t.Update(dst, stride, data))
 }
 
 func (t *texture) Destroy() error {
-	t.t.Close()
+	delete(t.r.textures, t)
+	if t.t != nil {
+		t.t.Close()
+	}
 	return nil
 }
 
@@ -147,11 +286,7 @@ func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (rend
 	if err != nil {
 		return nil, err
 	}
-	t, err := r.d.NewTexture(f, size.X, size.Y)
-	if err != nil {
-		return nil, err
-	}
-	return &texture{r: r, t: t}, nil
+	return r.build(&texture{r: r, format: f, size: size})
 }
 
 func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int, data []byte) (render.Texture, error) {
@@ -163,33 +298,125 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := render.CheckPixels(size, stride, len(data)); err != nil {
 		return nil, err
 	}
-	t, err := r.d.NewTexture(f, size.X, size.Y)
+	tex, err := r.build(&texture{r: r, format: f, size: size})
 	if err != nil {
 		return nil, err
 	}
-	tex := &texture{r: r, t: t}
-	uploaded := false
-	defer func() {
-		if !uploaded {
-			_ = tex.Destroy()
-		}
-	}()
-	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
-		return nil, err
+	if err := tex.update(image.Rectangle{Max: size}, stride, data); err != nil {
+		return nil, errors.Join(err, tex.Destroy())
 	}
-	uploaded = true
 	return tex, nil
 }
+
+type targetKind uint8
+
+const (
+	offscreenTarget targetKind = iota
+	floatTarget
+	importedTarget
+	exportedTarget
+)
 
 type Target struct {
 	r       *Renderer
 	t       *lgpu.Target
 	back    *lgpu.Readback
 	reading *pendingRead
+	kind    targetKind
+	size    image.Point
+	dmabuf  gpu.DMABUF
+	owned   bool
+	tex     *texture
+}
+
+func (t *Target) make() error {
+	r := t.r
+	var err error
+	switch t.kind {
+	case offscreenTarget:
+		t.t, err = r.d.NewOffscreen(t.size.X, t.size.Y)
+	case floatTarget:
+		t.t, err = r.d.NewOffscreenFloat(t.size.X, t.size.Y)
+	case importedTarget, exportedTarget:
+		t.t, err = r.d.ImportTarget(t.dmabuf.Dmabuf())
+		r.counts.Imports++
+	}
+	if err != nil {
+		return r.note(err)
+	}
+	if t.tex == nil {
+		return nil
+	}
+	if t.tex.t, err = t.t.Texture(); err != nil {
+		t.t.Close()
+		return r.note(err)
+	}
+	return nil
+}
+
+func (t *Target) keepDmabuf() error {
+	if t.kind != exportedTarget || t.owned || t.t == nil {
+		return nil
+	}
+	d, err := dupDmabuf(t.t.Dmabuf())
+	if err != nil {
+		return fmt.Errorf("vulkan: keep the %v exported target's dmabuf for the next device: %w", t.size, err)
+	}
+	t.dmabuf, t.owned = d, true
+	return nil
+}
+
+func (t *Target) closeDmabuf() {
+	if t.owned {
+		closePlanes(t.dmabuf)
+		t.owned = false
+	}
+}
+
+func (t *Target) dropReads() {
+	if t.reading != nil {
+		t.reading.t = nil
+		t.reading = nil
+	}
+	if t.back != nil {
+		t.back.Close()
+		t.back = nil
+	}
+}
+
+func dupDmabuf(b dmabuf.Buffer) (gpu.DMABUF, error) {
+	d := gpu.FromDmabuf(b)
+	for i := range d.Planes {
+		fd, err := unix.FcntlInt(uintptr(d.Planes[i].FD), unix.F_DUPFD_CLOEXEC, 0)
+		if err != nil {
+			closePlanes(gpu.DMABUF{Planes: d.Planes[:i]})
+			return gpu.DMABUF{}, err
+		}
+		d.Planes[i].FD = fd
+	}
+	return d, nil
+}
+
+func closePlanes(d gpu.DMABUF) {
+	for _, p := range d.Planes {
+		_ = unix.Close(p.FD)
+	}
+}
+
+func (r *Renderer) buildTarget(t *Target) (*Target, error) {
+	if r.lost != nil {
+		r.targets[t] = struct{}{}
+		return t, nil
+	}
+	if err := t.make(); err != nil {
+		return nil, err
+	}
+	r.targets[t] = struct{}{}
+	return t, nil
 }
 
 func (t *Target) Size() image.Point {
-	return t.t.Size()
+	return t.size
 }
 
 func (t *Target) Read(pix []byte, stride int) error {
@@ -201,9 +428,12 @@ func (t *Target) ReadRows(pix []byte, stride int, rows render.Rows) error {
 	if err := render.CheckRows(size, stride, len(pix), rows); err != nil {
 		return err
 	}
+	if t.r.lost != nil {
+		return nil
+	}
 	img, err := t.t.ReadRect(image.Rect(0, rows.From, size.X, rows.To))
 	if err != nil {
-		return err
+		return t.r.note(err)
 	}
 	for y := rows.From; y < rows.To; y++ {
 		src, dst := img.Pix[(y-rows.From)*img.Stride:], pix[y*stride:]
@@ -224,17 +454,17 @@ func (t *Target) Destroy() error {
 		t.back.Close()
 	}
 	t.back = nil
-	t.t.Close()
+	delete(t.r.targets, t)
+	if t.t != nil {
+		t.t.Close()
+	}
+	t.closeDmabuf()
 	return nil
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
 	r.counts.Targets++
-	t, err := r.d.NewOffscreen(size.X, size.Y)
-	if err != nil {
-		return nil, err
-	}
-	return &Target{r: r, t: t}, nil
+	return r.buildTarget(&Target{r: r, kind: offscreenTarget, size: size})
 }
 
 type TextureTarget struct {
@@ -246,32 +476,27 @@ func (t *TextureTarget) Texture() render.Texture {
 	return t.tex
 }
 
+func (r *Renderer) textureTarget(kind targetKind, size image.Point) (*TextureTarget, error) {
+	tex := &texture{r: r, working: kind == floatTarget, size: size}
+	t, err := r.buildTarget(&Target{r: r, kind: kind, size: size, tex: tex})
+	if err != nil {
+		return nil, err
+	}
+	return &TextureTarget{Target: t, tex: tex}, nil
+}
+
 func (r *Renderer) NewTextureTarget(size image.Point) (render.TextureTarget, error) {
 	r.counts.Targets++
-	t, err := r.d.NewOffscreen(size.X, size.Y)
-	if err != nil {
-		return nil, err
-	}
-	tex, err := t.Texture()
-	if err != nil {
-		t.Close()
-		return nil, err
-	}
-	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex}}, nil
+	return r.textureTarget(offscreenTarget, size)
 }
 
 func (r *Renderer) NewWorkingTarget(size image.Point) (render.TextureTarget, error) {
 	r.counts.Targets++
-	t, err := r.d.NewOffscreenFloat(size.X, size.Y)
+	t, err := r.textureTarget(floatTarget, size)
 	if err != nil {
 		return nil, fmt.Errorf("vulkan: a %v working target: %w", size, err)
 	}
-	tex, err := t.Texture()
-	if err != nil {
-		t.Close()
-		return nil, err
-	}
-	return &TextureTarget{Target: &Target{r: r, t: t}, tex: &texture{r: r, t: tex, working: true}}, nil
+	return t, nil
 }
 
 func (r *Renderer) RenderableModifiers(format fourcc.Format) ([]fourcc.Modifier, error) {
@@ -283,11 +508,16 @@ func (r *Renderer) ExportModifiers(format fourcc.Format) ([]fourcc.Modifier, err
 }
 
 func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (render.ReadTarget, gpu.DMABUF, error) {
+	if r.lost != nil {
+		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share while the device is lost: %w", size, r.lost)
+	}
 	t, err := r.d.NewTarget(size.X, size.Y, format, modifiers)
 	if err != nil {
-		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, err)
+		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, r.note(err))
 	}
-	return &Target{r: r, t: t}, gpu.FromDmabuf(t.Dmabuf()), nil
+	target := &Target{r: r, t: t, kind: exportedTarget, size: size}
+	r.targets[target] = struct{}{}
+	return target, gpu.FromDmabuf(t.Dmabuf()), nil
 }
 
 // LinearCopyTarget is a target whose frames reach a linear dmabuf by the
@@ -300,43 +530,87 @@ type LinearCopyTarget struct {
 	Free   func() error
 }
 
+type linearCopy struct {
+	r      *Renderer
+	target *Target
+	shared *lgpu.Buffer
+	dmabuf gpu.DMABUF
+	owned  bool
+	dst    *lgpu.Linear
+	all    []image.Rectangle
+}
+
+func (l *linearCopy) make() error {
+	dst, err := l.r.d.ImportLinear(l.dmabuf.Dmabuf())
+	if err != nil {
+		return fmt.Errorf("vulkan: copy into the linear %v buffer: %w", l.all[0].Size(), l.r.note(err))
+	}
+	l.dst = dst
+	return nil
+}
+
+func (l *linearCopy) keepDmabuf() error {
+	if l.owned {
+		return nil
+	}
+	d, err := dupDmabuf(l.shared.Dmabuf())
+	if err != nil {
+		return fmt.Errorf("vulkan: keep the linear %v buffer's dmabuf for the next device: %w", l.all[0].Size(), err)
+	}
+	l.shared.Close()
+	l.shared, l.dmabuf, l.owned = nil, d, true
+	return nil
+}
+
+func (l *linearCopy) closeDmabuf() {
+	if l.owned {
+		closePlanes(l.dmabuf)
+		l.owned = false
+	}
+}
+
+func (l *linearCopy) copy() error {
+	if l.r.lost != nil {
+		return nil
+	}
+	return l.r.note(l.r.d.CopyToLinear(l.dst, l.target.t, l.all))
+}
+
+func (l *linearCopy) free() error {
+	delete(l.r.linears, l)
+	err := l.target.Destroy()
+	l.dst.Close()
+	if l.shared != nil {
+		l.shared.Close()
+	}
+	l.closeDmabuf()
+	return err
+}
+
 func (r *Renderer) NewLinearCopyTarget(size image.Point, format fourcc.Format) (LinearCopyTarget, error) {
+	if r.lost != nil {
+		return LinearCopyTarget{}, fmt.Errorf("vulkan: a linear %v buffer to share while the device is lost: %w", size, r.lost)
+	}
 	shared, err := r.d.NewBuffer(size.X, size.Y, format, []fourcc.Modifier{fourcc.Linear})
 	if err != nil {
-		return LinearCopyTarget{}, fmt.Errorf("vulkan: a linear %v buffer to share: %w", size, err)
+		return LinearCopyTarget{}, fmt.Errorf("vulkan: a linear %v buffer to share: %w", size, r.note(err))
 	}
-	dst, err := r.d.ImportLinear(shared.Dmabuf())
-	if err != nil {
-		shared.Close()
-		return LinearCopyTarget{}, fmt.Errorf("vulkan: copy into the linear %v buffer: %w", size, err)
-	}
-	src, err := r.d.NewOffscreen(size.X, size.Y)
-	if err != nil {
-		dst.Close()
+	l := &linearCopy{r: r, shared: shared, dmabuf: gpu.FromDmabuf(shared.Dmabuf()), all: []image.Rectangle{{Max: size}}}
+	if err := l.make(); err != nil {
 		shared.Close()
 		return LinearCopyTarget{}, err
 	}
-	all := []image.Rectangle{{Max: size}}
-	target := &Target{r: r, t: src}
-	return LinearCopyTarget{
-		Target: target,
-		DMABUF: gpu.FromDmabuf(shared.Dmabuf()),
-		Copy:   func() error { return r.d.CopyToLinear(dst, src, all) },
-		Free: func() error {
-			err := target.Destroy()
-			dst.Close()
-			shared.Close()
-			return err
-		},
-	}, nil
+	if l.target, err = r.buildTarget(&Target{r: r, kind: offscreenTarget, size: size}); err != nil {
+		l.dst.Close()
+		shared.Close()
+		return LinearCopyTarget{}, err
+	}
+	r.linears[l] = struct{}{}
+	return LinearCopyTarget{Target: l.target, DMABUF: l.dmabuf, Copy: l.copy, Free: l.free}, nil
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
-	t, err := r.d.ImportTarget(b.Dmabuf())
-	if err != nil {
-		return nil, err
-	}
-	return &Target{r: r, t: t}, nil
+	return r.buildTarget(&Target{r: r, kind: importedTarget, size: b.Size, dmabuf: b})
 }
 
 func sitingOf(s gpu.Siting) lgpu.Siting {
@@ -364,11 +638,7 @@ func ycbcrOf(e gpu.YUVEncoding) lgpu.YCbCr {
 }
 
 func (r *Renderer) ImportTexture(b gpu.DMABUF) (render.Texture, error) {
-	t, err := r.d.ImportTextureYCbCr(b.Dmabuf(), ycbcrOf(b.YUV))
-	if err != nil {
-		return nil, err
-	}
-	return &texture{r: r, t: t}, nil
+	return r.build(&texture{r: r, size: b.Size, dmabuf: b, imported: true})
 }
 
 func (r *Renderer) CheckDMABUF(b gpu.DMABUF) error {
@@ -447,15 +717,25 @@ func (r *Renderer) NativeFences() bool {
 }
 
 func (r *Renderer) SyncFile() (int, error) {
-	return r.d.SyncFile()
+	if r.lost != nil {
+		return -1, nil
+	}
+	fd, err := r.d.SyncFile()
+	return fd, r.note(err)
 }
 
 func (r *Renderer) WaitFence(fd int) error {
-	return r.d.WaitSyncFile(fd)
+	if r.lost != nil {
+		return unix.Close(fd)
+	}
+	return r.note(r.d.WaitSyncFile(fd))
 }
 
 func (r *Renderer) Finish() error {
-	return r.d.Finish()
+	if r.lost != nil {
+		return nil
+	}
+	return r.note(r.d.Finish())
 }
 
 type pass struct {
@@ -487,9 +767,15 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	if r.pass != nil {
 		return nil, errors.New("vulkan: Begin while a pass is open")
 	}
+	if _, live := r.targets[t]; !live {
+		return nil, errors.New("vulkan: Begin on a destroyed target")
+	}
+	if r.lost != nil {
+		return render.LostPass{}, nil
+	}
 	p, err := r.d.Begin(t.t, damage)
 	if err != nil {
-		return nil, err
+		return nil, r.note(err)
 	}
 	r.idle = pass{r: r, p: p}
 	r.pass = &r.idle
@@ -563,16 +849,29 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 }
 
 type screenShader struct {
-	r *Renderer
-	s *lgpu.FragmentShader
+	r     *Renderer
+	s     *lgpu.FragmentShader
+	spirv []byte
+}
+
+func (s *screenShader) make() error {
+	fs, err := s.r.d.NewFragmentShader(s.spirv)
+	if err != nil {
+		return fmt.Errorf("vulkan: %w", s.r.note(err))
+	}
+	s.s = fs
+	return nil
 }
 
 func (r *Renderer) NewScreenShader(p *shader.Program) (render.ScreenShader, error) {
-	s, err := r.d.NewFragmentShader(p.SPIRV())
-	if err != nil {
-		return nil, fmt.Errorf("vulkan: %w", err)
+	s := &screenShader{r: r, spirv: p.SPIRV()}
+	if r.lost == nil {
+		if err := s.make(); err != nil {
+			return nil, err
+		}
 	}
-	return &screenShader{r: r, s: s}, nil
+	r.shaders[s] = struct{}{}
+	return s, nil
 }
 
 func (s *screenShader) Prepare(target render.Target) error {
@@ -580,10 +879,17 @@ func (s *screenShader) Prepare(target render.Target) error {
 	if err != nil {
 		return err
 	}
-	return s.s.Prepare(t.t)
+	if s.r.lost != nil {
+		return nil
+	}
+	return s.r.note(s.s.Prepare(t.t))
 }
 
 func (s *screenShader) Destroy() error {
+	delete(s.r.shaders, s)
+	if s.s == nil {
+		return nil
+	}
 	return s.s.Close()
 }
 
@@ -630,6 +936,5 @@ func (p *pass) End() error {
 		return errors.New("vulkan: End of a pass already ended")
 	}
 	p.r.pass = nil
-	err := p.p.End()
-	return errors.Join(p.err, err)
+	return errors.Join(p.err, p.r.note(p.p.End()))
 }

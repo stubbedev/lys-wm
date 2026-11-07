@@ -16,6 +16,7 @@ import (
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -1269,5 +1270,100 @@ func ReadRowsWritesOnlyThoseRows(t *testing.T, r render.Renderer, target render.
 		if err := target.ReadRows(got, MarkedStride, rows); err == nil {
 			t.Errorf("rows %d to %d of a 5x3 target were read", rows.From, rows.To)
 		}
+	}
+}
+
+func solid(c render.Color, size image.Point) []byte {
+	pix := make([]byte, size.X*size.Y*4)
+	for i := 0; i < len(pix); i += 4 {
+		pix[i], pix[i+1], pix[i+2], pix[i+3] = c.B, c.G, c.R, c.A
+	}
+	return pix
+}
+
+func readPixel(t *testing.T, target render.ReadTarget, at image.Point) render.Color {
+	t.Helper()
+	size := target.Size()
+	pix := make([]byte, size.X*size.Y*4)
+	if err := target.Read(pix, size.X*4); err != nil {
+		t.Fatal(err)
+	}
+	return render.ARGB8888.Decode(pix[(at.Y*size.X+at.X)*4:])
+}
+
+func SurvivesALostDevice(t *testing.T, r render.Renderer) {
+	t.Helper()
+	red, green, blue := render.Color{R: 0xff, A: 0xff}, render.Color{G: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
+	small := image.Pt(4, 4)
+	tex, err := r.NewTexture(render.ARGB8888, small, small.X*4, solid(red, small))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := r.NewTarget(image.Pt(8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt, err := r.NewTextureTarget(small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole := render.Region{{Max: image.Pt(8, 8)}}
+	src := render.FRect{W: 4, H: 4}
+	Paint(t, r, target, whole, func(p render.Pass) {
+		p.Clear(render.Color{})
+		p.DrawTexture(tex, src, image.Rect(0, 0, 4, 4), render.Normal, 1, render.Mask{})
+	})
+	if got := readPixel(t, target, image.Pt(1, 1)); got != red {
+		t.Fatalf("before the loss the texture drew %v, want %v", got, red)
+	}
+	if err := r.Lost(); err != nil {
+		t.Fatalf("a working device reports %v", err)
+	}
+
+	r.LoseDevice()
+	lost := r.Lost()
+	if !errors.Is(lost, gpu.ErrContextLost) && !errors.Is(lost, lgpu.ErrDeviceLost) {
+		t.Fatalf("a lost device reports %v, want a loss", lost)
+	}
+	during, err := r.NewTexture(render.ARGB8888, small, small.X*4, solid(blue, small))
+	if err != nil {
+		t.Fatalf("a texture made while the device is lost: %v", err)
+	}
+	Paint(t, r, target, whole, func(p render.Pass) { p.Clear(render.Color{}) })
+	if err := tex.Update(image.Rectangle{Max: small}, small.X*4, solid(green, small)); err != nil {
+		t.Fatalf("an upload while the device is lost: %v", err)
+	}
+
+	if err := r.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Lost(); err != nil {
+		t.Fatalf("a recovered device reports %v", err)
+	}
+	for _, up := range []struct {
+		tex render.Texture
+		c   render.Color
+	}{{tex, green}, {during, blue}} {
+		if err := up.tex.Update(image.Rectangle{Max: small}, small.X*4, solid(up.c, small)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Paint(t, r, tt, render.Region{{Max: small}}, func(p render.Pass) { p.Clear(red) })
+	Paint(t, r, target, whole, func(p render.Pass) {
+		p.Clear(render.Color{})
+		p.DrawTexture(tex, src, image.Rect(0, 0, 4, 4), render.Normal, 1, render.Mask{})
+		p.DrawTexture(during, src, image.Rect(4, 0, 8, 4), render.Normal, 1, render.Mask{})
+		p.DrawTexture(tt.Texture(), src, image.Rect(0, 4, 4, 8), render.Normal, 1, render.Mask{})
+	})
+	for _, want := range []struct {
+		at image.Point
+		c  render.Color
+	}{{image.Pt(1, 1), green}, {image.Pt(5, 1), blue}, {image.Pt(1, 5), red}, {image.Pt(5, 5), render.Color{}}} {
+		if got := readPixel(t, target, want.at); got != want.c {
+			t.Errorf("after recovering, %v drew %v, want %v", want.at, got, want.c)
+		}
+	}
+	if err := errors.Join(tex.Destroy(), during.Destroy(), tt.Destroy(), target.Destroy()); err != nil {
+		t.Fatal(err)
 	}
 }

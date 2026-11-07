@@ -12,26 +12,30 @@ import (
 	"github.com/stubbedev/lys-wm/internal/gpu"
 )
 
-func TestOnlyALostDeviceOrABrokenInvariantIsFatal(t *testing.T) {
+func TestOnlyAGoneDeviceOrABrokenInvariantIsFatalAndAGPUResetIsRecoverable(t *testing.T) {
 	for _, tc := range []struct {
-		err   error
-		fatal bool
+		err          error
+		fatal, reset bool
 	}{
-		{fmt.Errorf("drm: commit the frame: %w", unix.ENODEV), true},
-		{fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x300E}), true},
-		{fmt.Errorf("gles: render pass: %w", &gpu.GLError{Op: "draw", Code: 0x0507}), true},
-		{fmt.Errorf("%w: nested: host gone", backend.ErrDeviceLost), true},
-		{fmt.Errorf("vulkan: render pass: %w", lgpu.ErrDeviceLost), true},
-		{backend.Broken("present without BeginFrame"), true},
-		{fmt.Errorf("drm: commit the frame: %w", unix.EBUSY), false},
-		{fmt.Errorf("drm: test the frame: %w", unix.EINVAL), false},
-		{fmt.Errorf("drm: commit the frame: %w", unix.EACCES), false},
-		{fmt.Errorf("gles: render pass: %w", &gpu.GLError{Op: "draw", Code: 0x0505}), false},
-		{fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x3002}), false},
-		{errors.New("compositor: tab label: no glyphs"), false},
+		{err: fmt.Errorf("drm: commit the frame: %w", unix.ENODEV), fatal: true},
+		{err: fmt.Errorf("%w: nested: host gone", backend.ErrDeviceLost), fatal: true},
+		{err: backend.Broken("present without BeginFrame"), fatal: true},
+		{err: fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x300E}), reset: true},
+		{err: fmt.Errorf("gles: render pass: %w", &gpu.GLError{Op: "draw", Code: 0x0507}), reset: true},
+		{err: fmt.Errorf("gles: %w", &gpu.GLError{Op: "glGetGraphicsResetStatus", Code: 0x8254}), reset: true},
+		{err: fmt.Errorf("vulkan: render pass: %w", lgpu.ErrDeviceLost), reset: true},
+		{err: fmt.Errorf("drm: commit the frame: %w", unix.EBUSY)},
+		{err: fmt.Errorf("drm: test the frame: %w", unix.EINVAL)},
+		{err: fmt.Errorf("drm: commit the frame: %w", unix.EACCES)},
+		{err: fmt.Errorf("gles: render pass: %w", &gpu.GLError{Op: "draw", Code: 0x0505})},
+		{err: fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x3002})},
+		{err: errors.New("compositor: tab label: no glyphs")},
 	} {
 		if got := backend.Fatal(tc.err); got != tc.fatal {
 			t.Errorf("Fatal(%v) = %v, want %v", tc.err, got, tc.fatal)
+		}
+		if got := backend.GPULost(tc.err); got != tc.reset {
+			t.Errorf("GPULost(%v) = %v, want %v", tc.err, got, tc.reset)
 		}
 	}
 }

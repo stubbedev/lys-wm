@@ -110,11 +110,10 @@ drops to SCHED_OTHER for the rest of the session, before the hard limit would ki
 `Loop.Run` returns the first error a callback returns, and `lys-wm` exits
 with it. So only two classes of error may reach the loop (#144):
 
-- **Device lost**: the device is gone and nothing on it can recover.
-  `ENODEV` from any ioctl, `EGL_CONTEXT_LOST` or `GL_CONTEXT_LOST`
-  (`gpu.ErrContextLost`), `VK_ERROR_DEVICE_LOST` (lys-lib's
-  `gpu.ErrDeviceLost`), and `backend.ErrDeviceLost`, which the nested
-  backend wraps around a failed send to its host.
+- **Device gone**: the device is gone and nothing on it can recover.
+  `ENODEV` from any ioctl, and `backend.ErrDeviceLost`, which the nested
+  backend wraps around a failed send to its host and the compositor
+  wraps around a GPU that keeps resetting (below).
 - **Broken invariant**: a bug, which should crash loudly rather than limp
   on. `backend.Broken` marks these: a frame on an output the compositor
   does not know, `BeginFrame` with a frame already in progress, `Present`
@@ -139,6 +138,46 @@ recovered at the callback boundary:
   is one atomic request, with no test commit ahead of it (#259).
 - **A client**: a failing request kills that client (`server.Client`),
   and a failed capture sends `failed`, as before.
+
+**A GPU reset** (#374) is not one of them. An amdgpu ring timeout, an i915
+or xe engine reset or an NVIDIA Xid loses the GLES context
+(`gpu.ErrContextLost`: `EGL_CONTEXT_LOST`, `GL_CONTEXT_LOST`, or a reset
+status) or the Vulkan device (lys-lib's `gpu.ErrDeviceLost`), and
+`backend.GPULost` names that class. The EGL context asks for
+`EGL_EXT_create_context_robustness` with `EGL_LOSE_CONTEXT_ON_RESET`, so a
+reset is reported rather than drawn through. Recovery works like a robust
+context's own contract:
+
+- A renderer that sees a loss remembers it and turns every later call into
+  a no-op that succeeds: resources made meanwhile are recorded, passes draw
+  nothing, uploads and reads do nothing. No caller anywhere sees the loss
+  as an error, so nothing between the reset and the next frame kills a
+  client or disables a feature.
+- `Renderer.Lost` is the one place a loss is reported. The compositor asks
+  after every output frame and when a frame fails; GLES asks the driver
+  with one `glGetGraphicsResetStatus` per call, no allocation.
+- `Renderer.Recover` rebuilds in place on the same GPU: GLES renews its
+  context, Vulkan opens a new `VkDevice`. Every texture, target and screen
+  shader made before keeps its identity and is remade; dmabuf-backed ones,
+  client buffers and scanout swapchains alike, are imported again from
+  their still-open fds, exported ones from duplicates of theirs. Contents
+  are undefined afterwards, so the compositor uploads every shm surface
+  again from its pool, drops what it drew itself (labels, cursors,
+  gradient stops, grain, thumbnails, blur chains, working targets,
+  snapshots, closing animations), invalidates every scene and repaints
+  every output whole. Explicit-sync release points need nothing: a lost
+  renderer gives no fence, so they signal at once, and a fence taken
+  before the reset is a kernel dma-fence, which a reset signals too.
+- `gpu.Losses` (lys-lib) bounds it: past three resets in a minute the
+  compositor returns `backend.ErrDeviceLost` naming every one, and the
+  session ends rather than spin on a GPU that hangs on every frame.
+- A secondary GPU's blit renderer and a separate Vulkan copier recover the
+  same way inside the DRM backend, bounded on their own; a copier that is
+  the primary renderer's device re-imports its buffers once that device
+  changes.
+- `Renderer.LoseDevice` raises a loss at any point, for tests; the soft
+  renderer's fake device clears every uploaded texture when it recovers,
+  so a test sees what a real reset loses.
 
 The rest of the loop's errors stay fatal: a failed `timerfd` or `epoll`
 call, a read from the DRM device other than `EAGAIN`, and a failed modeset

@@ -63,6 +63,20 @@ type texture struct {
 	format render.Format
 	drawn  *Buffer
 	float  *workingTarget
+	gen    uint64
+}
+
+func (t *texture) alive() bool {
+	if t.pix == nil {
+		return false
+	}
+	if t.gen != t.owner.gen {
+		t.gen = t.owner.gen
+		if t.drawn == nil && t.float == nil {
+			clear(t.pix)
+		}
+	}
+	return true
 }
 
 func (t *texture) Size() image.Point {
@@ -71,7 +85,7 @@ func (t *texture) Size() image.Point {
 
 func (t *texture) Update(dst image.Rectangle, stride int, data []byte) error {
 	t.owner.counts.Uploads++
-	if t.pix == nil {
+	if !t.alive() {
 		return errors.New("soft: update of a destroyed texture")
 	}
 	if t.drawn != nil {
@@ -98,6 +112,25 @@ func (t *texture) Destroy() error {
 type Renderer struct {
 	pass   pass
 	counts render.Counts
+	lost   error
+	gen    uint64
+}
+
+func (r *Renderer) Lost() error {
+	return r.lost
+}
+
+func (r *Renderer) LoseDevice() {
+	r.lost = fmt.Errorf("soft: a device loss raised by LoseDevice: %w", lgpu.ErrDeviceLost)
+}
+
+func (r *Renderer) Recover() error {
+	if r.pass.active {
+		return errors.New("soft: Recover during a pass")
+	}
+	r.lost = nil
+	r.gen++
+	return nil
 }
 
 func (r *Renderer) Counts() render.Counts {
@@ -133,7 +166,7 @@ func (r *Renderer) NewTexture(format render.Format, size image.Point, stride int
 	if err := render.CheckPixels(size, stride, len(data)); err != nil {
 		return nil, err
 	}
-	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format}
+	t := &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format, gen: r.gen}
 	if err := t.Update(image.Rectangle{Max: size}, stride, data); err != nil {
 		return nil, err
 	}
@@ -144,7 +177,7 @@ func (r *Renderer) NewBlankTexture(format render.Format, size image.Point) (rend
 	if !slices.Contains(r.Formats(), format) {
 		return nil, fmt.Errorf("soft: unsupported texture format %d", format)
 	}
-	return &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format}, nil
+	return &texture{owner: r, pix: make([]byte, size.X*size.Y*4), stride: size.X * 4, size: size, format: format, gen: r.gen}, nil
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
@@ -377,7 +410,7 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 	case !ok || tex.owner != p.owner:
 		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
 		return
-	case tex.pix == nil:
+	case !tex.alive():
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
 	case tex.owned(p):
@@ -475,7 +508,7 @@ func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst ima
 	case !texOK || tex.owner != p.owner:
 		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
 		return
-	case tex.pix == nil:
+	case !tex.alive():
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
 	case tex.drawn == p.buf:
@@ -537,7 +570,7 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 	case !ok || tex.owner != p.owner:
 		p.fail(fmt.Errorf("soft: gradient stops %T belong to another renderer", g.Stops))
 		return
-	case tex.pix == nil:
+	case !tex.alive():
 		p.fail(errors.New("soft: gradient stops used after Destroy"))
 		return
 	case tex.owned(p):
@@ -584,7 +617,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case !ok || tex.owner != p.owner:
 		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
 		return
-	case tex.pix == nil:
+	case !tex.alive():
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
 	case tex.owned(p):
@@ -665,7 +698,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 	case !ok || tex.owner != p.owner:
 		p.fail(fmt.Errorf("soft: texture %T belongs to another renderer", t))
 		return
-	case tex.pix == nil:
+	case !tex.alive():
 		p.fail(errors.New("soft: texture used after Destroy"))
 		return
 	case tex.owned(p):

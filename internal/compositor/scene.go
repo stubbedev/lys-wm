@@ -84,6 +84,9 @@ func (c *Compositor) frame(o *output.Output) error {
 	if err := c.redrawThumb(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
+	if err := c.checkGPU(); err != nil {
+		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
+	}
 	if err := c.finishClosing(o, c.frameTime); err != nil {
 		return err
 	}
@@ -113,6 +116,13 @@ func (c *Compositor) frame(o *output.Output) error {
 func (c *Compositor) dropFrame(o *output.Output, err error) error {
 	if backend.Fatal(err) {
 		return err
+	}
+	if lost := c.renderer.Lost(); lost != nil {
+		if rerr := c.recoverGPU(lost); backend.Fatal(rerr) {
+			return rerr
+		} else if rerr != nil {
+			c.report(rerr)
+		}
 	}
 	c.frames.Drop(o.Backend().Name())
 	if c.dropped[o] == 0 {

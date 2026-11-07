@@ -11,31 +11,51 @@ import (
 )
 
 type screenShader struct {
-	r    *Renderer
-	prog program
+	r      *Renderer
+	source string
+	prog   program
+}
+
+func (s *screenShader) link() error {
+	gl := s.r.gl
+	id, err := gl.Link(vertexShader, s.source)
+	if err != nil {
+		return fmt.Errorf("gles: %w", err)
+	}
+	s.prog = s.r.newProgram(id)
+	gl.UseProgram(id)
+	gl.Uniform1i(gl.GetUniformLocation(id, "tex"), 0)
+	return nil
 }
 
 func (r *Renderer) NewScreenShader(p *shaderlang.Program) (render.ScreenShader, error) {
+	s := &screenShader{r: r, source: p.GLES()}
+	if r.lost != nil {
+		r.shaders[s] = struct{}{}
+		return s, nil
+	}
 	if err := r.enter(); err != nil {
 		return nil, err
 	}
-	id, err := r.gl.Link(vertexShader, p.GLES())
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("gles: %w", err), r.leave("gles: a screen shader"))
+	if err := s.link(); err != nil {
+		return nil, errors.Join(err, r.leave("gles: a screen shader"))
 	}
-	s := &screenShader{r: r, prog: r.newProgram(id)}
-	r.gl.UseProgram(id)
-	r.gl.Uniform1i(r.gl.GetUniformLocation(id, "tex"), 0)
 	if err := r.leave("gles: a screen shader"); err != nil {
 		return nil, errors.Join(err, s.Destroy())
 	}
+	r.shaders[s] = struct{}{}
 	return s, nil
 }
 
 func (*screenShader) Prepare(render.Target) error { return nil }
 
 func (s *screenShader) Destroy() error {
-	if s.prog.id == 0 {
+	if _, live := s.r.shaders[s]; !live {
+		return nil
+	}
+	delete(s.r.shaders, s)
+	if s.r.lost != nil || s.prog.id == 0 {
+		s.prog.id = 0
 		return nil
 	}
 	if err := s.r.enter(); err != nil {

@@ -399,3 +399,49 @@ func TestTargetsCountAndAFrameOfPassesIsOneSubmit(t *testing.T) {
 func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
 	rendertest.KawaseOverwrites(t, renderer(t))
 }
+
+func TestALostContextIsRenewedAndEveryObjectRemade(t *testing.T) {
+	rendertest.SurvivesALostDevice(t, renderer(t))
+}
+
+func TestARobustContextAsksForAResetOncePerCheck(t *testing.T) {
+	r := renderer(t)
+	before := r.Counts().ResetChecks
+	if err := r.Lost(); err != nil {
+		t.Fatal(err)
+	}
+	got := r.Counts().ResetChecks - before
+	if !gles.Robust(r) {
+		if got != 0 {
+			t.Fatalf("a context without robustness asked %d times", got)
+		}
+		t.Skipf("%s has no robust context", r.DeviceName())
+	}
+	if got != 1 {
+		t.Fatalf("one check asked for the reset status %d times, want 1", got)
+	}
+	if raceEnabled {
+		return
+	}
+	var failed error
+	check := func() {
+		if err := r.Lost(); err != nil && failed == nil {
+			failed = err
+		}
+	}
+	allocs := make(chan float64, 1)
+	unpinned := make(chan error, 1)
+	go func() {
+		unpin := gpu.PinThread()
+		check()
+		allocs <- testing.AllocsPerRun(50, check)
+		unpinned <- unpin()
+	}()
+	n := <-allocs
+	if err := errors.Join(failed, <-unpinned); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("a check on a pinned thread allocated %v times", n)
+	}
+}

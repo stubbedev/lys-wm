@@ -374,13 +374,15 @@ func SoftwareDevice(name string) bool {
 }
 
 type Counts struct {
-	Passes   uint64
-	Filters  uint64
-	Uploads  uint64
-	GPUWaits uint64
-	Submits  uint64
-	Targets  uint64
-	Clears   uint64
+	Passes      uint64
+	Filters     uint64
+	Uploads     uint64
+	GPUWaits    uint64
+	Submits     uint64
+	Targets     uint64
+	Clears      uint64
+	Imports     uint64
+	ResetChecks uint64
 }
 
 type Renderer interface {
@@ -394,6 +396,9 @@ type Renderer interface {
 	NewScreenShader(p *shader.Program) (ScreenShader, error)
 	NewWorkingTarget(size image.Point) (TextureTarget, error)
 	Begin(target Target, damage Region) (Pass, error)
+	Lost() error
+	Recover() error
+	LoseDevice()
 }
 
 type Speed uint8
@@ -444,3 +449,29 @@ type Pass interface {
 	DrawGlass(t Texture, src FRect, dst image.Rectangle, alpha float32, m Mask, g Glass)
 	End() error
 }
+
+type LostPass struct{}
+
+func (LostPass) SetColor(*ColorTransform)                                              {}
+func (LostPass) Clear(Color)                                                           {}
+func (LostPass) FillRect(image.Rectangle, Color, Mask)                                 {}
+func (LostPass) FillGradient(image.Rectangle, Gradient, Mask)                          {}
+func (LostPass) Kawase(Texture, image.Rectangle, float32, bool)                        {}
+func (LostPass) FillGoo(image.Rectangle, Color, Goo)                                   {}
+func (LostPass) DrawTexture(Texture, FRect, image.Rectangle, Transform, float32, Mask) {}
+func (LostPass) DrawScreenShader(ScreenShader, Texture, image.Rectangle, float32)      {}
+func (LostPass) DrawGlass(Texture, FRect, image.Rectangle, float32, Mask, Glass)       {}
+func (LostPass) End() error                                                            { return nil }
+
+type LostRead struct {
+	Pix    []byte
+	Stride int
+}
+
+func NewLostRead(size image.Point) *LostRead {
+	return &LostRead{Pix: make([]byte, size.X*size.Y*4), Stride: size.X * 4}
+}
+
+func (*LostRead) Wait() error                 { return nil }
+func (l *LostRead) Map() ([]byte, int, error) { return l.Pix, l.Stride, nil }
+func (*LostRead) Release() error              { return nil }

@@ -52,6 +52,8 @@ const (
 	eglSyncNativeFenceFD       = 0x3145
 	eglNoNativeFenceFD         = -1
 	eglContextLost             = 0x300E
+	eglResetStrategyEXT        = 0x3138
+	eglLoseContextOnResetEXT   = 0x31BF
 )
 
 var (
@@ -250,11 +252,13 @@ func (d Device) RenderNode() string {
 }
 
 type Display struct {
-	thread atomic.Pointer[pinnedThread]
-	lib    *Library
-	dpy    uintptr
-	ctx    uintptr
-	exts   []string
+	thread  atomic.Pointer[pinnedThread]
+	lib     *Library
+	dpy     uintptr
+	ctx     uintptr
+	exts    []string
+	attribs []int32
+	robust  bool
 }
 
 func (l *Library) Surfaceless() (*Display, error) {
@@ -296,15 +300,37 @@ func (l *Library) display(platform string, kind uint32, native uintptr) (*Displa
 	if l.egl.bindAPI(eglOpenGLESAPI) != eglTrue {
 		return nil, errors.Join(l.fail("eglBindAPI"), d.Close())
 	}
-	attribs := []int32{eglContextMajorVersion, 2}
+	d.attribs = []int32{eglContextMajorVersion, 2}
 	if d.Has("EGL_IMG_context_priority") {
-		attribs = append(attribs, eglContextPriorityLevelIMG, eglContextPriorityHighIMG)
+		d.attribs = append(d.attribs, eglContextPriorityLevelIMG, eglContextPriorityHighIMG)
 	}
-	attribs = append(attribs, eglNone)
-	if d.ctx = l.egl.createContext(dpy, 0, 0, &attribs[0]); d.ctx == 0 {
+	if d.robust = d.Has("EGL_EXT_create_context_robustness"); d.robust {
+		d.attribs = append(d.attribs, eglResetStrategyEXT, eglLoseContextOnResetEXT)
+	}
+	d.attribs = append(d.attribs, eglNone)
+	if d.ctx = l.egl.createContext(dpy, 0, 0, &d.attribs[0]); d.ctx == 0 {
 		return nil, errors.Join(l.fail("eglCreateContext"), d.Close())
 	}
 	return d, nil
+}
+
+func (d *Display) Robust() bool {
+	return d.robust
+}
+
+func (d *Display) Renew() error {
+	err := d.Release()
+	if d.lib.egl.destroyContext(d.dpy, d.ctx) != eglTrue {
+		err = errors.Join(err, d.lib.fail("eglDestroyContext"))
+	}
+	d.ctx = 0
+	if err != nil {
+		return err
+	}
+	if d.ctx = d.lib.egl.createContext(d.dpy, 0, 0, &d.attribs[0]); d.ctx == 0 {
+		return d.lib.fail("eglCreateContext")
+	}
+	return nil
 }
 
 func (l *Library) initialize(dpy uintptr, platform string) error {

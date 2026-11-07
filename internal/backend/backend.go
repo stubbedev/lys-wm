@@ -132,7 +132,11 @@ var (
 )
 
 func Fatal(err error) bool {
-	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken) || errors.Is(err, unix.ENODEV) || errors.Is(err, gpu.ErrContextLost) || errors.Is(err, lgpu.ErrDeviceLost)
+	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken) || errors.Is(err, unix.ENODEV)
+}
+
+func GPULost(err error) bool {
+	return errors.Is(err, gpu.ErrContextLost) || errors.Is(err, lgpu.ErrDeviceLost)
 }
 
 func Broken(format string, args ...any) error {
