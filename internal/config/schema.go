@@ -176,6 +176,7 @@ func annotations() map[string]annotation {
 		"autotile.ephemeral":               {def: s.Autotile.Ephemeral},
 		"autotile.min_trigger":             atLeastAnn(0, s.Autotile.MinTrigger),
 		"autotile.divisor":                 atLeastAnn(1, s.Autotile.Divisor),
+		"gestures.distance":                {exclusiveMinimum: new(0.0), def: compositor.DefaultGestures().Distance},
 		"xwayland.enabled":                 {def: true},
 		"xwayland.zero_scaling":            {def: true},
 		"color_management":                 {def: false},

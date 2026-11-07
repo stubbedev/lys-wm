@@ -453,7 +453,9 @@
       "type": "object",
       "properties": {
         "distance": {
-          "type": "number"
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 400
         },
         "hold": {
           "type": "array",
