@@ -168,10 +168,11 @@ var counted = map[string][]string{
 }
 
 var dropEvents = map[string][]string{
-	"wl_registry":         {"global"},
-	"wl_shm":              {"format"},
-	"wl_surface":          {"enter"},
-	"zwp_linux_dmabuf_v1": {"format", "modifier"},
+	"wl_registry":             {"global"},
+	"wl_shm":                  {"format"},
+	"wl_surface":              {"enter"},
+	"wp_image_description_v1": {"ready", "ready2"},
+	"zwp_linux_dmabuf_v1":     {"format", "modifier"},
 }
 
 func policyOf(iface *wire.Interface) *objectPolicy {

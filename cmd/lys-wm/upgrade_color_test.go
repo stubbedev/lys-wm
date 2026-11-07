@@ -80,8 +80,8 @@ func (e *colorEvents) PreferredChanged2(*ccm.WpColorManagementSurfaceFeedbackV1,
 }
 
 type descriptionEvents struct {
-	ready  bool
-	failed string
+	readies int
+	failed  string
 }
 
 func (e *descriptionEvents) Failed(_ *ccm.WpImageDescriptionV1, _ ccm.WpImageDescriptionV1Cause, msg string) error {
@@ -90,12 +90,12 @@ func (e *descriptionEvents) Failed(_ *ccm.WpImageDescriptionV1, _ ccm.WpImageDes
 }
 
 func (e *descriptionEvents) Ready(*ccm.WpImageDescriptionV1, uint32) error {
-	e.ready = true
+	e.readies++
 	return nil
 }
 
 func (e *descriptionEvents) Ready2(*ccm.WpImageDescriptionV1, uint32, uint32) error {
-	e.ready = true
+	e.readies++
 	return nil
 }
 
@@ -194,7 +194,7 @@ func iccProfile() []byte {
 
 func awaitDescription(t *testing.T, c *testclient.Client, what string, ev *descriptionEvents) {
 	t.Helper()
-	c.DispatchUntil(what, func() bool { return ev.ready || ev.failed != "" })
+	c.DispatchUntil(what, func() bool { return ev.readies > 0 || ev.failed != "" })
 	if ev.failed != "" {
 		t.Fatalf("%s failed: %s", what, ev.failed)
 	}
@@ -302,6 +302,9 @@ func TestUpgradeCarriesColorManagement(t *testing.T) {
 	}
 	if i := slices.Index(ev.outputEvents, "image_description_changed"); i < 0 || !slices.Equal(ev.outputEvents[i:], []string{"image_description_changed", "done"}) {
 		t.Fatalf("the output heard %v after the upgrade, want image_description_changed followed by one done", ev.outputEvents)
+	}
+	if paramsEv.readies != 1 || iccEv.readies != 1 {
+		t.Fatalf("the descriptions heard %d and %d ready events across the upgrade, want one each: ready is sent once per object", paramsEv.readies, iccEv.readies)
 	}
 	if got := pixelAt(t, c, centre); got != shown {
 		t.Fatalf("the new compositor shows the tagged window as %v, the old one %v", got, shown)
