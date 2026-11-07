@@ -580,6 +580,8 @@ func (c *Compositor) moveOverviewItem(ov *overview, it *overviewItem, goal image
 func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.WorkspaceID, strip []image.Rectangle, shown []wm.Placement) error {
 	old := v.spaces
 	v.spaces = make([]*overviewThumb, 0, len(spaces))
+	front := c.thumbMembers(shown)
+	pinned := slices.DeleteFunc(slices.Clone(front), func(m thumbMember) bool { return !c.wm.Pinned(m.w.id) })
 	for i, id := range spaces {
 		var t *overviewThumb
 		if at := slices.IndexFunc(old, func(x *overviewThumb) bool { return x.id == id }); at >= 0 {
@@ -589,15 +591,11 @@ func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.W
 			t = &overviewThumb{o: o, id: id, label: "Workspace " + strconv.Itoa(int(id)), dirty: true}
 		}
 		t.rect = strip[i]
-		places := shown
-		if id != v.workspace {
-			places = c.wm.WorkspacePlacements(id, c.spacing())
-		}
-		members := make([]thumbMember, 0, len(places))
-		for _, p := range places {
-			if w := c.windowByID(p.ID); w != nil && p.Visible && !p.Minimized {
-				members = append(members, thumbMember{w, p.Rect, p.Layer == wm.LayerFullscreen})
-			}
+		var members []thumbMember
+		if id == v.workspace {
+			members = front
+		} else {
+			members = append(c.thumbMembers(c.wm.WorkspacePlacements(id, c.spacing())), pinned...)
 		}
 		if !slices.Equal(t.members, members) {
 			t.members, t.dirty = members, true
@@ -605,6 +603,16 @@ func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.W
 		v.spaces = append(v.spaces, t)
 	}
 	return c.dropThumbs(old)
+}
+
+func (c *Compositor) thumbMembers(places []wm.Placement) []thumbMember {
+	into := make([]thumbMember, 0, len(places))
+	for _, p := range places {
+		if w := c.windowByID(p.ID); w != nil && p.Visible && !p.Minimized {
+			into = append(into, thumbMember{w, p.Rect, p.Layer == wm.LayerFullscreen})
+		}
+	}
+	return into
 }
 
 func (c *Compositor) overviewForget(s *surface.Surface) {
@@ -746,6 +754,27 @@ func (c *Compositor) OverviewSlots(o *output.Output) []image.Rectangle {
 		out = append(out, it.goal)
 	}
 	return out
+}
+
+func (c *Compositor) OverviewThumbWindows(o *output.Output, id wm.WorkspaceID) []wm.WindowID {
+	if c.overview == nil {
+		return nil
+	}
+	v, ok := c.overview.views[o]
+	if !ok {
+		return nil
+	}
+	for _, t := range v.spaces {
+		if t.id != id {
+			continue
+		}
+		out := make([]wm.WindowID, 0, len(t.members))
+		for _, m := range t.members {
+			out = append(out, m.w.id)
+		}
+		return out
+	}
+	return nil
 }
 
 func (c *Compositor) CursorShape() string {

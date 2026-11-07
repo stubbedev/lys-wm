@@ -1,7 +1,9 @@
 package harness
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
 	"testing"
 	"time"
 
@@ -114,4 +116,44 @@ func TestAPinnedWindowStaysPutWhileASwipeMovesTheWorkspaces(t *testing.T) {
 	r.end(false)
 	r.settle()
 	r.h.Eventually("workspace 2 shown with pip", both(showingWorkspace(2), showing(70, 50, green)))
+}
+
+func TestAPinnedWindowShowsOnEveryOverviewThumbnailOfItsOutput(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pip$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 30)}}
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	r := c.Window("red", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("red to map", r.Mapped)
+	p := c.Window("pip", testclient.Fill(0, 0xff, 0))
+	c.DispatchUntil("pip to map", p.Mapped)
+	h.dispatch("pin")
+	h.settled(c, "pip pinned", func(w ipc.Window) bool { return w.Pinned }, "pip")
+	h.dispatch("workspace 2")
+	b := c.Window("blue", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("blue to map", b.Mapped)
+	h.dispatch("workspace 1")
+	h.dispatch("overview show")
+	ids := map[string]wm.WindowID{}
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		for _, name := range []string{"red", "pip", "blue"} {
+			w, ok := windowNamed(comp, name)
+			if !ok {
+				return fmt.Errorf("no window %s", name)
+			}
+			ids[name] = w.ID
+		}
+		return nil
+	})
+	want := map[wm.WorkspaceID][]wm.WindowID{1: {ids["red"], ids["pip"]}, 2: {ids["blue"], ids["pip"]}}
+	h.Eventually("the pinned window on both thumbnails", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		o := comp.Outputs()[0]
+		for id, members := range want {
+			if !slices.Equal(comp.OverviewThumbWindows(o, id), members) {
+				return false
+			}
+		}
+		return true
+	})
 }
