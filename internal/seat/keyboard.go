@@ -3,6 +3,7 @@ package seat
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -256,7 +257,13 @@ func Prepare(cfg Config) (Pending, error) {
 	if cfg.Keymap == nil {
 		return Pending{}, errors.New("seat: no keymap")
 	}
-	return Pending{cfg: cfg, state: cfg.Keymap.NewState()}, nil
+	state := cfg.Keymap.NewState()
+	if cfg.NumLock {
+		if err := state.LockNumLock(); err != nil {
+			return Pending{}, fmt.Errorf("seat: turn Num Lock on: %w", err)
+		}
+	}
+	return Pending{cfg: cfg, state: state}, nil
 }
 
 func (s *Seat) Reconfigure(p Pending) error {

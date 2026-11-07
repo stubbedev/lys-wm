@@ -635,6 +635,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if c.seat, err = seat.New(display, cfg.Seat, c); err != nil {
 		return err
 	}
+	c.leds = c.seat.Locks()
 	if c.inputMethods, err = inputmethod.New(display, c.seat, c); err != nil {
 		return err
 	}

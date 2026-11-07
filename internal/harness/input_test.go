@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"math"
 	"slices"
@@ -250,4 +251,37 @@ func TestKeyboardLEDsFollowTheLockKeys(t *testing.T) {
 	if got := leds(); got != (xkb.Locks{}) {
 		t.Fatalf("after a second Caps Lock the keyboard LEDs are %+v", got)
 	}
+}
+
+func TestNumLockIsOnAfterStartAndAfterReload(t *testing.T) {
+	t.Parallel()
+	const numLock, mod2 = 69, 1 << 4
+	var cfg compositor.Config
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Seat.NumLock = true
+		cfg = *c
+	}, small)
+	cl := testclient.Connect(t, h.Socket())
+	_, in := cl.Seat()
+	w := cl.Window("win", quadrants)
+	cl.DispatchUntil("the window to map", w.Mapped)
+	on := func(when string, want bool) {
+		t.Helper()
+		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+			if got := b.Keyboard().LEDs().Num; got != want {
+				return fmt.Errorf("%s: the Num Lock LED is %v", when, got)
+			}
+			if got := c.Seat().Locks().Num; got != want {
+				return fmt.Errorf("%s: the seat's Num Lock is %v", when, got)
+			}
+			return nil
+		})
+		cl.DispatchUntil(when+": the focused client's locked modifiers", func() bool { return (in.Locked&mod2 != 0) == want })
+	}
+	on("after start", true)
+	h.key(numLock, true)
+	h.key(numLock, false)
+	on("after Num Lock was pressed", false)
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Reconfigure(cfg) })
+	on("after reload", true)
 }

@@ -35,6 +35,7 @@ type Config struct {
 	RepeatDelay int32
 	StickyKeys  bool
 	SlowKeys    time.Duration
+	NumLock     bool
 }
 
 type clientResources struct {

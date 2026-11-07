@@ -261,6 +261,7 @@ and touchpad while the lid is closed.
 | `repeat_delay` | Milliseconds before repeat starts. Default 300 |
 | `sticky_keys` | `true`: a modifier pressed and released alone applies to the next key; pressed twice in a row it stays on until pressed a third time. Default `false` |
 | `slow_keys` | Milliseconds a key must be held before it counts; a key let go sooner is dropped. 0, the default, turns slow keys off |
+| `numlock` | `true`: Num Lock is on when lys-wm starts and again after every reload. Default `false` |
 
 `lys-wmctl dispatch stickykeys on|off` and `slowkeys <ms>` change both while lys-wm runs, until the next reload.
 

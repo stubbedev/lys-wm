@@ -275,6 +275,7 @@ type rawKeyboard struct {
 	RepeatDelay *At[int]   `yaml:"repeat_delay"`
 	StickyKeys  bool       `yaml:"sticky_keys"`
 	SlowKeys    *At[int]   `yaml:"slow_keys"`
+	NumLock     bool       `yaml:"numlock"`
 }
 
 type rawBorders struct {
@@ -573,6 +574,7 @@ type Config struct {
 	RepeatDelay     int32
 	StickyKeys      bool
 	SlowKeys        time.Duration
+	NumLock         bool
 	Input           session.InputConfig
 	Outputs         compositor.OutputRules
 	ColorManagement bool
@@ -1651,6 +1653,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		RepeatDelay:     p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
 		StickyKeys:      raw.Input.Keyboard.StickyKeys,
 		SlowKeys:        time.Duration(p.repeat(raw.Input.Keyboard.SlowKeys, "input.keyboard.slow_keys", 0)) * time.Millisecond,
+		NumLock:         raw.Input.Keyboard.NumLock,
 		Input:           p.input(raw.Input),
 		Decor:           p.decor(raw, look.Decor),
 		WM:              compositor.DefaultSettings(),
@@ -1793,6 +1796,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.Seat.StickyKeys, cfg.Seat.SlowKeys = c.StickyKeys, c.SlowKeys
+	cfg.Seat.NumLock = c.NumLock
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
 	cfg.ClientHotkeys = c.ClientHotkeys

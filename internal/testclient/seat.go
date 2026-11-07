@@ -16,6 +16,8 @@ type Input struct {
 	KeymapSize uint32
 	Repeat     [2]int32
 	Depressed  uint32
+	Locked     uint32
+	Keymaps    int
 }
 
 func (in *Input) name(s *cw.WlSurface) string {
@@ -142,6 +144,7 @@ type keyboardEvents struct{ in *Input }
 
 func (e keyboardEvents) Keymap(_ *cw.WlKeyboard, _ cw.WlKeyboardKeymapFormat, fd int, size uint32) error {
 	e.in.KeymapSize = size
+	e.in.Keymaps++
 	return closeFD(fd)
 }
 
@@ -160,8 +163,8 @@ func (e keyboardEvents) Key(_ *cw.WlKeyboard, serial, _, key uint32, state cw.Wl
 	return e.in.Log.Note("key %d %d", key, state)
 }
 
-func (e keyboardEvents) Modifiers(_ *cw.WlKeyboard, _, depressed, _, _, _ uint32) error {
-	e.in.Depressed = depressed
+func (e keyboardEvents) Modifiers(_ *cw.WlKeyboard, _, depressed, _, locked, _ uint32) error {
+	e.in.Depressed, e.in.Locked = depressed, locked
 	return nil
 }
 

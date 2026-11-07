@@ -1632,6 +1632,10 @@
               "type": "string",
               "format": "lys-wm-xkb-model"
             },
+            "numlock": {
+              "type": "boolean",
+              "default": false
+            },
             "options": {
               "type": "string",
               "format": "lys-wm-xkb-options"

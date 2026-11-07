@@ -224,6 +224,18 @@ func (s *State) NextLayout() bool {
 	return s.state.UpdateLatchedLocked(0, 0, false, 0, 0, 0, true, int32(locked))&reportedChanges != 0 //nolint:gosec // below the keymap's layout count
 }
 
+const numLockModifier = "Mod2"
+
+// LockNumLock locks the Num Lock modifier, as a press of Num Lock would.
+func (s *State) LockNumLock() error {
+	mask, err := s.keymap.ModMask(numLockModifier)
+	if err != nil {
+		return err
+	}
+	s.state.UpdateLatchedLocked(0, 0, false, 0, lxkb.ModMask(mask), lxkb.ModMask(mask), false, 0)
+	return nil
+}
+
 func (s *State) Stick(mask uint32, before Modifiers) bool {
 	m := s.Modifiers()
 	latched, locked := m.Latched, m.Locked

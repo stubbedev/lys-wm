@@ -298,3 +298,18 @@ func TestOnlyKeysThatComposeTextTypeIt(t *testing.T) {
 		t.Error("Super_L is a modifier keysym and a is not")
 	}
 }
+
+func TestLockNumLockLightsItsLEDAndTurnsTheKeypadToDigits(t *testing.T) {
+	const keyKP1 = 79
+	s := state(t)
+	off := s.Keysym(keyKP1)
+	if err := s.LockNumLock(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Locks().Num || s.Modifiers().Locked == 0 {
+		t.Fatalf("locks %+v modifiers %+v after locking Num Lock", s.Locks(), s.Modifiers())
+	}
+	if on := s.Keysym(keyKP1); on == off || on != 0xffb1 {
+		t.Fatalf("KP_1 is %#x with Num Lock, %#x without", on, off)
+	}
+}
