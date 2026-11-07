@@ -135,8 +135,8 @@ func (r wsSpaceRequests) Assign(_ *sew.ExtWorkspaceHandleV1, group *sew.ExtWorks
 	return nil
 }
 
-func (wsSpaceRequests) Remove(*sew.ExtWorkspaceHandleV1) error     { return nil }
-func (wsSpaceRequests) Destroy(*sew.ExtWorkspaceHandleV1) error    { return nil }
+func (wsSpaceRequests) Remove(*sew.ExtWorkspaceHandleV1) error  { return nil }
+func (wsSpaceRequests) Destroy(*sew.ExtWorkspaceHandleV1) error { return nil }
 
 func (c *Compositor) workspaceState(w wm.Workspace) sew.ExtWorkspaceHandleV1State {
 	var st sew.ExtWorkspaceHandleV1State
