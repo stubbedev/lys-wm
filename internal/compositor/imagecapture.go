@@ -354,6 +354,7 @@ func (s *captureSession) noteDamage(o *output.Output, frame *region.Set) {
 
 func (c *Compositor) noteCommit(sf *surface.Surface) error {
 	var errs []error
+	errs = append(errs, c.noteWindowCopies(sf))
 	for _, s := range c.captureSessions {
 		src, ok := s.source.(windowSource)
 		if !ok || s.stopped || !c.inWindow(src.window, sf) {

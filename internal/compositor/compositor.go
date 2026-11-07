@@ -282,6 +282,7 @@ type Compositor struct {
 	cursorReads     map[*cursorRead]struct{}
 	offLoopWork     sync.WaitGroup
 	captureSessions []*captureSession
+	windowCopies    []*copyFrame
 	cursorSessions  []*cursorSession
 	scannedOut      map[*dmabuf.Buffer]*scannedOut
 	scannedFree     []*scannedOut

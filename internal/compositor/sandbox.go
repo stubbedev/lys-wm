@@ -11,6 +11,7 @@ import (
 	sesl "github.com/stubbedev/lys-wm/internal/protocol/server/extsessionlock"
 	sew "github.com/stubbedev/lys-wm/internal/protocol/server/extworkspace"
 	shgs "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandglobalshortcuts"
+	shte "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandtoplevelexport"
 	sksi "github.com/stubbedev/lys-wm/internal/protocol/server/keyboardshortcutsinhibit"
 	sle "github.com/stubbedev/lys-wm/internal/protocol/server/lysescape"
 	svk "github.com/stubbedev/lys-wm/internal/protocol/server/virtualkeyboard"
@@ -29,6 +30,7 @@ import (
 
 var privileged = []*wire.Interface{
 	swsc.ZwlrScreencopyManagerV1Interface,
+	shte.HyprlandToplevelExportManagerV1Interface,
 	seic.ExtImageCopyCaptureManagerV1Interface,
 	seis.ExtOutputImageCaptureSourceManagerV1Interface,
 	seis.ExtForeignToplevelImageCaptureSourceManagerV1Interface,

@@ -796,6 +796,13 @@ accent-color`, the `accent` palette colour the focus border and active tab
 default to. lys-ui's `portalsettings` monitor follows it on its own goroutine,
 and a change posts a config reload to the loop (stubbedev/lys-settings#4).
 
+Quickshell captures single windows only through
+`hyprland_toplevel_export_manager_v1` (#312), keyed by a wlr foreign-toplevel
+handle or, in `capture_toplevel`, by the lys-wm window ID. Its frames share
+wlr-screencopy's frame code: shm or dmabuf, the window drawn without
+decorations or rounding as ext-image-copy-capture draws it, also while it is
+hidden, and a copy that waits for damage waits for a commit in the window.
+
 ## Packages
 
 Everything lives under `internal/` except the commands.
