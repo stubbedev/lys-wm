@@ -638,6 +638,30 @@ never fully repainted.
 Nothing here has run on an HDR display. Connector programming is tested against
 fake KMS and the pixel paths on lavapipe and llvmpipe.
 
+## Variable refresh
+
+Decided in #298: lys-wm supports adaptive sync, off by default. scope.md promises
+games, and a fullscreen game below the panel's rate is where a fixed refresh
+judders; HDR, the other #40 non-goal, landed, and VRR needs nothing it lacks.
+
+An output rule picks `off`, `on` or `fullscreen` (Hyprland's `vrr` 0, 1 and 3).
+`fullscreen` follows the frame hints that already set the connector's content
+type and the tearing decision: one surface alone filling the output, tagged game
+or video. The compositor asks the backend through `backend.AdaptiveSync` on
+each frame it draws, and the DRM backend sets the CRTC's `VRR_ENABLED` only when
+it changes or on a modeset, never in an async flip. Capability is the
+connector's `vrr_capable` on a CRTC with `VRR_ENABLED`.
+
+While it is on, nothing assumes a fixed interval: the frame clock starts a frame
+as soon as it is asked (no latch half a refresh before the next vblank), the
+planes commit at once, no frame is timed against an aimed vblank, and
+animations sample at the clock instead of a predicted vblank. Presentation
+feedback reports refresh 0 to `wp_presentation` version 1, which cannot say
+otherwise, and the mode's interval, the fastest the output goes, to version 2.
+wlr-output-management reports the state per head and turns it on or off as the
+rule would. Tested against fake KMS and the headless backend; nothing here has
+run on a VRR display.
+
 ## Content updates
 
 Each `wl_surface.commit` makes a content update (#117). Extensions attach

@@ -1326,3 +1326,16 @@ func TestABufferNotAMultipleOfItsScaleIsAcceptedWhereTheSpecAllowsIt(t *testing.
 		})
 	}
 }
+
+func TestAVariableRefreshReachesOnlyFeedbackThatCanSayItIsTheFastest(t *testing.T) {
+	const interval = 6944 * time.Microsecond
+	for _, c := range []struct {
+		variable bool
+		version  uint32
+		want     time.Duration
+	}{{false, 1, interval}, {false, 2, interval}, {true, 1, 0}, {true, 2, interval}} {
+		if got := feedbackRefresh(interval, c.variable, c.version); got != c.want {
+			t.Errorf("variable %v, version %d: refresh %v, want %v", c.variable, c.version, got, c.want)
+		}
+	}
+}

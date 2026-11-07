@@ -39,6 +39,7 @@ var requires = map[string]map[string]any{
 	"binds[].flags[]":          {"binds[].chord": "SUPER + Q", "binds[].action": "kill"},
 	"submaps.*[].flags[]":      {"submaps.*[].chord": "SUPER + Q", "submaps.*[].action": "kill"},
 	"rules[].blur_look.tint":   {"rules[].app_id": "foot"},
+	"outputs[].vrr":            {"outputs[].match": "DP-1"},
 	"tabs.active.background":   {"tabs.active.text": "text"},
 	"tabs.active.text":         {"tabs.active.background": "base"},
 	"tabs.inactive.background": {"tabs.inactive.text": "text"},

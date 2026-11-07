@@ -21,6 +21,7 @@ type OutputRule struct {
 	Position      *image.Point
 	Scale         output.Scale
 	Depth         backend.BitDepth
+	VRR           VRRPolicy
 	Disabled      bool
 	Shader        string
 	HDR           bool
@@ -201,7 +202,7 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 		delete(c.hdr, b)
 		return changed, nil
 	}
-	return changed, c.setOutputColor(b, color)
+	return changed, errors.Join(c.commitAdaptiveSync(b, rule.VRR), c.setOutputColor(b, color))
 }
 
 func (c *Compositor) relayout() error {
@@ -353,7 +354,8 @@ func (c *Compositor) Heads() []outputmanagement.Head {
 	heads := make([]outputmanagement.Head, 0, len(c.outputs)+len(c.disabled))
 	for _, o := range c.outputs {
 		b := o.Backend()
-		heads = append(heads, outputmanagement.Head{Output: b, Enabled: true, Mode: b.State().Mode, Position: o.Position(), Scale: o.Scale()})
+		as, ok := b.(backend.AdaptiveSync)
+		heads = append(heads, outputmanagement.Head{Output: b, Enabled: true, Mode: b.State().Mode, Position: o.Position(), Scale: o.Scale(), AdaptiveSync: ok && as.AdaptiveSync()})
 	}
 	for _, b := range c.disabled {
 		heads = append(heads, outputmanagement.Head{Output: b})
@@ -381,6 +383,12 @@ func (c *Compositor) Configure(heads []outputmanagement.HeadConfig, apply bool) 
 		}
 		if h.Scale != nil {
 			rule.Scale = *h.Scale
+		}
+		if h.AdaptiveSync != nil {
+			rule.VRR = VRROff
+			if *h.AdaptiveSync {
+				rule.VRR = VRROn
+			}
 		}
 		overrides[b.Name()] = rule
 		if !h.Enabled {

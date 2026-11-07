@@ -61,6 +61,8 @@ const (
 	propContentTypeID
 	propColorEncodingID
 	propColorRangeID
+	propVRRCapableID
+	propVRREnabledID
 	inFormatsBlob    = 500
 	edidBlob         = 501
 	litModeBlob      = 502
@@ -122,6 +124,7 @@ type fakeDevice struct {
 	asyncFormats      bool
 	imports           int
 	contentTypes      bool
+	vrr               bool
 	overlayYUV        bool
 	refuseLone        bool
 	noMaster          bool
@@ -291,6 +294,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if !f.noCTM {
 			props["CTM"] = kdrm.Property{ID: propCTM}
 		}
+		if f.vrr {
+			props[propVRREnabled] = kdrm.Property{ID: propVRREnabledID}
+		}
 		return props, nil
 	case kdrm.ObjectConnector:
 		var routed uint64
@@ -303,6 +309,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		}
 		if f.contentTypes {
 			props[propContentType] = kdrm.Property{ID: propContentTypeID}
+		}
+		if f.vrr {
+			props[propVRRCapable] = kdrm.Property{ID: propVRRCapableID, Value: 1}
 		}
 		if f.nonDesktop[object] {
 			props["non-desktop"] = kdrm.Property{ID: propNonDesktop, Value: 1}

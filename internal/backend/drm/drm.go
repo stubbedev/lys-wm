@@ -981,6 +981,8 @@ type Output struct {
 	bpcRefused    bool
 	contentType   wm.ContentType
 	contentDirty  bool
+	vrr           bool
+	vrrSent       bool
 	tearFrame     bool
 	commitLatch   *loop.Timer
 	late          *scanout
@@ -1410,6 +1412,7 @@ func (o *Output) unbind() {
 		return
 	}
 	o.crtc.output, o.primary.taken = nil, false
+	o.vrrSent = false
 	if o.overlay != nil {
 		o.overlay.taken, o.overlay = false, nil
 	}
@@ -1715,8 +1718,11 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 		return errors.Join(err, unix.Close(fence))
 	}
 	o.renderFence, o.renderStart = fence, s.started
-	now := o.b.now()
-	o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
+	o.aimedAt = 0
+	if !o.vrrSent {
+		now := o.b.now()
+		o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
+	}
 	o.sentOverlay()
 	if flags&kdrm.AtomicAllowModeset != 0 {
 		o.bpc = o.maxBPC()
@@ -1808,7 +1814,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if torn {
 		return true, nil
 	}
-	o.contentDirty = false
+	o.contentDirty, o.vrrSent = false, o.vrr
 	return true, o.colorSent()
 }
 
@@ -1829,7 +1835,7 @@ func (o *Output) asyncFormat(d gpu.DMABUF) bool {
 }
 
 func (o *Output) tearable(fb uint32, flags uint32, fence int) bool {
-	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
+	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.vrrDirty() || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
 		return false
 	}
 	key := planeKey{primary: fb, flags: flags}
@@ -1933,7 +1939,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	if o.cursor != nil {
 		o.cursor.sent()
 	}
-	o.contentDirty = false
+	o.contentDirty, o.vrrSent = false, o.vrr
 	return o.colorSent()
 }
 
@@ -1976,6 +1982,7 @@ func (o *Output) frame(s *scanout, fence int) {
 	}
 	o.addColor()
 	o.addContentType(r)
+	o.addVRR(r)
 }
 
 func (p *plane) setPosition(r *kdrm.Request, at image.Point) {
@@ -2008,11 +2015,17 @@ func (o *Output) test(flags uint32) error {
 }
 
 func (o *Output) planesWait() time.Duration {
+	if o.vrrSent {
+		return 0
+	}
 	now := o.b.now()
 	return backend.PlaneLatch(o.vblank(now), now, modeOf(o.mode).Interval()) - now
 }
 
 func (o *Output) frameWait() time.Duration {
+	if o.vrrSent {
+		return 0
+	}
 	now := o.b.now()
 	return o.budget.Deadline(o.vblank(now), now, modeOf(o.mode).Interval()) - now
 }
@@ -2211,7 +2224,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 }
 
 func (o *Output) presentation(e kdrm.FlipEvent) backend.Presentation {
-	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn, Hardware: e.Sequence != 0}
+	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn, Hardware: e.Sequence != 0, Variable: o.vrrSent}
 }
 
 func (o *Output) dropScanout(s *scanout) error {

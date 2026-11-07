@@ -183,6 +183,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
 | `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
+| `vrr` | Variable refresh rate (adaptive sync, FreeSync, G-Sync Compatible): `off` (the default), `on` for always, or `fullscreen`: only while one surface alone fills the output and says through `wp_content_type_v1` that it is a game or a video. A frame then reaches the screen when it is ready instead of at the next fixed vblank. An output without it (no `vrr_capable` connector, or a CRTC without `VRR_ENABLED`) keeps a fixed refresh and says so in the log |
 | `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes. Default `false` |
 | `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
 | `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
@@ -235,8 +236,10 @@ Display tools such as wlr-randr, kanshi, wdisplays and nwg-displays change
 outputs while lys-wm runs, through wlr-output-management. Their changes take the
 place of these rules for the outputs they name until the config is reloaded,
 which applies the rules again. lys-wm refuses a configuration that rotates an
-output, turns on adaptive sync, uses a mode the output does not list, or turns
-every output off.
+output, turns on adaptive sync where the output has none, uses a mode the output
+does not list, or turns every output off. Turning adaptive sync on or off there
+sets `vrr` to `on` or `off` for that output; the head reports whether it is on
+right now.
 
 While the laptop lid is closed, internal panels (`eDP-*`) are off whatever the
 rules say, and their workspaces move to the other outputs; opening the lid

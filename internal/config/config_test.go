@@ -263,6 +263,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"outputs:\n  - match: DP-1\n    scale: 20\n":                            "t.yaml:3: outputs[0].scale: output: scale 20 is outside",
 		"outputs:\n  - match: DP-1\n    scale: .nan\n":                          "t.yaml:3: outputs[0].scale: output: scale NaN is outside",
 		"outputs:\n  - match: DP-1\n    bitdepth: 12\n":                         "t.yaml:3: outputs[0].bitdepth: 12 is not 8 or 10",
+		"outputs:\n  - match: DP-1\n    vrr: always\n":                          `t.yaml:3: outputs[0].vrr: "always" is not one of fullscreen, off, on`,
 		"outputs:\n  - match: DP-1\n    mode: 1x1@nan\n":                        `t.yaml:3: outputs[0].mode: "1x1@nan" is not`,
 		"outputs:\n  - match: DP-1\n    mode: 1x1@inf\n":                        `t.yaml:3: outputs[0].mode: "1x1@inf" is not`,
 		"outputs:\n  - match: DP-1\n    mode: 1x1@1e12\n":                       `t.yaml:3: outputs[0].mode: "1x1@1e12" is not`,
@@ -854,5 +855,17 @@ func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T
 	}
 	if got := parse(t, "borders:\n  active: \"#ff8800\"\n").Decor.Tab.Active.Background; got != desktop {
 		t.Errorf("an explicit border moved the active tab to %+v", got)
+	}
+}
+
+func TestAnOutputRuleNamesItsAdaptiveSyncPolicy(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("outputs:\n  - match: DP-1\n    vrr: on\n  - match: DP-2\n    vrr: fullscreen\n  - match: DP-3\n    vrr: off\n  - match: DP-4\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []compositor.VRRPolicy{compositor.VRROn, compositor.VRRFullscreen, compositor.VRROff, compositor.VRROff} {
+		if got := cfg.Outputs.Named[i].VRR; got != want {
+			t.Errorf("%s: vrr %d, want %d", cfg.Outputs.Named[i].Name, got, want)
+		}
 	}
 }

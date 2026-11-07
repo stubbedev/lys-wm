@@ -2,6 +2,7 @@ package compositor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"slices"
 
@@ -38,6 +39,9 @@ func (c *Compositor) showFrameHints(o *output.Output, sc *scene, bounds image.Re
 		op, alone = fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
 	}
 	c.showContentType(o, op.surface, alone)
+	if err := c.showAdaptiveSync(o, op.surface, alone); err != nil {
+		c.report(fmt.Errorf("compositor: announce the adaptive sync of %s: %w", o.Backend().Name(), err))
+	}
 	if ft, ok := o.Backend().(backend.FrameTearing); ok {
 		ft.TearFrame(alone && c.tears(op.surface))
 	}

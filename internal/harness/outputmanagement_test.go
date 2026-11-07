@@ -59,6 +59,7 @@ type omHead struct {
 	position    image.Point
 	scale       float64
 	transform   cw.WlOutputTransform
+	adaptive    cwom.ZwlrOutputHeadV1AdaptiveSyncState
 	finished    bool
 }
 
@@ -117,7 +118,8 @@ func (h *omHead) Finished(*cwom.ZwlrOutputHeadV1) error {
 func (*omHead) Make(*cwom.ZwlrOutputHeadV1, string) error         { return nil }
 func (*omHead) Model(*cwom.ZwlrOutputHeadV1, string) error        { return nil }
 func (*omHead) SerialNumber(*cwom.ZwlrOutputHeadV1, string) error { return nil }
-func (*omHead) AdaptiveSync(*cwom.ZwlrOutputHeadV1, cwom.ZwlrOutputHeadV1AdaptiveSyncState) error {
+func (h *omHead) AdaptiveSync(_ *cwom.ZwlrOutputHeadV1, state cwom.ZwlrOutputHeadV1AdaptiveSyncState) error {
+	h.adaptive = state
 	return nil
 }
 

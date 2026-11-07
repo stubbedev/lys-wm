@@ -170,6 +170,7 @@ func annotations() map[string]annotation {
 		"rules[].app_id":                   formatAnn(regexFormat),
 		"rules[].title":                    formatAnn(regexFormat),
 		"rules[].tag":                      formatAnn(regexFormat),
+		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
 	}

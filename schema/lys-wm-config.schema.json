@@ -786,6 +786,14 @@
           },
           "shader": {
             "type": "string"
+          },
+          "vrr": {
+            "type": "string",
+            "enum": [
+              "fullscreen",
+              "off",
+              "on"
+            ]
           }
         },
         "additionalProperties": false

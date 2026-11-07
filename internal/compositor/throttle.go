@@ -141,7 +141,7 @@ func (c *Compositor) capturedTree(root *surface.Surface, at time.Duration) error
 		}
 		delete(c.hidden.waiting, member)
 		member.Latch()
-		errs = errors.Join(errs, member.FrameDone(wire.Millis(at)), member.Presented(nil, at, 0, 0, 0))
+		errs = errors.Join(errs, member.FrameDone(wire.Millis(at)), member.Presented(nil, at, 0, false, 0, 0))
 	}
 	return errs
 }

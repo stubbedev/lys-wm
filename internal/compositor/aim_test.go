@@ -51,3 +51,13 @@ func TestAFrameWithoutARecentVblankSamplesAtTheClock(t *testing.T) {
 		t.Fatalf("with a vblank on another clock the frame samples at %v, want %v", got, now)
 	}
 }
+
+func TestAFrameOnAVariableRefreshSamplesAtTheClock(t *testing.T) {
+	now := 10 * time.Second
+	c := &Compositor{scenes: map[*output.Output]*scene{}}
+	o := &output.Output{}
+	c.sceneOf(o).last = backend.Presentation{Time: now - 5*time.Millisecond, Refresh: 16 * time.Millisecond, Variable: true}
+	if got := c.aimed(o, now); got != now {
+		t.Fatalf("under adaptive sync the frame samples at %v, want the clock's %v: the next refresh starts when the frame reaches the screen", got, now)
+	}
+}

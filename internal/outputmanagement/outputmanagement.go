@@ -20,11 +20,12 @@ import (
 const version = 4
 
 type Head struct {
-	Output   backend.Output
-	Enabled  bool
-	Mode     backend.Mode
-	Position image.Point
-	Scale    output.Scale
+	Output       backend.Output
+	Enabled      bool
+	Mode         backend.Mode
+	Position     image.Point
+	Scale        output.Scale
+	AdaptiveSync bool
 }
 
 type ModeRequest struct {
@@ -33,11 +34,12 @@ type ModeRequest struct {
 }
 
 type HeadConfig struct {
-	Output   backend.Output
-	Enabled  bool
-	Mode     *ModeRequest
-	Position *image.Point
-	Scale    *output.Scale
+	Output       backend.Output
+	Enabled      bool
+	Mode         *ModeRequest
+	Position     *image.Point
+	Scale        *output.Scale
+	AdaptiveSync *bool
 }
 
 type Controller interface {
@@ -144,7 +146,7 @@ func (b *binding) announce(h Head) error {
 		}
 	}
 	if res.Base().Version() >= 4 {
-		errs = append(errs, res.SendAdaptiveSync(swom.ZwlrOutputHeadV1AdaptiveSyncStateDisabled))
+		errs = append(errs, res.SendAdaptiveSync(adaptiveSyncState(h.AdaptiveSync)))
 	}
 	errs = append(errs, res.SendEnabled(enabled(h.Enabled)))
 	if h.Enabled {
@@ -152,6 +154,13 @@ func (b *binding) announce(h Head) error {
 	}
 	hb.sent = h
 	return errors.Join(errs...)
+}
+
+func adaptiveSyncState(on bool) swom.ZwlrOutputHeadV1AdaptiveSyncState {
+	if on {
+		return swom.ZwlrOutputHeadV1AdaptiveSyncStateEnabled
+	}
+	return swom.ZwlrOutputHeadV1AdaptiveSyncStateDisabled
 }
 
 func enabled(on bool) int32 {
@@ -216,6 +225,9 @@ func (hb *headBinding) update(now Head) error {
 	before := hb.sent
 	if now.Enabled != before.Enabled {
 		errs = append(errs, hb.res.SendEnabled(enabled(now.Enabled)))
+	}
+	if now.AdaptiveSync != before.AdaptiveSync && hb.res.Base().Version() >= 4 {
+		errs = append(errs, hb.res.SendAdaptiveSync(adaptiveSyncState(now.AdaptiveSync)))
 	}
 	if now.Enabled {
 		if !before.Enabled {
@@ -302,7 +314,7 @@ type configHead struct {
 	position    *image.Point
 	scale       *output.Scale
 	transform   bool
-	adaptive    bool
+	adaptive    *bool
 	unsupported []string
 }
 
@@ -389,7 +401,7 @@ func (cfg *configuration) configure(apply bool) error {
 		if len(ch.unsupported) > 0 {
 			return fmt.Errorf("%w: %s asks for %v, which lys-wm does not support", ErrRefused, ch.head.out.Name(), ch.unsupported)
 		}
-		heads = append(heads, HeadConfig{Output: ch.head.out, Enabled: ch.enabled, Mode: ch.mode, Position: ch.position, Scale: ch.scale})
+		heads = append(heads, HeadConfig{Output: ch.head.out, Enabled: ch.enabled, Mode: ch.mode, Position: ch.position, Scale: ch.scale, AdaptiveSync: ch.adaptive})
 	}
 	return cfg.b.m.ctl.Configure(heads, apply)
 }
@@ -464,15 +476,20 @@ func (ch *configHead) SetScale(obj *swom.ZwlrOutputConfigurationHeadV1, scale wi
 }
 
 func (ch *configHead) SetAdaptiveSync(obj *swom.ZwlrOutputConfigurationHeadV1, state swom.ZwlrOutputHeadV1AdaptiveSyncState) error {
-	if err := ch.once(obj, ch.adaptive, "adaptive sync"); err != nil {
+	if err := ch.once(obj, ch.adaptive != nil, "adaptive sync"); err != nil {
 		return err
 	}
-	ch.adaptive = true
 	switch state {
 	case swom.ZwlrOutputHeadV1AdaptiveSyncStateDisabled:
+		off := false
+		ch.adaptive = &off
 		return nil
 	case swom.ZwlrOutputHeadV1AdaptiveSyncStateEnabled:
-		ch.unsupported = append(ch.unsupported, "adaptive sync")
+		on := true
+		ch.adaptive = &on
+		if !backend.AdaptiveSyncCapable(ch.head.out) {
+			ch.unsupported = append(ch.unsupported, "adaptive sync")
+		}
 		return nil
 	}
 	return obj.ProtocolError(swom.ZwlrOutputConfigurationHeadV1ErrorInvalidAdaptiveSyncState, "adaptive sync state %d", state)

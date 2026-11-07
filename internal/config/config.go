@@ -152,6 +152,7 @@ type rawOutput struct {
 	Position      *At[string]  `yaml:"position"`
 	Scale         *At[float64] `yaml:"scale"`
 	BitDepth      *At[int]     `yaml:"bitdepth"`
+	VRR           *At[string]  `yaml:"vrr"`
 	Disabled      bool         `yaml:"disabled"`
 	HDR           bool         `yaml:"hdr"`
 	SDRBrightness *At[float64] `yaml:"sdr_brightness"`
@@ -952,6 +953,9 @@ func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
 			p.fail(r.BitDepth.Line, key+".bitdepth", "%d is not 8 or 10", r.BitDepth.V)
 		}
 	}
+	if v := choice(p, r.VRR, key+".vrr", vrrPolicies); v != nil {
+		rule.VRR = *v
+	}
 	if r.Shader != nil {
 		rule.Shader = p.shaderPath(*r.Shader, key+".shader")
 	}
@@ -989,6 +993,7 @@ var (
 	clickMethods  = map[string]session.ClickMethod{"none": session.ClickNone, "button_areas": session.ClickButtonAreas, "clickfinger": session.ClickFinger}
 	scrollMethods = map[string]session.ScrollMethod{"none": session.ScrollNone, "two_finger": session.ScrollTwoFinger, "edge": session.ScrollEdge, "on_button_down": session.ScrollOnButtonDown}
 	accelProfiles = map[string]session.AccelProfile{"flat": session.AccelFlat, "adaptive": session.AccelAdaptive}
+	vrrPolicies   = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
 )
 
 func choice[T any](p *parser, a *At[string], key string, names map[string]T) *T {

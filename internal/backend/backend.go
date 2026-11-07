@@ -113,6 +113,7 @@ type Presentation struct {
 	Torn     bool
 	Idle     bool
 	Hardware bool
+	Variable bool
 }
 
 const EmptyFramesPerRefresh = 2
@@ -207,6 +208,17 @@ type ContentTyped interface {
 
 type FrameTearing interface {
 	TearFrame(tear bool)
+}
+
+type AdaptiveSync interface {
+	AdaptiveSyncCapable() bool
+	AdaptiveSync() bool
+	SetAdaptiveSync(on bool) error
+}
+
+func AdaptiveSyncCapable(o Output) bool {
+	a, ok := o.(AdaptiveSync)
+	return ok && a.AdaptiveSyncCapable()
 }
 
 type Capability uint8

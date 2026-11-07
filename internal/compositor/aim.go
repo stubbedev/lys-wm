@@ -11,7 +11,7 @@ const aimPhaseAge = time.Second
 
 func (c *Compositor) aimed(o *output.Output, now time.Duration) time.Duration {
 	last := c.sceneOf(o).last
-	if last.Refresh <= 0 || last.Time == 0 || last.Time > now || now-last.Time > aimPhaseAge {
+	if last.Variable || last.Refresh <= 0 || last.Time == 0 || last.Time > now || now-last.Time > aimPhaseAge {
 		return now
 	}
 	at, _ := backend.NextVblank(last.Time, now, last.Refresh)

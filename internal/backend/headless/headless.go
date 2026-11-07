@@ -28,6 +28,7 @@ import (
 type Backend struct {
 	shallow    bool
 	sdrOnly    bool
+	vrr        bool
 	loop       *loop.Loop
 	renderer   render.Renderer
 	closeGPU   func() error
@@ -293,6 +294,7 @@ type Output struct {
 	gammaSize      int
 	gamma          []uint16
 	hasCTM         bool
+	vrr            bool
 	ctm            backend.Matrix
 	queuedTorn     bool
 	torn           uint64
@@ -330,6 +332,23 @@ func (o *Output) SetGamma(ramps []uint16) error {
 
 func (o *Output) Gamma() []uint16 {
 	return slices.Clone(o.gamma)
+}
+
+func (b *Backend) EnableAdaptiveSync() {
+	b.vrr = true
+}
+
+func (o *Output) AdaptiveSyncCapable() bool {
+	return o.backend.vrr
+}
+
+func (o *Output) AdaptiveSync() bool {
+	return o.vrr
+}
+
+func (o *Output) SetAdaptiveSync(on bool) error {
+	o.vrr = on && o.backend.vrr
+	return nil
 }
 
 func (o *Output) EnableColorTransform() {
@@ -768,7 +787,7 @@ func (o *Output) present() error {
 	}
 	torn := o.queuedTorn
 	o.queuedTorn = false
-	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Torn: torn, Hardware: o.hardwareClock})
+	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Torn: torn, Hardware: o.hardwareClock, Variable: o.vrr})
 }
 
 type device struct {

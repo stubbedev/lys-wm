@@ -53,7 +53,14 @@ func (s *Surface) Latch() {
 	s.current.feedbacks = s.current.feedbacks[:0]
 }
 
-func (s *Surface) Presented(outputs []*sw.WlOutput, at, refresh time.Duration, seq uint64, kind PresentationKind) error {
+func feedbackRefresh(refresh time.Duration, variable bool, version uint32) time.Duration {
+	if variable && version < 2 {
+		return 0
+	}
+	return refresh
+}
+
+func (s *Surface) Presented(outputs []*sw.WlOutput, at, refresh time.Duration, variable bool, seq uint64, kind PresentationKind) error {
 	feedbacks := s.latched
 	s.latched = feedbacks[:0]
 	defer clear(feedbacks)
@@ -65,7 +72,7 @@ func (s *Surface) Presented(outputs []*sw.WlOutput, at, refresh time.Duration, s
 				return err
 			}
 		}
-		if err := fb.SendPresented(ts.SecHi, ts.SecLo, ts.Nsec, uint32(refresh.Nanoseconds()), seqHi, seqLo, kind); err != nil { //nolint:gosec // a refresh period fits 32 bits of nanoseconds
+		if err := fb.SendPresented(ts.SecHi, ts.SecLo, ts.Nsec, uint32(feedbackRefresh(refresh, variable, fb.Base().Version()).Nanoseconds()), seqHi, seqLo, kind); err != nil { //nolint:gosec // a refresh period fits 32 bits of nanoseconds
 			return err
 		}
 	}

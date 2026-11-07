@@ -552,7 +552,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		} else {
 			frame = s.FrameDone(wire.Millis(p.Time))
 		}
-		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, seq, sc.feedbackKind(s, kind, p.Idle)))
+		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, p.Variable, seq, sc.feedbackKind(s, kind, p.Idle)))
 	}
 	if p.Idle {
 		return errs
