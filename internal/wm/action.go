@@ -803,6 +803,14 @@ var Actions = []ActionSpec{
 		},
 	},
 	{
+		Name: "pin", Args: "[toggle|on|off]",
+		Summary: "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			sw, err := optionalSwitch(spec, args)
+			return PinAction{Switch: sw}, err
+		},
+	},
+	{
 		Name: "maximize", Args: "[toggle|on|off]",
 		Summary: "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told.",
 		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {

@@ -125,6 +125,7 @@ type State struct {
 	remembered map[string]WorkspaceID
 	limits     map[WindowID]Limits
 	fake       map[WindowID]struct{}
+	pinned     map[WindowID]struct{}
 }
 
 var (
@@ -140,6 +141,7 @@ func (s State) clone() State {
 		remembered: make(map[string]WorkspaceID, len(s.remembered)),
 		limits:     maps.Clone(s.limits),
 		fake:       maps.Clone(s.fake),
+		pinned:     maps.Clone(s.pinned),
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
@@ -286,6 +288,7 @@ func (s *State) activate(id WorkspaceID) {
 	}
 	if prev != id {
 		o.previous = prev
+		s.gatherPinned()
 		s.dropIfIdle(prev)
 	}
 }
@@ -326,6 +329,7 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 	if s.focused == "" {
 		s.focused = name
 	}
+	s.gatherPinned()
 	return s, nil
 }
 
@@ -377,6 +381,7 @@ func (s State) RemoveOutput(name string) (State, error) {
 		}
 	}
 	s.scratch = slices.DeleteFunc(s.scratch, func(w Workspace) bool { return w.empty() && !s.Shown(w) })
+	s.gatherPinned()
 	if s.focused != "" {
 		s.dropIdleOn(s.focused)
 	}
@@ -473,6 +478,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 	}
 	delete(s.limits, id)
 	delete(s.fake, id)
+	delete(s.pinned, id)
 	s.vacated(w.ID)
 	return s, nil
 }
@@ -588,6 +594,9 @@ func (s State) MoveWindowToWorkspace(win WindowID, id WorkspaceID, at Autotile) 
 		return next, err
 	}
 	next.vacated(from)
+	if next.Pinned(win) {
+		delete(next.pinned, win)
+	}
 	return next, nil
 }
 
@@ -674,11 +683,13 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 	for i := range s.scratch {
 		s.placeScratchpad(all, &s.scratch[i], sp)
 	}
-	if len(s.fake) == 0 {
+	if len(s.fake) == 0 && len(s.pinned) == 0 {
 		return
 	}
 	for i := range all.Windows {
-		_, all.Windows[i].Fake = s.fake[all.Windows[i].ID]
+		id := all.Windows[i].ID
+		_, all.Windows[i].Fake = s.fake[id]
+		_, all.Windows[i].Pinned = s.pinned[id]
 	}
 }
 

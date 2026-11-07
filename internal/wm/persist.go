@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"maps"
 	"slices"
 )
 
@@ -57,6 +58,7 @@ type savedState struct {
 	Remembered map[string]WorkspaceID `json:"remembered,omitempty"`
 	Limits     []savedLimit           `json:"limits,omitempty"`
 	Fake       []WindowID             `json:"fake_fullscreen,omitempty"`
+	Pinned     []WindowID             `json:"pinned,omitempty"`
 }
 
 func saveGroup(g *Group) *savedGroup {
@@ -114,6 +116,7 @@ func (s State) Save() ([]byte, error) {
 		saved.Fake = append(saved.Fake, id)
 	}
 	slices.Sort(saved.Fake)
+	saved.Pinned = slices.Sorted(maps.Keys(s.pinned))
 	for id, l := range s.limits {
 		saved.Limits = append(saved.Limits, savedLimit{ID: id, Limits: l})
 	}
@@ -141,6 +144,12 @@ func LoadState(data []byte) (State, error) {
 	}
 	for _, l := range saved.Limits {
 		s.limits[l.ID] = l.Limits
+	}
+	for _, id := range saved.Pinned {
+		if s.pinned == nil {
+			s.pinned = map[WindowID]struct{}{}
+		}
+		s.pinned[id] = struct{}{}
 	}
 	for _, id := range saved.Fake {
 		if s.fake == nil {

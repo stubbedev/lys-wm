@@ -100,6 +100,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Fullscreen:    s.Fullscreen(w.id),
 			Maximized:     s.Maximized(w.id),
 			ClientFull:    s.Fullscreen(w.id) || s.FakeFullscreen(w.id),
+			Pinned:        s.Pinned(w.id),
 			Minimized:     s.Minimized(w.id),
 			Urgent:        w.urgent,
 			Unresponsive:  w.hung,

@@ -188,6 +188,9 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 }
 
 func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
+	if w.pinned {
+		return identity, w.visible
+	}
 	if w.scratch {
 		if v, drawn, sliding := c.scratchView(o, w); sliding {
 			return v, drawn

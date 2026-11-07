@@ -41,6 +41,7 @@ type window struct {
 	framesUnshown int
 	look          focusLook
 	scratch       bool
+	pinned        bool
 	looked        bool
 	border        Border
 	borderAngle   anim.Tween[float64]
@@ -281,7 +282,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch
+		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}

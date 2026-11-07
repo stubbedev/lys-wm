@@ -65,6 +65,8 @@ var everyAction = []Action{
 	FullscreenAction{Switch: SwitchOff, Fake: true},
 	FullscreenAction{Fake: true},
 	MaximizeAction{},
+	PinAction{},
+	PinAction{Switch: SwitchOn},
 	MaximizeAction{Switch: SwitchOff},
 	DragAction{Mode: DragMove},
 	DragAction{Mode: DragResize},

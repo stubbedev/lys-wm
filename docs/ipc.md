@@ -77,7 +77,7 @@ focused one, or `null`:
 
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
- "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
+ "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
  "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
 ```
 
@@ -90,6 +90,7 @@ from one `windows` request.
 Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
+`pinned` is true while the window stays on screen through workspace switches of its output (the `pin` action); its `workspace` is the one its output shows.
 A window in a scratchpad has `workspace` 0 and `scratchpad`, its name; other
 windows leave `scratchpad` out.
 `maximized` is true while the window fills the usable area (the `maximize`
@@ -199,6 +200,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `icon` | `window`, `icon` | A window set or cleared its icon |
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
 | `mode` | `window`, `fullscreen`, `maximized`, `client_fullscreen` | A window went fullscreen or maximized, or back, or was told it is fullscreen (fake fullscreen), or no longer |
+| `pin` | `window`, `pinned` | A window was pinned to its output (the `pin` action) or unpinned |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |
 | `stack` | `window`, `stack` (index or `null`) | A window's front-to-back index on its output changed, or it was shown or hidden |

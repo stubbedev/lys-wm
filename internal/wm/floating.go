@@ -135,6 +135,7 @@ func (s State) Float(id WindowID, rect image.Rectangle) (State, error) {
 
 func (s State) Tile(id WindowID, at Autotile) (State, error) {
 	s = s.clone()
+	delete(s.pinned, id)
 	w := s.windowWorkspace(id)
 	if w == nil || w.floatingIndex(id) < 0 {
 		return State{}, fmt.Errorf("tile window %d: %w", id, ErrUnknownWindow)

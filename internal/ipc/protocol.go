@@ -242,6 +242,7 @@ type Window struct {
 	Fullscreen    bool              `json:"fullscreen"`
 	Maximized     bool              `json:"maximized"`
 	ClientFull    bool              `json:"client_fullscreen"`
+	Pinned        bool              `json:"pinned"`
 	Minimized     bool              `json:"minimized"`
 	Urgent        bool              `json:"urgent"`
 	Unresponsive  bool              `json:"unresponsive"`

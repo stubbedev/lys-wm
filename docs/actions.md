@@ -29,6 +29,7 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `submap` | `<name\|reset>` | Switch binds to the named submap, or back to the default ones. |
 | `togglefloating` |  | Float the focused window centred at half the output, or tile it again. |
 | `fullscreen` | `[toggle\|on\|off] [fake]` | Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile. |
+| `pin` | `[toggle\|on\|off]` | Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it. |
 | `maximize` | `[toggle\|on\|off]` | Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told. |
 | `resizeactive` | `<dx> <dy>` | Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one. |
 | `movewindow` |  | Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with. |
