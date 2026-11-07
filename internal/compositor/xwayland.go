@@ -264,3 +264,27 @@ func (c *Compositor) hitUnmanaged(p point) (*surface.Surface, point) {
 	}
 	return nil, point{}
 }
+
+func (c *Compositor) WorkArea() image.Rectangle {
+	name := c.wm.FocusedOutput()
+	for _, o := range c.wm.Outputs() {
+		if o.Name == name {
+			return c.toX(o.Area)
+		}
+	}
+	return image.Rectangle{}
+}
+
+func (c *Compositor) WatchWorkArea(f func(image.Rectangle)) {
+	c.workAreaWatch, c.workArea = f, c.WorkArea()
+}
+
+func (c *Compositor) publishWorkArea() {
+	if c.workAreaWatch == nil {
+		return
+	}
+	if r := c.WorkArea(); r != c.workArea {
+		c.workArea = r
+		c.workAreaWatch(r)
+	}
+}

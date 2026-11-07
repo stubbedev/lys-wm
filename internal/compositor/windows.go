@@ -243,6 +243,7 @@ func (c *Compositor) reconcile() error {
 		}
 	}
 	c.refreshLooks(now)
+	c.publishWorkArea()
 	if !placed && !focusMoved {
 		return err
 	}

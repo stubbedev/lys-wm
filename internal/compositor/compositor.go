@@ -266,6 +266,8 @@ type Compositor struct {
 	hwCursors       map[*output.Output]*hwCursor
 	unmanaged       []*xwayland.Window
 	selectionWatch  func(data.Kind, data.Source) error
+	workAreaWatch   func(image.Rectangle)
+	workArea        image.Rectangle
 	xwaylandClients func(*server.Client) bool
 	blanked         map[*output.Output]bool
 	lockFade        anim.Tween[float64]

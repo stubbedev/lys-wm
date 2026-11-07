@@ -825,7 +825,7 @@ Everything lives under `internal/` except the commands.
 | `wm` | The pure core and the dispatcher (#21, #66) |
 | `anim` | Easing curves, springs, tweens and the per-event animation table (#223) |
 | `binds` | Typed chords (modifiers with a keycode from the first layout, a button or a scroll direction), submaps and bind flags, matched to `wm` actions (#29) |
-| `xwayland` | Runs Xwayland for X11 clients: the display sockets, the start on the first connection, the X11 window manager and the selection bridge (#44, #45, #46); `_NET_WM_STATE_DEMANDS_ATTENTION` marks a window urgent until it is focused, a maximize request is answered with the unmaximized state and the current geometry, and `_NET_CLIENT_LIST_STACKING` follows the raises (#311) |
+| `xwayland` | Runs Xwayland for X11 clients: the display sockets, the start on the first connection, the X11 window manager and the selection bridge (#44, #45, #46); `_NET_WM_STATE_DEMANDS_ATTENTION` marks a window urgent until it is focused, a maximize request is answered with the unmaximized state and the current geometry, `_NET_CLIENT_LIST_STACKING` follows the raises, and `_NET_WORKAREA` is the focused output's usable area, below its exclusive layer surfaces, in Xwayland's coordinates (#311) |
 | `config` | The typed config, its validation and reload (#30) |
 | `ipc` | The IPC socket and event stream (#31) |
 | `systemd` | Hands the session's environment to D-Bus activation and the systemd user manager, and runs `lys-wm-session.target` while lys-wm runs |

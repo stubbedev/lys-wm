@@ -235,6 +235,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 		}
 		h.compositor.WatchSelection(h.xwayland.SelectionChanged)
 		h.compositor.SetDropTarget(h.xwayland)
+		h.compositor.WatchWorkArea(h.xwayland.WorkAreaChanged)
 		if err := h.compositor.ScaleXwayland(h.xwayland.IsClient); err != nil {
 			t.Fatalf("harness: %v", err)
 		}

@@ -2,6 +2,7 @@ package harness
 
 import (
 	"encoding/binary"
+	"errors"
 	"image"
 	"slices"
 	"testing"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
 func (c *xclient) sendState(win xproto.Window, action uint32, a, b string) {
@@ -135,4 +138,44 @@ func windowAtoms(ws []xproto.Window) []xproto.Atom {
 		out[i] = xproto.Atom(w)
 	}
 	return out
+}
+
+func (c *xclient) workArea() image.Rectangle {
+	c.t.Helper()
+	v := c.atomsOf(c.root, "_NET_WORKAREA")
+	if len(v) != 4 {
+		return image.Rectangle{}
+	}
+	return image.Rect(int(v[0]), int(v[1]), int(v[0]+v[2]), int(v[1]+v[3]))
+}
+
+func TestTheXWorkAreaIsTheFocusedOutputsUsableArea(t *testing.T) {
+	t.Parallel()
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, scaled)
+	xc := xDial(t, h)
+	xc.intern("_NET_SUPPORTED", "_NET_WORKAREA")
+	if !slices.Contains(xc.atomsOf(xc.root, "_NET_SUPPORTED"), xc.atoms["_NET_WORKAREA"]) {
+		t.Error("_NET_SUPPORTED leaves out _NET_WORKAREA")
+	}
+	h.Eventually("the whole output as the work area", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.workArea() == image.Rect(0, 0, 240, 150)
+	})
+	c := testclient.Connect(t, h.Socket())
+	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	h.Eventually("the work area below the bar", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.workArea() == image.Rect(0, 20, 240, 150)
+	})
+	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+		return c.SetOutputScale(b.Outputs()[0], 180)
+	})
+	h.Eventually("the work area in Xwayland's physical pixels", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.workArea() == image.Rect(0, 30, 240, 150)
+	})
+	if err := errors.Join(bar.Destroy(), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the whole output once the bar is gone", func(*headless.Backend, *compositor.Compositor) bool {
+		return xc.workArea() == image.Rect(0, 0, 240, 150)
+	})
 }

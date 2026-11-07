@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"net"
 	"os"
@@ -364,6 +365,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		}
 		m.dndSel = &selection{atom: c.atoms[atomXdndSelection]}
 		p.wm = m
+		m.setWorkArea(s.opts.Listener.WorkArea())
 		var errs []error
 		for _, k := range []data.Kind{data.Clipboard, data.Primary} {
 			errs = append(errs, m.selectionChanged(k, s.opts.Listener.CurrentSelection(k)))
@@ -385,6 +387,12 @@ func (s *Server) SelectionChanged(k data.Kind, src data.Source) error {
 		return m.selectionChanged(k, src)
 	}
 	return nil
+}
+
+func (s *Server) WorkAreaChanged(r image.Rectangle) {
+	if m := s.running(); m != nil {
+		m.setWorkArea(r)
+	}
 }
 
 func (s *Server) associated(serial uint64, sf *surface.Surface) error {

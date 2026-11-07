@@ -53,6 +53,7 @@ const (
 	atomNetWMStateMaximizedVert
 	atomNetWMStateMaximizedHorz
 	atomNetClientListStacking
+	atomNetWorkarea
 	atomNetWMWindowType
 	atomNetWMWindowTypeDialog
 	atomNetWMWindowTypeUtility
@@ -120,6 +121,7 @@ var atomNames = [atomCount]string{
 	atomNetWMStateMaximizedVert:     "_NET_WM_STATE_MAXIMIZED_VERT",
 	atomNetWMStateMaximizedHorz:     "_NET_WM_STATE_MAXIMIZED_HORZ",
 	atomNetClientListStacking:       "_NET_CLIENT_LIST_STACKING",
+	atomNetWorkarea:                 "_NET_WORKAREA",
 	atomNetWMWindowType:             "_NET_WM_WINDOW_TYPE",
 	atomNetWMWindowTypeDialog:       "_NET_WM_WINDOW_TYPE_DIALOG",
 	atomNetWMWindowTypeUtility:      "_NET_WM_WINDOW_TYPE_UTILITY",
@@ -164,7 +166,7 @@ func (a atom) String() string {
 type atoms [atomCount]xproto.Atom
 
 var supported = []atom{
-	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetClientListStacking, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMStateDemandsAttention, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing, atomNetWMSyncRequest, atomNetWMSyncRequestCounter,
+	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetClientListStacking, atomNetWorkarea, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMStateDemandsAttention, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing, atomNetWMSyncRequest, atomNetWMSyncRequestCounter,
 }
 
 var watched = []atom{

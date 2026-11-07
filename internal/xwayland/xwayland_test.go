@@ -3,6 +3,7 @@ package xwayland
 import (
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"os/exec"
@@ -273,6 +274,7 @@ func (quietListener) XWindowResponsive(*Window, bool) error     { return nil }
 func (quietListener) XWindowSynced(*Window) error               { return nil }
 func (quietListener) CurrentSelection(data.Kind) data.Source    { return nil }
 func (quietListener) SetSelection(data.Kind, data.Source) error { return nil }
+func (quietListener) WorkArea() image.Rectangle                 { return image.Rectangle{} }
 
 func TestAnXwaylandThatCannotStartIsTriedAgainNextTime(t *testing.T) {
 	dir := testenv.SocketDir(t)

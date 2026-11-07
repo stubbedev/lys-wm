@@ -28,6 +28,7 @@ type Listener interface {
 	XWindowSynced(w *Window) error
 	CurrentSelection(k data.Kind) data.Source
 	SetSelection(k data.Kind, src data.Source) error
+	WorkArea() image.Rectangle
 }
 
 const (
@@ -414,6 +415,14 @@ func (m *wm) changeWindows(win xproto.Window, prop atom, list []xproto.Window) {
 		atoms[i] = xproto.Atom(w)
 	}
 	m.changeAtoms(win, m.atoms[prop], xproto.AtomWindow, atoms)
+}
+
+func (m *wm) setWorkArea(r image.Rectangle) {
+	if r.Empty() {
+		xproto.DeleteProperty(m.x, m.root, m.atoms[atomNetWorkarea])
+		return
+	}
+	m.changeAtoms(m.root, m.atoms[atomNetWorkarea], xproto.AtomCardinal, []xproto.Atom{xproto.Atom(r.Min.X), xproto.Atom(r.Min.Y), xproto.Atom(r.Dx()), xproto.Atom(r.Dy())}) //nolint:gosec // X root coordinates are not negative
 }
 
 func (m *wm) frameless(id xproto.Window) {
