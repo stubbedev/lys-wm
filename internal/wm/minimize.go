@@ -83,7 +83,7 @@ func (s State) Restore(id WindowID, at Autotile) (State, error) {
 	if mode := modeOf(m.Layer); mode != ModeNormal {
 		w.Cover = Cover{ID: id, Mode: mode}
 	}
-	if err := w.focus(id); err != nil {
+	if err := w.focus(id, Raise); err != nil {
 		return State{}, err
 	}
 	if s.output(w.Output) != nil {

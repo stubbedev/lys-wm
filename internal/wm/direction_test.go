@@ -107,8 +107,8 @@ func TestClosingReturnsToThePreviousFocus(t *testing.T) {
 	for _, id := range []WindowID{1, 2, 3} {
 		s = ok(t)(s.MapWindow(id, Autotile{}))
 	}
-	s = ok(t)(s.FocusWindow(1))
-	s = ok(t)(s.FocusWindow(3))
+	s = ok(t)(s.FocusWindow(1, Raise))
+	s = ok(t)(s.FocusWindow(3, Raise))
 	s = ok(t)(s.UnmapWindow(3))
 	if f, _ := s.Focused(); f != 1 {
 		t.Fatalf("closing 3 focused %d, want 1, which had focus before it", f)

@@ -268,7 +268,7 @@ func (r wlrHandleRequests) Activate(*swft.ZwlrForeignToplevelHandleV1, *sw.WlSea
 	if !r.live() {
 		return nil
 	}
-	return r.c.activate(r.w)
+	return r.c.activate(r.w, wm.FocusOther)
 }
 
 func (r wlrHandleRequests) Close(*swft.ZwlrForeignToplevelHandleV1) error {

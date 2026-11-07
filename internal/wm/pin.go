@@ -68,12 +68,12 @@ func (s *State) gatherPinned() {
 			continue
 		}
 		at := len(to.Floating)
-		if focused != id && to.floatFocus && at > 0 {
-			at--
+		if j := to.floatingIndex(to.floatFocus); focused != id && j >= 0 {
+			at = j
 		}
 		to.Floating = slices.Insert(to.Floating, at, f)
 		if focused == id {
-			to.floatFocus = true
+			to.floatFocus = id
 			to.record()
 		}
 		s.dropIfIdle(from.ID)

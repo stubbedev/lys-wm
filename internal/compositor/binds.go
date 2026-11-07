@@ -25,8 +25,8 @@ func (r *repeat) stop() error {
 	return r.timer.Disarm()
 }
 
-func (c *Compositor) run(a wm.Action, trigger binds.Trigger) {
-	if err := c.dispatch(a, trigger); err != nil {
+func (c *Compositor) run(a wm.Action, trigger binds.Trigger, by wm.FocusOrigin) {
+	if err := c.dispatch(a, trigger, by); err != nil {
 		c.report(err)
 	}
 }
@@ -76,11 +76,11 @@ func (c *Compositor) bindKey(code uint32, pressed bool) (bool, error) {
 		return fired, err
 	}
 	c.held = append(c.held, code)
-	c.run(b.Action, binds.Key{Code: code})
+	c.run(b.Action, binds.Key{Code: code}, wm.FocusKeyboard)
 	if !b.Flags.Repeating || c.seatConfig.RepeatRate == 0 {
 		return true, nil
 	}
-	return true, c.repeatKey(code, func() { c.run(b.Action, nil) })
+	return true, c.repeatKey(code, func() { c.run(b.Action, nil, wm.FocusKeyboard) })
 }
 
 func (c *Compositor) repeatKey(code uint32, fire func()) error {

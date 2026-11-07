@@ -73,7 +73,7 @@ func (s State) Open(id WindowID, o Opening) (State, error) {
 	before, hadFocus := w.focused()
 	if o.Float {
 		w.Floating = append(w.Floating, Floating{ID: id, Rect: o.Rect})
-		w.floatFocus = true
+		w.floatFocus = id
 	} else {
 		var area image.Rectangle
 		if out := s.output(w.Output); out != nil {
@@ -90,13 +90,13 @@ func (s State) Open(id WindowID, o Opening) (State, error) {
 		if w.Tree, err = tree.Place(id, area, at); err != nil {
 			return State{}, err
 		}
-		w.floatFocus = false
+		w.floatFocus = 0
 	}
 	w.record()
 	if o.NoFocus && hadFocus {
 		w.history = slices.DeleteFunc(w.history, func(x WindowID) bool { return x == id })
 		w.history = slices.Insert(w.history, max(len(w.history)-1, 0), id)
-		if err := w.focus(before); err != nil {
+		if err := w.focus(before, Raise); err != nil {
 			return State{}, err
 		}
 	}

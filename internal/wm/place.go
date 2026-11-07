@@ -259,10 +259,10 @@ func (s State) FocusLayer(sw Switch) (State, error) {
 	}
 	floating := sw.From(!w.treeFocused())
 	if floating && len(w.Floating) > 0 {
-		return s.FocusWindow(w.Floating[len(w.Floating)-1].ID)
+		return s.FocusWindow(w.Floating[len(w.Floating)-1].ID, Raise)
 	}
 	if id, ok := w.Tree.Focused(); ok && !floating {
-		return s.FocusWindow(id)
+		return s.FocusWindow(id, Raise)
 	}
 	return s, nil
 }

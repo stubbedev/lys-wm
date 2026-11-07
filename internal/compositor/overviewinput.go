@@ -146,7 +146,7 @@ func (c *Compositor) overviewReleased(at point) error {
 func (c *Compositor) overviewActivate(t overviewTarget) error {
 	switch t := t.(type) {
 	case overviewWindow:
-		if err := c.activate(t.w); err != nil {
+		if err := c.activate(t.w, wm.FocusOther); err != nil {
 			return err
 		}
 		return c.closeOverview()

@@ -189,6 +189,7 @@ func (c *Compositor) update(s wm.State, err error) error {
 		return err
 	}
 	c.wm = s
+	c.stateUpdates++
 	c.stateChanged()
 	return c.reconcile()
 }
@@ -228,7 +229,7 @@ func (c *Compositor) reconcile() error {
 	focused, hasFocus := c.wm.Focused()
 	if hasFocus {
 		if m := c.modalChild(c.windowByID(focused)); m != nil {
-			return c.update(c.wm.FocusWindow(m.id))
+			return c.update(c.wm.FocusWindow(m.id, wm.Raise))
 		}
 	}
 	c.layoutDirty, c.lagging = false, false
@@ -263,6 +264,7 @@ func (c *Compositor) reconcile() error {
 			c.setPeek(target.output, false, now)
 		}
 		c.active = target
+		c.focusMoved()
 		if target != nil {
 			if target.urgent {
 				c.stateChanged()
@@ -563,11 +565,6 @@ func (c *Compositor) redecide(t toplevel) error {
 	return c.update(c.wm.Tile(w.id, c.settings.Autotile))
 }
 
-func (c *Compositor) focusWindow(w *window) error {
-	c.layerFocus = nil
-	return c.update(c.wm.FocusWindow(w.id))
-}
-
 func (c *Compositor) keyboardTarget() *surface.Surface {
 	if c.shell.Locked() {
 		return c.lockTarget()
@@ -640,14 +637,21 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	closeErr = errors.Join(closeErr, c.dropJelly(w))
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	c.stack = slices.DeleteFunc(c.stack, func(x *window) bool { return x == w })
-	if c.active == w {
+	focused := c.active == w
+	if focused {
 		c.active = nil
+	}
+	if c.hovered == w {
+		c.hovered = nil
 	}
 	if c.interaction != nil && c.interaction.w == w {
 		c.interaction = nil
 		c.hidePreview(c.clock())
 	}
-	return errors.Join(closeErr, c.update(c.wm.UnmapWindow(w.id)))
+	if err := c.update(c.wm.UnmapWindow(w.id)); err != nil || !focused {
+		return errors.Join(closeErr, err)
+	}
+	return errors.Join(closeErr, c.focusUnderPointer())
 }
 
 func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {

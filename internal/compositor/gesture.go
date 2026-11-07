@@ -99,7 +99,7 @@ func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
 		claimed = c.claimGesture(step.Bind, at)
 	}
 	if step.Fire {
-		c.run(step.Bind.Action, nil)
+		c.run(step.Bind.Action, nil, wm.FocusOther)
 	}
 	return errors.Join(cancelled, released, claimed)
 }

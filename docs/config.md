@@ -920,7 +920,36 @@ shortcuts. Sandboxed applications do not see the protocol.
 ```yaml
 focus:
   on_activate: focus
+  follows_mouse: loose
+  raise_on_hover: false
+  warp_pointer: off
+  on_close: next
 ```
+
+`follows_mouse` decides what the pointer does to keyboard focus. `always`
+focuses whatever window the pointer moves over. `loose`, the default, does the
+same, except that after focus moves any other way (a key bind such as
+`focus left`, a new window, a closed one, an activation) the pointer has to
+cross into a different window before hovering takes focus again, so a twitch of
+the mouse over the old window does not undo a keyboard focus change. `off` is
+click to focus: hovering only moves pointer focus, so the window under the
+pointer gets motion and scroll events without being focused, and a button press
+on a window focuses it.
+
+Focusing a floating window by hovering it leaves the stacking order alone;
+`raise_on_hover: true` raises it as well. A click, a key bind and every other
+way of focusing a window raise it.
+
+`warp_pointer: on_keyboard_focus` moves the pointer to the centre of the newly
+focused window whenever a key bind moves focus to another window, unless the
+pointer is already inside it. `on_workspace_switch` does so only when a key
+bind changes the workspace shown on the focused output or focuses another
+output, warping to the focused window there or to the centre of the output
+when the workspace is empty. The pointer never warps while a client holds a
+pointer lock or confinement, or has hidden the cursor.
+
+`on_close: under_pointer` focuses the window under the pointer when the focused
+window closes, instead of the window focused before it (`next`).
 
 A window that asks for focus through `xdg_activation_v1` comes forward when its
 token was minted from a key press, click or touch in the client that had the

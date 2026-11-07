@@ -85,7 +85,7 @@ func (c *Compositor) startDrag(w *window, mode wm.DragMode, by dragInput, edges 
 	}
 	at := by.at(c).pixel()
 	c.interaction = &interaction{mode: mode, w: w, by: by, start: at, last: at, rect: w.tile, edges: edges}
-	if err := c.focusWindow(w); err != nil {
+	if err := c.focusWindow(w, wm.FocusClick); err != nil {
 		return err
 	}
 	if _, ok := by.(buttonInput); !ok {

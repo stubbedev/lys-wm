@@ -150,7 +150,7 @@ func (s State) MoveWindowToOutput(win WindowID, output string, at Autotile) (Sta
 	if err != nil {
 		return State{}, err
 	}
-	return next.FocusWindow(win)
+	return next.FocusWindow(win, Raise)
 }
 
 type (

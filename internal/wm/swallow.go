@@ -87,7 +87,7 @@ func (s *State) unmapFrom(w *Workspace, id WindowID) error {
 	if err != nil {
 		return err
 	}
-	w.Tree, w.floatFocus = tree, false
+	w.Tree, w.floatFocus = tree, 0
 	w.record()
 	return nil
 }
@@ -133,7 +133,7 @@ func (s State) SwitchSwallow(sw Switch) (State, error) {
 			return State{}, err
 		}
 		s.vacated(from.ID)
-		return s, s.windowWorkspace(p.By).focus(p.By)
+		return s, s.windowWorkspace(p.By).focus(p.By, Raise)
 	}
 	w := s.windowWorkspace(p.By)
 	if !w.Tree.Contains(p.By) {
@@ -142,7 +142,7 @@ func (s State) SwitchSwallow(sw Switch) (State, error) {
 			return State{}, err
 		}
 		w.Tree = tree
-		return s, w.focus(id)
+		return s, w.focus(id, Raise)
 	}
 	focused, err := w.Tree.Focus(p.By)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s State) SwitchSwallow(sw Switch) (State, error) {
 		return State{}, err
 	}
 	w.Tree = tree
-	return s, w.focus(id)
+	return s, w.focus(id, Raise)
 }
 
 func (s *State) workspaceHolding(id WindowID) *Workspace {
@@ -207,7 +207,7 @@ func (s State) openSwallowing(id WindowID, o Opening) (State, error) {
 	if err := s.swallowAt(w, id, o.Swallow); err != nil {
 		return State{}, err
 	}
-	if err := w.focus(id); err != nil {
+	if err := w.focus(id, Raise); err != nil {
 		return State{}, err
 	}
 	if o.Mode != ModeNormal {

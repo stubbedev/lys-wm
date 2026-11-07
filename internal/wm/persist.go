@@ -34,7 +34,7 @@ type savedWorkspace struct {
 	Minimized  []Minimized `json:"minimized,omitempty"`
 	Fullscreen WindowID    `json:"fullscreen,omitempty"`
 	Maximized  WindowID    `json:"maximized,omitempty"`
-	FloatFocus bool        `json:"float_focus,omitempty"`
+	FloatFocus WindowID    `json:"float_focused,omitempty"`
 	Home       string      `json:"home,omitempty"`
 	History    []WindowID  `json:"history,omitempty"`
 	Scratch    *Scratchpad `json:"scratchpad,omitempty"`
@@ -242,6 +242,9 @@ func loadWorkspaces(saved []savedWorkspace) ([]Workspace, error) {
 		tree, err := loadTree(w.Tree, w.Lift)
 		if err != nil {
 			return nil, err
+		}
+		if w.FloatFocus != 0 && !slices.ContainsFunc(w.Floating, func(f Floating) bool { return f.ID == w.FloatFocus }) {
+			return nil, fmt.Errorf("wm: read workspace %d: focused window %d does not float there", w.ID, w.FloatFocus)
 		}
 		ws := Workspace{
 			ID: w.ID, Output: w.Output, Tree: tree, Floating: w.Floating, Minimized: w.Minimized,

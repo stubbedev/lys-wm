@@ -32,7 +32,7 @@ type Workspace struct {
 	Minimized  []Minimized
 	Cover      Cover
 	Scratch    Scratchpad
-	floatFocus bool
+	floatFocus WindowID
 	home       string
 	history    []WindowID
 }
@@ -54,17 +54,19 @@ func (w *Workspace) empty() bool {
 }
 
 func (w *Workspace) focused() (WindowID, bool) {
-	if w.floatFocus && len(w.Floating) > 0 {
-		return w.Floating[len(w.Floating)-1].ID, true
+	if w.floatFocus != 0 {
+		return w.floatFocus, true
 	}
 	return w.Tree.Focused()
 }
 
-func (w *Workspace) focus(id WindowID) error {
+func (w *Workspace) focus(id WindowID, st Stacking) error {
 	if i := w.floatingIndex(id); i >= 0 {
-		f := w.Floating[i]
-		w.Floating = append(slices.Delete(w.Floating, i, i+1), f)
-		w.floatFocus = true
+		if st == Raise {
+			f := w.Floating[i]
+			w.Floating = append(slices.Delete(w.Floating, i, i+1), f)
+		}
+		w.floatFocus = id
 		w.record()
 		return nil
 	}
@@ -72,9 +74,21 @@ func (w *Workspace) focus(id WindowID) error {
 	if err != nil {
 		return err
 	}
-	w.Tree, w.floatFocus = tree, false
+	w.Tree, w.floatFocus = tree, 0
 	w.record()
 	return nil
+}
+
+func (w *Workspace) raised(id WindowID) bool {
+	i := w.floatingIndex(id)
+	return i < 0 || i == len(w.Floating)-1
+}
+
+func (w *Workspace) refocusTop() {
+	w.floatFocus = 0
+	if w.Tree.Empty() && len(w.Floating) > 0 {
+		w.floatFocus = w.Floating[len(w.Floating)-1].ID
+	}
 }
 
 func (w *Workspace) remove(id WindowID) error {
@@ -99,9 +113,9 @@ func (w *Workspace) remove(id WindowID) error {
 	if focused != id {
 		return nil
 	}
-	w.floatFocus = w.Tree.Empty() && len(w.Floating) > 0
+	w.refocusTop()
 	if n := len(w.history); n > 0 {
-		return w.focus(w.history[n-1])
+		return w.focus(w.history[n-1], Raise)
 	}
 	return nil
 }
@@ -438,6 +452,15 @@ func (s State) Focused() (WindowID, bool) {
 	return w.focused()
 }
 
+func (s State) Settled(id WindowID, st Stacking) bool {
+	w := s.activeWorkspace()
+	if w == nil {
+		return false
+	}
+	focused, ok := w.focused()
+	return ok && focused == id && (st == KeepStacking || w.raised(id))
+}
+
 var ErrReservedWindow = errors.New("wm: window id 0 is reserved")
 
 func (s State) MapWindow(id WindowID, at Autotile) (State, error) {
@@ -462,7 +485,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 	return s, nil
 }
 
-func (s State) FocusWindow(id WindowID) (State, error) {
+func (s State) FocusWindow(id WindowID, st Stacking) (State, error) {
 	if by, hidden := s.hiddenBy(id); hidden {
 		id = by
 	}
@@ -471,7 +494,7 @@ func (s State) FocusWindow(id WindowID) (State, error) {
 	if w == nil {
 		return State{}, fmt.Errorf("focus window %d: %w", id, ErrUnknownWindow)
 	}
-	if err := w.focus(id); err != nil {
+	if err := w.focus(id, st); err != nil {
 		return State{}, err
 	}
 	s.activate(w.ID)
@@ -615,7 +638,7 @@ func (s State) moveWindow(win WindowID, id WorkspaceID, at Autotile) (State, err
 			rect = rehomed(rect, src.Area, area)
 		}
 		to.Floating = append(to.Floating, Floating{ID: win, Rect: rect})
-		to.floatFocus = true
+		to.floatFocus = win
 		to.record()
 		return s, nil
 	}
@@ -623,7 +646,7 @@ func (s State) moveWindow(win WindowID, id WorkspaceID, at Autotile) (State, err
 	if err != nil {
 		return State{}, err
 	}
-	to.Tree, to.floatFocus = tree, false
+	to.Tree, to.floatFocus = tree, 0
 	to.record()
 	return s, nil
 }

@@ -970,8 +970,8 @@ func TestActivationPolicies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.WM.OnActivate != wm.ActivateUrgent {
-		t.Errorf("focus.on_activate: urgent gave %d", c.WM.OnActivate)
+	if c.WM.Focus.OnActivate != wm.ActivateUrgent {
+		t.Errorf("focus.on_activate: urgent gave %d", c.WM.Focus.OnActivate)
 	}
 	if d := wm.Decide(c.Rules, wm.Subject{AppID: "firefox", Title: ""}); d.OnActivate == nil || *d.OnActivate != wm.ActivateIgnore {
 		t.Errorf("a rule's on_activate: ignore gave %v", d.OnActivate)
@@ -979,11 +979,33 @@ func TestActivationPolicies(t *testing.T) {
 	if d := wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""}); d.OnActivate != nil {
 		t.Errorf("a window no rule names got on_activate %d", *d.OnActivate)
 	}
-	if c, err := Parse("t.yaml", nil); err != nil || c.WM.OnActivate != wm.ActivateFocus {
-		t.Errorf("no focus key: %d, %v; want focus", c.WM.OnActivate, err)
+	if c, err := Parse("t.yaml", nil); err != nil || c.WM.Focus.OnActivate != wm.ActivateFocus {
+		t.Errorf("no focus key: %d, %v; want focus", c.WM.Focus.OnActivate, err)
 	}
 	if _, err := Parse("t.yaml", []byte("focus:\n  on_activate: ignore\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: focus.on_activate:") {
 		t.Errorf("focus.on_activate: ignore was not refused: %v", err)
+	}
+}
+
+func TestFocusPolicies(t *testing.T) {
+	c, err := Parse("t.yaml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (wm.FocusSettings{FollowsMouse: wm.FollowsMouseLoose, WarpPointer: wm.WarpOff, OnClose: wm.CloseFocusesNext}); c.WM.Focus != want {
+		t.Errorf("no focus key: %+v, want %+v", c.WM.Focus, want)
+	}
+	c, err = Parse("t.yaml", []byte("focus:\n  follows_mouse: off\n  raise_on_hover: true\n  warp_pointer: on_keyboard_focus\n  on_close: under_pointer\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (wm.FocusSettings{FollowsMouse: wm.FollowsMouseOff, RaiseOnHover: true, WarpPointer: wm.WarpOnKeyboardFocus, OnClose: wm.CloseFocusesUnderPointer}); c.WM.Focus != want {
+		t.Errorf("focus keys: %+v, want %+v", c.WM.Focus, want)
+	}
+	for _, key := range []string{"follows_mouse", "warp_pointer", "on_close"} {
+		if _, err := Parse("t.yaml", []byte("focus:\n  "+key+": sometimes\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: focus."+key+":") {
+			t.Errorf("focus.%s: sometimes was not refused: %v", key, err)
+		}
 	}
 }
 

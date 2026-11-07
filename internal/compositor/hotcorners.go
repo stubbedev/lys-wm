@@ -136,7 +136,7 @@ func (c *Compositor) pushHotCorner(from, want point, e *backend.PointerMotion) {
 		return
 	}
 	h.fired = true
-	c.run(set[k].Action, nil)
+	c.run(set[k].Action, nil, wm.FocusOther)
 }
 
 func unaccelerated(away, delta, raw float64) float64 {

@@ -2,6 +2,7 @@ package wm
 
 import (
 	"image"
+	"slices"
 	"testing"
 )
 
@@ -27,12 +28,12 @@ func TestFloatingAndFullscreen(t *testing.T) {
 	if _, rect, _ := layerOf(s, 1); rect != area {
 		t.Fatalf("the tiled window did not take the freed space: %v", rect)
 	}
-	s = ok(t)(s.FocusWindow(1))
+	s = ok(t)(s.FocusWindow(1, Raise))
 	s = ok(t)(s.FocusDirection(Right))
 	if f, _ := s.Focused(); f != 1 {
 		t.Fatalf("tiled focus wandered to %d; hy3 keeps it among tiled windows", f)
 	}
-	s = ok(t)(s.FocusWindow(2))
+	s = ok(t)(s.FocusWindow(2, Raise))
 	s = ok(t)(s.FocusDirection(Left))
 	if f, _ := s.Focused(); f != 1 {
 		t.Fatalf("focus left from a floating window went to %d", f)
@@ -52,7 +53,7 @@ func TestFloatingAndFullscreen(t *testing.T) {
 	if _, _, visible := layerOf(s, 1); !visible {
 		t.Fatal("closing the fullscreen window did not uncover the others")
 	}
-	s = ok(t)(s.FocusWindow(2))
+	s = ok(t)(s.FocusWindow(2, Raise))
 	s = ok(t)(s.ToggleFloating(Autotile{}))
 	if layer, _, _ := layerOf(s, 2); layer != LayerTiled {
 		t.Fatal("toggling a floating window did not tile it again")
@@ -93,12 +94,12 @@ func TestResizeFocused(t *testing.T) {
 	for _, id := range []WindowID{1, 2, 3} {
 		s = ok(t)(s.MapWindow(id, Autotile{}))
 	}
-	s = ok(t)(s.FocusWindow(1))
+	s = ok(t)(s.FocusWindow(1, Raise))
 	s = ok(t)(s.ResizeFocused(50, 0))
 	if _, rect, _ := layerOf(s, 1); rect.Dx() != 350 {
 		t.Fatalf("growing the first window by 50: %v", rect)
 	}
-	s = ok(t)(s.FocusWindow(3))
+	s = ok(t)(s.FocusWindow(3, Raise))
 	s = ok(t)(s.ResizeFocused(50, 0))
 	if _, rect, _ := layerOf(s, 3); rect != image.Rect(550, 0, 900, 600) {
 		t.Fatalf("the last window has no right neighbour, so it grows left: %v", rect)
@@ -331,5 +332,61 @@ func TestKeptAspectResizesBothAxesTogether(t *testing.T) {
 		if r != tc.want || r.Dx()*from.Dy() != r.Dy()*from.Dx() {
 			t.Errorf("%v on %v: %v, want %v", tc.d, tc.moving, r, tc.want)
 		}
+	}
+}
+
+func floatingOrder(s State) []WindowID {
+	var out []WindowID
+	for _, f := range s.workspace(1).Floating {
+		out = append(out, f.ID)
+	}
+	return out
+}
+
+func TestFocusingAFloatingWindowRaisesItOnlyWhenAsked(t *testing.T) {
+	area := image.Rect(0, 0, 900, 600)
+	s := ok(t)(State{}.AddOutput("DP-1", area, area))
+	s = ok(t)(s.MapWindow(1, Autotile{}))
+	s = ok(t)(s.MapFloating(2, image.Rect(10, 10, 200, 200)))
+	s = ok(t)(s.MapFloating(3, image.Rect(100, 100, 300, 300)))
+	if s.Settled(2, KeepStacking) || !s.Settled(3, Raise) {
+		t.Fatal("the newest floating window is not the focused, raised one")
+	}
+	s = ok(t)(s.FocusWindow(2, KeepStacking))
+	if f, _ := s.Focused(); f != 2 || !slices.Equal(floatingOrder(s), []WindowID{2, 3}) {
+		t.Fatalf("focus without raising: focused %d, stack %v", f, floatingOrder(s))
+	}
+	if !s.Settled(2, KeepStacking) || s.Settled(2, Raise) {
+		t.Fatal("a focused window under another floating one counts as raised")
+	}
+	data, err := s.Save()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadState(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := loaded.Focused(); f != 2 || !slices.Equal(floatingOrder(loaded), []WindowID{2, 3}) {
+		t.Fatalf("a saved state focuses %d over %v", f, floatingOrder(loaded))
+	}
+	s = ok(t)(s.FocusWindow(2, Raise))
+	if !slices.Equal(floatingOrder(s), []WindowID{3, 2}) || !s.Settled(2, Raise) {
+		t.Fatalf("focus with raising left the stack %v", floatingOrder(s))
+	}
+	s = ok(t)(s.FocusWindow(3, KeepStacking))
+	s = ok(t)(s.UnmapWindow(3))
+	if f, _ := s.Focused(); f != 2 {
+		t.Fatalf("closing the focused floating window focused %d", f)
+	}
+	s = ok(t)(s.FocusWindow(1, KeepStacking))
+	if f, _ := s.Focused(); f != 1 || !slices.Equal(floatingOrder(s), []WindowID{2}) {
+		t.Fatalf("focusing the tiled window: focused %d, stack %v", f, floatingOrder(s))
+	}
+}
+
+func TestASavedFloatFocusMustFloatOnItsWorkspace(t *testing.T) {
+	if _, err := LoadState([]byte(`{"workspaces":[{"id":1,"output":"DP-1","float_focused":7}]}`)); err == nil {
+		t.Fatal("a saved focus on a window that does not float there loaded")
 	}
 }

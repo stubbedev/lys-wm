@@ -322,7 +322,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 	}
 	if b, ok := c.match(binds.Button{Code: e.Button}); e.Pressed && ok {
 		c.consumed = append(c.consumed, e.Button)
-		c.run(b.Action, binds.Button{Code: e.Button})
+		c.run(b.Action, binds.Button{Code: e.Button}, wm.FocusClick)
 		return nil
 	}
 	if e.Pressed && c.hotkeysOpen() {
@@ -334,7 +334,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 	if o := c.outputAt(c.cursor); e.Pressed && c.peeking(o) {
 		if w := c.sliverAt(o, c.cursor.pixel()); w != nil {
 			c.consumed = append(c.consumed, e.Button)
-			return errors.Join(c.endPeek(o), c.activate(w))
+			return errors.Join(c.endPeek(o), c.activate(w, wm.FocusClick))
 		}
 	}
 	if e.Pressed && c.overviewHolds() && c.seat.PointerFocus() == nil {
@@ -342,7 +342,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 		return c.overviewPressed(e.Button, 0, false, c.cursor)
 	}
 	if e.Pressed {
-		if err := c.clickFocus(c.seat.PointerFocus()); err != nil {
+		if err := errors.Join(c.clickFocus(c.seat.PointerFocus()), c.clickWindow()); err != nil {
 			return err
 		}
 	}
@@ -365,7 +365,7 @@ func (c *Compositor) inputAxis(e backend.PointerAxis) error {
 			dir = binds.ScrollUp
 		}
 		if b, ok := c.match(binds.Scroll{Dir: dir}); ok {
-			c.run(b.Action, binds.Scroll{Dir: dir})
+			c.run(b.Action, binds.Scroll{Dir: dir}, wm.FocusOther)
 			return nil
 		}
 	}
@@ -514,9 +514,7 @@ func (c *Compositor) pointerMoved(at time.Duration) error {
 	} else if s != nil {
 		err = c.seat.PointerMotion(at, local.X, local.Y)
 	}
-	if w != nil && c.grabClient() == nil && (c.active != w || c.seat.Focus() != w.top.Surface()) {
-		err = errors.Join(err, c.focusWindow(w))
-	}
+	err = errors.Join(err, c.hoverFocus(w))
 	if c.overviewHolds() && s == nil {
 		err = errors.Join(err, c.overviewMoved(c.cursor))
 	}
@@ -544,7 +542,8 @@ func (c *Compositor) refreshPointer() error {
 	if c.seat.PointerGrabbed() {
 		return nil
 	}
-	s, local, _ := c.pointerTarget()
+	s, local, w := c.pointerTarget()
+	c.hovered = w
 	if s == c.seat.PointerFocus() {
 		return nil
 	}

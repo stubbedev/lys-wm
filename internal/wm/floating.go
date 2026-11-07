@@ -119,7 +119,7 @@ func (s State) Float(id WindowID, rect image.Rectangle) (State, error) {
 		return State{}, err
 	}
 	w.Floating = append(w.Floating, Floating{ID: id, Rect: s.limits[id].fitRect(rect, 0)})
-	return s, w.focus(focused)
+	return s, w.focus(focused, Raise)
 }
 
 func (s State) Tile(id WindowID, at Autotile) (State, error) {
@@ -138,7 +138,7 @@ func (s State) Tile(id WindowID, at Autotile) (State, error) {
 		return State{}, err
 	}
 	w.Tree = tree
-	return s, w.focus(focused)
+	return s, w.focus(focused, Raise)
 }
 
 func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error) {

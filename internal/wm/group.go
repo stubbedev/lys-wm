@@ -373,9 +373,9 @@ func (w *Workspace) detachFocused() (Node, error) {
 		w.Cover = Cover{}
 	}
 	w.history = slices.DeleteFunc(w.history, func(x WindowID) bool { return slices.Contains(gone, x) })
-	w.floatFocus = w.Tree.Empty() && len(w.Floating) > 0
+	w.refocusTop()
 	if n := len(w.history); n > 0 {
-		return node, w.focus(w.history[n-1])
+		return node, w.focus(w.history[n-1], Raise)
 	}
 	return node, nil
 }
@@ -420,7 +420,7 @@ func (s State) moveFocusedNode(id WorkspaceID) (State, error) {
 	}
 	to.Tree = to.Tree.clone()
 	to.Tree.attach(node, rootLayout(area))
-	to.floatFocus = false
+	to.floatFocus = 0
 	to.record()
 	s.vacated(fromID)
 	return s, nil
@@ -438,7 +438,7 @@ func (s State) moveFocusedToOutputEdge(output string, d Direction) (State, error
 	to := s.workspace(o.Active)
 	to.Tree = to.Tree.clone()
 	to.Tree.insertEdge(node, d, o.Area)
-	to.floatFocus = false
+	to.floatFocus = 0
 	to.record()
 	s.focused = output
 	s.vacated(fromID)

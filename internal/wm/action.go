@@ -80,7 +80,7 @@ type Settings struct {
 	Collapse     CollapsePolicy
 	Autotile     Autotile
 	Gaps         Gaps
-	OnActivate   ActivatePolicy
+	Focus        FocusSettings
 	NewOverCover CoverPolicy
 	Scratchpads  map[ScratchpadName]ScratchpadSpec
 	Peek         int
@@ -491,7 +491,7 @@ func (a FocusWindowAction) apply(s State, _ Settings) (State, []Effect, error) {
 	if s.Minimized(a.ID) {
 		return emit(s, RestoreAction(a))
 	}
-	next, err := s.FocusWindow(a.ID)
+	next, err := s.FocusWindow(a.ID, Raise)
 	return next, nil, err
 }
 

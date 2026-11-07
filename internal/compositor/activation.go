@@ -86,7 +86,7 @@ func (c *Compositor) presentToken(t *shell.Toplevel, value string) error {
 }
 
 func (c *Compositor) activated(w *window, tok activationToken) error {
-	policy := c.settings.OnActivate
+	policy := c.settings.Focus.OnActivate
 	d := c.decision(w)
 	if d.OnActivate != nil {
 		policy = *d.OnActivate
@@ -98,7 +98,7 @@ func (c *Compositor) activated(w *window, tok activationToken) error {
 	case policy == wm.ActivateIgnore:
 		return nil
 	case policy == wm.ActivateFocus && tok.granted && c.keyboardClient() == tok.focus:
-		return c.activate(w)
+		return c.activate(w, wm.FocusOther)
 	}
 	return c.markUrgent(w)
 }

@@ -19,10 +19,13 @@ func (c *Compositor) Dispatch(a wm.Action) error {
 	if c.parked {
 		return errors.New("compositor: the session is moving to another binary")
 	}
-	return c.dispatch(a, nil)
+	return c.dispatch(a, nil, wm.FocusOther)
 }
 
-func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger) error {
+func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger, by wm.FocusOrigin) error {
+	outer := c.swapOrigin(by)
+	defer c.swapOrigin(outer)
+	before := c.markFocus()
 	s, effects, err := wm.Dispatch(c.wm, a, c.settings)
 	if err != nil {
 		return err
@@ -38,7 +41,10 @@ func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger) error {
 			return fmt.Errorf("compositor: %s: %w", a, err)
 		}
 	}
-	return nil
+	if by != wm.FocusKeyboard {
+		return nil
+	}
+	return c.warpAfterKeyboard(before)
 }
 
 func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {

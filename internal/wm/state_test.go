@@ -136,7 +136,7 @@ func TestMoveToWorkspaceKeepsFocusHere(t *testing.T) {
 			t.Fatalf("window 1 placed %+v, want the whole output", p)
 		}
 	}
-	s = ok(t)(s.FocusWindow(2))
+	s = ok(t)(s.FocusWindow(2, Raise))
 	if active(s)[0] != 4 {
 		t.Fatal("focusing a window did not show its workspace")
 	}

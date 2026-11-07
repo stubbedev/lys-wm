@@ -15,7 +15,7 @@ func TestAPinnedWindowStaysOnScreenThroughWorkspaceSwitches(t *testing.T) {
 	if !pip.Pinned || pip.Layer != LayerFloating {
 		t.Fatalf("pinning a tiled window: %+v, want it floating and pinned", pip)
 	}
-	s = must(s.FocusWindow(1))
+	s = must(s.FocusWindow(1, Raise))
 	s = must(s.SwitchWorkspace(3))
 	p, _ := placementOf(s, Spacing{}, 2)
 	if !p.Visible || p.Rect != pip.Rect || p.Workspace != 3 {
@@ -31,7 +31,7 @@ func TestAPinnedWindowStaysOnScreenThroughWorkspaceSwitches(t *testing.T) {
 	if other, _ := placementOf(s, Spacing{}, 1); !other.Visible {
 		t.Fatal("the workspace's own window is hidden")
 	}
-	s = must(s.FocusWindow(2))
+	s = must(s.FocusWindow(2, Raise))
 	s = must(s.SwitchWorkspace(4))
 	if f, _ := s.Focused(); f != 2 {
 		t.Fatalf("a focused pinned window lost focus over a switch to %d", f)

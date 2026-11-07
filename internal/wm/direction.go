@@ -323,7 +323,7 @@ func (s State) FocusDirection(d Direction) (State, error) {
 				next, found = w.Tree.NeighborOfFocus(d)
 			}
 			if found {
-				return s.FocusWindow(next)
+				return s.FocusWindow(next, Raise)
 			}
 		}
 	}

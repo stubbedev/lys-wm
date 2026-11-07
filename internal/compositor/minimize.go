@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type iconHint struct {
@@ -91,11 +92,13 @@ func (c *Compositor) restore(w *window) error {
 	return c.update(s, nil)
 }
 
-func (c *Compositor) activate(w *window) error {
+func (c *Compositor) activate(w *window, by wm.FocusOrigin) error {
 	if c.wm.Minimized(w.id) {
+		outer := c.swapOrigin(by)
+		defer c.swapOrigin(outer)
 		return c.restore(w)
 	}
-	return c.focusWindow(w)
+	return c.focusWindow(w, by)
 }
 
 func nearestEdge(area, r image.Rectangle) int {

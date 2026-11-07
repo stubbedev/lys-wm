@@ -139,7 +139,7 @@ func (s State) SetMode(id WindowID, mode WindowMode, on bool) (State, error) {
 	switch {
 	case on:
 		w.Cover = Cover{ID: id, Mode: mode}
-		if err := w.focus(id); err != nil {
+		if err := w.focus(id, Raise); err != nil {
 			return State{}, err
 		}
 	case w.Cover == Cover{ID: id, Mode: mode}:
@@ -208,11 +208,11 @@ func (s State) Opened(id WindowID, policy CoverPolicy) (State, error) {
 	w = s.windowWorkspace(id)
 	switch policy {
 	case CoverBehind:
-		return s, w.focus(cover.ID)
+		return s, w.focus(cover.ID, Raise)
 	case CoverTakeOver:
 		w.Cover = Cover{ID: id, Mode: cover.Mode}
 	case CoverExit:
 		w.Cover = Cover{}
 	}
-	return s, w.focus(id)
+	return s, w.focus(id, Raise)
 }

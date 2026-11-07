@@ -286,6 +286,11 @@ type Compositor struct {
 	drag               *dragging
 	usable             map[*output.Output]image.Rectangle
 	layerFocus         *shell.LayerSurface
+	focusBy            wm.FocusOrigin
+	hovered            *window
+	hoverHeld          bool
+	stateUpdates       uint64
+	warps              uint64
 	focusGrab          *focusGrab
 	shown              map[*output.Output][]*surface.Surface
 	footprints         map[*surface.Surface]footprint

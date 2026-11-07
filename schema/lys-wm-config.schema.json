@@ -674,6 +674,15 @@
     "focus": {
       "type": "object",
       "properties": {
+        "follows_mouse": {
+          "type": "string",
+          "enum": [
+            "always",
+            "loose",
+            "off"
+          ],
+          "default": "loose"
+        },
         "on_activate": {
           "type": "string",
           "enum": [
@@ -681,6 +690,27 @@
             "urgent"
           ],
           "default": "focus"
+        },
+        "on_close": {
+          "type": "string",
+          "enum": [
+            "next",
+            "under_pointer"
+          ],
+          "default": "next"
+        },
+        "raise_on_hover": {
+          "type": "boolean",
+          "default": false
+        },
+        "warp_pointer": {
+          "type": "string",
+          "enum": [
+            "off",
+            "on_keyboard_focus",
+            "on_workspace_switch"
+          ],
+          "default": "off"
         }
       },
       "additionalProperties": false

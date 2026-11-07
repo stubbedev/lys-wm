@@ -212,7 +212,11 @@ type rawFullscreen struct {
 }
 
 type rawFocus struct {
-	OnActivate *At[string] `yaml:"on_activate"`
+	OnActivate   *At[string] `yaml:"on_activate"`
+	FollowsMouse *At[string] `yaml:"follows_mouse"`
+	RaiseOnHover *bool       `yaml:"raise_on_hover"`
+	WarpPointer  *At[string] `yaml:"warp_pointer"`
+	OnClose      *At[string] `yaml:"on_close"`
 }
 
 type rawXwayland struct {
@@ -1286,6 +1290,9 @@ var (
 	hdrPolicies      = map[string]compositor.HDRPolicy{"false": compositor.HDROff, "true": compositor.HDROn, "fullscreen": compositor.HDRFullscreen}
 	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
 	focusActivations = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent}
+	followsMouse     = map[string]wm.FollowsMouse{"always": wm.FollowsMouseAlways, "loose": wm.FollowsMouseLoose, "off": wm.FollowsMouseOff}
+	pointerWarps     = map[string]wm.WarpPointer{"off": wm.WarpOff, "on_keyboard_focus": wm.WarpOnKeyboardFocus, "on_workspace_switch": wm.WarpOnWorkspaceSwitch}
+	closeFocuses     = map[string]wm.CloseFocus{"next": wm.CloseFocusesNext, "under_pointer": wm.CloseFocusesUnderPointer}
 	contentTypes     = byName(wm.ContentGame)
 	coverPolicies    = map[string]wm.CoverPolicy{"behind": wm.CoverBehind, "take_over": wm.CoverTakeOver, "exit": wm.CoverExit}
 )
@@ -1768,7 +1775,19 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
 	cfg.WM.Gaps = p.gaps(raw.Gaps, "gaps", cfg.WM.Gaps)
 	if v := choice(p, raw.Focus.OnActivate, "focus.on_activate", focusActivations); v != nil {
-		cfg.WM.OnActivate = *v
+		cfg.WM.Focus.OnActivate = *v
+	}
+	if v := choice(p, raw.Focus.FollowsMouse, "focus.follows_mouse", followsMouse); v != nil {
+		cfg.WM.Focus.FollowsMouse = *v
+	}
+	if raw.Focus.RaiseOnHover != nil {
+		cfg.WM.Focus.RaiseOnHover = *raw.Focus.RaiseOnHover
+	}
+	if v := choice(p, raw.Focus.WarpPointer, "focus.warp_pointer", pointerWarps); v != nil {
+		cfg.WM.Focus.WarpPointer = *v
+	}
+	if v := choice(p, raw.Focus.OnClose, "focus.on_close", closeFocuses); v != nil {
+		cfg.WM.Focus.OnClose = *v
 	}
 	if v := choice(p, raw.Fullscreen.NewWindow, "fullscreen.new_window", coverPolicies); v != nil {
 		cfg.WM.NewOverCover = *v
