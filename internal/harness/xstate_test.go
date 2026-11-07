@@ -68,40 +68,31 @@ func TestAnXWindowDemandingAttentionIsUrgentUntilFocused(t *testing.T) {
 	})
 }
 
-func TestAnXMaximizeRequestIsAnsweredWithTheTiledState(t *testing.T) {
+func TestAnXWindowMaximizesOnRequestAndAtMap(t *testing.T) {
 	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
 	xc := xDial(t, h)
 	xc.intern("_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ")
 	maximized := slices.Concat(xc.atom("_NET_WM_STATE_MAXIMIZED_VERT"), xc.atom("_NET_WM_STATE_MAXIMIZED_HORZ"))
+	xc.window(image.Rect(0, 0, 40, 30), 0x00ff00, false, map[string][]byte{"WM_CLASS": []byte("plain\x00XTest\x00")})
+	h.Eventually("the plain window", func(_ *headless.Backend, c *compositor.Compositor) bool { return len(windowsOf(c)) == 1 })
 	win := xc.create(image.Rect(10, 10, 90, 70), xproto.CwBackPixel|xproto.CwEventMask, []uint32{0xff0000, xproto.EventMaskStructureNotify},
 		map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00"), "_NET_WM_STATE": maximized})
 	maximizedState := func() bool {
 		states := xc.atomsOf(win, "_NET_WM_STATE")
-		return slices.Contains(states, xc.atoms["_NET_WM_STATE_MAXIMIZED_VERT"]) || slices.Contains(states, xc.atoms["_NET_WM_STATE_MAXIMIZED_HORZ"])
+		return slices.Contains(states, xc.atoms["_NET_WM_STATE_MAXIMIZED_VERT"]) && slices.Contains(states, xc.atoms["_NET_WM_STATE_MAXIMIZED_HORZ"])
 	}
-	h.Eventually("the window tiled without the maximized state it mapped with", func(*headless.Backend, *compositor.Compositor) bool {
-		return xc.geometry(win) == image.Rect(0, 0, 160, 100) && !maximizedState()
-	})
-	if err := xproto.ChangePropertyChecked(xc.x, xproto.PropModeReplace, win, xc.atoms["_NET_WM_STATE"], xproto.AtomAtom, 32, 2, maximized).Check(); err != nil {
-		t.Fatal(err)
-	}
-	if !maximizedState() {
-		t.Fatal("the client's own _NET_WM_STATE did not read back")
-	}
-	xc.sendState(win, 1, "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ")
-	for {
-		ev, open := xc.event(clientTimeout)
-		if !open {
-			t.Fatal("the X connection closed")
-		}
-		if n, ok := ev.(xproto.ConfigureNotifyEvent); ok && n.Window == win && n.Width == 160 && n.Height == 100 {
-			break
+	isMaximized := func(on bool, rect image.Rectangle) func(*headless.Backend, *compositor.Compositor) bool {
+		return func(_ *headless.Backend, c *compositor.Compositor) bool {
+			ws := windowsOf(c)
+			return len(ws) == 2 && ws[1].Maximized == on && xc.geometry(win) == rect && maximizedState() == on
 		}
 	}
-	h.Eventually("the answer saying the window is not maximized", func(*headless.Backend, *compositor.Compositor) bool {
-		return !maximizedState()
-	})
+	h.Eventually("the window that mapped maximized covering the output", isMaximized(true, image.Rect(0, 0, 160, 100)))
+	xc.sendState(win, 0, "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ")
+	h.Eventually("the window back in its tile", isMaximized(false, image.Rect(80, 0, 160, 100)))
+	xc.sendState(win, 2, "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ")
+	h.Eventually("the window maximized by a toggle", isMaximized(true, image.Rect(0, 0, 160, 100)))
 }
 
 func TestTheXWindowManagerAdvertisesAndKeepsTheStackingList(t *testing.T) {

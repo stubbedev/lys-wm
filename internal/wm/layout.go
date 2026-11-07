@@ -13,6 +13,11 @@ type Placement struct {
 	Layer     PlacementLayer
 	Minimized bool
 	Workspace WorkspaceID
+	Fake      bool
+}
+
+func (p Placement) Told() PlacementLayer {
+	return p.Layer.Told(p.Fake)
 }
 
 type TabBar struct {

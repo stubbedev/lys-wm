@@ -86,6 +86,8 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Rect:          ipc.RectOf(w.goal),
 			Floating:      s.Floats(w.id),
 			Fullscreen:    s.Fullscreen(w.id),
+			Maximized:     s.Maximized(w.id),
+			ClientFull:    s.Fullscreen(w.id) || s.FakeFullscreen(w.id),
 			Minimized:     s.Minimized(w.id),
 			Urgent:        w.urgent,
 			Unresponsive:  w.hung,
@@ -163,7 +165,7 @@ func (c *Compositor) KeyboardStateChanged() {
 	c.stateChanged()
 }
 
-var stackLayers = [...]wm.PlacementLayer{wm.LayerFullscreen, wm.LayerFloating, wm.LayerTiled}
+var stackLayers = [...]wm.PlacementLayer{wm.LayerFullscreen, wm.LayerMaximized, wm.LayerFloating, wm.LayerTiled}
 
 func (c *Compositor) stacking() map[wm.WindowID]int {
 	order := map[wm.WindowID]int{}

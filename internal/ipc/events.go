@@ -63,6 +63,12 @@ type (
 		Window wm.WindowID `json:"window"`
 		Urgent bool        `json:"urgent"`
 	}
+	ModeEvent struct {
+		Window           wm.WindowID `json:"window"`
+		Fullscreen       bool        `json:"fullscreen"`
+		Maximized        bool        `json:"maximized"`
+		ClientFullscreen bool        `json:"client_fullscreen"`
+	}
 	MinimizedEvent struct {
 		Window    wm.WindowID `json:"window"`
 		Minimized bool        `json:"minimized"`
@@ -118,6 +124,7 @@ func (RectEvent) Name() string           { return "rect" }
 func (IconEvent) Name() string           { return "icon" }
 func (UrgentEvent) Name() string         { return "urgent" }
 func (MinimizedEvent) Name() string      { return "minimized" }
+func (ModeEvent) Name() string           { return "mode" }
 func (UnresponsiveEvent) Name() string   { return "unresponsive" }
 func (StackEvent) Name() string          { return "stack" }
 func (FocusEvent) Name() string          { return "focus" }
@@ -217,6 +224,9 @@ func Diff(prev, next Snapshot) []Event {
 		}
 		if p.Urgent != w.Urgent {
 			out = append(out, UrgentEvent{Window: w.ID, Urgent: w.Urgent})
+		}
+		if p.Fullscreen != w.Fullscreen || p.Maximized != w.Maximized || p.ClientFull != w.ClientFull {
+			out = append(out, ModeEvent{Window: w.ID, Fullscreen: w.Fullscreen, Maximized: w.Maximized, ClientFullscreen: w.ClientFull})
 		}
 		if p.Minimized != w.Minimized {
 			out = append(out, MinimizedEvent{Window: w.ID, Minimized: w.Minimized})

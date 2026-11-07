@@ -61,8 +61,8 @@ func (t xToplevel) prefersFloating() bool {
 	return t.PrefersFloating()
 }
 
-func (t xToplevel) wantsFullscreen() bool {
-	return t.Fullscreen()
+func (t xToplevel) wantsMode() wm.WindowMode {
+	return wantedMode(t.Fullscreen(), t.Maximized())
 }
 
 func (t xToplevel) sizeLimits() (minimum, maximum image.Point) {
@@ -83,7 +83,7 @@ func (t xToplevel) state(w want) xwayland.State {
 		h := t.SizeHints()
 		r.Max = r.Min.Add(wm.Limits{Min: h.Min, Max: h.Max}.Fit(r.Size()))
 	}
-	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.layer == wm.LayerFullscreen, Minimized: w.minimized}
+	return xwayland.State{Rect: r, Activated: w.activated, Fullscreen: w.told == wm.LayerFullscreen, Maximized: w.told == wm.LayerMaximized, Minimized: w.minimized}
 }
 
 func (t xToplevel) settled(w want) bool {
@@ -234,7 +234,9 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 	case xwayland.Activate:
 		return c.markUrgent(win)
 	case xwayland.SetFullscreen:
-		return c.update(c.wm.SetFullscreen(win.id, r.On))
+		return c.update(c.wm.ClientRequestsFullscreen(win.id, r.On))
+	case xwayland.SetMaximized:
+		return c.update(c.wm.SetMaximized(win.id, r.On))
 	case xwayland.Minimize:
 		return c.minimize(win)
 	case xwayland.Move:

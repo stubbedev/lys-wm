@@ -140,6 +140,11 @@ type rawConfig struct {
 	LidSuspend      *bool                    `yaml:"lid_suspend"`
 	Gestures        rawGestures              `yaml:"gestures"`
 	Focus           rawFocus                 `yaml:"focus"`
+	Fullscreen      rawFullscreen            `yaml:"fullscreen"`
+}
+
+type rawFullscreen struct {
+	NewWindow *At[string] `yaml:"new_window"`
 }
 
 type rawFocus struct {
@@ -1013,6 +1018,7 @@ var (
 	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
 	focusActivations = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent}
 	contentTypes     = byName(wm.ContentGame)
+	coverPolicies    = map[string]wm.CoverPolicy{"behind": wm.CoverBehind, "take_over": wm.CoverTakeOver, "exit": wm.CoverExit}
 )
 
 func byName[E interface {
@@ -1408,6 +1414,9 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	cfg.WM.Gaps = p.gaps(raw.Gaps, cfg.WM.Gaps)
 	if v := choice(p, raw.Focus.OnActivate, "focus.on_activate", focusActivations); v != nil {
 		cfg.WM.OnActivate = *v
+	}
+	if v := choice(p, raw.Fullscreen.NewWindow, "fullscreen.new_window", coverPolicies); v != nil {
+		cfg.WM.NewOverCover = *v
 	}
 	cfg.Animations = p.animations(raw.Animations, look.Motion)
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))

@@ -41,7 +41,7 @@ func TestFloatingAndFullscreen(t *testing.T) {
 	if f, _ := s.Focused(); f != 3 {
 		t.Fatalf("a new floating window is not focused: %d", f)
 	}
-	s = ok(t)(s.ToggleFullscreen())
+	s = ok(t)(s.SwitchMode(ModeFullscreen, SwitchToggle))
 	if layer, rect, visible := layerOf(s, 3); layer != LayerFullscreen || rect != full || !visible {
 		t.Fatalf("fullscreen window 3: layer %d at %v visible %t", layer, rect, visible)
 	}

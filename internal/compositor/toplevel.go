@@ -15,6 +15,7 @@ type want struct {
 	rect      image.Rectangle
 	bounds    image.Point
 	layer     wm.PlacementLayer
+	told      wm.PlacementLayer
 	placed    bool
 	activated bool
 	minimized bool
@@ -32,7 +33,7 @@ type toplevel interface {
 	parent() toplevel
 	modal() bool
 	prefersFloating() bool
-	wantsFullscreen() bool
+	wantsMode() wm.WindowMode
 	sizeLimits() (minimum, maximum image.Point)
 	scaled() bool
 	settled(w want) bool
@@ -71,8 +72,18 @@ func (t xdgToplevel) prefersFloating() bool {
 	return t.Dialog()
 }
 
-func (t xdgToplevel) wantsFullscreen() bool {
-	return t.WantsFullscreen()
+func (t xdgToplevel) wantsMode() wm.WindowMode {
+	return wantedMode(t.WantsFullscreen(), t.WantsMaximized())
+}
+
+func wantedMode(fullscreen, maximized bool) wm.WindowMode {
+	switch {
+	case fullscreen:
+		return wm.ModeFullscreen
+	case maximized:
+		return wm.ModeMaximized
+	}
+	return wm.ModeNormal
 }
 
 func (t xdgToplevel) sizeLimits() (minimum, maximum image.Point) {
@@ -97,11 +108,17 @@ var (
 	fullscreenStates          = []shell.ToplevelState{sxdg.XdgToplevelStateFullscreen}
 	activatedFullscreenStates = []shell.ToplevelState{sxdg.XdgToplevelStateFullscreen, sxdg.XdgToplevelStateActivated}
 	activatedStates           = []shell.ToplevelState{sxdg.XdgToplevelStateActivated}
+	maximizedStates           = []shell.ToplevelState{sxdg.XdgToplevelStateMaximized}
+	activatedMaximizedStates  = []shell.ToplevelState{sxdg.XdgToplevelStateMaximized, sxdg.XdgToplevelStateActivated}
 )
 
 func xdgStates(w want) []shell.ToplevelState {
-	tiled, fullscreen := w.placed && w.layer == wm.LayerTiled, w.placed && w.layer == wm.LayerFullscreen
+	tiled, fullscreen, maximized := w.placed && w.told == wm.LayerTiled, w.placed && w.told == wm.LayerFullscreen, w.placed && w.told == wm.LayerMaximized
 	switch {
+	case maximized && w.activated:
+		return activatedMaximizedStates
+	case maximized:
+		return maximizedStates
 	case tiled && w.activated:
 		return activatedTiledStates
 	case tiled:
@@ -137,7 +154,7 @@ func (t xdgToplevel) apply(w want) error {
 
 func (t xdgToplevel) resizes(w want) bool {
 	was, size := t.Requested(), w.rect.Size()
-	flips := (w.placed && w.layer == wm.LayerFullscreen) != was.Has(sxdg.XdgToplevelStateFullscreen)
+	flips := (w.placed && w.told == wm.LayerFullscreen) != was.Has(sxdg.XdgToplevelStateFullscreen) || (w.placed && w.told == wm.LayerMaximized) != was.Has(sxdg.XdgToplevelStateMaximized)
 	return flips || (size != was.Size && size != t.Geometry().Size())
 }
 

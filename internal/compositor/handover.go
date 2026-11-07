@@ -206,7 +206,7 @@ func (c *Compositor) FinishAdoption() error {
 		return err
 	}
 	for _, name := range a.off {
-		if err := c.dpms(wm.DPMSAction{Mode: wm.PowerOff, Output: name}); err != nil {
+		if err := c.dpms(wm.DPMSAction{Mode: wm.SwitchOff, Output: name}); err != nil {
 			return err
 		}
 	}

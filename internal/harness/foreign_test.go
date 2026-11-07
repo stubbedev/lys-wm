@@ -183,6 +183,23 @@ func TestForeignToplevelsListAndManageWindows(t *testing.T) {
 		ws := windowsOf(comp)
 		return len(ws) == 2 && ws[0].Fullscreen
 	})
+	if err := errors.Join(wlr.order[0].UnsetFullscreen(), wlr.order[0].SetMaximized(), watcher.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the first window maximized by request", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		ws := windowsOf(comp)
+		return len(ws) == 2 && ws[0].Maximized && !ws[0].Fullscreen
+	})
+	watcher.DispatchUntil("the maximized state listed", func() bool {
+		return slices.Contains(wlr.toplevels[wlr.order[0]].states, cwft.ZwlrForeignToplevelHandleV1StateMaximized)
+	})
+	if err := errors.Join(wlr.order[0].UnsetMaximized(), watcher.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	h.Eventually("the first window unmaximized by request", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		ws := windowsOf(comp)
+		return len(ws) == 2 && !ws[0].Maximized
+	})
 	if err := errors.Join(wlr.order[1].Close(), watcher.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}

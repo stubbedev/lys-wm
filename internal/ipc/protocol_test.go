@@ -91,7 +91,7 @@ func TestDiff(t *testing.T) {
 	next.Outputs = []Output{dp1b, hdmib}
 	a2, b2 := a, b
 	a2.Focused, a2.Title, a2.Workspace = false, "a!", 3
-	b2.Urgent = true
+	b2.Urgent, b2.Maximized = true, true
 	b2.AppID, b2.Rect = "footclient", Rect{X: 100, Y: 4, Width: 50, Height: 40}
 	b2.Icon = &Icon{Serial: 4, Name: "foot", Sizes: []int{16, 32}}
 	c := Window{ID: 3, AppID: "mpv", Workspace: 3, Output: "HDMI-A-1", Focused: true}
@@ -109,9 +109,10 @@ func TestDiff(t *testing.T) {
 		`{"event":"rect","window":2,"output":"HDMI-A-1","rect":{"x":100,"y":4,"width":50,"height":40}}`,
 		`{"event":"icon","window":2,"icon":{"serial":4,"name":"foot","sizes":[16,32]}}`,
 		`{"event":"urgent","window":2,"urgent":true}`,
+		`{"event":"mode","window":2,"fullscreen":false,"maximized":true,"client_fullscreen":false}`,
 		`{"event":"move","window":1,"workspace":3}`,
 		`{"event":"title","window":1,"title":"a!"}`,
-		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"content_type":"none","content_source":"client","icon":null}}`,
+		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"content_type":"none","content_source":"client","icon":null}}`,
 		`{"event":"focus","window":3}`,
 		`{"event":"submap","submap":"resize"}`,
 		`{"event":"layout","layout":{"index":1,"name":"Danish"}}`,

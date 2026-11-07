@@ -12,15 +12,6 @@ type Minimized struct {
 	Layer PlacementLayer
 }
 
-func (m *Minimized) setFullscreen(on bool) {
-	switch {
-	case on:
-		m.Layer = LayerFullscreen
-	case m.Layer == LayerFullscreen:
-		m.Layer = LayerTiled
-	}
-}
-
 func appendMinimized(out []Placement, ms []Minimized) []Placement {
 	for _, m := range ms {
 		out = append(out, Placement{ID: m.ID, Rect: m.Rect, Layer: m.Layer, Minimized: true})
@@ -54,8 +45,8 @@ func (s State) Minimize(id WindowID, tile image.Rectangle) (State, error) {
 	if i := w.floatingIndex(id); i >= 0 {
 		m.Rect, m.Layer = w.Floating[i].Rect, LayerFloating
 	}
-	if w.Fullscreen == id {
-		m.Layer = LayerFullscreen
+	if w.Cover.ID == id {
+		m.Layer = w.Cover.Mode.layer()
 	}
 	if err := w.remove(id); err != nil {
 		return State{}, err
@@ -89,8 +80,8 @@ func (s State) Restore(id WindowID, at Autotile) (State, error) {
 		}
 		w.Tree = tree
 	}
-	if m.Layer == LayerFullscreen {
-		w.Fullscreen = id
+	if mode := modeOf(m.Layer); mode != ModeNormal {
+		w.Cover = Cover{ID: id, Mode: mode}
 	}
 	if err := w.focus(id); err != nil {
 		return State{}, err

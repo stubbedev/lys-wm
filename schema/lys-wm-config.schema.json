@@ -438,6 +438,21 @@
       },
       "additionalProperties": false
     },
+    "fullscreen": {
+      "type": "object",
+      "properties": {
+        "new_window": {
+          "type": "string",
+          "enum": [
+            "behind",
+            "exit",
+            "take_over"
+          ],
+          "default": "behind"
+        }
+      },
+      "additionalProperties": false
+    },
     "gaps": {
       "type": "object",
       "properties": {

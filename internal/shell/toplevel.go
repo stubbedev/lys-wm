@@ -49,6 +49,7 @@ type Toplevel struct {
 	iconSet         bool
 	destroyed       bool
 	wantsFullscreen bool
+	wantsMaximized  bool
 	wireStates      []byte
 }
 
@@ -102,6 +103,10 @@ func (t *Toplevel) Current() State {
 
 func (t *Toplevel) WantsFullscreen() bool {
 	return t.wantsFullscreen
+}
+
+func (t *Toplevel) WantsMaximized() bool {
+	return t.wantsMaximized
 }
 
 func (t *Toplevel) Requested() State {
@@ -221,7 +226,7 @@ func (t *Toplevel) mapped() error {
 
 func (t *Toplevel) unmapped() error {
 	t.configures.reset()
-	t.wantsFullscreen = false
+	t.wantsFullscreen, t.wantsMaximized = false, false
 	return t.xs.base.shell.listener.ToplevelUnmapped(t)
 }
 
@@ -337,10 +342,12 @@ func (t *Toplevel) SetMinSize(obj *sxdg.XdgToplevel, w, h int32) error {
 }
 
 func (t *Toplevel) SetMaximized(*sxdg.XdgToplevel) error {
+	t.wantsMaximized = true
 	return t.request(SetMaximized{On: true})
 }
 
 func (t *Toplevel) UnsetMaximized(*sxdg.XdgToplevel) error {
+	t.wantsMaximized = false
 	return t.request(SetMaximized{On: false})
 }
 

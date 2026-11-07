@@ -58,7 +58,7 @@ func (c *Compositor) dpms(e wm.DPMSAction) error {
 	}
 	var errs []error
 	for _, o := range targets {
-		on := e.Mode == wm.PowerOn || e.Mode == wm.PowerToggle && !c.Powered(o)
+		on := e.Mode.From(c.Powered(o))
 		errs = append(errs, c.SetPower(o, on))
 	}
 	return errors.Join(errs...)

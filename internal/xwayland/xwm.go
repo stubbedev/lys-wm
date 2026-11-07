@@ -53,6 +53,10 @@ type SetFullscreen struct {
 	On bool
 }
 
+type SetMaximized struct {
+	On bool
+}
+
 type Activate struct{}
 
 type Minimize struct{}
@@ -99,6 +103,7 @@ type Resize struct {
 type CancelMoveResize struct{}
 
 func (SetFullscreen) isRequest()    {}
+func (SetMaximized) isRequest()     {}
 func (Activate) isRequest()         {}
 func (Minimize) isRequest()         {}
 func (Configure) isRequest()        {}
@@ -107,8 +112,8 @@ func (Resize) isRequest()           {}
 func (CancelMoveResize) isRequest() {}
 
 type State struct {
-	Rect                             image.Rectangle
-	Activated, Fullscreen, Minimized bool
+	Rect                                        image.Rectangle
+	Activated, Fullscreen, Maximized, Minimized bool
 }
 
 type props struct {
@@ -257,6 +262,10 @@ func (w *Window) Fullscreen() bool {
 	return w.has(w.props.states, atomNetWMStateFullscreen)
 }
 
+func (w *Window) Maximized() bool {
+	return w.has(w.props.states, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
+}
+
 func (w *Window) Applied() State {
 	return w.applied
 }
@@ -280,6 +289,9 @@ func (w *Window) Apply(s State) error {
 	}
 	if s.Fullscreen != prev.Fullscreen {
 		w.setState(s.Fullscreen, atomNetWMStateFullscreen)
+	}
+	if s.Maximized != prev.Maximized {
+		w.setState(s.Maximized, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
 	}
 	if s.Minimized != prev.Minimized {
 		w.setState(s.Minimized, atomNetWMStateHidden)
@@ -658,20 +670,25 @@ func (m *wm) stateRequested(id xproto.Window, action uint32, a, b xproto.Atom) e
 	if asked, on := requested(atomNetWMStateDemandsAttention); asked {
 		w.setState(on, atomNetWMStateDemandsAttention)
 	}
-	vert, _ := requested(atomNetWMStateMaximizedVert)
-	if horz, _ := requested(atomNetWMStateMaximizedHorz); vert || horz {
-		w.setState(false, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
-		m.notifyGeometry(w)
+	vert, onVert := requested(atomNetWMStateMaximizedVert)
+	horz, onHorz := requested(atomNetWMStateMaximizedHorz)
+	if vert || horz {
+		if err := m.stateChange(w, onVert || onHorz, SetMaximized{On: onVert || onHorz}, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz); err != nil {
+			return err
+		}
 	}
-	asked, on := requested(atomNetWMStateFullscreen)
-	switch {
-	case !asked:
-		return nil
-	case !w.shown:
-		w.setState(on, atomNetWMStateFullscreen)
+	if asked, on := requested(atomNetWMStateFullscreen); asked {
+		return m.stateChange(w, on, SetFullscreen{On: on}, atomNetWMStateFullscreen)
+	}
+	return nil
+}
+
+func (m *wm) stateChange(w *Window, on bool, r Request, states ...atom) error {
+	if !w.shown {
+		w.setState(on, states...)
 		return nil
 	}
-	return m.listener.XWindowRequest(w, SetFullscreen{On: on})
+	return m.listener.XWindowRequest(w, r)
 }
 
 func (m *wm) iconifyRequested(id xproto.Window, state uint32) error {
@@ -731,9 +748,6 @@ func (m *wm) show(w *Window) error {
 		m.clients = append(m.clients, w.id)
 		m.changeWindows(m.root, atomNetClientList, m.clients)
 		m.restack(w.id, true)
-		if w.has(w.props.states, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz) {
-			w.setState(false, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz)
-		}
 	}
 	return m.listener.XWindowMapped(w)
 }

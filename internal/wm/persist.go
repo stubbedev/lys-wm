@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"slices"
 )
 
 type savedNode struct {
@@ -27,6 +28,7 @@ type savedWorkspace struct {
 	Floating   []Floating  `json:"floating,omitempty"`
 	Minimized  []Minimized `json:"minimized,omitempty"`
 	Fullscreen WindowID    `json:"fullscreen,omitempty"`
+	Maximized  WindowID    `json:"maximized,omitempty"`
 	FloatFocus bool        `json:"float_focus,omitempty"`
 	Home       string      `json:"home,omitempty"`
 	History    []WindowID  `json:"history,omitempty"`
@@ -51,6 +53,7 @@ type savedState struct {
 	Focused    string                 `json:"focused"`
 	Remembered map[string]WorkspaceID `json:"remembered,omitempty"`
 	Limits     []savedLimit           `json:"limits,omitempty"`
+	Fake       []WindowID             `json:"fake_fullscreen,omitempty"`
 }
 
 func saveGroup(g *Group) *savedGroup {
@@ -99,11 +102,22 @@ func (s State) Save() ([]byte, error) {
 		saved.Outputs = append(saved.Outputs, savedOutput{Name: o.Name, Full: o.Full, Area: o.Area, Active: o.Active, Previous: o.previous})
 	}
 	for _, w := range s.workspaces {
-		saved.Workspaces = append(saved.Workspaces, savedWorkspace{
+		sw := savedWorkspace{
 			ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Floating: w.Floating, Minimized: w.Minimized,
-			Fullscreen: w.Fullscreen, FloatFocus: w.floatFocus, Home: w.home, History: w.history,
-		})
+			FloatFocus: w.floatFocus, Home: w.home, History: w.history,
+		}
+		switch w.Cover.Mode {
+		case ModeFullscreen:
+			sw.Fullscreen = w.Cover.ID
+		case ModeMaximized:
+			sw.Maximized = w.Cover.ID
+		}
+		saved.Workspaces = append(saved.Workspaces, sw)
 	}
+	for id := range s.fake {
+		saved.Fake = append(saved.Fake, id)
+	}
+	slices.Sort(saved.Fake)
 	for id, l := range s.limits {
 		saved.Limits = append(saved.Limits, savedLimit{ID: id, Limits: l})
 	}
@@ -129,11 +143,17 @@ func LoadState(data []byte) (State, error) {
 		}
 		s.workspaces = append(s.workspaces, Workspace{
 			ID: w.ID, Output: w.Output, Tree: Tree{root: root}, Floating: w.Floating, Minimized: w.Minimized,
-			Fullscreen: w.Fullscreen, floatFocus: w.FloatFocus, home: w.Home, history: w.History,
+			Cover: savedCover(w), floatFocus: w.FloatFocus, home: w.Home, history: w.History,
 		})
 	}
 	for _, l := range saved.Limits {
 		s.limits[l.ID] = l.Limits
+	}
+	for _, id := range saved.Fake {
+		if s.fake == nil {
+			s.fake = map[WindowID]struct{}{}
+		}
+		s.fake[id] = struct{}{}
 	}
 	return s, nil
 }
@@ -151,4 +171,14 @@ func (s State) Windows() []WindowID {
 		}
 	}
 	return out
+}
+
+func savedCover(w savedWorkspace) Cover {
+	switch {
+	case w.Fullscreen != 0:
+		return Cover{ID: w.Fullscreen, Mode: ModeFullscreen}
+	case w.Maximized != 0:
+		return Cover{ID: w.Maximized, Mode: ModeMaximized}
+	}
+	return Cover{}
 }

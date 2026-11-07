@@ -874,6 +874,28 @@ it: the workspace comes back for the window. GTK 3 and 4, Firefox and
 Chromium present the token after their first configure and before their first
 buffer, which is early enough. lys-wm keeps the newest 64 tokens.
 
+## fullscreen
+
+```yaml
+fullscreen:
+  new_window: behind
+```
+
+What a window does when it opens on a workspace where another window is
+fullscreen or maximized. `behind` (the default) puts it in its place behind
+that window, which keeps focus; `take_over` gives the new window the same
+state, returning the other to its tile; `exit` ends the state and focuses the
+new window.
+
+A window maximizes with the `maximize` action, its own maximize button
+(`xdg_toplevel.set_maximized`, `_NET_WM_STATE_MAXIMIZED_*` from an X client)
+or a taskbar's maximize: it fills the output's usable area inside the outer
+gaps, keeps the bars and its border, and covers the rest of its workspace
+until it is unmaximized and goes back to its tile. `fullscreen on fake`
+leaves a window where it is and only tells it it is fullscreen, so a video
+player or browser fills its tile instead of the output; the window's own
+request to leave fullscreen ends it.
+
 ## rules
 
 ```yaml

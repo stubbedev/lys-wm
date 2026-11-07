@@ -24,16 +24,6 @@ const (
 	DragResize
 )
 
-type PowerMode uint8
-
-const (
-	PowerOn PowerMode = iota + 1
-	PowerOff
-	PowerToggle
-)
-
-var powerModes = []string{PowerOn: "on", PowerOff: "off", PowerToggle: "toggle"}
-
 type ZoomMode uint8
 
 const (
@@ -87,10 +77,11 @@ func emit(s State, e Effect) (State, []Effect, error) {
 }
 
 type Settings struct {
-	Collapse   CollapsePolicy
-	Autotile   Autotile
-	Gaps       Gaps
-	OnActivate ActivatePolicy
+	Collapse     CollapsePolicy
+	Autotile     Autotile
+	Gaps         Gaps
+	OnActivate   ActivatePolicy
+	NewOverCover CoverPolicy
 }
 
 type WorkspaceTarget interface {
@@ -137,9 +128,13 @@ type (
 		Layout    Layout
 		Ephemeral bool
 	}
-	SubmapAction              struct{ Name string }
-	FloatAction               struct{}
-	FullscreenAction          struct{}
+	SubmapAction     struct{ Name string }
+	FloatAction      struct{}
+	FullscreenAction struct {
+		Switch Switch
+		Fake   bool
+	}
+	MaximizeAction            struct{ Switch Switch }
 	DragAction                struct{ Mode DragMode }
 	ResizeAction              struct{ DX, DY int }
 	ReloadAction              struct{}
@@ -150,7 +145,7 @@ type (
 	SlowKeysAction            struct{ Delay time.Duration }
 	GlobalAction              struct{ AppID, ID string }
 	DPMSAction                struct {
-		Mode   PowerMode
+		Mode   Switch
 		Output string
 	}
 	MinimizeAction struct{ ID WindowID }
@@ -207,10 +202,6 @@ func (a RestoreAction) apply(s State, _ Settings) (State, []Effect, error) {
 		return State{}, nil, fmt.Errorf("restore window %d: %w", id, ErrUnknownWindow)
 	}
 	return emit(s, RestoreAction{ID: id})
-}
-
-func (m PowerMode) String() string {
-	return enumName(powerModes, m, "PowerMode")
 }
 
 func (a DPMSAction) String() string {
@@ -333,8 +324,23 @@ func (a ResizeAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return next, nil, err
 }
 
-func (FloatAction) String() string      { return "togglefloating" }
-func (FullscreenAction) String() string { return "fullscreen" }
+func (FloatAction) String() string { return "togglefloating" }
+func switched(name string, sw Switch) string {
+	if sw == SwitchToggle {
+		return name
+	}
+	return name + " " + sw.String()
+}
+
+func (a FullscreenAction) String() string {
+	text := switched("fullscreen", a.Switch)
+	if a.Fake {
+		text += " fake"
+	}
+	return text
+}
+
+func (a MaximizeAction) String() string { return switched("maximize", a.Switch) }
 func (a DragAction) String() string {
 	if a.Mode == DragResize {
 		return "resizewindow"
@@ -347,8 +353,17 @@ func (FloatAction) apply(s State, settings Settings) (State, []Effect, error) {
 	return next, nil, err
 }
 
-func (FullscreenAction) apply(s State, _ Settings) (State, []Effect, error) {
-	next, err := s.ToggleFullscreen()
+func (a FullscreenAction) apply(s State, _ Settings) (State, []Effect, error) {
+	if a.Fake {
+		next, err := s.SwitchFakeFullscreen(a.Switch)
+		return next, nil, err
+	}
+	next, err := s.SwitchMode(ModeFullscreen, a.Switch)
+	return next, nil, err
+}
+
+func (a MaximizeAction) apply(s State, _ Settings) (State, []Effect, error) {
+	next, err := s.SwitchMode(ModeMaximized, a.Switch)
 	return next, nil, err
 }
 
@@ -644,7 +659,7 @@ var Actions = []ActionSpec{
 			if len(args) == 0 || len(args) > 2 {
 				return nil, badArgs(spec, "needs on, off or toggle and an optional output")
 			}
-			mode, ok := parseEnum[PowerMode](powerModes, args[0])
+			mode, ok := ParseSwitch(args[0])
 			if !ok {
 				return nil, badArgs(spec, "%q is not on, off or toggle", args[0])
 			}
@@ -765,9 +780,24 @@ var Actions = []ActionSpec{
 		parse:   bare(FloatAction{}),
 	},
 	{
-		Name:    "fullscreen",
-		Summary: "Make the focused window cover its output, above the top layer, or end that.",
-		parse:   bare(FullscreenAction{}),
+		Name: "fullscreen", Args: "[toggle|on|off] [fake]",
+		Summary: "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			fake := len(args) > 0 && args[len(args)-1] == "fake"
+			if fake {
+				args = args[:len(args)-1]
+			}
+			sw, err := optionalSwitch(spec, args)
+			return FullscreenAction{Switch: sw, Fake: fake}, err
+		},
+	},
+	{
+		Name: "maximize", Args: "[toggle|on|off]",
+		Summary: "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			sw, err := optionalSwitch(spec, args)
+			return MaximizeAction{Switch: sw}, err
+		},
 	},
 	{
 		Name: "resizeactive", Args: "<dx> <dy>",
@@ -799,6 +829,19 @@ var Actions = []ActionSpec{
 		Summary: "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16.",
 		parse:   parseZoom,
 	},
+}
+
+func optionalSwitch(spec ActionSpec, args []string) (Switch, error) {
+	switch len(args) {
+	case 0:
+		return SwitchToggle, nil
+	case 1:
+		if sw, ok := ParseSwitch(args[0]); ok {
+			return sw, nil
+		}
+		return 0, badArgs(spec, "%q is not toggle, on or off", args[0])
+	}
+	return 0, badArgs(spec, "takes toggle, on or off, or nothing, not %d arguments", len(args))
 }
 
 func bare(a Action) func(ActionSpec, []string, string) (Action, error) {

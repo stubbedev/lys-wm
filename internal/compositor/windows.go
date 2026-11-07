@@ -134,8 +134,8 @@ func (c *Compositor) outputAtRect(r image.Rectangle) *output.Output {
 	return nil
 }
 
-func (c *Compositor) wanted(rect image.Rectangle, layer wm.PlacementLayer, activated bool) want {
-	w := want{rect: rect, layer: layer, activated: activated}
+func (c *Compositor) wanted(rect image.Rectangle, p wm.Placement, activated bool) want {
+	w := want{rect: rect, layer: p.Layer, told: p.Told(), activated: activated}
 	if o := c.outputAtRect(rect); o != nil {
 		w.placed, w.scale, w.bounds = true, c.scaleOver(rect), c.usable[o].Size()
 	}
@@ -361,7 +361,7 @@ func fixedSize(minimum, maximum image.Point) bool {
 
 func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	t := xdgToplevel{st}
-	if float, size := c.floats(t); float && !t.wantsFullscreen() {
+	if float, size := c.floats(t); float && t.wantsMode() == wm.ModeNormal {
 		return t.apply(want{rect: image.Rectangle{Max: floatSize(t, size)}, activated: true})
 	}
 	s, err := c.mapped(t, c.nextWindow)
@@ -370,7 +370,7 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	}
 	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == c.nextWindow {
-			return t.apply(c.wanted(c.content(p.Rect, p.Layer), p.Layer, true))
+			return t.apply(c.wanted(c.content(p.Rect, p.Layer), p, true))
 		}
 	}
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)
@@ -387,10 +387,16 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
 	if ws, ok := c.launchWorkspace(t); ok && err == nil {
 		s, err = s.MoveWindowToWorkspace(id, ws, c.settings.Autotile)
 	}
-	if err != nil || !t.wantsFullscreen() {
+	if err != nil {
 		return s, err
 	}
-	return s.SetFullscreen(id, true)
+	if s, err = s.Opened(id, c.settings.NewOverCover); err != nil {
+		return s, err
+	}
+	if mode := t.wantsMode(); mode != wm.ModeNormal {
+		return s.SetMode(id, mode, true)
+	}
+	return s, nil
 }
 
 func (c *Compositor) floatRect(t toplevel, size image.Point) image.Rectangle {
@@ -589,10 +595,9 @@ func (c *Compositor) ToplevelRequest(t *shell.Toplevel, r shell.Request) error {
 	}
 	switch r := r.(type) {
 	case shell.SetFullscreen:
-		return c.update(c.wm.SetFullscreen(w.id, r.On))
+		return c.update(c.wm.ClientRequestsFullscreen(w.id, r.On))
 	case shell.SetMaximized:
-		_, err := t.Configure(t.Requested())
-		return err
+		return c.update(c.wm.SetMaximized(w.id, r.On))
 	case shell.SetMinimized:
 		return c.minimize(w)
 	case shell.Move:

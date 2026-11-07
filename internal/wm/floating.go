@@ -199,48 +199,6 @@ func (s State) Floats(id WindowID) bool {
 	return w.floatingIndex(id) >= 0
 }
 
-func (s State) SetFullscreen(id WindowID, on bool) (State, error) {
-	s = s.clone()
-	w := s.windowWorkspace(id)
-	if w == nil {
-		return State{}, fmt.Errorf("fullscreen window %d: %w", id, ErrUnknownWindow)
-	}
-	if i := w.minimizedIndex(id); i >= 0 {
-		w.Minimized[i].setFullscreen(on)
-		return s, nil
-	}
-	switch {
-	case on:
-		w.Fullscreen = id
-		if err := w.focus(id); err != nil {
-			return State{}, err
-		}
-	case w.Fullscreen == id:
-		w.Fullscreen = 0
-	}
-	return s, nil
-}
-
-func (s State) ToggleFullscreen() (State, error) {
-	id, ok := s.Focused()
-	if !ok {
-		return s, nil
-	}
-	w := s.windowWorkspace(id)
-	return s.SetFullscreen(id, w.Fullscreen != id)
-}
-
-func (s State) Fullscreen(id WindowID) bool {
-	w := s.windowWorkspace(id)
-	if w == nil {
-		return false
-	}
-	if i := w.minimizedIndex(id); i >= 0 {
-		return w.Minimized[i].Layer == LayerFullscreen
-	}
-	return w.Fullscreen == id
-}
-
 func (s State) Reinsert(id WindowID, at image.Point, auto Autotile) (State, error) {
 	s = s.clone()
 	w := s.windowWorkspace(id)

@@ -65,12 +65,12 @@ focused one, or `null`:
 
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
- "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
+ "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
  "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
 ```
 
 `stack` is the window's front-to-back index among the windows its output
-shows, 0 on top: fullscreen windows, then floating, then tiled, each in the
+shows, 0 on top: fullscreen windows, then maximized, then floating, then tiled, each in the
 order they are drawn. It is left out for a window no output shows, on a hidden
 workspace or minimized. A client can tell which window is on top at a point
 from one `windows` request.
@@ -78,6 +78,10 @@ from one `windows` request.
 Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
+`maximized` is true while the window fills the usable area (the `maximize`
+action or its own request); `client_fullscreen` while it is told it is
+fullscreen, which a window under `fullscreen on fake` is while it stays in its
+tile.
 A minimized window stays on its workspace, and in the workspace's `windows`
 count, with `minimized` true and the `rect` it comes back to when floating.
 `content_type` is what lys-wm takes the window to show: `none`, `photo`,
@@ -147,6 +151,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `rect` | `window`, `output`, `rect` | A window moved, resized or went to another output; `rect` is as in `windows` |
 | `icon` | `window`, `icon` | A window set or cleared its icon |
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
+| `mode` | `window`, `fullscreen`, `maximized`, `client_fullscreen` | A window went fullscreen or maximized, or back, or was told it is fullscreen (fake fullscreen), or no longer |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |
 | `stack` | `window`, `stack` (index or `null`) | A window's front-to-back index on its output changed, or it was shown or hidden |

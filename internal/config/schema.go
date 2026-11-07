@@ -202,6 +202,7 @@ func annotations() map[string]annotation {
 		"rules[].tag":                      formatAnn(regexFormat),
 		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
 		"focus.on_activate":                {enum: slices.Sorted(maps.Keys(focusActivations)), def: "focus"},
+		"fullscreen.new_window":            {enum: slices.Sorted(maps.Keys(coverPolicies)), def: "behind"},
 		"rules[].on_activate":              {enum: slices.Sorted(maps.Keys(activations))},
 		"rules[].content":                  {enum: slices.Sorted(maps.Keys(contentTypes))},
 		"binds[].flags[]":                  bindFlags,

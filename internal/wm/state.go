@@ -29,7 +29,7 @@ type Workspace struct {
 	Tree       Tree
 	Floating   []Floating
 	Minimized  []Minimized
-	Fullscreen WindowID
+	Cover      Cover
 	floatFocus bool
 	home       string
 	history    []WindowID
@@ -90,8 +90,8 @@ func (w *Workspace) remove(id WindowID) error {
 		}
 		w.Tree = tree
 	}
-	if w.Fullscreen == id {
-		w.Fullscreen = 0
+	if w.Cover.ID == id {
+		w.Cover = Cover{}
 	}
 	w.history = slices.DeleteFunc(w.history, func(x WindowID) bool { return x == id })
 	if focused != id {
@@ -121,6 +121,7 @@ type State struct {
 	focused    string
 	remembered map[string]WorkspaceID
 	limits     map[WindowID]Limits
+	fake       map[WindowID]struct{}
 }
 
 var (
@@ -135,6 +136,7 @@ func (s State) clone() State {
 		focused:    s.focused,
 		remembered: make(map[string]WorkspaceID, len(s.remembered)),
 		limits:     maps.Clone(s.limits),
+		fake:       maps.Clone(s.fake),
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
@@ -416,6 +418,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 		return State{}, err
 	}
 	delete(s.limits, id)
+	delete(s.fake, id)
 	s.dropIfIdle(w.ID)
 	return s, nil
 }
@@ -573,6 +576,7 @@ const (
 	LayerTiled PlacementLayer = iota
 	LayerFloating
 	LayerFullscreen
+	LayerMaximized
 )
 
 func (s State) Arrange(sp Spacing) Arrangement {
@@ -599,6 +603,12 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 		placeWorkspace(all, w, o, o.Active == w.ID, sp)
 		all.inWorkspace(from, w.ID)
 	}
+	if len(s.fake) == 0 {
+		return
+	}
+	for i := range all.Windows {
+		_, all.Windows[i].Fake = s.fake[all.Windows[i].ID]
+	}
 }
 
 func appendTreeWindows(out []Placement, n Node) []Placement {
@@ -616,13 +626,20 @@ func appendTreeWindows(out []Placement, n Node) []Placement {
 	return out
 }
 
+func (c Cover) rect(o *Output, sp Spacing) image.Rectangle {
+	if c.Mode == ModeFullscreen {
+		return o.Full
+	}
+	return sp.Gaps.Outer.shrink(o.Area)
+}
+
 func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spacing) {
-	covered := w.Fullscreen != 0
+	covered := w.Cover.ID != 0
 	from, bars := len(all.Windows), len(all.TabBars)
 	w.Tree.arrangeInto(all, o.Area, sp)
 	kept := all.Windows[:from]
 	for _, p := range all.Windows[from:] {
-		if p.ID == w.Fullscreen {
+		if p.ID == w.Cover.ID {
 			continue
 		}
 		p.Laid = p.Visible && !covered
@@ -637,12 +654,12 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 		all.TabBars[i].Workspace, all.TabBars[i].Shown = w.ID, shown
 	}
 	for _, f := range w.Floating {
-		if f.ID != w.Fullscreen {
+		if f.ID != w.Cover.ID {
 			all.Windows = append(all.Windows, Placement{ID: f.ID, Rect: f.Rect, Visible: shown && !covered, Laid: !covered, Layer: LayerFloating})
 		}
 	}
 	if covered {
-		all.Windows = append(all.Windows, Placement{ID: w.Fullscreen, Rect: o.Full, Visible: shown, Laid: true, Layer: LayerFullscreen})
+		all.Windows = append(all.Windows, Placement{ID: w.Cover.ID, Rect: w.Cover.rect(o, sp), Visible: shown, Laid: true, Layer: w.Cover.Mode.layer()})
 	}
 	all.Windows = appendMinimized(all.Windows, w.Minimized)
 }

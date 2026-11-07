@@ -278,7 +278,7 @@ func (c *Compositor) render(o *output.Output) error {
 	return errors.Join(c.lockBlanked(o), c.runCaptures(o))
 }
 
-var windowLayers = []wm.PlacementLayer{wm.LayerTiled, wm.LayerFloating}
+var windowLayers = []wm.PlacementLayer{wm.LayerTiled, wm.LayerFloating, wm.LayerMaximized}
 
 func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface.Surface) ([]*surface.Surface, error) {
 	if c.overview != nil {

@@ -134,7 +134,7 @@ func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 			return awaited, errUnknownWindow(p.ID)
 		}
 		w.goal = c.content(p.Rect, p.Layer)
-		goal := c.wanted(w.goal, p.Layer, hasFocus && focused == w.id)
+		goal := c.wanted(w.goal, p, hasFocus && focused == w.id)
 		goal.minimized = p.Minimized
 		if c.interaction != nil && w.top.stale() && w.top.resizes(goal) {
 			c.lagging = true

@@ -934,3 +934,15 @@ func TestContentRules(t *testing.T) {
 		t.Errorf("content: movie was not refused: %v", err)
 	}
 }
+
+func TestFullscreenNewWindowPolicy(t *testing.T) {
+	for text, want := range map[string]wm.CoverPolicy{"": wm.CoverBehind, "fullscreen:\n  new_window: take_over\n": wm.CoverTakeOver, "fullscreen:\n  new_window: exit\n": wm.CoverExit} {
+		c, err := Parse("t.yaml", []byte(text))
+		if err != nil || c.WM.NewOverCover != want {
+			t.Errorf("%q: %d, %v; want %d", text, c.WM.NewOverCover, err, want)
+		}
+	}
+	if _, err := Parse("t.yaml", []byte("fullscreen:\n  new_window: above\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: fullscreen.new_window:") {
+		t.Errorf("fullscreen.new_window: above was not refused: %v", err)
+	}
+}

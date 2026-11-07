@@ -27,14 +27,14 @@ type foreignState struct {
 	title, appID          string
 	output                *output.Output
 	activated, fullscreen bool
-	minimized             bool
+	maximized, minimized  bool
 	parent                *window
 }
 
 func (c *Compositor) foreignStateOf(w *window) foreignState {
 	return foreignState{
 		title: w.top.Title(), appID: w.top.AppID(), output: w.output,
-		activated: c.active == w, fullscreen: !w.minimized && w.layer == wm.LayerFullscreen, minimized: w.minimized,
+		activated: c.active == w, fullscreen: !w.minimized && w.layer == wm.LayerFullscreen, maximized: !w.minimized && w.layer == wm.LayerMaximized, minimized: w.minimized,
 		parent: c.windowOf(w.top.parent()),
 	}
 }
@@ -155,6 +155,9 @@ func wlrStates(s foreignState) []byte {
 	if s.activated {
 		out = binary.LittleEndian.AppendUint32(out, uint32(swft.ZwlrForeignToplevelHandleV1StateActivated))
 	}
+	if s.maximized {
+		out = binary.LittleEndian.AppendUint32(out, uint32(swft.ZwlrForeignToplevelHandleV1StateMaximized))
+	}
 	if s.fullscreen {
 		out = binary.LittleEndian.AppendUint32(out, uint32(swft.ZwlrForeignToplevelHandleV1StateFullscreen))
 	}
@@ -215,7 +218,7 @@ func (c *Compositor) updateWlrHandle(m *wlrManager, h *wlrHandle, now foreignSta
 			}
 		}
 	}
-	if h.fresh || now.activated != prev.activated || now.fullscreen != prev.fullscreen || now.minimized != prev.minimized {
+	if h.fresh || now.activated != prev.activated || now.fullscreen != prev.fullscreen || now.maximized != prev.maximized || now.minimized != prev.minimized {
 		errs = append(errs, res.SendState(wlrStates(now)))
 	}
 	if res.Base().Version() >= 3 && (h.fresh || now.parent != prev.parent) {
@@ -275,22 +278,28 @@ func (r wlrHandleRequests) Close(*swft.ZwlrForeignToplevelHandleV1) error {
 	return r.w.top.close()
 }
 
-func (r wlrHandleRequests) SetFullscreen(*swft.ZwlrForeignToplevelHandleV1, *sw.WlOutput) error {
+func (r wlrHandleRequests) setMode(mode wm.WindowMode, on bool) error {
 	if !r.live() {
 		return nil
 	}
-	return r.c.update(r.c.wm.SetFullscreen(r.w.id, true))
+	return r.c.update(r.c.wm.SetMode(r.w.id, mode, on))
+}
+
+func (r wlrHandleRequests) SetFullscreen(*swft.ZwlrForeignToplevelHandleV1, *sw.WlOutput) error {
+	return r.setMode(wm.ModeFullscreen, true)
 }
 
 func (r wlrHandleRequests) UnsetFullscreen(*swft.ZwlrForeignToplevelHandleV1) error {
-	if !r.live() {
-		return nil
-	}
-	return r.c.update(r.c.wm.SetFullscreen(r.w.id, false))
+	return r.setMode(wm.ModeFullscreen, false)
 }
 
-func (wlrHandleRequests) SetMaximized(*swft.ZwlrForeignToplevelHandleV1) error   { return nil }
-func (wlrHandleRequests) UnsetMaximized(*swft.ZwlrForeignToplevelHandleV1) error { return nil }
+func (r wlrHandleRequests) SetMaximized(*swft.ZwlrForeignToplevelHandleV1) error {
+	return r.setMode(wm.ModeMaximized, true)
+}
+
+func (r wlrHandleRequests) UnsetMaximized(*swft.ZwlrForeignToplevelHandleV1) error {
+	return r.setMode(wm.ModeMaximized, false)
+}
 
 func (r wlrHandleRequests) SetMinimized(*swft.ZwlrForeignToplevelHandleV1) error {
 	if !r.live() {
