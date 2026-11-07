@@ -45,6 +45,7 @@ type Handler interface {
 	Icon(w wm.WindowID, size int) (*image.RGBA, int, error)
 	CreateOutput(spec OutputSpec) (CreatedOutput, error)
 	RemoveOutput(name string) error
+	Capture(send func(Event)) (CaptureSession, error)
 }
 
 type Upgrader func(binary string, dropX11 bool, conn *os.File, done func(UpgradeResult, error))
@@ -268,11 +269,11 @@ func (s *Server) forget(conn *net.UnixConn) {
 	_ = conn.Close()
 }
 
-func readRequest(conn *net.UnixConn) ([]byte, error) {
+func readRequest(conn *net.UnixConn, r *bufio.Reader) ([]byte, error) {
 	if err := conn.SetReadDeadline(time.Now().Add(ioTimeout)); err != nil {
 		return nil, err
 	}
-	line, err := bufio.NewReaderSize(conn, maxRequest).ReadSlice('\n')
+	line, err := r.ReadSlice('\n')
 	switch {
 	case errors.Is(err, bufio.ErrBufferFull):
 		return nil, fmt.Errorf("%w: longer than %d bytes", ErrBadRequest, maxRequest)
@@ -338,7 +339,8 @@ func onLoop[T any](s *Server, f func() (T, error)) (T, error) {
 
 func (s *Server) serve(conn *net.UnixConn) {
 	defer s.forget(conn)
-	line, err := readRequest(conn)
+	r := bufio.NewReaderSize(conn, maxRequest)
+	line, err := readRequest(conn, r)
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			s.reply(conn, nil, err)
@@ -361,6 +363,10 @@ func (s *Server) serve(conn *net.UnixConn) {
 	}
 	if req.kind == KindUpgrade {
 		s.runUpgrade(conn, req.binary, req.dropX11)
+		return
+	}
+	if req.kind == KindCapture {
+		s.capture(conn, r)
 		return
 	}
 	var loaded func() error

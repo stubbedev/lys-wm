@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/seat"
@@ -161,6 +162,13 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case *backend.Key:
 		return c.inputKey(*e)
 	case *backend.PointerMotion:
+		if c.capturing != nil {
+			c.capturing.pointer(ipc.CaptureMotionEvent{DX: e.DX, DY: e.DY})
+			return nil
+		}
+		if crossed, err := c.crossBarrier(e.DX, e.DY); crossed || err != nil {
+			return err
+		}
 		if err := c.seat.RelativeMotion(e.Time, e.DX, e.DY, e.UnaccelDX, e.UnaccelDY); err != nil {
 			return err
 		}
@@ -178,6 +186,10 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case *backend.PointerAxis:
 		return c.inputAxis(*e)
 	case *backend.PointerFrame:
+		if c.capturing != nil {
+			c.capturing.frame()
+			return nil
+		}
 		return c.seat.PointerFrame()
 	case backend.GestureBegin:
 		return c.gestureBegin(d, e)
@@ -225,6 +237,9 @@ func (c *Compositor) inputKey(e backend.Key) error {
 }
 
 func (c *Compositor) acceptKey(e backend.Key) error {
+	if c.capturing != nil {
+		return c.captureKey(e)
+	}
 	if err := c.watchTap(e.Code, e.Pressed); err != nil {
 		return err
 	}
@@ -245,6 +260,9 @@ func (c *Compositor) acceptKey(e backend.Key) error {
 }
 
 func (c *Compositor) inputAbsolute(e backend.PointerMotionAbsolute) error {
+	if c.capturing != nil {
+		return nil
+	}
 	area, ok := c.absoluteArea(e.Output)
 	if !ok {
 		return nil
@@ -253,6 +271,10 @@ func (c *Compositor) inputAbsolute(e backend.PointerMotionAbsolute) error {
 }
 
 func (c *Compositor) inputButton(e backend.PointerButton) error {
+	if c.capturing != nil {
+		c.capturing.pointer(ipc.CaptureButtonEvent{Button: e.Button, Pressed: e.Pressed})
+		return nil
+	}
 	if e.Pressed {
 		c.interruptTap()
 	}
@@ -305,6 +327,10 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 }
 
 func (c *Compositor) inputAxis(e backend.PointerAxis) error {
+	if c.capturing != nil {
+		c.captureAxis(e)
+		return nil
+	}
 	c.interruptTap()
 	if e.Orientation == backend.Vertical && e.Value != 0 {
 		dir := binds.ScrollDown
@@ -413,6 +439,9 @@ func (c *Compositor) touchCancel() error {
 }
 
 func (c *Compositor) moveCursor(at time.Duration, next point) error {
+	if c.capturing != nil {
+		return nil
+	}
 	next, moved := c.constrainMotion(next)
 	if !moved {
 		return nil
@@ -468,6 +497,9 @@ func (c *Compositor) pointerTarget() (*surface.Surface, point, *window) {
 }
 
 func (c *Compositor) refreshPointer() error {
+	if c.capturing != nil {
+		return nil
+	}
 	if c.interaction != nil {
 		return nil
 	}

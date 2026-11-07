@@ -95,6 +95,9 @@ func Do(path string, req Request) (result json.RawMessage, err error) {
 	if req.Request == KindWatch {
 		return nil, fmt.Errorf("%w: use Watch for the event stream", ErrBadRequest)
 	}
+	if req.Request == KindCapture {
+		return nil, fmt.Errorf("%w: use OpenCapture for an input capture", ErrBadRequest)
+	}
 	cn, err := send(path, req)
 	if err != nil {
 		return nil, err
@@ -134,4 +137,45 @@ func (s *Stream) Next() ([]byte, error) {
 
 func (s *Stream) Close() error {
 	return s.cn.close()
+}
+
+type CaptureConn struct {
+	cn *conn
+}
+
+func OpenCapture(path string) (*CaptureConn, error) {
+	cn, err := send(path, Request{Request: KindCapture})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := cn.response(); err != nil {
+		return nil, errors.Join(err, cn.close())
+	}
+	if err := cn.c.SetReadDeadline(time.Time{}); err != nil {
+		return nil, errors.Join(err, cn.close())
+	}
+	return &CaptureConn{cn: cn}, nil
+}
+
+func (c *CaptureConn) Send(cmd CaptureCommand) error {
+	line, err := EncodeCaptureCommand(cmd)
+	if err != nil {
+		return err
+	}
+	if err := write(c.cn.c, line); err != nil {
+		return fmt.Errorf("ipc: send a capture command: %w", err)
+	}
+	return nil
+}
+
+func (c *CaptureConn) Next() ([]byte, error) {
+	line, err := c.cn.r.ReadBytes('\n')
+	if err != nil {
+		return nil, fmt.Errorf("ipc: read the capture stream: %w", err)
+	}
+	return line, nil
+}
+
+func (c *CaptureConn) Close() error {
+	return c.cn.close()
 }

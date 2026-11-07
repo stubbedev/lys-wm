@@ -260,7 +260,7 @@ func (s *Seat) retire(c *server.Client, out *wire.Conn) error {
 		return nil
 	}
 	serial := s.display.Serial()
-	if f := s.keyboard.focus; f != nil && f.Client() == c {
+	if f := s.receiver(); f != nil && f.Client() == c {
 		for _, kb := range r.keyboards {
 			if err := server.Event(out, kb, "leave", func(e *wire.Encoder) { e.Uint(serial); e.Object(f.Resource().Base().ID()) }); err != nil {
 				return err

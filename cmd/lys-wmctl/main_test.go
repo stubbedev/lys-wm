@@ -230,3 +230,7 @@ func TestOutputCreateAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func (h *handler) Capture(func(ipc.Event)) (ipc.CaptureSession, error) {
+	return nil, errors.New("lys-wmctl starts no input capture")
+}

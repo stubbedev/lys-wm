@@ -34,7 +34,8 @@ then the server closes it:
 `activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
 [Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
-takes `name` and `scale`), `removeoutput` (which needs `name`) and `watch`. Unknown
+takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` and `capture`
+(see [Input capture](#input-capture)). Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
 queries, `result`. A client should refuse to talk to a version it does not
@@ -202,3 +203,58 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 
 A watcher that falls 256 events behind is disconnected. Reconnect and
 re-query to resynchronise.
+
+## Input capture
+
+`capture` is how a software KVM (Deskflow, Input Leap, lan-mouse, through
+lys-shell's InputCapture portal) takes the local pointer and keyboard when the
+pointer crosses a screen edge. It answers `{"version":1}` and then stays open
+in both directions: the client writes commands as JSON lines, and lys-wm
+writes events as JSON lines, each with an `event` field. The first event is
+`keymap`. Closing the connection ends the capture.
+
+Commands:
+
+| `command` | Fields | Effect |
+| --- | --- | --- |
+| `barriers` | `barriers`: a list of `{"id","x1","y1","x2","y2"}` | Replaces the client's barriers and disables it; an active capture of the client ends with `deactivated` |
+| `enable` | | Arms the barriers |
+| `disable` | | Disarms them; an active capture of the client ends without an event |
+| `release` | `at` (optional `{"x","y"}`) | Ends the client's active capture, warping the pointer to `at` (clamped to the outputs) first; answered by `deactivated` |
+
+A barrier is a horizontal (`y1 == y2`) or vertical (`x1 == x2`) line in
+logical pixels with a non-zero `id` unique among the client's barriers, on the
+top or left edge of the pixels it names, both ends inclusive: the right edge
+of a 1920x1080 output at 0,0 is `{"x1":1920,"y1":0,"x2":1920,"y2":1079}`. A
+barrier triggers when relative pointer motion would cross its line, even
+though the pointer itself stops at the edge. Barriers do not trigger while the
+session is locked, a pointer constraint is active, a button is held on a
+surface or a drag is in progress, and only one capture is active at a time.
+
+Every command that applies is answered by `{"event":"applied"}`, after the
+events it caused. A malformed or refused command is answered by
+`{"event":"error","error":"..."}` and ends the capture.
+
+Events:
+
+| `event` | Fields | When |
+| --- | --- | --- |
+| `keymap` | `keymap` (xkb keymap text) | The capture opened, or a reload changed the keymap |
+| `activated` | `activation`, `at` (`x`, `y`), `barrier` | The pointer pushed through `barrier`; `at` is where the motion would have put it, past the edge. `activation` grows by one with each capture |
+| `deactivated` | `activation`, `at` | The capture ended by `release`, by new `barriers`, or by lys-wm; `at` is the pointer |
+| `disabled` | | lys-wm ended the capture and disabled the client: a session lock, or Super+Escape. The client sends `enable` to arm its barriers again |
+| `motion` | `dx`, `dy` | Relative pointer motion, accelerated |
+| `button` | `button` (evdev code), `pressed` | |
+| `scroll` | `dx`, `dy` | Smooth scrolling in logical pixels |
+| `scroll_discrete` | `dx`, `dy` | Wheel scrolling in 120ths of a detent |
+| `scroll_stop` | `x`, `y` | Smooth scrolling on those axes ended |
+| `frame` | | Ends a group of pointer events |
+| `key` | `key` (evdev code), `pressed` | |
+| `modifiers` | `depressed`, `latched`, `locked`, `group` | The keyboard's modifier state, at activation and whenever a key changes it |
+
+While a capture is active, lys-wm routes no pointer or keyboard input to
+surfaces and runs no binds: the focused surface gets `wl_keyboard.leave` and
+`wl_pointer.leave`, and the pointer stays where it stopped. When the capture
+ends, the keyboard focus comes back with the keys still held, and the pointer
+re-enters whatever is under it. Super+Escape always ends the capture and
+disables the client; the press reaches no client.

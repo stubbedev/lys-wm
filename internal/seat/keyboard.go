@@ -14,11 +14,12 @@ import (
 )
 
 type keyboardState struct {
-	focus   *surface.Surface
-	pressed []uint32
-	grab    KeyboardGrab
-	grabbed []uint32
-	sticky  uint32
+	focus     *surface.Surface
+	pressed   []uint32
+	grab      KeyboardGrab
+	grabbed   []uint32
+	sticky    uint32
+	suspended bool
 }
 
 type KeyboardGrab interface {
@@ -91,28 +92,73 @@ func (s *Seat) enterKeyboard(kb *sw.WlKeyboard) error {
 	return s.sendModifiers(kb)
 }
 
+func (s *Seat) receiver() *surface.Surface {
+	if s.keyboard.suspended {
+		return nil
+	}
+	return s.keyboard.focus
+}
+
+func (s *Seat) leaveKeyboard(target *surface.Surface) error {
+	r := s.lookup(target.Client())
+	if r == nil {
+		return nil
+	}
+	var errs []error
+	for _, kb := range r.keyboards {
+		errs = append(errs, kb.SendLeave(s.display.NextSerial(), target.Resource()))
+	}
+	return errors.Join(errs...)
+}
+
+func (s *Seat) enterFocus() error {
+	f := s.receiver()
+	if f == nil {
+		return nil
+	}
+	r := s.lookup(f.Client())
+	if r == nil {
+		return nil
+	}
+	var errs []error
+	for _, kb := range r.keyboards {
+		errs = append(errs, s.enterKeyboard(kb))
+	}
+	return errors.Join(errs...)
+}
+
 func (s *Seat) SetKeyboardFocus(target *surface.Surface) error {
 	if target == s.keyboard.focus {
 		return nil
 	}
 	var errs []error
-	if old := s.keyboard.focus; old != nil {
-		if r := s.lookup(old.Client()); r != nil {
-			for _, kb := range r.keyboards {
-				errs = append(errs, kb.SendLeave(s.display.NextSerial(), old.Resource()))
-			}
-		}
+	if old := s.receiver(); old != nil {
+		errs = append(errs, s.leaveKeyboard(old))
 	}
 	s.keyboard.focus = target
-	errs = append(errs, s.listener.KeyboardFocusChanged(target), s.focusPads(target))
-	if target != nil {
-		if r := s.lookup(target.Client()); r != nil {
-			for _, kb := range r.keyboards {
-				errs = append(errs, s.enterKeyboard(kb))
-			}
-		}
-	}
+	errs = append(errs, s.listener.KeyboardFocusChanged(target), s.focusPads(target), s.enterFocus())
 	return errors.Join(errs...)
+}
+
+func (s *Seat) SuspendKeyboard() error {
+	old := s.receiver()
+	s.keyboard.suspended = true
+	if old == nil {
+		return nil
+	}
+	return s.leaveKeyboard(old)
+}
+
+func (s *Seat) ResumeKeyboard() error {
+	if !s.keyboard.suspended {
+		return nil
+	}
+	s.keyboard.suspended = false
+	return s.enterFocus()
+}
+
+func (s *Seat) Modifiers() xkb.Modifiers {
+	return s.state.Modifiers()
 }
 
 func (s *Seat) DepressedModifiers() uint32 {
@@ -137,6 +183,9 @@ func (s *Seat) Key(code uint32, pressed bool, at time.Duration) error {
 	}
 	if modsChanged {
 		s.listener.KeyboardStateChanged()
+	}
+	if k.suspended && (pressed || !slices.Contains(k.grabbed, code)) {
+		return nil
 	}
 	if grabbed, err := s.grabKey(code, pressed, modsChanged, at); grabbed {
 		return err
@@ -168,7 +217,7 @@ func (s *Seat) SetStickyKeys(on bool) {
 }
 
 func (s *Seat) sendKey(v *VirtualKeyboard, code uint32, pressed, modsChanged bool, at time.Duration) error {
-	c, r := s.resourcesAt(s.keyboard.focus)
+	c, r := s.resourcesAt(s.receiver())
 	if r == nil {
 		return nil
 	}
@@ -222,7 +271,7 @@ func (s *Seat) Reconfigure(p Pending) error {
 		errs = append(errs, g.Keymap(s.cfg.Keymap.FD(), s.cfg.Keymap.Size()), g.RepeatInfo(s.cfg.RepeatRate, s.cfg.RepeatDelay))
 	}
 	for _, r := range s.clients {
-		focused := s.keyboard.focus != nil && s.keyboard.focus.Client() == r.client
+		focused := s.receiver() != nil && s.receiver().Client() == r.client
 		for _, kb := range r.keyboards {
 			errs = append(errs, s.sendKeyboardConfig(kb))
 			if focused {
@@ -247,7 +296,7 @@ func (r seatRequests) GetKeyboard(obj *sw.WlSeat, kb *sw.WlKeyboard) (sw.WlKeybo
 	if err := s.sendKeyboardConfig(kb); err != nil {
 		return nil, err
 	}
-	if s.keyboard.focus != nil && s.keyboard.focus.Client() == r.c {
+	if f := s.receiver(); f != nil && f.Client() == r.c {
 		if err := s.enterKeyboard(kb); err != nil {
 			return nil, err
 		}
@@ -280,7 +329,7 @@ func (s *Seat) NextLayout() error {
 	if g := s.keyboard.grab; g != nil {
 		errs = append(errs, g.Modifiers(s.display.NextSerial(), s.state.Modifiers()))
 	}
-	if _, r := s.resourcesAt(s.keyboard.focus); r != nil {
+	if _, r := s.resourcesAt(s.receiver()); r != nil {
 		for _, kb := range r.keyboards {
 			errs = append(errs, s.sendModifiers(kb))
 		}

@@ -312,6 +312,9 @@ type Compositor struct {
 	keyInhibitors      map[*surface.Surface]*shortcutsInhibitor
 	inhibiting         *shortcutsInhibitor
 	escapeArms         []*escapeArm
+	inputCaptures      []*inputCapture
+	capturing          *activeCapture
+	activations        uint32
 	globalShortcuts    []*globalShortcut
 	heldShortcuts      []heldShortcut
 	cursorGen          uint64
@@ -620,6 +623,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 		c.shaderOf(o)
 	}
 	c.syncLEDs()
+	c.captureKeymapChanged()
 	if err != nil {
 		c.report(fmt.Errorf("compositor: apply the new config: %w", err))
 	}

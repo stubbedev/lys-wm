@@ -77,7 +77,7 @@ func (v *VirtualKeyboard) sendModifiers(s *Seat, kb *sw.WlKeyboard) error {
 }
 
 func (s *Seat) focusedKeyboards() []*sw.WlKeyboard {
-	if _, r := s.resourcesAt(s.keyboard.focus); r != nil {
+	if _, r := s.resourcesAt(s.receiver()); r != nil {
 		return r.keyboards
 	}
 	return nil

@@ -29,6 +29,7 @@ type fake struct {
 	snapshots  int
 	created    []OutputSpec
 	removed    []string
+	captures   []*fakeCapture
 }
 
 func (f *fake) CreateOutput(spec OutputSpec) (CreatedOutput, error) {

@@ -38,9 +38,10 @@ const (
 	KindUpgrade        Kind = "upgrade"
 	KindCreateOutput   Kind = "createoutput"
 	KindRemoveOutput   Kind = "removeoutput"
+	KindCapture        Kind = "capture"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture}
 
 type Request struct {
 	Request Kind        `json:"request"`
