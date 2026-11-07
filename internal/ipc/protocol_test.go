@@ -127,7 +127,7 @@ func TestDiff(t *testing.T) {
 		`{"event":"mode","window":2,"fullscreen":false,"maximized":true,"client_fullscreen":false}`,
 		`{"event":"move","window":1,"workspace":3}`,
 		`{"event":"title","window":1,"title":"a!"}`,
-		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"content_type":"none","content_source":"client","icon":null}}`,
+		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"inhibits_shortcuts":false,"content_type":"none","content_source":"client","icon":null}}`,
 		`{"event":"focus","window":3}`,
 		`{"event":"submap","submap":"resize"}`,
 		`{"event":"layout","layout":{"index":1,"name":"Danish"}}`,
