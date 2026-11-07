@@ -343,6 +343,29 @@ or `input.touchpad` skips it; one that lacks a setting named for it under
 `input.devices` is reported. These settings apply with the drm backend; nested,
 the host compositor configures the devices.
 
+## cursor
+
+```yaml
+cursor:
+  hide_while_typing: true
+  hide_after: 5000
+  shake_to_find: true
+```
+
+| Key | Value |
+| --- | --- |
+| `hide_while_typing` | Hide the pointer when a key that is neither a bind nor a lone modifier reaches a window. Default `false` |
+| `hide_after` | Milliseconds without pointer input before the pointer hides; 0, the default, never hides it. It never hides while a button is held, a window is moved or resized, something is dragged, or a client has locked the pointer |
+| `shake_to_find` | Shaking the mouse left and right (four quick turns) grows the pointer to three times its size on a spring, and it settles back. Default `false` |
+
+The next pointer motion, button, scroll, touch or pen event shows a hidden
+pointer again. Hiding is lys-wm's own: windows keep pointer focus and get no
+leave or enter, a client's cursor stays as it set it, and a hidden pointer
+costs no cursor plane updates. A shape from the cursor theme grows from the
+theme's larger size when it has one, else it is scaled; a cursor surface a
+client draws itself keeps its size. The pointer's size itself comes from
+`XCURSOR_SIZE`.
+
 ## Colours
 
 A colour is a palette name or `#rrggbb[aa]`. The palette starts as

@@ -129,6 +129,7 @@ type rawConfig struct {
 	Outputs         []At[rawOutput]              `yaml:"outputs"`
 	VirtualOutputs  []At[rawVirtualOutput]       `yaml:"virtual_outputs"`
 	Input           rawInput                     `yaml:"input"`
+	Cursor          rawCursor                    `yaml:"cursor"`
 	Palette         map[string]At[string]        `yaml:"palette"`
 	Borders         rawBorders                   `yaml:"borders"`
 	Gaps            rawGaps                      `yaml:"gaps"`
@@ -244,6 +245,12 @@ type rawOutput struct {
 	Shader        *At[string]           `yaml:"shader"`
 	ICC           *At[string]           `yaml:"icc"`
 	HotCorners    *At[rawOutputCorners] `yaml:"hot_corners"`
+}
+
+type rawCursor struct {
+	HideWhileTyping bool     `yaml:"hide_while_typing"`
+	HideAfter       *At[int] `yaml:"hide_after"`
+	ShakeToFind     bool     `yaml:"shake_to_find"`
 }
 
 type rawInput struct {
@@ -673,6 +680,7 @@ type Config struct {
 	SlowKeys        time.Duration
 	NumLock         bool
 	Input           session.InputConfig
+	Cursor          compositor.CursorBehavior
 	Outputs         compositor.OutputRules
 	VirtualOutputs  []compositor.VirtualOutput
 	ColorManagement bool
@@ -1784,6 +1792,11 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		SlowKeys:        time.Duration(p.repeat(raw.Input.Keyboard.SlowKeys, "input.keyboard.slow_keys", 0)) * time.Millisecond,
 		NumLock:         raw.Input.Keyboard.NumLock,
 		Input:           p.input(raw.Input),
+		Cursor: compositor.CursorBehavior{
+			HideWhileTyping: raw.Cursor.HideWhileTyping,
+			HideAfter:       time.Duration(p.repeat(raw.Cursor.HideAfter, "cursor.hide_after", 0)) * time.Millisecond,
+			ShakeToFind:     raw.Cursor.ShakeToFind,
+		},
 		Decor:           p.decor(raw, look.Decor),
 		WM:              compositor.DefaultSettings(),
 		Xwayland:        raw.Xwayland.Enabled == nil || *raw.Xwayland.Enabled,
@@ -1949,6 +1962,7 @@ func (c Config) Compositor(keymaps xkb.Keymaps, font *gtext.Typeface) (composito
 	cfg.Seat.StickyKeys, cfg.Seat.SlowKeys = c.StickyKeys, c.SlowKeys
 	cfg.Seat.NumLock, cfg.Seat.Devices = c.NumLock, keymaps.Devices
 	cfg.DeviceOutputs = c.DeviceOutputs
+	cfg.CursorBehavior = c.Cursor
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.VirtualOutputs = c.VirtualOutputs
 	cfg.ColorManagement = c.ColorManagement

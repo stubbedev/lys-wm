@@ -170,8 +170,22 @@ func (c *Compositor) inArea(area image.Rectangle, x, y float64) point {
 }
 
 func (c *Compositor) Input(d backend.Device, e backend.Event) error {
-	if _, lid := e.(backend.Switch); !lid {
+	err := c.input(d, e)
+	if c.presence.pushed == c.presence.hidden() {
+		return err
+	}
+	return errors.Join(err, c.cursorMoved())
+}
+
+func (c *Compositor) input(d backend.Device, e backend.Event) error {
+	switch e.(type) {
+	case backend.Switch:
+	case backend.Key, *backend.Key:
 		if err := c.idle.Activity(); err != nil {
+			return err
+		}
+	default:
+		if err := errors.Join(c.idle.Activity(), c.pointerActive()); err != nil {
 			return err
 		}
 	}
@@ -181,6 +195,7 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case *backend.Key:
 		return c.inputKey(d.Name(), *e)
 	case *backend.PointerMotion:
+		c.shaken(e.Time, e.DX)
 		if c.capturing != nil {
 			c.capturing.pointer(ipc.CaptureMotionEvent{DX: e.DX, DY: e.DY})
 			return nil
@@ -293,6 +308,11 @@ func (c *Compositor) takeKey(device string, e backend.Key) error {
 	}
 	if taken, err := c.takeEscape(e.Code, e.Pressed); taken || err != nil {
 		return err
+	}
+	if e.Pressed {
+		if err := c.typed(e.Code); err != nil {
+			return err
+		}
 	}
 	err := c.seat.Key(e.Code, e.Pressed, e.Time)
 	c.syncLEDs()

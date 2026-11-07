@@ -444,6 +444,26 @@
       "type": "boolean",
       "default": false
     },
+    "cursor": {
+      "type": "object",
+      "properties": {
+        "hide_after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "default": 0
+        },
+        "hide_while_typing": {
+          "type": "boolean",
+          "default": false
+        },
+        "shake_to_find": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
     "decoration": {
       "type": "object",
       "properties": {

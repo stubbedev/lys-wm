@@ -98,6 +98,7 @@ type Config struct {
 	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
 	ClientHotkeys   bool
+	CursorBehavior  CursorBehavior
 	DeviceOutputs   map[string]wm.OutputMatch
 }
 
@@ -367,6 +368,7 @@ type Compositor struct {
 	cursorGen          uint64
 	cursorOps          frame
 	cursorShown        []*surface.Surface
+	presence           cursorPresence
 	animations         anim.Table
 	clock              func() time.Duration
 	frameTime          time.Duration
@@ -531,6 +533,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		cursorReads:    map[*cursorRead]struct{}{},
 		blanked:        map[*output.Output]bool{},
 		lockFade:       anim.NewTween(0.0, anim.Lerp),
+		presence:       cursorPresence{grow: anim.NewMotion(1)},
 		lockSnapshots:  map[*output.Output]render.TextureTarget{},
 		captures:       map[*output.Output][]*capture{},
 		reads:          map[*asyncRead]struct{}{},
@@ -549,6 +552,9 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 	c.adopt(cfg, m)
 	if err := c.setup(l, display, b, cfg); err != nil {
 		return nil, errors.Join(fmt.Errorf("compositor: %w", err), c.Close())
+	}
+	if err := c.adoptCursorBehavior(cfg.CursorBehavior); err != nil {
+		return nil, errors.Join(err, c.Close())
 	}
 	if err := c.preloadCursors(c.cursors.Size); err != nil {
 		return nil, err
@@ -571,6 +577,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.hidden.timer, err = l.AddTimer(c.hiddenFrame); err != nil {
+		return err
+	}
+	if c.presence.timer, err = l.AddTimer(c.cursorIdleExpired); err != nil {
 		return err
 	}
 	if c.layout, err = output.New(display); err != nil {
@@ -705,7 +714,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.syncHotkeys(), c.applyOutputRules(), c.syncVirtualOutputs(), c.scheduleAll())
+	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.adoptCursorBehavior(cfg.CursorBehavior), c.syncColorManagement(), c.syncHotkeys(), c.applyOutputRules(), c.syncVirtualOutputs(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

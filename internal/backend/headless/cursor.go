@@ -18,6 +18,7 @@ type Cursor struct {
 	hotspot, at      image.Point
 	visible, drawing bool
 	images, moves    uint64
+	commits          uint64
 	copies           uint64
 	refused          error
 	readsBack        bool
@@ -90,6 +91,7 @@ func (c *Cursor) SetCursor(hotspot image.Point) error {
 	}
 	c.image, c.hotspot, c.visible = img, hotspot, true
 	c.images++
+	c.commits++
 	return nil
 }
 
@@ -110,6 +112,7 @@ func (c *Cursor) LoadCursor(pix []byte, stride int, size, hotspot image.Point) e
 	}
 	c.image, c.hotspot, c.visible = img, hotspot, true
 	c.images++
+	c.commits++
 	c.copies++
 	return nil
 }
@@ -125,11 +128,17 @@ func (c *Cursor) MoveCursor(at image.Point) error {
 	if at != c.at {
 		c.at = at
 		c.moves++
+		if c.visible {
+			c.commits++
+		}
 	}
 	return nil
 }
 
 func (c *Cursor) HideCursor() error {
+	if c.visible {
+		c.commits++
+	}
 	c.visible = false
 	return nil
 }
@@ -144,6 +153,10 @@ func (c *Cursor) Position() image.Point {
 
 func (c *Cursor) Images() uint64 {
 	return c.images
+}
+
+func (c *Cursor) Commits() uint64 {
+	return c.commits
 }
 
 func (c *Cursor) Moves() uint64 {

@@ -23,6 +23,7 @@ type cursorKey struct {
 
 type cursorTexture struct {
 	tex     render.Texture
+	px      int
 	size    image.Point
 	hotspot image.Point
 	pixels  []byte
@@ -71,7 +72,7 @@ func (c *Compositor) storeCursor(key cursorKey, l loadedCursor) (*cursorTexture,
 	if err != nil {
 		return nil, fmt.Errorf("compositor: cursor %q at %dpx: %w", key.name, key.px, err)
 	}
-	ct := &cursorTexture{tex: tex, size: l.size, hotspot: l.spot, pixels: l.pixels}
+	ct := &cursorTexture{tex: tex, px: key.px, size: l.size, hotspot: l.spot, pixels: l.pixels}
 	c.pointers[key] = ct
 	return ct, nil
 }
@@ -190,7 +191,7 @@ func resample(pix []byte, from, to image.Point) []byte {
 }
 
 func (c *Compositor) drawCursor(pass *frame, o *output.Output, shown []*surface.Surface) ([]*surface.Surface, error) {
-	if !c.seat.HasPointer() || !c.cursor.pixel().In(o.Logical()) {
+	if c.presence.hidden() || !c.seat.HasPointer() || !c.cursor.pixel().In(o.Logical()) {
 		return shown, nil
 	}
 	switch cur := c.seat.Cursor().(type) {
@@ -200,14 +201,34 @@ func (c *Compositor) drawCursor(pass *frame, o *output.Output, shown []*surface.
 	case seat.HiddenCursor:
 		return shown, nil
 	}
-	ct, err := c.cursorTexture(c.cursorShape(), o.Scale())
+	ct, size, hotspot, err := c.grownCursor(o)
 	if err != nil {
 		return shown, err
 	}
 	tip := c.cursorTip(o)
-	size := ct.tex.Size()
-	pass.DrawTexture(ct.tex, render.FRect{W: float64(size.X), H: float64(size.Y)}, image.Rectangle{Min: tip.Sub(ct.hotspot), Max: tip.Sub(ct.hotspot).Add(ct.size)}, render.Normal, 1)
+	src := ct.tex.Size()
+	pass.DrawTexture(ct.tex, render.FRect{W: float64(src.X), H: float64(src.Y)}, image.Rectangle{Min: tip.Sub(hotspot), Max: tip.Sub(hotspot).Add(size)}, render.Normal, 1)
 	return shown, nil
+}
+
+func (c *Compositor) grownCursor(o *output.Output) (ct *cursorTexture, size, hotspot image.Point, err error) {
+	growth := c.cursorGrowth(c.clock())
+	if growth == 1 {
+		ct, err = c.cursorTexture(c.cursorShape(), o.Scale())
+		if err != nil {
+			return nil, image.Point{}, image.Point{}, err
+		}
+		return ct, ct.size, ct.hotspot, nil
+	}
+	px := o.Scale().ToDevice(c.cursors.Size)
+	if ct, err = c.cursorTextureAt(c.cursorShape(), int(math.Round(float64(px)*shakeGrowth))); err != nil {
+		return nil, image.Point{}, image.Point{}, err
+	}
+	k := growth * float64(px) / float64(ct.px)
+	grown := func(p image.Point) image.Point {
+		return image.Pt(int(math.Round(float64(p.X)*k)), int(math.Round(float64(p.Y)*k)))
+	}
+	return ct, grown(ct.size), grown(ct.hotspot), nil
 }
 
 func (c *Compositor) cursorTip(o *output.Output) image.Point {
@@ -237,6 +258,7 @@ type cursorRead struct {
 
 type cursorImage struct {
 	gen     uint64
+	growth  float64
 	scale   output.Scale
 	hotspot image.Point
 	size    image.Point
@@ -270,9 +292,12 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 		return true, hw.hide()
 	}
 	box, tip := ops.bounds(), c.cursorTip(o)
-	want := cursorImage{gen: c.cursorGen, scale: o.Scale(), hotspot: tip.Sub(box.Min), size: box.Size()}
+	want := cursorImage{gen: c.cursorGen, growth: c.cursorGrowth(c.clock()), scale: o.Scale(), hotspot: tip.Sub(box.Min), size: box.Size()}
 	if limit := hw.plane.CursorSize(); want.size.X > limit.X || want.size.Y > limit.Y {
 		return false, hw.hide()
+	}
+	if err := hw.plane.MoveCursor(tip); err != nil {
+		return false, c.dropCursorPlane(o, err)
 	}
 	if !hw.holds || hw.loaded != want {
 		err := c.loadCursor(hw, o, box, want.hotspot)
@@ -283,9 +308,6 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 			return false, c.dropCursorPlane(o, err)
 		}
 		hw.loaded, hw.holds = want, true
-	}
-	if err := hw.plane.MoveCursor(tip); err != nil {
-		return false, c.dropCursorPlane(o, err)
 	}
 	return true, nil
 }
@@ -306,6 +328,9 @@ func (c *Compositor) cursorShape() string {
 func (c *Compositor) themePixels(o *output.Output) (*cursorTexture, bool) {
 	switch c.seat.Cursor().(type) {
 	case seat.SurfaceCursor, seat.HiddenCursor:
+		return nil, false
+	}
+	if c.cursorGrowth(c.clock()) != 1 {
 		return nil, false
 	}
 	ct, err := c.cursorTexture(c.cursorShape(), o.Scale())
@@ -452,6 +477,11 @@ func (c *Compositor) dropCursorPlane(o *output.Output, cause error) error {
 }
 
 func (c *Compositor) cursorMoved() error {
+	p := &c.presence
+	if p.hidden() && p.pushed {
+		return nil
+	}
+	p.pushed = p.hidden()
 	var err error
 	for _, o := range c.outputs {
 		placed, placeErr := c.placeCursor(o)
