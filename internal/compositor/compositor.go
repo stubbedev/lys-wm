@@ -238,6 +238,7 @@ type Compositor struct {
 	submap          string
 	held            []uint32
 	repeat          repeat
+	slow            slowKeys
 	report          func(error)
 	seatConfig      seat.Config
 	outputRules     OutputRules
@@ -476,6 +477,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.holdTimer, err = l.AddTimer(c.holdExpired); err != nil {
+		return err
+	}
+	if c.slow.timer, err = l.AddTimer(c.slowKeyHeld); err != nil {
 		return err
 	}
 	if c.hidden.timer, err = l.AddTimer(c.hiddenFrame); err != nil {

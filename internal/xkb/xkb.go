@@ -224,6 +224,23 @@ func (s *State) NextLayout() bool {
 	return s.state.UpdateLatchedLocked(0, 0, false, 0, 0, 0, true, int32(locked))&reportedChanges != 0 //nolint:gosec // below the keymap's layout count
 }
 
+func (s *State) Stick(mask uint32, before Modifiers) bool {
+	m := s.Modifiers()
+	latched, locked := m.Latched, m.Locked
+	switch {
+	case before.Locked&mask == mask:
+		latched &^= mask
+		locked &^= mask
+	case before.Latched&mask == mask:
+		latched &^= mask
+		locked |= mask
+	default:
+		latched |= mask
+	}
+	affect := lxkb.ModMask(mask)
+	return s.state.UpdateLatchedLocked(affect, lxkb.ModMask(latched), false, 0, affect, lxkb.ModMask(locked), false, 0)&reportedChanges != 0
+}
+
 func (s *State) Keysym(evdev uint32) uint32 {
 	return uint32(s.state.KeyGetOneSym(lxkb.Keycode(evdev + evdevOffset)))
 }

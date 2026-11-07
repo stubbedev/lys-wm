@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	scs "github.com/stubbedev/lys-wm/internal/protocol/server/cursorshape"
 	spg "github.com/stubbedev/lys-wm/internal/protocol/server/pointergestures"
@@ -32,6 +33,8 @@ type Config struct {
 	Keymap      *xkb.Keymap
 	RepeatRate  int32
 	RepeatDelay int32
+	StickyKeys  bool
+	SlowKeys    time.Duration
 }
 
 type clientResources struct {

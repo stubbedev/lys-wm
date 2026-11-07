@@ -218,6 +218,13 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 }
 
 func (c *Compositor) inputKey(e backend.Key) error {
+	if c.seatConfig.SlowKeys > 0 {
+		return c.slowKey(e)
+	}
+	return c.acceptKey(e)
+}
+
+func (c *Compositor) acceptKey(e backend.Key) error {
 	if err := c.watchTap(e.Code, e.Pressed); err != nil {
 		return err
 	}

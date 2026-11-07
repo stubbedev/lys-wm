@@ -84,6 +84,12 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return nil
 	case wm.NextLayoutAction:
 		return c.seat.NextLayout()
+	case wm.StickyKeysAction:
+		c.seatConfig.StickyKeys = e.On
+		c.seat.SetStickyKeys(e.On)
+		return nil
+	case wm.SlowKeysAction:
+		return c.setSlowKeys(e.Delay)
 	case wm.ExitAction:
 		if c.hooks.Exit == nil {
 			return errors.New("nothing to exit to: this compositor was started without a way to stop")

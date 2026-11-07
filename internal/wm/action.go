@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Action interface {
@@ -71,6 +72,8 @@ func (ReloadAction) isEffect()              {}
 func (DismissConfigNoticeAction) isEffect() {}
 func (ExitAction) isEffect()                {}
 func (NextLayoutAction) isEffect()          {}
+func (StickyKeysAction) isEffect()          {}
+func (SlowKeysAction) isEffect()            {}
 func (GlobalAction) isEffect()              {}
 func (DPMSAction) isEffect()                {}
 func (MinimizeAction) isEffect()            {}
@@ -143,6 +146,8 @@ type (
 	DismissConfigNoticeAction struct{}
 	ExitAction                struct{}
 	NextLayoutAction          struct{}
+	StickyKeysAction          struct{ On bool }
+	SlowKeysAction            struct{ Delay time.Duration }
 	GlobalAction              struct{ AppID, ID string }
 	DPMSAction                struct {
 		Mode   PowerMode
@@ -289,6 +294,25 @@ func (a ExitAction) apply(s State, _ Settings) (State, []Effect, error) {
 func (NextLayoutAction) String() string { return "nextlayout" }
 
 func (a NextLayoutAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (a StickyKeysAction) String() string {
+	if a.On {
+		return "stickykeys on"
+	}
+	return "stickykeys off"
+}
+
+func (a StickyKeysAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (a SlowKeysAction) String() string {
+	return "slowkeys " + strconv.FormatInt(a.Delay.Milliseconds(), 10)
+}
+
+func (a SlowKeysAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
 }
 
@@ -650,6 +674,36 @@ var Actions = []ActionSpec{
 		Name:    "nextlayout",
 		Summary: "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing.",
 		parse:   bare(NextLayoutAction{}),
+	},
+	{
+		Name: "stickykeys", Args: "<on|off>",
+		Summary: "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			if err := exactly(spec, args, 1); err != nil {
+				return nil, err
+			}
+			switch args[0] {
+			case "on":
+				return StickyKeysAction{On: true}, nil
+			case "off":
+				return StickyKeysAction{}, nil
+			}
+			return nil, badArgs(spec, "%q is not on or off", args[0])
+		},
+	},
+	{
+		Name: "slowkeys", Args: "<ms>",
+		Summary: "Accept a key only once it was held this many milliseconds; 0 turns slow keys off.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			if err := exactly(spec, args, 1); err != nil {
+				return nil, err
+			}
+			ms, err := strconv.ParseUint(args[0], 10, 16)
+			if err != nil {
+				return nil, badArgs(spec, "%q is not milliseconds from 0 to 65535", args[0])
+			}
+			return SlowKeysAction{Delay: time.Duration(ms) * time.Millisecond}, nil
+		},
 	},
 	{
 		Name: "global", Args: "<app_id>:<id>",

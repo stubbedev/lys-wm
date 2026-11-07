@@ -19,6 +19,8 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `dismissconfignotice` |  | Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds. |
 | `exit` |  | End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM. |
 | `nextlayout` |  | Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing. |
+| `stickykeys` | `<on\|off>` | Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again. |
+| `slowkeys` | `<ms>` | Accept a key only once it was held this many milliseconds; 0 turns slow keys off. |
 | `global` | `<app_id>:<id>` | Press the global shortcut an application registered, and release it with the bind. |
 | `exec` | `<command>` | Run a shell command with sh -c. |
 | `makegroup` | `<h\|v\|tab> [ephemeral]` | Wrap the focused window in a new group; an ephemeral group dissolves when one window is left. |

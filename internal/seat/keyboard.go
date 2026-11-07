@@ -18,6 +18,7 @@ type keyboardState struct {
 	pressed []uint32
 	grab    KeyboardGrab
 	grabbed []uint32
+	sticky  uint32
 }
 
 type KeyboardGrab interface {
@@ -129,7 +130,11 @@ func (s *Seat) Key(code uint32, pressed bool, at time.Duration) error {
 	default:
 		k.pressed = slices.Delete(k.pressed, i, i+1)
 	}
+	before := s.state.Modifiers()
 	modsChanged := s.state.Key(code, pressed)
+	if s.cfg.StickyKeys && s.stick(code, pressed, before) {
+		modsChanged = true
+	}
 	if modsChanged {
 		s.listener.KeyboardStateChanged()
 	}
@@ -137,6 +142,29 @@ func (s *Seat) Key(code uint32, pressed bool, at time.Duration) error {
 		return err
 	}
 	return s.sendKey(nil, code, pressed, modsChanged, at)
+}
+
+func (s *Seat) stick(code uint32, pressed bool, before xkb.Modifiers) bool {
+	k := &s.keyboard
+	after := s.state.Modifiers()
+	if pressed {
+		k.sticky = 0
+		if len(k.pressed) == 1 && after.Locked == before.Locked && xkb.IsModifier(s.state.Keysym(code)) {
+			k.sticky = code
+		}
+		return false
+	}
+	if code != k.sticky {
+		return false
+	}
+	k.sticky = 0
+	mask := before.Depressed &^ after.Depressed
+	return mask != 0 && s.state.Stick(mask, before)
+}
+
+func (s *Seat) SetStickyKeys(on bool) {
+	s.cfg.StickyKeys = on
+	s.keyboard.sticky = 0
 }
 
 func (s *Seat) sendKey(v *VirtualKeyboard, code uint32, pressed, modsChanged bool, at time.Duration) error {

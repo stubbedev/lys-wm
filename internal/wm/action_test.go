@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 var update = flag.Bool("update", false, "rewrite docs/actions.md")
@@ -38,6 +39,10 @@ var everyAction = []Action{
 	DismissConfigNoticeAction{},
 	ExitAction{},
 	NextLayoutAction{},
+	StickyKeysAction{On: true},
+	StickyKeysAction{},
+	SlowKeysAction{Delay: 300 * time.Millisecond},
+	SlowKeysAction{},
 	DPMSAction{Mode: PowerOff},
 	ZoomAction{Mode: ZoomIn, Factor: 1.25},
 	ZoomAction{Mode: ZoomOut, Factor: 2},
@@ -279,7 +284,7 @@ func TestEnumArgumentsParseByName(t *testing.T) {
 			t.Errorf("%q parsed to %v (%v), want %v", tc.in, got, err, tc.want)
 		}
 	}
-	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms ", "zoom", "zoom sideways", "zoom set", "zoom set 0.5", "zoom set 17", "zoom in NaN", "zoom reset 2", "zoom in 2 3"} {
+	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms ", "zoom", "zoom sideways", "zoom set", "zoom set 0.5", "zoom set 17", "zoom in NaN", "zoom reset 2", "zoom in 2 3", "stickykeys", "stickykeys maybe", "slowkeys", "slowkeys -1", "slowkeys 70000"} {
 		if a, err := ParseAction(in); !errors.Is(err, ErrBadAction) {
 			t.Errorf("%q parsed to %v, %v; want a bad action", in, a, err)
 		}

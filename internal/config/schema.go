@@ -134,6 +134,8 @@ func annotations() map[string]annotation {
 	out := map[string]annotation{
 		"input.keyboard.repeat_rate":       at(0, math.MaxInt32, seat.DefaultRepeatRate),
 		"input.keyboard.repeat_delay":      at(0, math.MaxInt32, seat.DefaultRepeatDelay),
+		"input.keyboard.slow_keys":         at(0, math.MaxInt32, 0),
+		"input.keyboard.sticky_keys":       {def: false},
 		"borders.width":                    atLeastAnn(0, d.BorderWidth),
 		"gaps.inner":                       atLeastAnn(0, s.Gaps.Inner),
 		"gaps.outer":                       {def: sidesValue(s.Gaps.Outer)},

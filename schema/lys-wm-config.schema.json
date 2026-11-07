@@ -651,6 +651,16 @@
               "type": "string",
               "format": "lys-wm-xkb-rules"
             },
+            "slow_keys": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 0
+            },
+            "sticky_keys": {
+              "type": "boolean",
+              "default": false
+            },
             "variant": {
               "type": "string",
               "format": "lys-wm-xkb-variant"

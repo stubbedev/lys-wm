@@ -256,6 +256,10 @@ and touchpad while the lid is closed.
 | `rules`, `model`, `layout`, `variant`, `options` | The XKB names, as in `setxkbmap`. With none set, the `XKB_DEFAULT_*` variables apply |
 | `repeat_rate` | Repeats per second; 0 turns repeat off. Default 50 |
 | `repeat_delay` | Milliseconds before repeat starts. Default 300 |
+| `sticky_keys` | `true`: a modifier pressed and released alone applies to the next key; pressed twice in a row it stays on until pressed a third time. Default `false` |
+| `slow_keys` | Milliseconds a key must be held before it counts; a key let go sooner is dropped. 0, the default, turns slow keys off |
+
+`lys-wmctl dispatch stickykeys on|off` and `slowkeys <ms>` change both while lys-wm runs, until the next reload.
 
 ## input.pointer, input.touchpad and input.devices
 
