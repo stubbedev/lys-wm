@@ -5,9 +5,13 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | Action | Arguments | Effect |
 | --- | --- | --- |
 | `focus` | `<left\|right\|up\|down>` | Move focus to the neighbouring window, or to the next output at the edge. |
-| `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge nothing happens. |
-| `workspace` | `<n\|e+n\|e-n\|previous>` | Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it. |
-| `movetoworkspace` | `<n\|e+n\|e-n\|previous>` | Move the focused window to a workspace without following it. |
+| `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. |
+| `workspace` | `<n\|e+n\|e-n\|m+n\|m-n\|empty\|previous>` | Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it. |
+| `movetoworkspace` | `<n\|e+n\|e-n\|m+n\|m-n\|empty\|previous> [follow]` | Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch. |
+| `focusoutput` | `<left\|right\|up\|down\|name>` | Focus the neighbouring output in that direction, or the output with that name, and the window focused there. |
+| `movetooutput` | `<left\|right\|up\|down\|name>` | Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output. |
+| `moveworkspacetooutput` | `<left\|right\|up\|down\|name>` | Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area. |
+| `swapworkspaces` | `<output> <output>` | Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name. |
 | `scratchpad` | `<toggle <name>\|hide>` | Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output. |
 | `movetoscratchpad` | `<name>` | Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back. |
 | `kill` |  | Ask the focused window to close. |

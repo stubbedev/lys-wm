@@ -108,7 +108,25 @@ func (r RelativeWorkspace) String() string {
 }
 
 func (r RelativeWorkspace) resolve(s State) (WorkspaceID, error) {
-	return s.relative(int(r))
+	return s.relative(int(r), false)
+}
+
+type OutputRelativeWorkspace int
+
+func (r OutputRelativeWorkspace) String() string {
+	return fmt.Sprintf("m%+d", int(r))
+}
+
+func (r OutputRelativeWorkspace) resolve(s State) (WorkspaceID, error) {
+	return s.relative(int(r), true)
+}
+
+type EmptyWorkspace struct{}
+
+func (EmptyWorkspace) String() string { return "empty" }
+
+func (EmptyWorkspace) resolve(s State) (WorkspaceID, error) {
+	return s.firstUnused(), nil
 }
 
 func (PreviousWorkspace) String() string { return "previous" }
@@ -121,12 +139,15 @@ type (
 	FocusAction           struct{ Dir Direction }
 	MoveAction            struct{ Dir Direction }
 	WorkspaceAction       struct{ Target WorkspaceTarget }
-	MoveToWorkspaceAction struct{ Target WorkspaceTarget }
-	KillAction            struct{}
-	FocusWindowAction     struct{ ID WindowID }
-	CloseWindowAction     struct{ ID WindowID }
-	ExecAction            struct{ Command string }
-	MakeGroupAction       struct {
+	MoveToWorkspaceAction struct {
+		Target WorkspaceTarget
+		Follow bool
+	}
+	KillAction        struct{}
+	FocusWindowAction struct{ ID WindowID }
+	CloseWindowAction struct{ ID WindowID }
+	ExecAction        struct{ Command string }
+	MakeGroupAction   struct {
 		Layout    Layout
 		Ephemeral bool
 	}
@@ -377,6 +398,9 @@ func (a FocusAction) String() string     { return "focus " + a.Dir.String() }
 func (a MoveAction) String() string      { return "move " + a.Dir.String() }
 func (a WorkspaceAction) String() string { return "workspace " + a.Target.String() }
 func (a MoveToWorkspaceAction) String() string {
+	if a.Follow {
+		return "movetoworkspace " + a.Target.String() + " follow"
+	}
 	return "movetoworkspace " + a.Target.String()
 }
 func (KillAction) String() string { return "kill" }
@@ -430,7 +454,15 @@ func (a MoveToWorkspaceAction) apply(s State, settings Settings) (State, []Effec
 	if err != nil {
 		return State{}, nil, err
 	}
+	win, ok := s.Focused()
+	if !ok {
+		return s, nil, nil
+	}
 	next, err := s.MoveToWorkspace(id, settings.Autotile)
+	if err != nil || !a.Follow {
+		return next, nil, err
+	}
+	next, err = next.FocusWindow(win)
 	return next, nil, err
 }
 
@@ -520,12 +552,21 @@ func parseDirection(s string) (Direction, bool) {
 }
 
 func parseWorkspace(s string) (WorkspaceTarget, bool) {
-	if s == (PreviousWorkspace{}).String() {
+	switch s {
+	case PreviousWorkspace{}.String():
 		return PreviousWorkspace{}, true
+	case EmptyWorkspace{}.String():
+		return EmptyWorkspace{}, true
 	}
-	if rest, ok := strings.CutPrefix(s, "e"); ok && len(rest) > 1 && (rest[0] == '+' || rest[0] == '-') {
-		n, err := strconv.Atoi(rest)
-		return RelativeWorkspace(n), err == nil && n != 0
+	if len(s) > 2 && (s[0] == 'e' || s[0] == 'm') && (s[1] == '+' || s[1] == '-') {
+		n, err := strconv.Atoi(s[1:])
+		if err != nil || n == 0 {
+			return nil, false
+		}
+		if s[0] == 'm' {
+			return OutputRelativeWorkspace(n), true
+		}
+		return RelativeWorkspace(n), true
 	}
 	n, err := strconv.Atoi(s)
 	return WorkspaceID(n), err == nil && n >= 1
@@ -555,17 +596,39 @@ func directional(build func(Direction) Action) func(ActionSpec, []string, string
 	}
 }
 
-func workspaced(build func(WorkspaceTarget) Action) func(ActionSpec, []string, string) (Action, error) {
-	return func(spec ActionSpec, args []string, _ string) (Action, error) {
-		if err := exactly(spec, args, 1); err != nil {
-			return nil, err
-		}
-		w, ok := parseWorkspace(args[0])
-		if !ok {
-			return nil, badArgs(spec, "unknown workspace %q", args[0])
-		}
-		return build(w), nil
+const workspaceTargets = "<n|e+n|e-n|m+n|m-n|empty|previous>"
+
+func workspaceArg(spec ActionSpec, arg string) (WorkspaceTarget, error) {
+	w, ok := parseWorkspace(arg)
+	if !ok {
+		return nil, badArgs(spec, "unknown workspace %q", arg)
 	}
+	return w, nil
+}
+
+func parseWorkspaceAction(spec ActionSpec, args []string, _ string) (Action, error) {
+	if err := exactly(spec, args, 1); err != nil {
+		return nil, err
+	}
+	w, err := workspaceArg(spec, args[0])
+	if err != nil {
+		return nil, err
+	}
+	return WorkspaceAction{Target: w}, nil
+}
+
+func parseMoveToWorkspace(spec ActionSpec, args []string, _ string) (Action, error) {
+	if len(args) == 0 || len(args) > 2 {
+		return nil, badArgs(spec, "takes a workspace and an optional follow, not %d arguments", len(args))
+	}
+	if len(args) == 2 && args[1] != "follow" {
+		return nil, badArgs(spec, "unknown option %q", args[1])
+	}
+	w, err := workspaceArg(spec, args[0])
+	if err != nil {
+		return nil, err
+	}
+	return MoveToWorkspaceAction{Target: w, Follow: len(args) == 2}, nil
 }
 
 func windowed(build func(WindowID) Action) func(ActionSpec, []string, string) (Action, error) {
@@ -599,18 +662,38 @@ var Actions = []ActionSpec{
 	},
 	{
 		Name: "move", Args: "<left|right|up|down>",
-		Summary: "Move the focused window, hy3 style; at the workspace edge nothing happens.",
+		Summary: "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows.",
 		parse:   directional(func(d Direction) Action { return MoveAction{Dir: d} }),
 	},
 	{
-		Name: "workspace", Args: "<n|e+n|e-n|previous>",
-		Summary: "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it.",
-		parse:   workspaced(func(w WorkspaceTarget) Action { return WorkspaceAction{Target: w} }),
+		Name: "workspace", Args: workspaceTargets,
+		Summary: "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it.",
+		parse:   parseWorkspaceAction,
 	},
 	{
-		Name: "movetoworkspace", Args: "<n|e+n|e-n|previous>",
-		Summary: "Move the focused window to a workspace without following it.",
-		parse:   workspaced(func(w WorkspaceTarget) Action { return MoveToWorkspaceAction{Target: w} }),
+		Name: "movetoworkspace", Args: workspaceTargets + " [follow]",
+		Summary: "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch.",
+		parse:   parseMoveToWorkspace,
+	},
+	{
+		Name: "focusoutput", Args: "<left|right|up|down|name>",
+		Summary: "Focus the neighbouring output in that direction, or the output with that name, and the window focused there.",
+		parse:   outputTargeted(func(o OutputTarget) Action { return FocusOutputAction{Target: o} }),
+	},
+	{
+		Name: "movetooutput", Args: "<left|right|up|down|name>",
+		Summary: "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output.",
+		parse:   outputTargeted(func(o OutputTarget) Action { return MoveToOutputAction{Target: o} }),
+	},
+	{
+		Name: "moveworkspacetooutput", Args: "<left|right|up|down|name>",
+		Summary: "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area.",
+		parse:   outputTargeted(func(o OutputTarget) Action { return MoveWorkspaceToOutputAction{Target: o} }),
+	},
+	{
+		Name: "swapworkspaces", Args: "<output> <output>",
+		Summary: "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name.",
+		parse:   parseSwapWorkspaces,
 	},
 	{
 		Name: "scratchpad", Args: "<toggle <name>|hide>",

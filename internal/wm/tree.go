@@ -255,10 +255,7 @@ func (a Autotile) trigger(area image.Rectangle) int {
 }
 
 func (t Tree) Place(id WindowID, area image.Rectangle, at Autotile) (Tree, error) {
-	root := SplitH
-	if area.Dy() > area.Dx() {
-		root = SplitV
-	}
+	root := rootLayout(area)
 	focused, ok := t.Focused()
 	if !at.Enabled || !ok {
 		return t.Insert(id, root)

@@ -115,17 +115,37 @@
               {
                 "name": "move",
                 "args": "<left|right|up|down>",
-                "summary": "Move the focused window, hy3 style; at the workspace edge nothing happens."
+                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
               },
               {
                 "name": "workspace",
-                "args": "<n|e+n|e-n|previous>",
-                "summary": "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it."
+                "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
+                "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
               },
               {
                 "name": "movetoworkspace",
-                "args": "<n|e+n|e-n|previous>",
-                "summary": "Move the focused window to a workspace without following it."
+                "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+              },
+              {
+                "name": "focusoutput",
+                "args": "<left|right|up|down|name>",
+                "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+              },
+              {
+                "name": "movetooutput",
+                "args": "<left|right|up|down|name>",
+                "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+              },
+              {
+                "name": "moveworkspacetooutput",
+                "args": "<left|right|up|down|name>",
+                "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+              },
+              {
+                "name": "swapworkspaces",
+                "args": "<output> <output>",
+                "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
               },
               {
                 "name": "scratchpad",
@@ -658,17 +678,37 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge nothing happens."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Move the focused window to a workspace without following it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                  },
+                  {
+                    "name": "focusoutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                  },
+                  {
+                    "name": "movetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                  },
+                  {
+                    "name": "moveworkspacetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                  },
+                  {
+                    "name": "swapworkspaces",
+                    "args": "<output> <output>",
+                    "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
                   },
                   {
                     "name": "scratchpad",
@@ -842,17 +882,37 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge nothing happens."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Move the focused window to a workspace without following it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                  },
+                  {
+                    "name": "focusoutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                  },
+                  {
+                    "name": "movetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                  },
+                  {
+                    "name": "moveworkspacetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                  },
+                  {
+                    "name": "swapworkspaces",
+                    "args": "<output> <output>",
+                    "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
                   },
                   {
                     "name": "scratchpad",
@@ -1026,17 +1086,37 @@
                   {
                     "name": "move",
                     "args": "<left|right|up|down>",
-                    "summary": "Move the focused window, hy3 style; at the workspace edge nothing happens."
+                    "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|previous>",
-                    "summary": "Move the focused window to a workspace without following it."
+                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                  },
+                  {
+                    "name": "focusoutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                  },
+                  {
+                    "name": "movetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                  },
+                  {
+                    "name": "moveworkspacetooutput",
+                    "args": "<left|right|up|down|name>",
+                    "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                  },
+                  {
+                    "name": "swapworkspaces",
+                    "args": "<output> <output>",
+                    "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
                   },
                   {
                     "name": "scratchpad",
@@ -1936,17 +2016,37 @@
                 {
                   "name": "move",
                   "args": "<left|right|up|down>",
-                  "summary": "Move the focused window, hy3 style; at the workspace edge nothing happens."
+                  "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows."
                 },
                 {
                   "name": "workspace",
-                  "args": "<n|e+n|e-n|previous>",
-                  "summary": "Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it."
+                  "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
+                  "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                 },
                 {
                   "name": "movetoworkspace",
-                  "args": "<n|e+n|e-n|previous>",
-                  "summary": "Move the focused window to a workspace without following it."
+                  "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                  "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                },
+                {
+                  "name": "focusoutput",
+                  "args": "<left|right|up|down|name>",
+                  "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                },
+                {
+                  "name": "movetooutput",
+                  "args": "<left|right|up|down|name>",
+                  "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                },
+                {
+                  "name": "moveworkspacetooutput",
+                  "args": "<left|right|up|down|name>",
+                  "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                },
+                {
+                  "name": "swapworkspaces",
+                  "args": "<output> <output>",
+                  "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
                 },
                 {
                   "name": "scratchpad",

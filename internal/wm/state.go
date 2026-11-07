@@ -492,14 +492,19 @@ func (s State) SwitchWorkspace(id WorkspaceID) (State, error) {
 	return s, nil
 }
 
-func (s State) relative(offset int) (WorkspaceID, error) {
+func (s State) relative(offset int, onOutput bool) (WorkspaceID, error) {
 	o := s.output(s.focused)
 	if o == nil {
 		return 0, fmt.Errorf("step %+d workspaces: %w", offset, ErrUnknownOutput)
 	}
-	at := slices.IndexFunc(s.workspaces, func(w Workspace) bool { return w.ID == o.Active })
-	n := len(s.workspaces)
-	return s.workspaces[((at+offset)%n+n)%n].ID, nil
+	ids := make([]WorkspaceID, 0, len(s.workspaces))
+	for _, w := range s.workspaces {
+		if !onOutput || w.Output == o.Name {
+			ids = append(ids, w.ID)
+		}
+	}
+	at, n := slices.Index(ids, o.Active), len(ids)
+	return ids[((at+offset)%n+n)%n], nil
 }
 
 func (s State) previous() (WorkspaceID, error) {
@@ -525,20 +530,14 @@ func (s State) AssignWorkspace(id WorkspaceID, output string) (State, error) {
 	s = s.clone()
 	w := s.workspace(id)
 	from := w.Output
-	w.Output, w.home = output, ""
-	if o := s.output(from); o != nil && o.Active == id {
-		if next := s.firstOn(from); next != nil {
-			o.Active = next.ID
-		} else {
-			o.Active = s.create(s.firstUnused(), from).ID
-		}
-	}
+	s.rehome(w, output)
+	s.replaceActive(from, id)
 	s.dropIfIdle(id)
 	return s, nil
 }
 
 func (s State) RelativeWorkspace(offset int) (State, error) {
-	id, err := s.relative(offset)
+	id, err := s.relative(offset, false)
 	if err != nil {
 		return State{}, err
 	}
@@ -603,8 +602,8 @@ func (s State) moveWindow(win WindowID, id WorkspaceID, at Autotile) (State, err
 		area = o.Area
 	}
 	if floating >= 0 {
-		if src := s.output(fromOutput); src != nil {
-			rect = rect.Add(area.Min.Sub(src.Area.Min))
+		if src := s.output(fromOutput); src != nil && fromOutput != to.Output {
+			rect = rehomed(rect, src.Area, area)
 		}
 		to.Floating = append(to.Floating, Floating{ID: win, Rect: rect})
 		to.floatFocus = true

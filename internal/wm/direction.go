@@ -288,8 +288,15 @@ func (s State) MoveDirection(d Direction, policy CollapsePolicy) (State, error) 
 		return s, nil
 	}
 	tree, moved, err := w.Tree.Move(id, d, policy)
-	if err != nil || !moved {
-		return s, err
+	if err != nil {
+		return State{}, err
+	}
+	if !moved {
+		name, ok := s.outputToward(w.Output, d)
+		if !ok {
+			return s, nil
+		}
+		return s.moveToOutputEdge(id, name, d)
 	}
 	s = s.clone()
 	active := s.activeWorkspace()
