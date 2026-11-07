@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cxa "github.com/stubbedev/lys-wm/internal/protocol/client/xdgactivation"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -239,4 +240,30 @@ func TestActivationTokensStayCapped(t *testing.T) {
 	last := requestToken(t, minter.c, minter.act, minter.seat, serial)
 	target.activate(t, last)
 	h.expectActivation("a live token still focuses", 1, "target", false, "target")
+}
+
+func TestARealToolkitLaunchedThroughExecOpensOnItsEmptiedLaunchWorkspace(t *testing.T) {
+	t.Parallel()
+	for _, demo := range []string{"gtk3-demo", "gtk4-demo"} {
+		t.Run(demo, func(t *testing.T) {
+			t.Parallel()
+			path := testenv.Require(t, demo)
+			h := Start(t, desktop)
+			h.dispatch("workspace 2")
+			h.dispatch("exec env GDK_BACKEND=wayland GTK_A11Y=none NO_AT_BRIDGE=1 DBUS_SESSION_BUS_ADDRESS=disabled: " + path)
+			h.dispatch("workspace 3")
+			h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+				if _, ok := c.WM().Workspace(2); ok {
+					t.Error("the empty launch workspace outlived the switch away from it")
+				}
+				return nil
+			})
+			h.Eventually(demo+" mapped on workspace 2 with workspace 3 still shown", func(_ *headless.Backend, c *compositor.Compositor) bool {
+				ws := windowsOf(c)
+				s := c.WM()
+				shown, _ := s.ActiveOn(s.FocusedOutput())
+				return len(ws) == 1 && ws[0].Workspace == 2 && shown == 3
+			})
+		})
+	}
 }

@@ -17,6 +17,7 @@ with pkgs; [
   glslang
   spirv-tools
   gtk3.dev
+  gtk4.dev
   (import ./lys-ui-debug.nix lys-ui)
   (import ./alacritty-swrast.nix pkgs)
 ]

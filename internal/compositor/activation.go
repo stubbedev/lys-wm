@@ -90,9 +90,7 @@ func (c *Compositor) launchWorkspace(t toplevel) (wm.WorkspaceID, bool) {
 	if i < 0 {
 		return 0, false
 	}
-	id := c.tokens[i].workspace
-	_, exists := c.wm.Workspace(id)
-	return id, exists
+	return c.tokens[i].workspace, true
 }
 
 func (c *Compositor) dropClaims(t toplevel) {

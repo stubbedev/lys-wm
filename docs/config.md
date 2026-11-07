@@ -865,8 +865,10 @@ brings the browser forward. Any other activation marks the window urgent.
 `exec` binds, `autostart` commands and `lys-wmctl dispatch exec` hand the
 command a token in `XDG_ACTIVATION_TOKEN` and `DESKTOP_STARTUP_ID`. A window
 that presents it before it first maps opens on the workspace that was shown
-when the command ran, if that workspace still exists, even after a switch to
-another one. lys-wm keeps the newest 64 tokens.
+when the command ran, even after a switch to another one emptied and removed
+it: the workspace comes back for the window. GTK 3 and 4, Firefox and
+Chromium present the token after their first configure and before their first
+buffer, which is early enough. lys-wm keeps the newest 64 tokens.
 
 ## rules
 
