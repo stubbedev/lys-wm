@@ -132,7 +132,10 @@ def check_randr():
     machine.wait_until_succeeds(f"{outputs} | jq -e '.[0].mode.width == 1024 and .[0].mode.height == 768'", timeout=30)
     machine.succeed(randr("--output Virtual-1 --mode 1280x800 --scale 1"))
     machine.wait_until_succeeds(f"{outputs} | jq -e '.[0].scale == 1 and .[0].mode.width == 1280'", timeout=30)
-    machine.fail(randr("--output Virtual-1 --transform 90"))
+    machine.succeed(randr("--output Virtual-1 --transform 90"))
+    machine.wait_until_succeeds(f"{outputs} | jq -e '.[0].transform == \"90\" and .[0].rect.width == 800 and .[0].rect.height == 1280'", timeout=30)
+    machine.succeed(randr("--output Virtual-1 --transform normal"))
+    machine.wait_until_succeeds(f"{outputs} | jq -e '.[0].transform == null and .[0].rect.width == 1280'", timeout=30)
 
 
 try:
