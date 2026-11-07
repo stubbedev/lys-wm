@@ -34,23 +34,15 @@ type objectPolicy struct {
 }
 
 var refused = map[string]string{
-	"ext_session_lock_v1":                     "it holds the session lock",
-	"ext_session_lock_surface_v1":             "it holds the session lock",
-	"wl_shell_surface":                        "it uses wl_shell",
-	"wp_security_context_v1":                  "it holds a sandbox listener",
-	"xwayland_surface_v1":                     "it is Xwayland",
-	"zxdg_exported_v1":                        "it exports a window across clients",
-	"zxdg_exported_v2":                        "it exports a window across clients",
-	"zxdg_imported_v1":                        "it imports a window across clients",
-	"zxdg_imported_v2":                        "it imports a window across clients",
-	"wp_color_management_output_v1":           "it uses color management",
-	"wp_color_management_surface_feedback_v1": "it uses color management",
-	"wp_color_management_surface_v1":          "it uses color management",
-	"wp_image_description_creator_icc_v1":     "it uses color management",
-	"wp_image_description_creator_params_v1":  "it uses color management",
-	"wp_image_description_info_v1":            "it uses color management",
-	"wp_image_description_reference_v1":       "it uses color management",
-	"wp_image_description_v1":                 "it uses color management",
+	"ext_session_lock_v1":         "it holds the session lock",
+	"ext_session_lock_surface_v1": "it holds the session lock",
+	"wl_shell_surface":            "it uses wl_shell",
+	"wp_security_context_v1":      "it holds a sandbox listener",
+	"xwayland_surface_v1":         "it is Xwayland",
+	"zxdg_exported_v1":            "it exports a window across clients",
+	"zxdg_exported_v2":            "it exports a window across clients",
+	"zxdg_imported_v1":            "it imports a window across clients",
+	"zxdg_imported_v2":            "it imports a window across clients",
 }
 
 var retired = map[string][]string{
@@ -95,8 +87,9 @@ var retired = map[string][]string{
 }
 
 var gone = map[string][]string{
-	"wl_callback":              {"done"},
-	"wp_presentation_feedback": {"discarded"},
+	"wl_callback":                  {"done"},
+	"wp_presentation_feedback":     {"discarded"},
+	"wp_image_description_info_v1": {"done"},
 }
 
 var retireAlways = map[string][]string{
@@ -126,6 +119,7 @@ var dropped = map[string][]string{
 	"wp_commit_timer_v1":                       {"set_timestamp"},
 	"wp_cursor_shape_device_v1":                {"set_shape"},
 	"wp_fifo_v1":                               {"set_barrier", "wait_barrier"},
+	"wp_image_description_v1":                  {"get_information"},
 	"wp_linux_drm_syncobj_surface_v1":          {"set_acquire_point", "set_release_point"},
 	"wp_pointer_warp_v1":                       {"warp_pointer"},
 	"wp_presentation":                          {"feedback"},

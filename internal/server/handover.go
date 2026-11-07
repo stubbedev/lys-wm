@@ -299,7 +299,14 @@ func (s *Stream) message(m *retained) error {
 			wire.SetObjectAt(data, a.off, id)
 		}
 	}
-	return s.conn.Raw(data, m.fds)
+	if m.file == nil {
+		return s.conn.Raw(data, m.fds)
+	}
+	fd, err := m.file.open()
+	if err != nil {
+		return err
+	}
+	return errors.Join(s.conn.Raw(data, []int{fd}), unix.Close(fd))
 }
 
 func (s *Stream) markInert() {

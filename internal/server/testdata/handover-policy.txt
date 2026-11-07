@@ -216,14 +216,14 @@ wp_alpha_modifier_surface_v1.set_multiplier = latest
 wp_alpha_modifier_v1 = journal retire=
 wp_alpha_modifier_v1.destroy = destructor
 wp_alpha_modifier_v1.get_surface = create
-wp_color_management_output_v1 = refused retire=
+wp_color_management_output_v1 = journal retire=
 wp_color_management_output_v1.destroy = destructor
 wp_color_management_output_v1.get_image_description = create
-wp_color_management_surface_feedback_v1 = refused retire=
+wp_color_management_surface_feedback_v1 = journal retire=
 wp_color_management_surface_feedback_v1.destroy = destructor
 wp_color_management_surface_feedback_v1.get_preferred = create
 wp_color_management_surface_feedback_v1.get_preferred_parametric = create
-wp_color_management_surface_v1 = refused retire=
+wp_color_management_surface_v1 = journal retire=
 wp_color_management_surface_v1.destroy = destructor
 wp_color_management_surface_v1.set_image_description = latest
 wp_color_management_surface_v1.unset_image_description = latest
@@ -276,10 +276,10 @@ wp_fractional_scale_manager_v1.destroy = destructor
 wp_fractional_scale_manager_v1.get_fractional_scale = create
 wp_fractional_scale_v1 = journal retire=
 wp_fractional_scale_v1.destroy = destructor
-wp_image_description_creator_icc_v1 = refused retire=
+wp_image_description_creator_icc_v1 = journal retire=
 wp_image_description_creator_icc_v1.create = destructor
 wp_image_description_creator_icc_v1.set_icc_file = latest
-wp_image_description_creator_params_v1 = refused retire=
+wp_image_description_creator_params_v1 = journal retire=
 wp_image_description_creator_params_v1.create = destructor
 wp_image_description_creator_params_v1.set_tf_named = latest
 wp_image_description_creator_params_v1.set_tf_power = latest
@@ -290,12 +290,12 @@ wp_image_description_creator_params_v1.set_mastering_display_primaries = latest
 wp_image_description_creator_params_v1.set_mastering_luminance = latest
 wp_image_description_creator_params_v1.set_max_cll = latest
 wp_image_description_creator_params_v1.set_max_fall = latest
-wp_image_description_info_v1 = refused retire=
-wp_image_description_reference_v1 = refused retire=
+wp_image_description_info_v1 = gone retire=done
+wp_image_description_reference_v1 = journal retire=
 wp_image_description_reference_v1.destroy = destructor
-wp_image_description_v1 = refused retire=
+wp_image_description_v1 = journal retire=
 wp_image_description_v1.destroy = destructor
-wp_image_description_v1.get_information = create
+wp_image_description_v1.get_information = dropped
 wp_linux_drm_syncobj_manager_v1 = journal retire=
 wp_linux_drm_syncobj_manager_v1.destroy = destructor
 wp_linux_drm_syncobj_manager_v1.get_surface = create

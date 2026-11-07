@@ -233,7 +233,10 @@ func (c *Compositor) CompleteAdoption() error {
 	a := c.adopting
 	c.adopting = nil
 	c.animations = a.animations
-	return nil
+	if c.colorManager == nil {
+		return nil
+	}
+	return c.colorManager.Adopted()
 }
 
 func (c *Compositor) Display() *server.Display {

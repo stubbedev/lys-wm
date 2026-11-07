@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,9 +20,15 @@ type retained struct {
 	target *record
 	data   []byte
 	fds    []int
+	file   *keptFile
 	refs   []argRef
 	bare   []bareArg
 	count  int
+}
+
+type keptFile struct {
+	offset int64
+	data   []byte
 }
 
 type bareArg struct {
@@ -138,7 +145,7 @@ func (j *journal) keep(rec *record, class requestClass, spec wire.MessageSpec, m
 	if newID != 0 {
 		rec.refs++
 	}
-	if class != requestDestructor {
+	if class != requestDestructor || newID != 0 {
 		for _, a := range msg.refs {
 			if a.rec != nil {
 				a.rec.refs++
@@ -146,8 +153,6 @@ func (j *journal) keep(rec *record, class requestClass, spec wire.MessageSpec, m
 		}
 	}
 	switch {
-	case class == requestDestructor:
-		rec.end = msg
 	case newID != 0:
 		child := &record{id: newID, iface: childIface, creator: msg}
 		for i := range msg.refs {
@@ -156,10 +161,61 @@ func (j *journal) keep(rec *record, class requestClass, spec wire.MessageSpec, m
 			}
 		}
 		j.records[newID] = child
+	case class == requestDestructor:
+		rec.end = msg
 	default:
 		rec.msgs = append(rec.msgs, msg)
 	}
 	return nil
+}
+
+func KeepFile(r wire.Resource, request string, offset int64, data []byte) error {
+	c := clientOf(r)
+	if !c.display.journaling {
+		return nil
+	}
+	id, iface := r.Base().ID(), r.Base().Interface()
+	op := slices.IndexFunc(iface.Requests, func(spec wire.MessageSpec) bool { return spec.Name == request })
+	if op < 0 {
+		return fmt.Errorf("server: %s has no request %s", iface.Name, request)
+	}
+	rec := c.journal.records[id]
+	var msg *retained
+	if rec != nil {
+		if i := slices.IndexFunc(rec.msgs, func(m *retained) bool { return int(m.opcode) == op }); i >= 0 {
+			msg = rec.msgs[i]
+		}
+	}
+	if msg == nil {
+		return fmt.Errorf("server: %s@%d has no journaled %s to keep a file of", iface.Name, id, request)
+	}
+	for _, fd := range msg.fds {
+		_ = unix.Close(fd)
+	}
+	msg.fds = nil
+	msg.file = &keptFile{offset: offset, data: data}
+	return nil
+}
+
+func (f *keptFile) open() (int, error) {
+	fd, err := unix.MemfdCreate("lys-wm-handover", unix.MFD_CLOEXEC)
+	if err != nil {
+		return -1, fmt.Errorf("server: a memfd for a kept file: %w", err)
+	}
+	if err := unix.Ftruncate(fd, f.offset+int64(len(f.data))); err != nil {
+		return -1, errors.Join(fmt.Errorf("server: size a kept file to %d bytes: %w", f.offset+int64(len(f.data)), err), unix.Close(fd))
+	}
+	for n := 0; n < len(f.data); {
+		k, err := unix.Pwrite(fd, f.data[n:], f.offset+int64(n))
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return -1, errors.Join(fmt.Errorf("server: write a kept file: %w", err), unix.Close(fd))
+		}
+		n += k
+	}
+	return fd, nil
 }
 
 func (j *journal) release(msg *retained) {
@@ -239,4 +295,16 @@ func (j *journal) size() (records, messages int) {
 
 func (c *Client) JournalSize() (records, messages int) {
 	return c.journal.size()
+}
+
+func (c *Client) JournalFileBytes() int {
+	n := 0
+	for _, r := range c.journal.reachable() {
+		for _, m := range append([]*retained{r.creator, r.end}, r.msgs...) {
+			if m != nil && m.file != nil {
+				n += len(m.file.data)
+			}
+		}
+	}
+	return n
 }

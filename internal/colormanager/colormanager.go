@@ -5,9 +5,12 @@
 package colormanager
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 
 	"golang.org/x/sys/unix"
 
@@ -163,6 +166,24 @@ func (m *Manager) PreferredChanged(s *surface.Surface) error {
 	var errs []error
 	for f := range m.feedback {
 		if f.s == s {
+			errs = append(errs, f.update())
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *Manager) Adopted() error {
+	outputs := slices.SortedFunc(maps.Keys(m.outputs), func(a, b *outputColor) int { return cmp.Compare(a.res.Base().ID(), b.res.Base().ID()) })
+	feedback := slices.SortedFunc(maps.Keys(m.feedback), func(a, b *feedback) int { return cmp.Compare(a.res.Base().ID(), b.res.Base().ID()) })
+	var errs []error
+	for _, k := range outputs {
+		if k.o != nil {
+			errs = append(errs, k.res.SendImageDescriptionChanged())
+		}
+	}
+	for _, f := range feedback {
+		if f.s != nil {
+			f.last = nil
 			errs = append(errs, f.update())
 		}
 	}
@@ -443,7 +464,10 @@ type iccCreator struct {
 }
 
 func (c *iccCreator) SetIccFile(obj *scm.WpImageDescriptionCreatorIccV1, fd int, offset, length uint32) error {
-	return errors.Join(c.read(obj, fd, offset, length), unix.Close(fd))
+	if err := errors.Join(c.read(obj, fd, offset, length), unix.Close(fd)); err != nil || c.data == nil {
+		return err
+	}
+	return server.KeepFile(obj, "set_icc_file", int64(offset), c.data)
 }
 
 func (c *iccCreator) read(obj *scm.WpImageDescriptionCreatorIccV1, fd int, offset, length uint32) error {

@@ -1083,9 +1083,19 @@ its own handlers made of them.
   sources are cancelled, captures fail, focus leaves. The client sees what any
   compositor may do at any time, and its stale objects stay inert until it
   destroys them.
+- Colour management moves like the rest: an image description is the
+  requests that made it, replayed, and an ICC profile is replayed from the
+  bytes the old compositor read (at most `maxICCSize`), through a memfd, so the
+  client's file may have changed or gone since. Descriptions get the new
+  compositor's identities, so once the clients are released every
+  `wp_color_management_output_v1` hears `image_description_changed` and every
+  surface feedback `preferred_changed`, and clients query again. A surface's
+  tag is journaled as its latest `set_image_description` and latches with the
+  surface state `surface/handover.go` writes. Description information is a
+  one-shot stream: one still open is retired with its `done`.
 - What cannot be retired refuses the upgrade before anything changes, and the
   refusal names the client and the reason: a session lock, a sandbox listener,
-  an exported window, color management. Xwayland is refused too unless
+  an exported window. Xwayland is refused too unless
   `--drop-x11` says to end it, as its window manager's X connection and every X
   client's state have no equivalent of the above.
 
