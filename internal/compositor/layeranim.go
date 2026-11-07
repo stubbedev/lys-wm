@@ -38,11 +38,12 @@ func anchoredSlide(area, r image.Rectangle, anchor swlr.ZwlrLayerSurfaceV1Anchor
 
 func (c *Compositor) layerStyled(e anim.Event, l *layer) (image.Rectangle, float64) {
 	goal := l.bounds()
-	switch st := c.animations.Style(e); st.Kind {
+	st, _ := c.layerStyle(l, e)
+	switch st.Kind {
 	case anim.Slide:
 		return anchoredSlide(l.output.Logical(), goal, l.surface.Current().Anchor), 1
 	case anim.Popin:
-		return styled(c.animations.Style(e), l.output, goal), 1
+		return styled(st, l.output, goal), 1
 	}
 	return goal, 0
 }
@@ -53,7 +54,7 @@ func (c *Compositor) layerAppear(l *layer, now time.Duration) {
 	l.motion = anim.NewTween(goal, anim.LerpRect)
 	l.fade = anim.NewTween(1.0, anim.Lerp)
 	curve := c.animations.Curve(anim.LayersIn)
-	if curve == anim.Instant {
+	if _, animated := c.layerStyle(l, anim.LayersIn); curve == anim.Instant || !animated {
 		return
 	}
 	start, alpha := c.layerStyled(anim.LayersIn, l)
@@ -82,7 +83,7 @@ func (c *Compositor) layerSnapshot(l *layer) (render.TextureTarget, error) {
 func (c *Compositor) layerClosing(l *layer, now time.Duration) error {
 	l.appeared = false
 	curve := c.animations.Curve(anim.LayersOut)
-	if curve == anim.Instant {
+	if _, animated := c.layerStyle(l, anim.LayersOut); curve == anim.Instant || !animated {
 		return nil
 	}
 	tt := l.snapshot

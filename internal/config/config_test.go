@@ -99,8 +99,8 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("decoration:\n  blur:\n    xray: true\n")); err != nil || !c.Decor.Blur.XRay {
 		t.Errorf("decoration.blur.xray: %+v, %v", c.Decor.Blur, err)
 	}
-	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Size, Passes: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Passes, Look: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Look}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
-		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
+	if p := wm.DecideLayer(cfg.LayerRules, "waybar"); cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Size, Passes: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Passes, Look: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Look}) || p.Blur == nil || !*p.Blur {
+		t.Errorf("decoration.blur parsed to %+v, layer rules %+v", cfg.Decor.Blur, cfg.LayerRules)
 	}
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""}).Blur {
 		t.Errorf("a rule's blur: %+v, %v", c.Rules, err)
@@ -717,12 +717,12 @@ animations:
 			t.Errorf("speed %d overrides overview.blur: true", speed)
 		}
 	}
-	layers, err := Parse("t.yaml", []byte("decoration:\n  blur: {layers: [waybar]}\n"))
+	layers, err := Parse("t.yaml", []byte("layer_rules:\n  - {namespace: ^waybar$, blur: true}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if layers.Slower[render.CPUDriver].Decor.Blur.Withhold {
-		t.Error("blur.layers on a CPU driver is withheld")
+		t.Error("a blurred layer rule on a CPU driver is withheld")
 	}
 }
 
@@ -1096,5 +1096,31 @@ func TestBlockOutFrom(t *testing.T) {
 		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: %v, want %s", text, err, want)
 		}
+	}
+}
+
+func TestLayerRules(t *testing.T) {
+	c, err := Parse("t.yaml", []byte(`layer_rules:
+  - {namespace: ^lys-shell-notification-popup$, animation: {in: slide, out: fade}, block_out_from: screencast}
+  - {namespace: ^lys-shell-bar-, blur: true, blur_alpha_threshold: 0.2, shadow: true, rounding: 12, opacity: 0.9, dim_around: true}
+  - {namespace: ^lys-shell-wallpaper$, animation: false}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := wm.DecideLayer(c.LayerRules, "lys-shell-notification-popup")
+	if p.Animation == nil || p.Animation.In.Kind != anim.Slide || p.Animation.Out.Kind != anim.FadeStyle || p.BlockOutFrom != wm.BlockScreencast {
+		t.Errorf("notification: %+v", p)
+	}
+	p = wm.DecideLayer(c.LayerRules, "lys-shell-bar-DP-1")
+	if p.Blur == nil || !*p.Blur || p.BlurAlpha == nil || *p.BlurAlpha != 0.2 || p.Shadow == nil || p.Rounding == nil || *p.Rounding != 12 || p.Opacity == nil || *p.Opacity != 0.9 || !p.DimAround {
+		t.Errorf("bar: %+v", p)
+	}
+	if p := wm.DecideLayer(c.LayerRules, "lys-shell-wallpaper"); p.Animation == nil || !p.Animation.Off {
+		t.Errorf("wallpaper: %+v", p)
+	}
+	c, err = Parse("t.yaml", []byte("decoration:\n  blur: {layers: [waybar]}\n"))
+	if err != nil || len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0].Error(), "decoration.blur.layers: removed; blur a layer surface with layer_rules") {
+		t.Errorf("the removed key: %v, %v", c.Warnings, err)
 	}
 }

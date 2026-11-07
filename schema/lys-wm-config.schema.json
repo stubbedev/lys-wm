@@ -389,12 +389,6 @@
               "maximum": 1,
               "default": 0
             },
-            "layers": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
             "live_tiled": {
               "type": "boolean",
               "default": false
@@ -1442,11 +1436,44 @@
       "items": {
         "type": "object",
         "properties": {
+          "animation": {
+            "type": "object",
+            "properties": {
+              "-": {
+                "type": "boolean"
+              },
+              "in": {
+                "type": "string"
+              },
+              "out": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
           "block_out_from": {
             "type": "string"
           },
+          "blur": {
+            "type": "boolean"
+          },
+          "blur_alpha_threshold": {
+            "type": "number"
+          },
+          "dim_around": {
+            "type": "boolean"
+          },
           "namespace": {
             "type": "string"
+          },
+          "opacity": {
+            "type": "number"
+          },
+          "rounding": {
+            "type": "integer"
+          },
+          "shadow": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

@@ -443,9 +443,23 @@ func (b BlockFrom) Blocks(screencast bool) bool {
 
 type LayerProps struct {
 	BlockOutFrom BlockFrom
+	Animation    *WindowAnimation
+	Blur         *bool
+	BlurAlpha    *float32
+	Shadow       *bool
+	Rounding     *int
+	Opacity      *float32
+	DimAround    bool
 }
 
 func (p LayerProps) then(r LayerProps) LayerProps {
+	p.Animation = pick(p.Animation, r.Animation)
+	p.Blur = pick(p.Blur, r.Blur)
+	p.BlurAlpha = pick(p.BlurAlpha, r.BlurAlpha)
+	p.Shadow = pick(p.Shadow, r.Shadow)
+	p.Rounding = pick(p.Rounding, r.Rounding)
+	p.Opacity = pick(p.Opacity, r.Opacity)
+	p.DimAround = p.DimAround || r.DimAround
 	if r.BlockOutFrom != BlockNone {
 		p.BlockOutFrom = r.BlockOutFrom
 	}

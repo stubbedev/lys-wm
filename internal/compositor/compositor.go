@@ -87,7 +87,6 @@ type Config struct {
 	HDRHold         time.Duration
 	HoldOpening     bool
 	Animations      anim.Table
-	BlurLayers      []string
 	LayerRules      []wm.LayerRule
 	Gestures        Gestures
 	Overview        OverviewStyle
@@ -344,9 +343,9 @@ type Compositor struct {
 	grain              grainTile
 	jellyGen           uint64
 	genieStrips        []anim.GenieStrip
-	blurLayers         []string
 	layerRules         []wm.LayerRule
 	maskedOps          []drawOp
+	alphaShapes        map[*surface.Surface]bufferShape
 	blockedScratch     []image.Rectangle
 	exceptScratch      []image.Rectangle
 	overview           *overview
@@ -437,7 +436,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.colorManagement = cfg.ColorManagement
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
-	c.animations, c.clock, c.blurLayers, c.layerRules = cfg.Animations, cfg.Clock, cfg.BlurLayers, cfg.LayerRules
+	c.animations, c.clock, c.layerRules = cfg.Animations, cfg.Clock, cfg.LayerRules
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
 	c.powerSaverRate = cfg.PowerSaverRate
@@ -468,6 +467,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scratchSlideOf: map[*output.Output]*workspaceSwitch{},
 		peeks:          map[*output.Output]*peek{},
+		alphaShapes:    map[*surface.Surface]bufferShape{},
 		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},

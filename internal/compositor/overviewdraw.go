@@ -79,7 +79,7 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 	shown = c.drawLayers(pass, o, overlay, shown)
 	for _, e := range c.layers {
 		from = len(pass.ops)
-		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e.surface), look: &c.decor.Blur.Look})
+		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e), look: &c.decor.Blur.Look})
 		if !isOverlay(e.surface) {
 			fadeOrDrop(pass, from, 1-in)
 		}

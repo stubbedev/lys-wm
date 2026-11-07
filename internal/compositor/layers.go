@@ -17,18 +17,19 @@ import (
 )
 
 type layer struct {
-	surface  *shell.LayerSurface
-	output   *output.Output
-	box      image.Rectangle
-	placed   bool
-	appeared bool
-	motion   anim.Tween[image.Rectangle]
-	fade     anim.Tween[float64]
-	snapshot render.TextureTarget
-	frost    *frost
-	props    wm.LayerProps
-	ruled    bool
-	ruledGen uint64
+	surface   *shell.LayerSurface
+	output    *output.Output
+	box       image.Rectangle
+	placed    bool
+	appeared  bool
+	motion    anim.Tween[image.Rectangle]
+	fade      anim.Tween[float64]
+	snapshot  render.TextureTarget
+	frost     *frost
+	props     wm.LayerProps
+	ruled     bool
+	ruledGen  uint64
+	shapeless bool
 }
 
 func (e *layer) bounds() image.Rectangle {
@@ -194,21 +195,39 @@ func (c *Compositor) layersAt(o *output.Output, levels []shell.Layer) iter.Seq[*
 	}
 }
 
-func (c *Compositor) blursLayer(l *shell.LayerSurface) bool {
-	return slices.Contains(c.blurLayers, l.Namespace())
+func (c *Compositor) blursLayer(e *layer) bool {
+	b := c.layerProps(e).Blur
+	return b != nil && *b
 }
 
 func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.Layer, shown []*surface.Surface) []*surface.Surface {
 	for _, lv := range levels {
 		for e := range c.layersAt(o, []shell.Layer{lv}) {
+			props := c.layerProps(e)
+			if props.DimAround {
+				pass.FillRect(deviceRect(o, o.Logical()), c.dimAroundColor())
+			}
 			from := len(pass.ops)
 			rims := len(pass.rims)
 			look := &c.decor.Blur.Look
-			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
-				under := deviceRect(o, e.bounds())
-				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: c.sceneOf(o).blurs.one(under), extent: under, alpha: c.alphaOf(e.surface.Surface()), look: look})
+			under := deviceRect(o, e.bounds())
+			var mask render.Mask
+			if r := props.Rounding; r != nil && *r > 0 {
+				mask.Keep = render.RoundRect{Rect: under, Radius: deviceLength(o, *r)}
 			}
-			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1, look)
+			if s := props.Shadow; s != nil && *s && c.decor.Shadow.Enabled {
+				c.paintShadow(pass, o, under, mask.Keep.Radius, c.decor.Shadow.Active.Premultiply())
+			}
+			opacity := float32(1)
+			if props.Opacity != nil {
+				opacity = *props.Opacity
+			}
+			if c.blursLayer(e) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), opacity) {
+				if shape := c.layerBlurShape(o, e, under); len(shape) > 0 {
+					c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: shape, extent: under, mask: mask, alpha: c.alphaOf(e.surface.Surface()) * opacity, look: look})
+				}
+			}
+			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, mask, opacity, look)
 			if err := c.drawRims(pass, o, rims); err != nil {
 				c.report(fmt.Errorf("compositor: the rim of the %q layer surface: %w", e.surface.Namespace(), err))
 			}

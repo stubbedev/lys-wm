@@ -359,22 +359,23 @@ func (c *Compositor) outline(o *output.Output, w *window) image.Rectangle {
 }
 
 func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
-	sh := c.decor.Shadow
 	if !c.shadowed(w) || w.layer == wm.LayerFullscreen {
 		return
 	}
-	tile := c.outline(o, w)
+	c.paintShadow(pass, o, c.outline(o, w), c.outerRadius(o, w), c.shownShadow(w).Premultiply())
+}
+
+func (c *Compositor) paintShadow(pass *frame, o *output.Output, tile image.Rectangle, radius float32, color render.Color) {
+	sh := c.decor.Shadow
 	size := image.Pt(int(math.Round(float64(tile.Dx())*sh.Scale)), int(math.Round(float64(tile.Dy())*sh.Scale)))
 	corner := tile.Min.Add(tile.Size().Sub(size).Div(2)).Add(image.Pt(o.Scale().ToDevice(sh.Offset.X), o.Scale().ToDevice(sh.Offset.Y)))
 	base := image.Rectangle{Min: corner, Max: corner.Add(size)}
-	radius := c.outerRadius(o, w)
 	var falloff render.Falloff
 	reach := 0
 	if !sh.Sharp && sh.Range > 0 {
 		falloff = render.Falloff{Range: deviceLength(o, sh.Range), Power: float32(sh.Power)}
 		reach = int(math.Ceil(float64(falloff.Range)))
 	}
-	color := c.shownShadow(w).Premultiply()
 	mask := render.Mask{
 		Keep:    render.RoundRect{Rect: base, Radius: radius},
 		Cut:     render.RoundRect{Rect: tile, Radius: radius},

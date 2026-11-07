@@ -325,7 +325,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	}
 	shown = c.drawLayers(pass, o, overlay, shown)
 	for _, e := range c.layers {
-		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e.surface), look: &c.decor.Blur.Look})
+		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e), look: &c.decor.Blur.Look})
 	}
 	shown, err := c.drawInputPopups(pass, o, shown)
 	if err != nil {

@@ -364,10 +364,10 @@ func TestPopupsBlurByTheirRegion(t *testing.T) {
 func TestDecorationBlurReachesPopupsOfBlurredParents(t *testing.T) {
 	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
-		off := false
+		off, blurred := false, true
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 3, Passes: 2}
-			cfg.BlurLayers = []string{"lys-wm.testclient"}
+			cfg.LayerRules = []wm.LayerRule{{Namespace: regexp.MustCompile(`^lys-wm\.testclient$`), Blur: &blurred}}
 			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^plain$`)}, Mode: wm.RuleFloat, Size: wm.Px(20, 20), Blur: &off}}
 		}, small)
 		c := testclient.Connect(t, h.Socket())

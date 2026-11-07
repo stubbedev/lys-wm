@@ -104,6 +104,10 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			key := n.Content[i]
 			ft, ok := fields[key.Value]
+			if note, removed := removedKeys[join(key.Value)]; !ok && removed {
+				p.warn(key.Line, join(key.Value), "%s", note)
+				continue
+			}
 			if !ok {
 				p.warn(key.Line, join(key.Value), "unknown key (known: %s)", strings.Join(slices.Sorted(maps.Keys(fields)), ", "))
 				continue
@@ -148,8 +152,15 @@ type rawConfig struct {
 }
 
 type rawLayerRule struct {
-	Namespace    *At[string] `yaml:"namespace"`
-	BlockOutFrom *At[string] `yaml:"block_out_from"`
+	Namespace          *At[string]      `yaml:"namespace"`
+	BlockOutFrom       *At[string]      `yaml:"block_out_from"`
+	Animation          *At[rawRuleAnim] `yaml:"animation"`
+	Blur               *bool            `yaml:"blur"`
+	BlurAlphaThreshold *At[float64]     `yaml:"blur_alpha_threshold"`
+	Shadow             *bool            `yaml:"shadow"`
+	Rounding           *At[int]         `yaml:"rounding"`
+	Opacity            *At[float64]     `yaml:"opacity"`
+	DimAround          bool             `yaml:"dim_around"`
 }
 
 type rawShowDesktop struct {
@@ -313,13 +324,12 @@ type rawDragPreview struct {
 }
 
 type rawBlur struct {
-	Enabled   *bool        `yaml:"enabled"`
-	Size      *At[int]     `yaml:"size"`
-	Passes    *At[int]     `yaml:"passes"`
-	Layers    []At[string] `yaml:"layers"`
-	XRay      *bool        `yaml:"xray"`
-	LiveTiled *bool        `yaml:"live_tiled"`
-	Mica      rawMica      `yaml:"mica"`
+	Enabled   *bool    `yaml:"enabled"`
+	Size      *At[int] `yaml:"size"`
+	Passes    *At[int] `yaml:"passes"`
+	XRay      *bool    `yaml:"xray"`
+	LiveTiled *bool    `yaml:"live_tiled"`
+	Mica      rawMica  `yaml:"mica"`
 	rawLook   `yaml:",inline"`
 }
 
@@ -538,7 +548,6 @@ type Config struct {
 	Tearing         bool
 	LidSuspend      bool
 	Animations      anim.Table
-	BlurLayers      []string
 	LayerRules      []wm.LayerRule
 	Gestures        compositor.Gestures
 	Overview        compositor.OverviewStyle
@@ -1429,7 +1438,7 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 		Shadow: p.shadow(raw.Decoration.Shadow, def.Shadow),
 		Blur: compositor.Blur{
 			Enabled:   raw.Decoration.Blur.Enabled != nil && *raw.Decoration.Blur.Enabled,
-			Withhold:  def.Blur.Withhold && raw.Decoration.Blur.Enabled == nil && len(raw.Decoration.Blur.Layers) == 0,
+			Withhold:  def.Blur.Withhold && raw.Decoration.Blur.Enabled == nil && !blursAnyLayer(raw.LayerRules),
 			Size:      p.positive(raw.Decoration.Blur.Size, "decoration.blur.size", def.Blur.Size),
 			Passes:    p.blurPasses(raw.Decoration.Blur.Passes, def.Blur.Passes),
 			XRay:      raw.Decoration.Blur.XRay != nil && *raw.Decoration.Blur.XRay,
@@ -1554,9 +1563,6 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
 	cfg.Overview = p.overview(raw.Overview, look.Overview)
-	for _, l := range raw.Decoration.Blur.Layers {
-		cfg.BlurLayers = append(cfg.BlurLayers, l.V)
-	}
 	fallback := false
 	for i, o := range raw.Outputs {
 		rule := p.output(i, o)
@@ -1646,13 +1652,13 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.ClientHotkeys = c.ClientHotkeys
 	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
 	cfg.PowerSaverRate = c.PowerSaverRate
-	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
+	cfg.Animations, cfg.Slower = c.Animations, c.Slower
 	cfg.LayerRules = c.LayerRules
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err
 	}
-	cfg.Animations, cfg.BlurLayers, cfg.Overview = c.Animations, c.BlurLayers, c.Overview
+	cfg.Animations, cfg.Overview = c.Animations, c.Overview
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }
@@ -1757,19 +1763,7 @@ func (p *parser) props(r rawRule, key string) wm.Props {
 		props.Rounding = &rounding
 	}
 	props.Shadow, props.DimInactive, props.VRR, props.KeepAspect = r.Shadow, r.DimInactive, r.VRR, r.KeepAspect
-	if a := r.Animation; a != nil {
-		style := func(s *At[string], k string) anim.Style {
-			if s == nil {
-				return anim.Style{}
-			}
-			st, err := anim.ParseStyle(s.V)
-			if err != nil {
-				p.fail(s.Line, key+".animation."+k, "%v", err)
-			}
-			return st
-		}
-		props.Animation = &wm.WindowAnimation{Off: a.V.Off, In: style(a.V.In, "in"), Out: style(a.V.Out, "out")}
-	}
+	props.Animation = p.animation(r.Animation, key)
 	if v := choice(p, r.IdleInhibit, key+".idle_inhibit", idleInhibits); v != nil {
 		props.IdleInhibit = *v
 	}
@@ -1827,7 +1821,45 @@ func (p *parser) layerRules(raw []At[rawLayerRule]) []wm.LayerRule {
 		if v := choice(p, at.V.BlockOutFrom, key+".block_out_from", blockFroms); v != nil {
 			r.BlockOutFrom = *v
 		}
+		r.Animation, r.Blur, r.Shadow, r.DimAround = p.animation(at.V.Animation, key), at.V.Blur, at.V.Shadow, at.V.DimAround
+		if v := p.between(at.V.BlurAlphaThreshold, key+".blur_alpha_threshold", 0, 1, false); v != nil {
+			threshold := float32(*v)
+			r.BlurAlpha = &threshold
+		}
+		if at.V.Rounding != nil {
+			rounding := p.nonNegative(at.V.Rounding, key+".rounding", 0)
+			r.Rounding = &rounding
+		}
+		if v := p.between(at.V.Opacity, key+".opacity", 0, 1, false); v != nil {
+			opacity := float32(*v)
+			r.Opacity = &opacity
+		}
 		out = append(out, r)
 	}
 	return out
+}
+
+func (p *parser) animation(a *At[rawRuleAnim], key string) *wm.WindowAnimation {
+	if a == nil {
+		return nil
+	}
+	style := func(s *At[string], k string) anim.Style {
+		if s == nil {
+			return anim.Style{}
+		}
+		st, err := anim.ParseStyle(s.V)
+		if err != nil {
+			p.fail(s.Line, key+".animation."+k, "%v", err)
+		}
+		return st
+	}
+	return &wm.WindowAnimation{Off: a.V.Off, In: style(a.V.In, "in"), Out: style(a.V.Out, "out")}
+}
+
+func blursAnyLayer(rules []At[rawLayerRule]) bool {
+	return slices.ContainsFunc(rules, func(r At[rawLayerRule]) bool { return r.V.Blur != nil && *r.V.Blur })
+}
+
+var removedKeys = map[string]string{
+	"decoration.blur.layers": "removed; blur a layer surface with layer_rules: [{namespace: ^name$, blur: true}]",
 }

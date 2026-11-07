@@ -250,7 +250,7 @@ func (c *Compositor) layerFrost(l *layer) *frost {
 	s := l.surface.Surface()
 	box := deviceRect(l.output, l.bounds())
 	f := &frost{surface: s, extent: box, box: box, alpha: c.alphaOf(s), look: c.decor.Blur.Look}
-	if c.blursLayer(l.surface) && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
+	if c.blursLayer(l) && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
 		f.shape = append(f.shape, box)
 	}
 	f.shape = c.appendTreeRegions(f.shape, l.output, s, flat(l.bounds().Min))

@@ -51,7 +51,6 @@ decoration:
   blur:
     enabled: true
     passes: 2
-    layers: [waybar]
 
 gaps:
   inner: 6
@@ -84,6 +83,9 @@ submaps:
       flags: [repeating]
     - chord: Return
       action: submap reset
+layer_rules:
+  - {namespace: ^waybar$, blur: true}
+
 rules:
   - app_id: ^steam$
     float: true

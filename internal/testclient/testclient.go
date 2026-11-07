@@ -450,6 +450,7 @@ type LayerSpec struct {
 	Size          image.Point
 	ExclusiveZone int32
 	Interactivity cwlr.ZwlrLayerSurfaceV1KeyboardInteractivity
+	Namespace     string
 }
 
 func (c *Client) Layer(spec LayerSpec, paint Painter) *Window {
@@ -458,7 +459,11 @@ func (c *Client) Layer(spec LayerSpec, paint Painter) *Window {
 	var err error
 	w.Surface, err = c.Compositor.CreateSurface(surfaceEvents{w})
 	c.must(err)
-	w.Layer, err = c.LayerShell.GetLayerSurface(layerEvents{w}, w.Surface, spec.Output, spec.Layer, "lys-wm.testclient")
+	namespace := spec.Namespace
+	if namespace == "" {
+		namespace = "lys-wm.testclient"
+	}
+	w.Layer, err = c.LayerShell.GetLayerSurface(layerEvents{w}, w.Surface, spec.Output, spec.Layer, namespace)
 	c.must(err)
 	c.must(errors.Join(
 		w.Layer.SetAnchor(spec.Anchor),

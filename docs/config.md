@@ -169,7 +169,7 @@ lys-wm starts, since an effect that is cheap on a GPU can eat a CPU:
 | GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | Everything but blur, the overview's included. Blur costs these 10 to 40 ms per redraw. `ext_background_effect_v1` is not offered as able to blur, so clients such as lys-shell show their opaque style |
 | lys-wm's software renderer (`-renderer soft`) | Also no shadow and no animated workspace switch: a 1080p frame takes 68 ms with shadows and 14 ms without, and a slide draws two workspaces. Windows and layer surfaces still animate |
 
-Setting `decoration.blur.enabled` or `decoration.blur.layers`, either way, puts
+Setting `decoration.blur.enabled`, or a layer rule's `blur`, either way, puts
 blur back in your hands on any renderer, `overview.blur` the overview's, as does `decoration.shadow.enabled` for
 shadows. `animations.events.workspaces` does the same for a workspace switch.
 
@@ -393,7 +393,6 @@ decoration:
     enabled: true
     size: 8
     passes: 2
-    layers: [waybar, rofi]
 ```
 
 | Key | Default |
@@ -401,7 +400,6 @@ decoration:
 | `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha, and its popups |
 | `size` | 6: the distance between the blur's taps, in logical pixels |
 | `passes` | 2: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
-| `layers` | none: layer-shell namespaces to blur behind, as `waybar` or `rofi` name themselves, and their popups | fade |
 | `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
 | `live_tiled` | `false`: a tiled window blurs over the output's shared background blur, as `xray` does, so sliding or resizing tiles never refilters it; `true` blurs what lies behind each tiled window, as floating windows always do, at a filter per window whenever its area moves; a window with only the background behind it uses the shared blur either way |
 
@@ -417,16 +415,16 @@ name the exact region of a surface to blur: a toplevel, a popup, a layer
 surface, a subsurface or an input method's popup. The region is honoured
 whether or not `enabled` is set, with this section's `size`, `passes` and
 `xray`, and it follows the window's rounded corners. Only a renderer that rasterizes on the CPU
-with neither `enabled` nor `layers` in the config withholds it: the global then
+with neither `enabled` nor a layer rule's `blur` in the config withholds it: the global then
 offers no blur, and a region draws nothing, until a reload sets one. Where a surface has one,
-it replaces the whole-surface blur `enabled` or `layers` would draw. A window
+it replaces the whole-surface blur `enabled` or a layer rule would draw. A window
 rule's `blur: false` turns regions off for that window and its popups, and
 nothing else does.
 Cursors, drag icons and session-lock surfaces ignore regions. The blur fades
 with a surface's alpha-modifier, not with a window's `opacity`, which leaves the
 blur behind a translucent window at full strength.
 
-The same section gives glass its look, for windows, listed layers, popups and
+The same section gives glass its look, for windows, blurred layers, popups and
 client regions alike. Only saturation is on by default, and an effect that is off
 adds nothing to a frame: with `saturation: 1` the pixels are those of a plain blur.
 
@@ -908,8 +906,21 @@ layer_rules:
 ```
 
 Rules for layer-shell surfaces, matched on the namespace the client gave
-(a regular expression), later rules overriding earlier ones. `block_out_from`
-works as for windows.
+(a regular expression), later rules overriding earlier ones, decided once per
+surface:
+
+| Key | Value |
+| --- | --- |
+| `blur` | `true`: blur behind the surface and its popups with `decoration.blur` |
+| `blur_alpha_threshold` | 0 to 1: blur only under texels whose alpha is above it, so a bar's transparent rounded corners show no blurred rectangle. It reads alpha from shared-memory buffers; a surface drawing into dmabufs gets no blur and a notice |
+| `animation` | `false`: map and unmap without animating; or `{in: <style>, out: <style>}` with `layers_in` and `layers_out` styles |
+| `shadow` | `true`: a shadow as `decoration.shadow` draws for windows |
+| `rounding` | Corner radius in pixels for the surface, its blur and its shadow |
+| `opacity` | 0 to 1 |
+| `dim_around` | `true`: darken everything below the surface by `decoration.dim_strength` |
+| `block_out_from` | As for windows |
+
+`decoration.blur.layers` is gone: write `{namespace: ^waybar$, blur: true}`.
 
 What counts as a screenshot: a capture whose client declared it one-shot
 through `lys_capture_hint_v1` before its first frame, which lys-shell's
