@@ -342,9 +342,9 @@ func (s *captureSession) sync() error {
 	return s.constraints()
 }
 
-func (s *captureSession) noteDamage(o *output.Output, frame *region.Set) {
+func (s *captureSession) noteDamage(o *output.Output, frame *region.Set, cursorOnly bool) {
 	src, ok := s.source.(outputSource)
-	if s.stopped || !ok || src.output != o {
+	if s.stopped || !ok || src.output != o || (cursorOnly && !s.cursor) {
 		return
 	}
 	if _, area, ok := s.target(); ok {

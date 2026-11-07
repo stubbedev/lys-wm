@@ -204,11 +204,11 @@ func (c *Compositor) queueCapture(k *capture, waitForDamage bool) error {
 }
 
 func (c *Compositor) runCaptures(o *output.Output) error {
-	damage := &c.sceneOf(o).damage
+	sc := c.sceneOf(o)
 	for _, s := range c.captureSessions {
-		s.noteDamage(o, damage)
+		s.noteDamage(o, &sc.damage, sc.cursorOnly)
 	}
-	return c.flushCaptures(o, damage)
+	return c.flushCaptures(o, &sc.damage)
 }
 
 func (c *Compositor) wakeCaptures(o *output.Output) error {

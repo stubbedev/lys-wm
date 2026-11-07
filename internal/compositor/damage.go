@@ -495,6 +495,7 @@ type scene struct {
 	zeroCopy    [2]*surface.Surface
 	blurDamage  region.Set
 	blurScratch region.Set
+	cursorOnly  bool
 }
 
 func newScene() *scene {
@@ -573,6 +574,7 @@ func (op *drawOp) deviceDamage(r image.Rectangle) image.Rectangle {
 
 func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 	sc.damage.Reset()
+	sc.cursorOnly = sc.drawn && sc.onlyCursorChanged()
 	if sc.drawn {
 		sc.diffOps()
 		sc.addContentDamage()
@@ -586,6 +588,13 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 	}
 	sc.damage.Clip(bounds)
 	return &sc.damage
+}
+
+func (sc *scene) onlyCursorChanged() bool {
+	prev, cur := &sc.prev, &sc.cur
+	return !slices.Equal(prev.ops[prev.cursorFrom:], cur.ops[cur.cursorFrom:]) &&
+		slices.Equal(prev.ops[:prev.cursorFrom], cur.ops[:cur.cursorFrom]) &&
+		!sc.contentPending() && sc.blurDamage.Empty()
 }
 
 func (sc *scene) diffOps() {
@@ -678,15 +687,17 @@ func appendDsts(rects []image.Rectangle, ops []drawOp) []image.Rectangle {
 	return rects
 }
 
-func (sc *scene) addContentDamage() {
-	pending := false
+func (sc *scene) contentPending() bool {
 	for _, content := range sc.content {
 		if !content.Empty() {
-			pending = true
-			break
+			return true
 		}
 	}
-	if !pending {
+	return false
+}
+
+func (sc *scene) addContentDamage() {
+	if !sc.contentPending() {
 		return
 	}
 	sc.occluded.Reset()

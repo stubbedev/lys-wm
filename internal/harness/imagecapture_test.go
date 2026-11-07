@@ -313,6 +313,38 @@ func TestImageCopyCaptureFollowsAPlaneCursor(t *testing.T) {
 	}
 }
 
+// A cursor drawn into the frame is no change of what an output capture
+// without cursors shows: its session waits through the pointer moving,
+// while one painting cursors gets the frame.
+func TestAMovingFrameCursorWakesOnlyTheCapturesThatPaintIt(t *testing.T) {
+	t.Parallel()
+	theme := testenv.CursorTheme(t)
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, small)
+	c := testclient.Connect(t, h.Socket())
+	settle(t, h)
+	r := newCaptureRig(t, h, c)
+	bare, bareView := r.outputSession(0)
+	painted, paintedView := r.outputSession(ceic.ExtImageCopyCaptureManagerV1OptionsPaintCursors)
+	r.first(bare, bareView.size)
+	r.first(painted, paintedView.size)
+	f, _ := r.waiting(bare, bareView.size)
+	g, _ := r.waiting(painted, paintedView.size)
+	presents := presentCount(h)
+	for i := range 10 {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return errors.Join(b.Pointer().MoveTo(b.Outputs()[0], 0.2+float64(i)*0.05, 0.3), b.Pointer().Frame())
+		})
+		settle(t, h)
+	}
+	c.DispatchUntil("a frame of the moved cursor", func() bool { return g.ready || g.failed })
+	if err := c.Display.Roundtrip(); err != nil || f.ready || f.failed {
+		t.Fatalf("the moving cursor finished the frame of a capture without cursors: %+v (%v)", *f, err)
+	}
+	if presentCount(h) == presents {
+		t.Fatal("the cursor moved without a frame drawing it")
+	}
+}
+
 func dmabufCapture(t *testing.T, start gpuStarter) (*testclient.Client, *ceic.ExtImageCopyCaptureSessionV1, *captureView) {
 	t.Helper()
 	h := start(t, func(*compositor.Config) {}, small)
