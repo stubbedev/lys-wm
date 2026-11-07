@@ -203,10 +203,10 @@ func (c *Compositor) hdrAsked(b backend.Output, rule OutputRule) (colorspace.Out
 	return co, meta, nil
 }
 
-func (c *Compositor) setOutputColor(b backend.Output, co *colorspace.Output) error {
+func (c *Compositor) setOutputColor(b backend.Output, co *colorspace.Output) (bool, error) {
 	prev := c.hdr[b]
 	if prev == nil && co == nil || prev != nil && co != nil && prev.output == *co {
-		return nil
+		return false, nil
 	}
 	ctm := backend.Identity
 	if m, ok := c.ctms[b]; ok {
@@ -219,9 +219,9 @@ func (c *Compositor) setOutputColor(b backend.Output, co *colorspace.Output) err
 	}
 	o := c.output(b)
 	if o == nil {
-		return nil
+		return false, nil
 	}
-	return c.outputColorChanged(o, b, prev != nil, co != nil, ctm)
+	return true, c.outputColorChanged(o, b, prev != nil, co != nil, ctm)
 }
 
 func (c *Compositor) outputColorChanged(o *output.Output, b backend.Output, wasHDR, isHDR bool, ctm backend.Matrix) error {

@@ -20,7 +20,20 @@ type colorEvents struct {
 	done             bool
 	outputChanged    int
 	preferredChanged int
+	outputEvents     []string
 }
+
+func (*colorEvents) Geometry(*cw.WlOutput, int32, int32, int32, int32, cw.WlOutputSubpixel, string, string, cw.WlOutputTransform) error {
+	return nil
+}
+
+func (*colorEvents) Mode(*cw.WlOutput, cw.WlOutputMode, int32, int32, int32) error { return nil }
+
+func (*colorEvents) Scale(*cw.WlOutput, int32) error { return nil }
+
+func (*colorEvents) Name(*cw.WlOutput, string) error { return nil }
+
+func (*colorEvents) Description(*cw.WlOutput, string) error { return nil }
 
 func (*colorEvents) SupportedIntent(*ccm.WpColorManagerV1, ccm.WpColorManagerV1RenderIntent) error {
 	return nil
@@ -43,8 +56,16 @@ func (e *colorEvents) Done(*ccm.WpColorManagerV1) error {
 	return nil
 }
 
+type outputEvents struct{ *colorEvents }
+
+func (e outputEvents) Done(*cw.WlOutput) error {
+	e.outputEvents = append(e.outputEvents, "done")
+	return nil
+}
+
 func (e *colorEvents) ImageDescriptionChanged(*ccm.WpColorManagementOutputV1) error {
 	e.outputChanged++
+	e.outputEvents = append(e.outputEvents, "image_description_changed")
 	return nil
 }
 
@@ -240,7 +261,12 @@ func TestUpgradeCarriesColorManagement(t *testing.T) {
 	})
 	c.DispatchUntil("the window to map", w.Mapped)
 	c.DispatchUntil("the window's first frame on screen", func() bool { return w.Frames > 0 })
-	if _, err := m.GetOutput(ev, c.Outputs[0]); err != nil {
+	wl, err := cw.NewWlOutput(c.Display, 4, outputEvents{ev})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Bind(wl)
+	if _, err := m.GetOutput(ev, wl); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.GetSurfaceFeedback(ev, w.Surface); err != nil {
@@ -258,6 +284,7 @@ func TestUpgradeCarriesColorManagement(t *testing.T) {
 		t.Fatalf("the tagged window shows its raw level %v: the tag changed nothing to compare across the upgrade", shown)
 	}
 	outputChanged, preferredChanged := ev.outputChanged, ev.preferredChanged
+	ev.outputEvents = nil
 
 	result, err := s.upgrade(buildCopy(t, binary))
 	if err != nil {
@@ -272,6 +299,9 @@ func TestUpgradeCarriesColorManagement(t *testing.T) {
 	c.Sync()
 	if ev.outputChanged != outputChanged+1 || ev.preferredChanged != preferredChanged+1 {
 		t.Fatalf("after the upgrade %d image_description_changed and %d preferred_changed, want one each", ev.outputChanged-outputChanged, ev.preferredChanged-preferredChanged)
+	}
+	if i := slices.Index(ev.outputEvents, "image_description_changed"); i < 0 || !slices.Equal(ev.outputEvents[i:], []string{"image_description_changed", "done"}) {
+		t.Fatalf("the output heard %v after the upgrade, want image_description_changed followed by one done", ev.outputEvents)
 	}
 	if got := pixelAt(t, c, centre); got != shown {
 		t.Fatalf("the new compositor shows the tagged window as %v, the old one %v", got, shown)

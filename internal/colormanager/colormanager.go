@@ -143,12 +143,26 @@ func (m *Manager) identityOf(d *colorspace.Description) uint64 {
 
 func (m *Manager) OutputChanged(o *output.Output) error {
 	var errs []error
-	for k := range m.outputs {
+	for _, k := range m.sortedOutputs() {
 		if k.o == o {
 			errs = append(errs, k.res.SendImageDescriptionChanged())
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (m *Manager) OutputDone(o *output.Output) error {
+	var errs []error
+	for _, k := range m.sortedOutputs() {
+		if k.o == o {
+			errs = append(errs, k.done())
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *Manager) sortedOutputs() []*outputColor {
+	return slices.SortedFunc(maps.Keys(m.outputs), func(a, b *outputColor) int { return cmp.Compare(a.res.Base().ID(), b.res.Base().ID()) })
 }
 
 func (m *Manager) OutputRemoved(o *output.Output) {
@@ -173,12 +187,11 @@ func (m *Manager) PreferredChanged(s *surface.Surface) error {
 }
 
 func (m *Manager) Adopted() error {
-	outputs := slices.SortedFunc(maps.Keys(m.outputs), func(a, b *outputColor) int { return cmp.Compare(a.res.Base().ID(), b.res.Base().ID()) })
 	feedback := slices.SortedFunc(maps.Keys(m.feedback), func(a, b *feedback) int { return cmp.Compare(a.res.Base().ID(), b.res.Base().ID()) })
 	var errs []error
-	for _, k := range outputs {
+	for _, k := range m.sortedOutputs() {
 		if k.o != nil {
-			errs = append(errs, k.res.SendImageDescriptionChanged())
+			errs = append(errs, k.res.SendImageDescriptionChanged(), k.done())
 		}
 	}
 	for _, f := range feedback {
@@ -228,7 +241,7 @@ type requests struct{ m *Manager }
 func (requests) Destroy(*scm.WpColorManagerV1) error { return nil }
 
 func (r requests) GetOutput(_ *scm.WpColorManagerV1, res *scm.WpColorManagementOutputV1, wl *sw.WlOutput) (scm.WpColorManagementOutputV1Handler, error) {
-	k := &outputColor{m: r.m, res: res, o: r.m.view.Owner(wl)}
+	k := &outputColor{m: r.m, res: res, wl: wl, o: r.m.view.Owner(wl)}
 	r.m.outputs[k] = struct{}{}
 	server.OnDestroy(res, func() error {
 		delete(r.m.outputs, k)
@@ -369,7 +382,15 @@ func sendInformation(res *scm.WpImageDescriptionInfoV1, d *colorspace.Descriptio
 type outputColor struct {
 	m   *Manager
 	res *scm.WpColorManagementOutputV1
+	wl  *sw.WlOutput
 	o   *output.Output
+}
+
+func (k *outputColor) done() error {
+	if k.wl.Base().Removed() || k.wl.Base().Version() < 2 {
+		return nil
+	}
+	return k.wl.SendDone()
 }
 
 func (*outputColor) Destroy(*scm.WpColorManagementOutputV1) error { return nil }

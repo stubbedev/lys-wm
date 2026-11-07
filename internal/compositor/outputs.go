@@ -145,7 +145,7 @@ func abs(v int32) int32 {
 	return v
 }
 
-func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, error) {
+func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (changed, recolored bool, err error) {
 	current := b.State()
 	next := current
 	switch {
@@ -157,7 +157,7 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 	if next.Enabled() {
 		m, err := rule.mode().choose(b.Modes(), current.Mode)
 		if err != nil {
-			return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
+			return false, false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
 		}
 		next.Mode, next.Depth, next.HDR = m, rule.Depth, backend.HDRMetadata{}
 	}
@@ -173,9 +173,9 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 			}
 		}
 	}
-	changed := next != current
+	changed = next != current
 	if changed {
-		err := b.Commit(next)
+		err = b.Commit(next)
 		if color != nil && (errors.Is(err, backend.ErrHDRUnsupported) || errors.Is(err, backend.ErrDepthUnsupported)) {
 			c.report(fmt.Errorf("compositor: output %s stays SDR: %w", b.Name(), err))
 			color, next.Depth, next.HDR = nil, rule.Depth, backend.HDRMetadata{}
@@ -195,14 +195,15 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (bool, erro
 			}
 		}
 		if err != nil {
-			return false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
+			return false, false, fmt.Errorf("compositor: output %s: %w", b.Name(), err)
 		}
 	}
 	if !next.Enabled() {
 		delete(c.hdr, b)
-		return changed, nil
+		return changed, false, nil
 	}
-	return changed, errors.Join(c.commitAdaptiveSync(b, rule.VRR), c.setOutputColor(b, color))
+	recolored, err = c.setOutputColor(b, color)
+	return changed, recolored, errors.Join(c.commitAdaptiveSync(b, rule.VRR), err)
 }
 
 func (c *Compositor) relayout() error {
@@ -250,7 +251,7 @@ func (c *Compositor) outputLive(o *output.Output) bool {
 func (c *Compositor) OutputAdded(b backend.Output) error {
 	c.stateChanged()
 	rule := c.outputRule(b)
-	if _, err := c.commitOutput(b, rule); err != nil {
+	if _, _, err := c.commitOutput(b, rule); err != nil {
 		c.report(err)
 	}
 	if !b.State().Enabled() {
@@ -460,7 +461,7 @@ func (c *Compositor) applyOutputRules() error {
 		b := o.Backend()
 		rule := c.outputRule(b)
 		if rule.Disabled {
-			if _, err := c.commitOutput(b, rule); err != nil {
+			if _, _, err := c.commitOutput(b, rule); err != nil {
 				errs = append(errs, err)
 				continue
 			}
@@ -468,12 +469,15 @@ func (c *Compositor) applyOutputRules() error {
 			errs = append(errs, c.disable(o))
 			continue
 		}
-		changed, err := c.commitOutput(b, rule)
+		changed, recolored, err := c.commitOutput(b, rule)
 		if err != nil {
 			errs = append(errs, err)
 		}
-		if changed || o.Scale() != rule.scale() {
+		switch {
+		case changed || o.Scale() != rule.scale():
 			errs = append(errs, o.Update(o.Position(), rule.scale()), c.outputResized(o))
+		case recolored && c.colorManager != nil:
+			errs = append(errs, c.colorManager.OutputDone(o))
 		}
 	}
 	for _, b := range slices.Clone(c.disabled) {
@@ -481,7 +485,7 @@ func (c *Compositor) applyOutputRules() error {
 		if rule.Disabled {
 			continue
 		}
-		if _, err := c.commitOutput(b, rule); err != nil {
+		if _, _, err := c.commitOutput(b, rule); err != nil {
 			errs = append(errs, err)
 			continue
 		}
