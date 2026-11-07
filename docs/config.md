@@ -1013,10 +1013,17 @@ lock colour until the locker covers them. lys-wm does not set logind's
 services find the same commands the session does; a variable `env` sets wins
 over lys-wm's own. It then starts `lys-wm-session.target`, which binds
 `graphical-session.target`, so user services that want a graphical session
-start with lys-wm. On exit lys-wm stops the target and puts the user manager's
-environment back as it found it: a variable it had before gets its old value,
-one it did not have is removed. D-Bus cannot unset a variable, so the
-activation environment keeps them.
+start with lys-wm. The target also wants `xdg-desktop-autostart.target`, so the
+entries in `~/.config/autostart` and `/etc/xdg/autostart` start once the
+environment is in place, as systemd-xdg-autostart-generator reads them:
+`Hidden`, `X-systemd-skip`, and `OnlyShowIn` or `NotShowIn` against
+`XDG_CURRENT_DESKTOP=lys-wm` keep an entry from starting. The generator does
+not read `X-GNOME-Autostart-enabled`, so an entry turned off only that way
+still starts; a copy under `~/.config/autostart` with `Hidden=true` turns it
+off. On exit lys-wm stops the target and puts the user manager's environment
+back as it found it: a variable it had before gets its old value, one it did
+not have is removed. D-Bus cannot unset a variable, so the activation
+environment keeps them.
 
 A display manager session should run `lys-wm --systemd`. Leave the flag off
 when running lys-wm nested in another session, which owns

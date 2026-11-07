@@ -2,5 +2,6 @@
 Description=lys-wm compositor session
 Documentation=https://github.com/stubbedev/lys-wm
 BindsTo=graphical-session.target
-Wants=graphical-session-pre.target
+Wants=graphical-session-pre.target xdg-desktop-autostart.target
 After=graphical-session-pre.target
+Before=xdg-desktop-autostart.target
