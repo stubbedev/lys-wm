@@ -116,7 +116,7 @@ func (o *Output) setColor(p colorProp, data []byte) error {
 	if o.testable() {
 		r := &o.b.req
 		r.Reset()
-		o.crtc.set(r, p.String(), uint64(blob))
+		o.setCRTCs(r, p.String(), uint64(blob))
 		if err := o.test(kdrm.AtomicNonblock); err != nil {
 			return errors.Join(fmt.Errorf("drm: %s refuses the %s: %w", o.Name(), p, err), o.destroyBlob(blob))
 		}
@@ -147,9 +147,9 @@ func (o *Output) addColor() {
 		c := o.color[p]
 		switch {
 		case c.dirty:
-			o.crtc.set(&o.b.req, p.String(), uint64(c.next))
+			o.setCRTCs(&o.b.req, p.String(), uint64(c.next))
 		case o.kms != kmsFlip:
-			o.crtc.set(&o.b.req, p.String(), uint64(c.current))
+			o.setCRTCs(&o.b.req, p.String(), uint64(c.current))
 		}
 	}
 }

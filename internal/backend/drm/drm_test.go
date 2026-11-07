@@ -63,10 +63,12 @@ const (
 	propColorRangeID
 	propVRRCapableID
 	propVRREnabledID
+	propTileID
 	inFormatsBlob    = 500
 	edidBlob         = 501
 	litModeBlob      = 502
 	asyncFormatsBlob = 503
+	tileBlobs        = 520
 	splashFB         = 650
 	fakeNumber       = 0xe200
 )
@@ -125,6 +127,7 @@ type fakeDevice struct {
 	imports           int
 	contentTypes      bool
 	vrr               bool
+	tiles             map[uint32]string
 	overlayYUV        bool
 	refuseLone        bool
 	noMaster          bool
@@ -313,6 +316,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.vrr {
 			props[propVRRCapable] = kdrm.Property{ID: propVRRCapableID, Value: 1}
 		}
+		if _, ok := f.tiles[object]; ok {
+			props[propTile] = kdrm.Property{ID: propTileID, Value: uint64(tileBlobs + object)}
+		}
 		if f.nonDesktop[object] {
 			props["non-desktop"] = kdrm.Property{ID: propNonDesktop, Value: 1}
 		}
@@ -350,6 +356,9 @@ func (f *fakeDevice) PropertyInfo(id uint32) (kdrm.PropertyInfo, error) {
 }
 
 func (f *fakeDevice) Blob(id uint32) ([]byte, error) {
+	if tile, ok := f.tiles[id-tileBlobs]; ok && id > tileBlobs {
+		return append([]byte(tile), 0), nil
+	}
 	if id == edidBlob {
 		if f.sinkEDID != nil {
 			return f.sinkEDID, nil

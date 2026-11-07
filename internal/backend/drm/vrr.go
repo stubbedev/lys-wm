@@ -1,6 +1,8 @@
 package drm
 
 import (
+	"slices"
+
 	kdrm "github.com/stubbedev/lys-lib/drm"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -14,7 +16,7 @@ const (
 )
 
 func (o *Output) AdaptiveSyncCapable() bool {
-	if o.connector.props[propVRRCapable].Value != 1 || !o.bound() {
+	if o.connector.props[propVRRCapable].Value != 1 || !o.bound() || slices.ContainsFunc(o.tiles, func(t *tile) bool { return t.connector.props[propVRRCapable].Value != 1 }) {
 		return false
 	}
 	_, ok := o.crtc.props[propVRREnabled]
@@ -47,5 +49,5 @@ func (o *Output) addVRR(r *kdrm.Request) {
 	if o.vrr {
 		on = 1
 	}
-	o.crtc.set(r, propVRREnabled, on)
+	o.setCRTCs(r, propVRREnabled, on)
 }

@@ -131,15 +131,15 @@ func (o *Output) bpcLeft() error {
 
 func (o *Output) addSignal(r *kdrm.Request) {
 	if o.bpcChanges() {
-		o.connector.set(r, propMaxBPC, o.maxBPC())
+		o.setConnectors(r, propMaxBPC, o.maxBPC())
 	}
 	var colorspace uint64
 	if o.signal.meta.Active {
 		colorspace = o.signal.colorspace
 	}
-	o.connector.set(r, propColorspace, colorspace)
-	o.connector.set(r, propHDRMetadata, uint64(o.signal.blob))
-	o.crtc.set(r, propDegammaLUT, 0)
+	o.setConnectors(r, propColorspace, colorspace)
+	o.setConnectors(r, propHDRMetadata, uint64(o.signal.blob))
+	o.setCRTCs(r, propDegammaLUT, 0)
 }
 
 func (o *Output) releaseSignal() error {

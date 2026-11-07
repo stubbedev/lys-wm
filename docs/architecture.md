@@ -638,6 +638,24 @@ never fully repainted.
 Nothing here has run on an HDR display. Connector programming is tested against
 fake KMS and the pixel paths on lavapipe and llvmpipe.
 
+## Tiled displays
+
+A monitor driven as tiles (some 5K and 8K panels, MST tiling) gives each
+connector a `TILE` property naming its group, the grid and its place in it.
+When every tile of a group is connected and no member already lists a mode of
+the whole picture, the group is one output: the connector at the top left
+names it, its one mode is the tile mode grown to the grid at the same rate, and
+its frames are one buffer of the whole size. Each tile keeps its connector, CRTC
+and primary plane; every commit sets all of them together, each plane scanning
+its tile's part of the one framebuffer, so the tiles flip as one frame, and the
+frame is presented when every CRTC's flip event has arrived. Gamma, the colour
+matrix, the HDR signal, the content type and adaptive sync go to every tile.
+A tiled output has no cursor or overlay plane, which would show on one tile
+only, and never flips async, which commits one CRTC. A group whose driver drives
+the whole picture on one connector (Aquamarine's redundant tiles) lights that
+connector alone; an incomplete group lights each connector as its own output,
+and a tile coming or going rebuilds the output.
+
 ## Variable refresh
 
 Decided in #298: lys-wm supports adaptive sync, off by default. scope.md promises

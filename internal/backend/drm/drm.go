@@ -550,7 +550,16 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 		return p.err
 	}
 	b.starved = false
-	var errs []error
+	connected := make([]kdrm.Connector, 0, len(p.ids))
+	for _, id := range p.ids {
+		if probed := p.connectors[id]; probed.err == nil && probed.c.Connection == kdrm.Connected {
+			c := probed.c
+			c.Modes = progressive(c.Modes)
+			connected = append(connected, c)
+		}
+	}
+	groups, err := b.tileGroups(connected)
+	errs := []error{err}
 	for _, o := range slices.Clone(b.outputs) {
 		if !slices.Contains(p.ids, o.conn.ID) {
 			errs = append(errs, b.remove(o))
@@ -563,7 +572,7 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 			errs = append(errs, b.remove(o))
 		case err != nil:
 			errs = append(errs, err, b.remove(o))
-		case c.Connection != kdrm.Connected:
+		case c.Connection != kdrm.Connected || !o.keepsShape(connected, groups):
 			errs = append(errs, b.remove(o))
 		default:
 			o.bpcRefused = false
@@ -571,7 +580,7 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 		}
 	}
 	for _, id := range p.ids {
-		if slices.ContainsFunc(b.outputs, func(o *Output) bool { return o.conn.ID == id }) {
+		if slices.ContainsFunc(b.outputs, func(o *Output) bool { return o.ownsConnector(id) }) {
 			continue
 		}
 		probed := p.connectors[id]
@@ -587,9 +596,57 @@ func (b *Backend) applyProbe(p connectorProbe) error {
 		if c.Connection != kdrm.Connected || len(c.Modes) == 0 {
 			continue
 		}
-		errs = append(errs, b.add(c))
+		g := groupOf(groups, id)
+		switch {
+		case g == nil:
+			errs = append(errs, b.add(c, nil))
+		case g.whole != nil:
+			if g.whole.c.ID == id {
+				errs = append(errs, b.add(c, nil))
+			}
+		case g.members[0].c.ID == id:
+			errs = append(errs, b.addTiled(g))
+		}
 	}
 	return errors.Join(errs...)
+}
+
+func groupOf(groups map[uint32]*tileGroup, id uint32) *tileGroup {
+	for _, g := range groups {
+		if g.owns(id) {
+			return g
+		}
+	}
+	return nil
+}
+
+func (o *Output) keepsShape(connected []kdrm.Connector, groups map[uint32]*tileGroup) bool {
+	g := groupOf(groups, o.conn.ID)
+	if !o.tiled() {
+		return g == nil || g.whole != nil && g.whole.c.ID == o.conn.ID
+	}
+	if g == nil || g.whole != nil || g.members[0].c.ID != o.conn.ID {
+		return false
+	}
+	for _, t := range o.tiles {
+		if !g.owns(t.conn.ID) || !slices.ContainsFunc(connected, func(c kdrm.Connector) bool { return c.ID == t.conn.ID }) {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *Backend) addTiled(g *tileGroup) error {
+	c, lead, tiles, err := b.newTiles(g)
+	if err != nil {
+		b.report(fmt.Errorf("%w; its tiles light as separate outputs", err))
+		errs := make([]error, 0, len(g.members))
+		for _, m := range g.members {
+			errs = append(errs, b.add(m.c, nil))
+		}
+		return errors.Join(errs...)
+	}
+	return b.add(c, &tiling{mode: lead, tiles: tiles})
 }
 
 func progressive(modes []kdrm.Mode) []kdrm.Mode {
@@ -683,7 +740,7 @@ func (b *Backend) scanning(p *plane) (uint32, error) {
 }
 
 func (b *Backend) inherits(o *Output, routed uint32) (bool, error) {
-	if routed != o.crtc.id {
+	if routed != o.crtc.id || o.tiled() {
 		return false, nil
 	}
 	props, err := b.dev.Properties(o.crtc.id, kdrm.ObjectCRTC)
@@ -714,7 +771,15 @@ func sameTimings(a, b kdrm.Mode) bool {
 	return a == b
 }
 
-func (b *Backend) add(c kdrm.Connector) error {
+func (b *Backend) add(c kdrm.Connector, t *tiling) error {
+	err := b.light(c, t)
+	if t != nil {
+		err = errors.Join(err, t.release(b.dev))
+	}
+	return err
+}
+
+func (b *Backend) light(c kdrm.Connector, t *tiling) error {
 	props, err := b.dev.Properties(c.ID, kdrm.ObjectConnector)
 	if err != nil {
 		return err
@@ -734,6 +799,9 @@ func (b *Backend) add(c kdrm.Connector) error {
 		return err
 	}
 	o := &Output{b: b, conn: c, connector: kmsObject{c.ID, props}, renderFence: -1, lateFence: -1, tested: map[planeKey]bool{}}
+	if t != nil {
+		o.tiles, o.tileMode, t.tiles = t.tiles, t.mode, nil
+	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: o.frameWait,
 		Wake: func(after time.Duration) error {
@@ -757,6 +825,15 @@ func (b *Backend) add(c kdrm.Connector) error {
 	o.bpcFound = props[propMaxBPC].Value
 	o.bpc = o.bpcFound
 	o.bind(cr, p)
+	if err := o.bindTiles(); err != nil {
+		err = errors.Join(err, o.release())
+		if errors.Is(err, errNoCRTC) {
+			b.starved = true
+			b.report(fmt.Errorf("%w; it lights when another output on the device is disabled or unplugged", err))
+			return nil
+		}
+		return err
+	}
 	if o.pacer, err = b.loop.AddTimer(o.paceElapsed); err != nil {
 		return errors.Join(err, o.release())
 	}
@@ -979,6 +1056,9 @@ type Output struct {
 	bpcFound      uint64
 	bpc           uint64
 	bpcRefused    bool
+	tiles         []*tile
+	tileMode      kdrm.Mode
+	restatedFlips int
 	contentType   wm.ContentType
 	contentDirty  bool
 	vrr           bool
@@ -1041,7 +1121,7 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 	if err != nil {
 		return err
 	}
-	blob, err := o.b.dev.CreateBlob(m.Bytes())
+	blob, err := o.b.dev.CreateBlob(o.crtcMode(m).Bytes())
 	if err != nil {
 		return errors.Join(err, o.dropSignal(next))
 	}
@@ -1168,15 +1248,14 @@ func (o *Output) addRestatement(r *kdrm.Request) {
 		o.b.report(fmt.Errorf("drm: release the restated modes beside %s: %w", o.Name(), err))
 	}
 	for _, l := range o.b.litBeside(o) {
-		blob, err := o.b.dev.CreateBlob(l.mode.Bytes())
+		blob, err := o.b.dev.CreateBlob(l.crtcMode(l.mode).Bytes())
 		if err != nil {
 			o.b.report(fmt.Errorf("drm: restate the mode of %s beside %s: %w", l.Name(), o.Name(), err))
 			continue
 		}
 		o.restated = append(o.restated, blob)
-		l.connector.set(r, "CRTC_ID", uint64(l.crtc.id))
-		l.crtc.set(r, "MODE_ID", uint64(blob))
-		l.crtc.set(r, "ACTIVE", 1)
+		o.restatedFlips += 1 + len(l.tiles)
+		l.addModeset(r, blob)
 	}
 }
 
@@ -1185,7 +1264,7 @@ func (o *Output) dropRestated() error {
 	for _, blob := range o.restated {
 		errs = append(errs, o.b.dev.DestroyBlob(blob))
 	}
-	o.restated = o.restated[:0]
+	o.restated, o.restatedFlips = o.restated[:0], 0
 	return errors.Join(errs...)
 }
 
@@ -1252,6 +1331,10 @@ func (o *Output) Commit(s backend.OutputState) error {
 			return err
 		}
 		o.bind(cr, p)
+		if err := o.bindTiles(); err != nil {
+			o.unbind()
+			return err
+		}
 	}
 	if err := o.setMode(o.conn.Modes[i], s.Depth, s.HDR); err != nil {
 		if !o.enabled {
@@ -1280,7 +1363,7 @@ func (o *Output) recheckLink(c kdrm.Connector) error {
 	if props[propLinkStatus].Value != linkStatusBad {
 		return nil
 	}
-	if fresh := progressive(c.Modes); len(fresh) > 0 {
+	if fresh := progressive(c.Modes); len(fresh) > 0 && !o.tiled() {
 		o.conn.Modes = fresh
 	}
 	m := o.mode
@@ -1320,6 +1403,7 @@ func (o *Output) powerOff() error {
 		r.Reset()
 		o.crtc.set(&o.b.req, "ACTIVE", 0)
 		o.detach()
+		o.detachTiles(r, false)
 		err := o.b.dev.Commit(r, kdrm.AtomicAllowModeset|kdrm.AtomicNonblock, 0)
 		if errors.Is(err, unix.EBUSY) && o.b.flipsPending() {
 			o.off, o.offBusy, o.offDue, o.busy = true, true, false, nil
@@ -1364,6 +1448,7 @@ func (o *Output) disable() error {
 	o.crtc.set(&o.b.req, "ACTIVE", 0)
 	o.crtc.set(&o.b.req, "MODE_ID", 0)
 	o.detach()
+	o.detachTiles(r, true)
 	if err := o.commitDisable(r); err != nil {
 		return fmt.Errorf("drm: disable %s: %w", o.Name(), err)
 	}
@@ -1385,7 +1470,7 @@ func (o *Output) bind(cr *crtc, p *plane) {
 	cr.output, p.taken = o, true
 	clear(o.tested)
 	o.overlayTested = nil
-	if cp := o.b.free(cursorPlane, cr); cp != nil {
+	if cp := o.b.free(cursorPlane, cr); cp != nil && !o.tiled() {
 		cp.taken = true
 		if o.cursor == nil {
 			o.cursor = &cursor{o: o}
@@ -1399,6 +1484,9 @@ func (o *Output) bind(cr *crtc, p *plane) {
 		o.cursor = nil
 	}
 	for ov := range o.b.frees(overlayPlane, cr) {
+		if o.tiled() {
+			break
+		}
 		if ov.props["zpos"].Value > p.props["zpos"].Value {
 			ov.taken = true
 			o.overlay = ov
@@ -1413,6 +1501,7 @@ func (o *Output) unbind() {
 	}
 	o.crtc.output, o.primary.taken = nil, false
 	o.vrrSent = false
+	o.unbindTiles()
 	if o.overlay != nil {
 		o.overlay.taken, o.overlay = false, nil
 	}
@@ -1703,7 +1792,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	if busy {
 		err = o.submit(s, fence, flags&^kdrm.AtomicNonblock)
 	}
-	restated := len(o.restated)
+	restated := o.restatedFlips + len(o.tiles)
 	err = errors.Join(err, o.dropRestated())
 	if err != nil {
 		if refused(err) {
@@ -1810,7 +1899,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if o.cursor != nil && !torn {
 		o.cursor.sent()
 	}
-	o.lit, o.flipping, o.queued, o.torn = true, true, s, torn
+	o.lit, o.flipping, o.queued, o.torn, o.extraFlips = true, true, s, torn, len(o.tiles)
 	if torn {
 		return true, nil
 	}
@@ -1835,7 +1924,7 @@ func (o *Output) asyncFormat(d gpu.DMABUF) bool {
 }
 
 func (o *Output) tearable(fb uint32, flags uint32, fence int) bool {
-	if !o.b.async || o.front == nil || o.color.dirty() || o.contentDirty || o.vrrDirty() || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
+	if !o.b.async || o.tiled() || o.front == nil || o.color.dirty() || o.contentDirty || o.vrrDirty() || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
 		return false
 	}
 	key := planeKey{primary: fb, flags: flags}
@@ -1963,18 +2052,19 @@ func (o *Output) frame(s *scanout, fence int) {
 		if fence >= 0 {
 			o.primary.set(r, "IN_FENCE_FD", uint64(fence))
 		}
+		o.flipTiles(s.fb, fence)
 	case kmsModeset:
-		o.connector.set(r, "CRTC_ID", uint64(o.crtc.id))
-		o.crtc.set(r, "MODE_ID", uint64(o.modeBlob))
-		o.crtc.set(r, "ACTIVE", 1)
+		o.addModeset(r, o.modeBlob)
 		o.addSignal(r)
-		o.connector.set(r, propLinkStatus, linkStatusGood)
+		o.setConnectors(r, propLinkStatus, linkStatusGood)
 		if o.restate {
 			o.addRestatement(r)
 		}
 		fallthrough
 	default:
-		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(o.mode.HDisplay), int(o.mode.VDisplay))}, fence)
+		lead := o.crtcMode(o.mode)
+		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(lead.HDisplay), int(lead.VDisplay))}, fence)
+		o.placeTiles(s.fb, fence)
 	}
 	o.addOverlay()
 	if c := o.cursor; c != nil && (c.dirty || o.kms != kmsFlip) {
@@ -1991,11 +2081,15 @@ func (p *plane) setPosition(r *kdrm.Request, at image.Point) {
 }
 
 func (o *Output) place(p *plane, fb uint32, at image.Rectangle, fence int) {
+	o.placeOn(p, o.crtc, fb, image.Point{}, at, fence)
+}
+
+func (o *Output) placeOn(p *plane, cr *crtc, fb uint32, src image.Point, at image.Rectangle, fence int) {
 	w, h := uint64(at.Dx()), uint64(at.Dy()) //nolint:gosec // plane sizes are positive
 	p.set(&o.b.req, "FB_ID", uint64(fb))
-	p.set(&o.b.req, "CRTC_ID", uint64(o.crtc.id))
-	p.set(&o.b.req, "SRC_X", 0)
-	p.set(&o.b.req, "SRC_Y", 0)
+	p.set(&o.b.req, "CRTC_ID", uint64(cr.id))
+	p.set(&o.b.req, "SRC_X", uint64(src.X)<<16) //nolint:gosec // a source offset is not negative
+	p.set(&o.b.req, "SRC_Y", uint64(src.Y)<<16) //nolint:gosec // a source offset is not negative
 	p.set(&o.b.req, "SRC_W", w<<16)
 	p.set(&o.b.req, "SRC_H", h<<16)
 	p.setPosition(&o.b.req, at.Min)
@@ -2130,7 +2224,7 @@ func (o *Output) sendPlanes(cursor bool) error {
 		return o.planesFailed(fmt.Errorf("drm: commit the cursor and colour of %s: %w", o.Name(), err))
 	}
 	o.planesFailing = false
-	o.flipping = true
+	o.flipping, o.extraFlips = true, len(o.tiles)
 	if cursor {
 		c.sent()
 	}
@@ -2274,7 +2368,7 @@ func (o *Output) leaveOnScreen() error {
 
 func (o *Output) release() error {
 	o.setDamageClips(nil)
-	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence(), o.dropRestated())
+	err := errors.Join(o.freeBuffers(), o.releaseColor(), o.releaseSignal(), o.dropRenderFence(), o.dropRestated(), o.releaseTiles())
 	if o.modeBlob != 0 {
 		err = errors.Join(err, o.b.dev.DestroyBlob(o.modeBlob))
 		o.modeBlob = 0

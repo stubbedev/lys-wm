@@ -34,6 +34,6 @@ func (o *Output) addContentType(r *kdrm.Request) {
 		return
 	}
 	if v, ok := info.Enums[contentTypeEnums[o.contentType]]; ok {
-		o.connector.set(r, propContentType, v)
+		o.setConnectors(r, propContentType, v)
 	}
 }
