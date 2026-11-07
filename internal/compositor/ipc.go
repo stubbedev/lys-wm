@@ -16,8 +16,13 @@ func (c *Compositor) TraceFrames(r *frametrace.Recorder) {
 	c.frames = r
 }
 
-func (c *Compositor) OnDispatch(f func(wm.Action)) {
-	c.dispatched = f
+type IPCEvents interface {
+	Dispatched(a wm.Action)
+	Announce(e ipc.Event)
+}
+
+func (c *Compositor) OnIPCEvents(e IPCEvents) {
+	c.ipcEvents = e
 }
 
 func (c *Compositor) Snapshot() ipc.Snapshot {
@@ -178,5 +183,14 @@ func stackOf(order map[wm.WindowID]int, id wm.WindowID) *int {
 	if n, ok := order[id]; ok {
 		return &n
 	}
+	return nil
+}
+
+func (c *Compositor) showWindowMenu(w *window, t *shell.Toplevel, r shell.ShowWindowMenu) error {
+	if c.ipcEvents == nil || !c.seat.PressSerial(t.Surface().Client(), r.Serial) {
+		return nil
+	}
+	at := c.windowOrigin(w).global(point{float64(r.At.X), float64(r.At.Y)}).pixel()
+	c.ipcEvents.Announce(ipc.WindowMenuEvent{Window: w.id, X: at.X, Y: at.Y})
 	return nil
 }

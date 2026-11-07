@@ -99,6 +99,11 @@ type (
 	ConfigProblemsEvent struct {
 		ConfigProblems
 	}
+	WindowMenuEvent struct {
+		Window wm.WindowID `json:"window"`
+		X      int         `json:"x"`
+		Y      int         `json:"y"`
+	}
 )
 
 func (OutputEvent) Name() string         { return "output" }
@@ -123,6 +128,7 @@ func (ReducedMotionEvent) Name() string  { return "reducedmotion" }
 func (DispatchEvent) Name() string       { return "dispatch" }
 func (OverviewEvent) Name() string       { return "overview" }
 func (ConfigProblemsEvent) Name() string { return "configproblems" }
+func (WindowMenuEvent) Name() string     { return "windowmenu" }
 
 func Encode(e Event) ([]byte, error) {
 	body, err := json.Marshal(e)

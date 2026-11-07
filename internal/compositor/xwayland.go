@@ -237,6 +237,12 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 		return c.update(c.wm.SetFullscreen(win.id, r.On))
 	case xwayland.Minimize:
 		return c.minimize(win)
+	case xwayland.Move:
+		return c.xDrag(win, w, r.Button, wm.DragMove, 0)
+	case xwayland.Resize:
+		return c.xDrag(win, w, r.Button, wm.DragResize, xEdges[r.Edge])
+	case xwayland.CancelMoveResize:
+		return c.cancelDrag(win)
 	case xwayland.Configure:
 		if !c.wm.Floats(win.id) {
 			return nil
@@ -287,4 +293,23 @@ func (c *Compositor) publishWorkArea() {
 		c.workArea = r
 		c.workAreaWatch(r)
 	}
+}
+
+var xEdges = [...]wm.Edges{
+	xwayland.EdgeTopLeft:     wm.EdgeTop | wm.EdgeLeft,
+	xwayland.EdgeTop:         wm.EdgeTop,
+	xwayland.EdgeTopRight:    wm.EdgeTop | wm.EdgeRight,
+	xwayland.EdgeRight:       wm.EdgeRight,
+	xwayland.EdgeBottomRight: wm.EdgeBottom | wm.EdgeRight,
+	xwayland.EdgeBottom:      wm.EdgeBottom,
+	xwayland.EdgeBottomLeft:  wm.EdgeBottom | wm.EdgeLeft,
+	xwayland.EdgeLeft:        wm.EdgeLeft,
+}
+
+func (c *Compositor) xDrag(win *window, w *xwayland.Window, button uint32, mode wm.DragMode, edges wm.Edges) error {
+	code, ok := c.seat.PointerHeld(w.Surface(), button)
+	if !ok {
+		return nil
+	}
+	return c.clientDrag(win, mode, buttonInput{code}, edges)
 }

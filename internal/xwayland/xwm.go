@@ -61,10 +61,50 @@ type Configure struct {
 	Rect image.Rectangle
 }
 
-func (SetFullscreen) isRequest() {}
-func (Activate) isRequest()      {}
-func (Minimize) isRequest()      {}
-func (Configure) isRequest()     {}
+type Edge uint8
+
+const (
+	EdgeTopLeft Edge = iota
+	EdgeTop
+	EdgeTopRight
+	EdgeRight
+	EdgeBottomRight
+	EdgeBottom
+	EdgeBottomLeft
+	EdgeLeft
+	edgeCount
+)
+
+const (
+	netWMMoveResizeMove   = 8
+	netWMMoveResizeCancel = 11
+)
+
+const (
+	btnLeft   = 0x110
+	btnRight  = 0x111
+	btnMiddle = 0x112
+	btnSide   = 0x113
+)
+
+type Move struct {
+	Button uint32
+}
+
+type Resize struct {
+	Button uint32
+	Edge   Edge
+}
+
+type CancelMoveResize struct{}
+
+func (SetFullscreen) isRequest()    {}
+func (Activate) isRequest()         {}
+func (Minimize) isRequest()         {}
+func (Configure) isRequest()        {}
+func (Move) isRequest()             {}
+func (Resize) isRequest()           {}
+func (CancelMoveResize) isRequest() {}
 
 type State struct {
 	Rect                             image.Rectangle
@@ -640,6 +680,38 @@ func (m *wm) iconifyRequested(id xproto.Window, state uint32) error {
 		return nil
 	}
 	return m.listener.XWindowRequest(w, Minimize{})
+}
+
+func evdevButton(x uint32) (uint32, bool) {
+	switch {
+	case x == 0:
+		return 0, true
+	case x <= 3:
+		return [...]uint32{btnLeft, btnMiddle, btnRight}[x-1], true
+	case x >= 8:
+		return btnSide + x - 8, true
+	}
+	return 0, false
+}
+
+func (m *wm) moveResizeRequested(id xproto.Window, direction, xButton uint32) error {
+	w, ok := m.windows[id]
+	if !ok || !w.shown {
+		return nil
+	}
+	if direction == netWMMoveResizeCancel {
+		return m.listener.XWindowRequest(w, CancelMoveResize{})
+	}
+	button, ok := evdevButton(xButton)
+	switch {
+	case !ok:
+		return nil
+	case direction < uint32(edgeCount):
+		return m.listener.XWindowRequest(w, Resize{Button: button, Edge: Edge(direction)})
+	case direction == netWMMoveResizeMove:
+		return m.listener.XWindowRequest(w, Move{Button: button})
+	}
+	return nil
 }
 
 func (m *wm) activeRequested(id xproto.Window) error {

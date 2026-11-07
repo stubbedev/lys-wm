@@ -26,6 +26,6 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `togglefloating` |  | Float the focused window centred at half the output, or tile it again. |
 | `fullscreen` |  | Make the focused window cover its output, above the top layer, or end that. |
 | `resizeactive` | `<dx> <dy>` | Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one. |
-| `movewindow` |  | Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. |
-| `resizewindow` |  | Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. |
+| `movewindow` |  | Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with. |
+| `resizewindow` |  | Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE. |
 | `zoom` | `<in\|out\|reset\|set> [factor]` | Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16. |

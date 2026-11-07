@@ -1048,27 +1048,43 @@ func TestDragFrameAllocations(t *testing.T) {
 		c.Sync()
 	}
 	h.Eventually("the layout landed", landed)
+	owner := clients[len(clients)-1]
+	seat, in := owner.Seat()
+	x := 0.5
+	dragFrames := func(what string) {
+		t.Helper()
+		h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+			o, p := b.Outputs()[0], b.Pointer()
+			allocs := testing.AllocsPerRun(200, func() {
+				x += 0.0005
+				if err := errors.Join(p.MoveTo(o, x, 0.5), p.Frame(), comp.Frame(o)); err != nil {
+					t.Error(err)
+				}
+			})
+			if allocs > 4 {
+				t.Errorf("a frame of %s allocates %.1f times; 2 are the fake pointer's event, 2 the workspace and floating lists", what, allocs)
+			}
+			t.Logf("allocations: a frame of %s, 8 windows, %.1f", what, allocs)
+			return errors.Join(p.Button(btnLeft, false), p.Frame())
+		})
+	}
 	h.key(keySuper, true)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		o, p := b.Outputs()[0], b.Pointer()
-		return errors.Join(p.MoveTo(o, 0.5, 0.5), p.Frame(), p.Button(btnLeft, true), p.Frame())
+		return errors.Join(p.MoveTo(o, x, 0.5), p.Frame(), p.Button(btnLeft, true), p.Frame())
 	})
-	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
-		o, p := b.Outputs()[0], b.Pointer()
-		x := 0.5
-		floating := testing.AllocsPerRun(200, func() {
-			x += 0.0005
-			if err := errors.Join(p.MoveTo(o, x, 0.5), p.Frame(), comp.Frame(o)); err != nil {
-				t.Error(err)
-			}
-		})
-		if floating > 4 {
-			t.Errorf("a frame of a floating drag allocates %.1f times; 2 are the fake pointer's event, 2 the workspace and floating lists", floating)
-		}
-		t.Logf("allocations: a frame of a floating drag, 8 windows, %.1f", floating)
-		return errors.Join(p.Button(btnLeft, false), p.Frame())
-	})
+	dragFrames("a floating bind drag")
 	h.key(keySuper, false)
+	before := in.Press
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		p := b.Pointer()
+		return errors.Join(p.Button(btnLeft, true), p.Frame())
+	})
+	owner.DispatchUntil("the press on the floating window", func() bool { return in.Press != before })
+	if err := errors.Join(last.Toplevel.Move(seat, in.Press), owner.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	dragFrames("a floating client drag")
 }
 
 func TestAnOpeningWindowShowsWithoutWaitingForItsNeighbours(t *testing.T) {

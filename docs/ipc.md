@@ -154,6 +154,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `reducedmotion` | `reduced_motion` | A reload turned `animations.reduced_motion` on or off |
 | `configproblems` | `rejected`, `messages` | A load of the config left something out or was refused, or a later one fixed it |
 | `overview` | `open` | The overview opened or started closing. `open` is true from the moment it takes input, before its animation ends |
+| `windowmenu` | `window`, `x`, `y` | A window asked for its window menu (`xdg_toplevel.show_window_menu`) in answer to a press; `x`, `y` are the point in layout coordinates, for a shell to draw the menu at |
 
 A watcher that falls 256 events behind is disconnected. Reconnect and
 re-query to resynchronise.

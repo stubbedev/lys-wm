@@ -261,7 +261,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 		if c.overviewHolds() && c.overview.press != nil && !c.overview.press.touched && c.overview.press.button == e.Button {
 			return errors.Join(released, c.overviewReleased(c.cursor))
 		}
-		if c.interaction != nil && c.interaction.button == e.Button {
+		if c.draggedBy(buttonInput{e.Button}) {
 			return errors.Join(released, c.endDrag())
 		}
 		return released
@@ -344,6 +344,10 @@ func (c *Compositor) touchMotion(e backend.TouchMotion) error {
 	}
 	t.at = c.touchPoint(c.inArea(t.area, e.X, e.Y))
 	c.touches[e.ID] = t
+	if c.draggedBy(touchInput{e.ID}) {
+		c.markDragged()
+		return c.scheduleAll()
+	}
 	if c.touchDrag(e.ID) {
 		return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
 	}
@@ -368,6 +372,11 @@ func (c *Compositor) touchUp(e backend.TouchUp) error {
 		delete(c.touches, e.ID)
 		return c.overviewReleased(at)
 	}
+	if c.draggedBy(touchInput{e.ID}) {
+		if err := c.endDrag(); err != nil {
+			return err
+		}
+	}
 	if c.touchDrag(e.ID) {
 		c.seat.DropTouch(e.ID)
 		err := c.drag.Drop()
@@ -387,6 +396,11 @@ func (c *Compositor) touchCancel() error {
 	if c.touchDragging() {
 		err = errors.Join(err, c.drag.Cancel())
 	}
+	if c.interaction != nil {
+		if _, ok := c.interaction.by.(touchInput); ok {
+			err = errors.Join(err, c.endDrag())
+		}
+	}
 	clear(c.touches)
 	return errors.Join(err, c.seat.TouchCancel())
 }
@@ -402,9 +416,7 @@ func (c *Compositor) moveCursor(at time.Duration, next point) error {
 
 func (c *Compositor) pointerMoved(at time.Duration) error {
 	if c.interaction != nil {
-		if !c.dragPending {
-			c.dragPending, c.dragMovedAt = true, c.clock()
-		}
+		c.markDragged()
 		return c.scheduleAll()
 	}
 	if c.overviewHolds() && c.overview.press != nil {

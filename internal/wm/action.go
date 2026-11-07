@@ -731,12 +731,12 @@ var Actions = []ActionSpec{
 	},
 	{
 		Name:    "movewindow",
-		Summary: "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released.",
+		Summary: "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with.",
 		parse:   bare(DragAction{Mode: DragMove}),
 	},
 	{
 		Name:    "resizewindow",
-		Summary: "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios.",
+		Summary: "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE.",
 		parse:   bare(DragAction{Mode: DragResize}),
 	},
 	{

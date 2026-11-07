@@ -50,10 +50,14 @@ type clientCursor struct {
 	want   Cursor
 }
 
+type heldButton struct {
+	code, serial uint32
+}
+
 type pointerState struct {
 	focus       *surface.Surface
 	enterSerial uint32
-	buttons     []uint32
+	buttons     []heldButton
 	cursor      clientCursor
 	framed      []*server.Client
 }
@@ -120,29 +124,57 @@ func (s *Seat) PointerMotion(at time.Duration, x, y float64) error {
 
 func (s *Seat) PointerButton(at time.Duration, button uint32, pressed bool) error {
 	p := &s.pointer
-	i := slices.Index(p.buttons, button)
+	i := slices.IndexFunc(p.buttons, func(b heldButton) bool { return b.code == button })
 	switch {
 	case pressed && i >= 0, !pressed && i < 0 && p.focus == nil:
 		return nil
-	case pressed:
-		p.buttons = append(p.buttons, button)
 	case i >= 0:
 		p.buttons = slices.Delete(p.buttons, i, i+1)
 	}
-	state := sw.WlPointerButtonStateReleased
-	if pressed {
-		state = sw.WlPointerButtonStatePressed
-	}
 	c, pointers := s.focusPointers()
 	if c == nil {
+		if pressed {
+			p.buttons = append(p.buttons, heldButton{code: button})
+		}
 		return nil
 	}
 	serial := s.eventSerial(c, pressed)
+	state := sw.WlPointerButtonStateReleased
+	if pressed {
+		p.buttons = append(p.buttons, heldButton{code: button, serial: serial})
+		state = sw.WlPointerButtonStatePressed
+	}
 	var errs error
 	for _, ptr := range pointers {
 		errs = errors.Join(errs, ptr.SendButton(serial, wire.Millis(at), button, state))
 	}
 	return errs
+}
+
+func (s *Seat) PointerPress(c *server.Client, serial uint32) (uint32, bool) {
+	p := &s.pointer
+	if serial == 0 || p.focus == nil || p.focus.Client() != c {
+		return 0, false
+	}
+	for _, b := range p.buttons {
+		if b.serial == serial {
+			return b.code, true
+		}
+	}
+	return 0, false
+}
+
+func (s *Seat) PointerHeld(target *surface.Surface, button uint32) (uint32, bool) {
+	p := &s.pointer
+	if target == nil || p.focus != target {
+		return 0, false
+	}
+	for _, b := range p.buttons {
+		if button == 0 || b.code == button {
+			return b.code, true
+		}
+	}
+	return 0, false
 }
 
 func (s *Seat) PointerAxis(at time.Duration, a Axis) error {

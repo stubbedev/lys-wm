@@ -145,11 +145,17 @@ func TestFloatingWindowsKeepTheirLimits(t *testing.T) {
 		"shrunk by the keyboard": {func(s State) (State, error) { return s.ResizeFocused(-300, -300) }, image.Rect(100, 100, 400, 300)},
 		"grown by the keyboard":  {func(s State) (State, error) { return s.ResizeFocused(500, 500) }, image.Rect(100, 100, 700, 500)},
 		"dragged from the left past min": {func(s State) (State, error) {
-			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(300, 0), false, true)
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(300, 0), EdgeLeft|EdgeBottom)
 		}, image.Rect(200, 100, 500, 400)},
 		"dragged from the right past max": {func(s State) (State, error) {
-			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(400, 0), true, true)
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(400, 0), EdgeRight|EdgeBottom)
 		}, image.Rect(100, 100, 700, 400)},
+		"dragged from the top past min, the bottom held": {func(s State) (State, error) {
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(50, 250), EdgeTop)
+		}, image.Rect(100, 200, 500, 400)},
+		"dragged from the top left past max, the bottom right held": {func(s State) (State, error) {
+			return s.ResizeFloating(1, image.Rect(100, 100, 500, 400), image.Pt(-300, -300), EdgeTop|EdgeLeft)
+		}, image.Rect(-100, 0, 500, 400)},
 		"placed too small":           {func(s State) (State, error) { return s.SetFloatingRect(1, image.Rect(0, 0, 10, 10)) }, image.Rect(0, 0, 300, 200)},
 		"limits that grow after map": {func(s State) (State, error) { return s.SetLimits(1, Limits{Min: image.Pt(450, 350)}) }, image.Rect(100, 100, 550, 450)},
 	} {
@@ -274,5 +280,27 @@ func TestPointsInTheSameDropZoneLandInTheSamePlace(t *testing.T) {
 	}
 	if len(seen) < 4 {
 		t.Errorf("only %d zones across the output", len(seen))
+	}
+}
+
+func TestAFloatingResizeMovesOnlyTheGrabbedEdges(t *testing.T) {
+	area := image.Rect(0, 0, 1000, 600)
+	from := image.Rect(100, 100, 500, 400)
+	s := ok(t)(State{}.AddOutput("DP-1", area, area))
+	s = ok(t)(s.MapFloating(1, from))
+	d := image.Pt(30, 20)
+	for edges, want := range map[Edges]image.Rectangle{
+		EdgeTop:                image.Rect(100, 120, 500, 400),
+		EdgeBottom:             image.Rect(100, 100, 500, 420),
+		EdgeLeft:               image.Rect(130, 100, 500, 400),
+		EdgeRight:              image.Rect(100, 100, 530, 400),
+		EdgeTop | EdgeLeft:     image.Rect(130, 120, 500, 400),
+		EdgeTop | EdgeRight:    image.Rect(100, 120, 530, 400),
+		EdgeBottom | EdgeLeft:  image.Rect(130, 100, 500, 420),
+		EdgeBottom | EdgeRight: image.Rect(100, 100, 530, 420),
+	} {
+		if _, rect, _ := layerOf(ok(t)(s.ResizeFloating(1, from, d, edges)), 1); rect != want {
+			t.Errorf("edges %04b dragged by %v: %v, want %v", edges, d, rect, want)
+		}
 	}
 }

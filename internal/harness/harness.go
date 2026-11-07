@@ -226,7 +226,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	if h.ipc, err = ipc.Listen(h.loop, socket, h.compositor, cfg.Report); err != nil {
 		t.Fatalf("harness: %v", err)
 	}
-	h.compositor.OnDispatch(h.ipc.Dispatched)
+	h.compositor.OnIPCEvents(h.ipc)
 	h.auditIPC()
 	if s.xwayland != nil {
 		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, FirstDisplay: xwaylandDisplay(), Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout}

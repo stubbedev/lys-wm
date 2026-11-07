@@ -6,20 +6,26 @@ import (
 	"image"
 
 	"github.com/stubbedev/lys-wm/internal/binds"
+	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
+	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type interaction struct {
-	mode   wm.DragMode
-	w      *window
-	button uint32
-	start  image.Point
-	last   image.Point
-	rect   image.Rectangle
-	right  bool
-	bottom bool
-	drop   tiledDrop
+	mode  wm.DragMode
+	w     *window
+	by    dragInput
+	start image.Point
+	last  image.Point
+	rect  image.Rectangle
+	edges wm.Edges
+	drop  tiledDrop
 }
+
+type buttonInput struct{ code uint32 }
+
+func (buttonInput) at(c *Compositor) point { return c.cursor }
 
 var ErrNotFromMouseBind = errors.New("only a mouse bind can start a drag")
 
@@ -32,16 +38,75 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 		return err
 	}
 	_, _, w := c.surfaceAt(c.cursor)
-	if w == nil || w.layer == wm.LayerFullscreen {
+	if w == nil {
 		return nil
 	}
 	at := c.cursor.pixel()
 	mid := w.tile.Min.Add(w.tile.Size().Div(2))
-	c.interaction = &interaction{mode: mode, w: w, button: button.Code, start: at, last: at, rect: w.tile, right: at.X >= mid.X, bottom: at.Y >= mid.Y}
+	horizontal, vertical := wm.EdgeLeft, wm.EdgeTop
+	if at.X >= mid.X {
+		horizontal = wm.EdgeRight
+	}
+	if at.Y >= mid.Y {
+		vertical = wm.EdgeBottom
+	}
+	return c.startDrag(w, mode, buttonInput{button.Code}, horizontal|vertical)
+}
+
+func (c *Compositor) clientDrag(w *window, mode wm.DragMode, by dragInput, edges wm.Edges) error {
+	if c.interaction != nil || c.drag != nil {
+		return nil
+	}
+	if err := c.landInFlight(); err != nil {
+		return err
+	}
+	if err := c.startDrag(w, mode, by, edges); err != nil || c.interaction == nil {
+		return err
+	}
+	if b, ok := by.(buttonInput); ok {
+		c.consumed = append(c.consumed, b.code)
+	}
+	return nil
+}
+
+func (c *Compositor) pressedBy(cl *server.Client, serial uint32) (dragInput, bool) {
+	if code, ok := c.seat.PointerPress(cl, serial); ok {
+		return buttonInput{code}, true
+	}
+	if id, ok := c.seat.TouchPress(cl, serial); ok {
+		return touchInput{id}, true
+	}
+	return nil, false
+}
+
+func (c *Compositor) startDrag(w *window, mode wm.DragMode, by dragInput, edges wm.Edges) error {
+	if w.layer == wm.LayerFullscreen {
+		return nil
+	}
+	at := by.at(c).pixel()
+	c.interaction = &interaction{mode: mode, w: w, by: by, start: at, last: at, rect: w.tile, edges: edges}
 	if err := c.focusWindow(w); err != nil {
 		return err
 	}
+	if _, ok := by.(buttonInput); !ok {
+		return nil
+	}
 	return errors.Join(c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
+}
+
+func (c *Compositor) Dragging() bool {
+	return c.interaction != nil
+}
+
+func (c *Compositor) draggedBy(by dragInput) bool {
+	return c.interaction != nil && c.interaction.by == by
+}
+
+func (c *Compositor) cancelDrag(w *window) error {
+	if c.interaction == nil || c.interaction.w != w {
+		return nil
+	}
+	return c.endDrag()
 }
 
 func (c *Compositor) flushDrag() error {
@@ -54,7 +119,7 @@ func (c *Compositor) flushDrag() error {
 }
 
 func (c *Compositor) dragTo(it *interaction) error {
-	at := c.cursor.pixel()
+	at := it.by.at(c).pixel()
 	total, step := at.Sub(it.start), at.Sub(it.last)
 	it.last = at
 	floating := it.w.layer == wm.LayerFloating
@@ -62,25 +127,24 @@ func (c *Compositor) dragTo(it *interaction) error {
 	case floating && it.mode == wm.DragMove:
 		return c.dragged(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
 	case floating:
-		return c.dragged(c.wm.ResizeFloating(it.w.id, it.rect, total, it.right, it.bottom))
+		return c.dragged(c.wm.ResizeFloating(it.w.id, it.rect, total, it.edges))
 	case it.mode == wm.DragResize:
 		s := c.wm
 		var err error
-		horizontal, vertical := wm.Left, wm.Up
-		dx, dy := -step.X, -step.Y
-		if it.right {
-			horizontal, dx = wm.Right, step.X
-		}
-		if it.bottom {
-			vertical, dy = wm.Down, step.Y
-		}
-		if dx != 0 {
-			if s, err = s.ResizeTiled(it.w.id, horizontal, dx); err != nil {
-				return err
+		for _, axis := range [...]struct {
+			delta      int
+			lead, tail wm.Edges
+			ahead      wm.Direction
+			behind     wm.Direction
+		}{{step.X, wm.EdgeLeft, wm.EdgeRight, wm.Right, wm.Left}, {step.Y, wm.EdgeTop, wm.EdgeBottom, wm.Down, wm.Up}} {
+			switch {
+			case axis.delta == 0:
+			case it.edges.Has(axis.lead):
+				s, err = s.ResizeTiled(it.w.id, axis.behind, -axis.delta)
+			case it.edges.Has(axis.tail):
+				s, err = s.ResizeTiled(it.w.id, axis.ahead, axis.delta)
 			}
-		}
-		if dy != 0 {
-			if s, err = s.ResizeTiled(it.w.id, vertical, dy); err != nil {
+			if err != nil {
 				return err
 			}
 		}
@@ -120,9 +184,46 @@ func (c *Compositor) endDrag() error {
 		return fmt.Errorf("compositor: snap window %d: %w", it.w.id, err)
 	}
 	if it.mode == wm.DragMove && it.w.layer == wm.LayerTiled && it.w.tile != (image.Rectangle{}) {
-		if err := c.update(c.wm.Reinsert(it.w.id, c.cursor.pixel(), c.settings.Autotile)); err != nil {
+		if err := c.update(c.wm.Reinsert(it.w.id, it.by.at(c).pixel(), c.settings.Autotile)); err != nil {
 			return fmt.Errorf("compositor: drop window %d: %w", it.w.id, err)
 		}
 	}
 	return errors.Join(c.refreshPointer(), c.seat.PointerFrame(), c.scheduleAll())
+}
+
+func (c *Compositor) markDragged() {
+	if !c.dragPending {
+		c.dragPending, c.dragMovedAt = true, c.clock()
+	}
+}
+
+var xdgEdgeBits = [...]struct {
+	xdg sxdg.XdgToplevelResizeEdge
+	wm  wm.Edges
+}{
+	{sxdg.XdgToplevelResizeEdgeTop, wm.EdgeTop},
+	{sxdg.XdgToplevelResizeEdgeBottom, wm.EdgeBottom},
+	{sxdg.XdgToplevelResizeEdgeLeft, wm.EdgeLeft},
+	{sxdg.XdgToplevelResizeEdgeRight, wm.EdgeRight},
+}
+
+func xdgEdges(e sxdg.XdgToplevelResizeEdge) wm.Edges {
+	var edges wm.Edges
+	for _, b := range xdgEdgeBits {
+		if e&b.xdg != 0 {
+			edges |= b.wm
+		}
+	}
+	return edges
+}
+
+func (c *Compositor) xdgDrag(w *window, t *shell.Toplevel, serial uint32, mode wm.DragMode, edges wm.Edges) error {
+	if mode == wm.DragResize && edges == 0 {
+		return nil
+	}
+	by, ok := c.pressedBy(t.Surface().Client(), serial)
+	if !ok {
+		return nil
+	}
+	return c.clientDrag(w, mode, by, edges)
 }

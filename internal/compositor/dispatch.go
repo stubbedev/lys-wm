@@ -30,8 +30,8 @@ func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger) error {
 	if err := c.update(s, nil); err != nil {
 		return err
 	}
-	if c.dispatched != nil {
-		c.dispatched(a)
+	if c.ipcEvents != nil {
+		c.ipcEvents.Dispatched(a)
 	}
 	for _, e := range effects {
 		if err := c.perform(e, trigger); err != nil {

@@ -585,6 +585,12 @@ func (c *Compositor) ToplevelRequest(t *shell.Toplevel, r shell.Request) error {
 		return err
 	case shell.SetMinimized:
 		return c.minimize(w)
+	case shell.Move:
+		return c.xdgDrag(w, t, r.Serial, wm.DragMove, 0)
+	case shell.Resize:
+		return c.xdgDrag(w, t, r.Serial, wm.DragResize, xdgEdges(r.Edges))
+	case shell.ShowWindowMenu:
+		return c.showWindowMenu(w, t, r)
 	}
 	return nil
 }

@@ -28,17 +28,30 @@ func (l Limits) floored() Limits {
 	return l
 }
 
-func (l Limits) fitRect(r image.Rectangle, right, bottom bool) image.Rectangle {
+type Edges uint8
+
+const (
+	EdgeTop Edges = 1 << iota
+	EdgeBottom
+	EdgeLeft
+	EdgeRight
+)
+
+func (e Edges) Has(edge Edges) bool {
+	return e&edge != 0
+}
+
+func (l Limits) fitRect(r image.Rectangle, moving Edges) image.Rectangle {
 	size := l.Fit(r.Size())
-	if right {
-		r.Max.X = r.Min.X + size.X
-	} else {
+	if moving.Has(EdgeLeft) {
 		r.Min.X = r.Max.X - size.X
-	}
-	if bottom {
-		r.Max.Y = r.Min.Y + size.Y
 	} else {
+		r.Max.X = r.Min.X + size.X
+	}
+	if moving.Has(EdgeTop) {
 		r.Min.Y = r.Max.Y - size.Y
+	} else {
+		r.Max.Y = r.Min.Y + size.Y
 	}
 	return r
 }
@@ -54,7 +67,7 @@ func (s State) SetLimits(id WindowID, l Limits) (State, error) {
 	s.limits[id] = l
 	w := s.windowWorkspace(id)
 	if i := w.floatingIndex(id); i >= 0 {
-		w.Floating[i].Rect = l.fitRect(w.Floating[i].Rect, true, true)
+		w.Floating[i].Rect = l.fitRect(w.Floating[i].Rect, 0)
 	}
 	return s, nil
 }
@@ -116,7 +129,7 @@ func (s State) Float(id WindowID, rect image.Rectangle) (State, error) {
 	if err := w.remove(id); err != nil {
 		return State{}, err
 	}
-	w.Floating = append(w.Floating, Floating{ID: id, Rect: s.limits[id].fitRect(rect, true, true)})
+	w.Floating = append(w.Floating, Floating{ID: id, Rect: s.limits[id].fitRect(rect, 0)})
 	return s, w.focus(focused)
 }
 
@@ -146,7 +159,7 @@ func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error)
 	}
 	if i := w.minimizedIndex(id); i >= 0 && w.Minimized[i].Layer == LayerFloating {
 		w.Minimized = slices.Clone(w.Minimized)
-		w.Minimized[i].Rect = s.limits[id].fitRect(rect, true, true)
+		w.Minimized[i].Rect = s.limits[id].fitRect(rect, 0)
 		return s, nil
 	}
 	i := w.floatingIndex(id)
@@ -154,23 +167,25 @@ func (s State) SetFloatingRect(id WindowID, rect image.Rectangle) (State, error)
 		return State{}, fmt.Errorf("wm: window %d is not floating", id)
 	}
 	w.Floating = slices.Clone(w.Floating)
-	w.Floating[i].Rect = s.limits[id].fitRect(rect, true, true)
+	w.Floating[i].Rect = s.limits[id].fitRect(rect, 0)
 	return s, nil
 }
 
-func (s State) ResizeFloating(id WindowID, from image.Rectangle, d image.Point, right, bottom bool) (State, error) {
+func (s State) ResizeFloating(id WindowID, from image.Rectangle, d image.Point, moving Edges) (State, error) {
 	r := from
-	if right {
-		r.Max.X += d.X
-	} else {
+	switch {
+	case moving.Has(EdgeLeft):
 		r.Min.X += d.X
+	case moving.Has(EdgeRight):
+		r.Max.X += d.X
 	}
-	if bottom {
-		r.Max.Y += d.Y
-	} else {
+	switch {
+	case moving.Has(EdgeTop):
 		r.Min.Y += d.Y
+	case moving.Has(EdgeBottom):
+		r.Max.Y += d.Y
 	}
-	return s.SetFloatingRect(id, s.limits[id].floored().fitRect(r, right, bottom))
+	return s.SetFloatingRect(id, s.limits[id].floored().fitRect(r, moving))
 }
 
 func (s State) Floats(id WindowID) bool {
@@ -270,7 +285,7 @@ func (s State) ResizeFocused(dx, dy int) (State, error) {
 		r := w.Floating[i].Rect
 		r.Max = r.Max.Add(image.Pt(dx, dy))
 		w.Floating = slices.Clone(w.Floating)
-		w.Floating[i].Rect = s.limits[id].floored().fitRect(r, true, true)
+		w.Floating[i].Rect = s.limits[id].floored().fitRect(r, 0)
 		return s, nil
 	}
 	area := s.output(w.Output).Area
@@ -332,7 +347,7 @@ func (s State) SnapTarget(id WindowID, area image.Rectangle, at image.Point, dis
 	if !ok {
 		return image.Rectangle{}, false
 	}
-	return s.limits[id].floored().fitRect(r, true, true), true
+	return s.limits[id].floored().fitRect(r, 0), true
 }
 
 func (s State) DropZones(id WindowID, reuse DropZones) (DropZones, error) {

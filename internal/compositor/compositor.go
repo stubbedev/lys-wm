@@ -242,7 +242,7 @@ type Compositor struct {
 	outputRules     OutputRules
 	disabled        []backend.Output
 	hooks           Hooks
-	dispatched      func(wm.Action)
+	ipcEvents       IPCEvents
 	changed         func()
 	loop            *loop.Loop
 	display         *server.Display

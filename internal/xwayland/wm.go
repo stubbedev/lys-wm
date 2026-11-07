@@ -77,6 +77,7 @@ const (
 	atomNetWMPing
 	atomNetWMSyncRequest
 	atomNetWMSyncRequestCounter
+	atomNetWMMoveResize
 	atomXdndSelection
 	atomXdndAware
 	atomXdndProxy
@@ -145,6 +146,7 @@ var atomNames = [atomCount]string{
 	atomNetWMPing:                   "_NET_WM_PING",
 	atomNetWMSyncRequest:            "_NET_WM_SYNC_REQUEST",
 	atomNetWMSyncRequestCounter:     "_NET_WM_SYNC_REQUEST_COUNTER",
+	atomNetWMMoveResize:             "_NET_WM_MOVERESIZE",
 	atomXdndSelection:               "XdndSelection",
 	atomXdndAware:                   "XdndAware",
 	atomXdndProxy:                   "XdndProxy",
@@ -167,7 +169,7 @@ func (a atom) String() string {
 type atoms [atomCount]xproto.Atom
 
 var supported = []atom{
-	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetClientListStacking, atomNetWorkarea, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMStateDemandsAttention, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing, atomNetWMSyncRequest, atomNetWMSyncRequestCounter,
+	atomNetSupported, atomNetSupportingWMCheck, atomNetWMName, atomNetWMPID, atomNetActiveWindow, atomNetClientList, atomNetClientListStacking, atomNetWorkarea, atomNetWMState, atomNetWMStateFullscreen, atomNetWMStateHidden, atomNetWMStateModal, atomNetWMStateDemandsAttention, atomNetWMStateMaximizedVert, atomNetWMStateMaximizedHorz, atomNetWMWindowType, atomNetFrameExtents, atomNetRequestFrameExtents, atomNetWMPing, atomNetWMSyncRequest, atomNetWMSyncRequestCounter, atomNetWMMoveResize,
 }
 
 var watched = []atom{
@@ -451,6 +453,8 @@ func (c *xconn) message(e xproto.ClientMessageEvent) {
 		c.post(func(m *wm) error { return m.serialSet(e.Window, serial) })
 	case c.atoms[atomNetWMState]:
 		c.post(func(m *wm) error { return m.stateRequested(e.Window, d[0], xproto.Atom(d[1]), xproto.Atom(d[2])) })
+	case c.atoms[atomNetWMMoveResize]:
+		c.post(func(m *wm) error { return m.moveResizeRequested(e.Window, d[2], d[3]) })
 	case c.atoms[atomNetActiveWindow]:
 		c.post(func(m *wm) error { return m.activeRequested(e.Window) })
 	case c.atoms[atomWMChangeState]:

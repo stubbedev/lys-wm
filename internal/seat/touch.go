@@ -40,6 +40,15 @@ func (s *Seat) TouchBySerial(target *surface.Surface, serial uint32) (int32, boo
 	return 0, false
 }
 
+func (s *Seat) TouchPress(c *server.Client, serial uint32) (int32, bool) {
+	for _, p := range s.touch.points {
+		if serial != 0 && p.serial == serial && p.surface.Client() == c {
+			return p.id, true
+		}
+	}
+	return 0, false
+}
+
 func (s *Seat) DropTouch(id int32) {
 	s.touch.points = slices.DeleteFunc(s.touch.points, func(p touchPoint) bool { return p.id == id })
 }

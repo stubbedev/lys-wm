@@ -472,7 +472,13 @@ func (s *Server) drop(w *watcher) {
 
 func (s *Server) Dispatched(a wm.Action) {
 	if len(s.watchers) > 0 {
-		s.pending = append(s.pending, DispatchEvent{Action: a.String()})
+		s.Announce(DispatchEvent{Action: a.String()})
+	}
+}
+
+func (s *Server) Announce(e Event) {
+	if len(s.watchers) > 0 {
+		s.pending = append(s.pending, e)
 	}
 }
 

@@ -707,7 +707,7 @@ func run(args []string) (err error) {
 		return err
 	}
 	defer leave(func() error { return srv.Close() })
-	s.comp.OnDispatch(srv.Dispatched)
+	s.comp.OnIPCEvents(srv)
 	s.comp.OnStateChange(srv.Changed)
 	if b.onPower != nil {
 		b.onPower(s.comp.PowerChanged)

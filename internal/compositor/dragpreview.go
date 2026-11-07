@@ -31,10 +31,11 @@ func (c *Compositor) dropTarget(it *interaction) (image.Rectangle, bool, error) 
 	if !c.decor.DragPreview.Enabled || it.mode != wm.DragMove {
 		return image.Rectangle{}, false, nil
 	}
-	at := c.cursor.pixel()
+	p := it.by.at(c)
+	at := p.pixel()
 	switch it.w.layer {
 	case wm.LayerFloating:
-		o := c.outputAt(c.cursor)
+		o := c.outputAt(p)
 		if o == nil || at == it.start {
 			return image.Rectangle{}, false, nil
 		}
