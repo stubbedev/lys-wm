@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -174,4 +175,11 @@ func (c *Cursor) destroy() error {
 	err := c.target.Destroy()
 	c.target = nil
 	return err
+}
+
+func (c *Cursor) Pixels() []byte {
+	if c.image == nil {
+		return nil
+	}
+	return slices.Clone(c.image.Pix)
 }

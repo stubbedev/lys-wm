@@ -757,11 +757,22 @@ func TestBlurShadowsAndCornersCompositeInTheWorkingSpace(t *testing.T) {
 	})
 }
 
-func TestTheCursorDrawsInTheFrameOnAnHDROutput(t *testing.T) {
+func TestAnHDROutputsCursorPlaneHoldsTheCursorAtTheSDRWhiteInPQ(t *testing.T) {
 	h := StartWithCursorPlanes(t, image.Pt(64, 64), hdrConfig(compositor.OutputRule{}), small)
+	movePointerTo(h, 0.5, 0.5)
+	h.Eventually("the cursor on its plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return b.Outputs()[0].Cursor().Visible()
+	})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-		if b.Outputs()[0].Cursor().Visible() {
-			t.Error("an HDR output shows the cursor on a plane that would show it as PQ")
+		pix := b.Outputs()[0].Cursor().Pixels()
+		var brightest byte
+		for i := 0; i+4 <= len(pix); i += 4 {
+			if pix[i+3] == 0xff {
+				brightest = max(brightest, pix[i], pix[i+1], pix[i+2])
+			}
+		}
+		if want := pqByte(203); brightest+1 < want || brightest > want+1 {
+			t.Errorf("the brightest opaque cursor pixel on the plane is %d, want white at 203 cd/m² in PQ, %d", brightest, want)
 		}
 		return nil
 	})
