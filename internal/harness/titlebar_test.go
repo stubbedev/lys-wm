@@ -137,7 +137,12 @@ func TestTheTitlebarMovesClosesMinimizesAndMaximizes(t *testing.T) {
 	s.floatAgain()
 
 	lines := s.h.watch()
-	s.click(s.bar().Min.Add(image.Pt(12, 4)), btnRight)
+	menuAt := s.bar().Min.Add(image.Pt(1, 1))
+	s.h.Eventually("the bar drawn where the menu click goes", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		snap, err := b.Outputs()[0].Snapshot()
+		return err == nil && pixel(snap, menuAt.X, menuAt.Y) == [3]byte{0xcb, 0xa6, 0xf7}
+	})
+	s.click(menuAt, btnRight)
 	awaitStreamed(t, lines, "the window menu", func(e streamed) bool { return e.Event == "windowmenu" })
 
 	s.click(s.button(0), btnLeft)
