@@ -85,6 +85,8 @@ var everyAction = []Action{
 	PlaceAction{Target: PlaceRestore},
 	FocusFloatingAction{},
 	SwallowAction{},
+	DebugOverlayAction{Overlay: DebugDamage, Mode: SwitchOn},
+	DebugRecordAction{Recording: DebugTrace, Stop: true},
 	SwallowAction{Switch: SwitchOff},
 	FocusFloatingAction{Switch: SwitchOn},
 	FullscreenAction{},
