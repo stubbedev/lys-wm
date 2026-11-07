@@ -140,9 +140,7 @@ func (r *swipeRig) active() wm.WorkspaceID {
 
 func (r *swipeRig) expectNoMoreFrames() {
 	r.t.Helper()
-	r.h.Eventually("the output to stop drawing with nothing moving", func(b *headless.Backend, c *compositor.Compositor) bool {
-		return !b.Outputs()[0].FrameOwed() && !c.Animating(c.Outputs()[0])
-	})
+	r.h.Eventually("the output to stop drawing with nothing moving", atRest)
 }
 
 func TestASwipeTracksTheFingersAndCommits(t *testing.T) {

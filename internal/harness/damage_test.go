@@ -35,21 +35,13 @@ func presentCount(h *Harness) uint64 {
 
 func settle(t testing.TB, h *Harness) {
 	t.Helper()
-	h.Eventually("labels and cursors to finish loading", func(_ *headless.Backend, c *compositor.Compositor) bool {
-		return !c.LabelsPending() && !c.CursorsLoading()
+	h.Eventually("labels and cursors loaded and the output at rest", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return !c.LabelsPending() && !c.CursorsLoading() && atRest(b, c)
 	})
-	presents := presentCount(h)
-	for deadline := time.Now().Add(clientTimeout); ; {
-		time.Sleep(50 * time.Millisecond)
-		now := presentCount(h)
-		if now == presents {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the output never stopped presenting")
-		}
-		presents = now
-	}
+}
+
+func atRest(b *headless.Backend, c *compositor.Compositor) bool {
+	return !b.Outputs()[0].FrameOwed() && !c.Animating(c.Outputs()[0])
 }
 
 func quiesce(t *testing.T, h *Harness, c *testclient.Client, w *testclient.Window) {

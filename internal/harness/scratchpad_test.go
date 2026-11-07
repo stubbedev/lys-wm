@@ -108,7 +108,7 @@ func TestAHiddenScratchpadCostsNoFrames(t *testing.T) {
 	var frames uint64
 	h.Eventually("the output idle", func(be *headless.Backend, comp *compositor.Compositor) bool {
 		frames = be.Outputs()[0].Frames()
-		return !be.Outputs()[0].FrameOwed() && !comp.Animating(comp.Outputs()[0])
+		return atRest(be, comp)
 	})
 	for range 10 {
 		if err := b.Redraw(); err != nil {

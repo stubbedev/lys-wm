@@ -601,13 +601,13 @@ func TestScreencopyOfAnHDROutputIsSDR(t *testing.T) {
 			t.Fatalf("a capture of an SDR window on an HDR output is %v, want its own pixels", got)
 		}
 		level := pqByte(1000)
-		hdr := c.WindowWith("hdr", testclient.Fill(level, level, level), tagWith(m, hdr10Description(t, c, m, 1000)))
-		c.DispatchUntil("the HDR window to map", hdr.Mapped)
 		var sdrThere [3]byte
 		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 			sdrThere = pixel(snapshot(b.Outputs()[0]), 120, 50)
 			return nil
 		})
+		hdr := c.WindowWith("hdr", testclient.Fill(level, level, level), tagWith(m, hdr10Description(t, c, m, 1000)))
+		c.DispatchUntil("the HDR window to map", hdr.Mapped)
 		h.Eventually("the HDR window in the layout, past the hold for its neighbour", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return pixel(snapshot(b.Outputs()[0]), 120, 50) != sdrThere
 		})
