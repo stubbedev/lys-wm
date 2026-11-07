@@ -253,7 +253,7 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 			return nil
 		}
 		rect := c.fromX(r.Rect)
-		return c.update(c.wm.SetFloatingRect(win.id, rect.Inset(-c.decor.BorderWidth)))
+		return c.update(c.wm.SetFloatingRect(win.id, rect.Inset(-c.borderWidth(win))))
 	}
 	return nil
 }

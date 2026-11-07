@@ -95,10 +95,11 @@ type Config struct {
 }
 
 type Hooks struct {
-	Reload   func() (apply func() error)
-	Exit     func() error
-	SwitchVT func(vt uint32) error
-	Lid      LidPolicy
+	Reload    func() (apply func() error)
+	ParseProp func(key, value string) (wm.Decision, error)
+	Exit      func() error
+	SwitchVT  func(vt uint32) error
+	Lid       LidPolicy
 }
 
 type LidPolicy struct {

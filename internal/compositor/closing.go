@@ -40,8 +40,7 @@ func (cl *closing) done(now time.Duration) bool {
 	return cl.motion.Done(now) && cl.fade.Done(now) && (cl.genie == nil || cl.genie.progress.Done(now))
 }
 
-func (c *Compositor) styled(e anim.Event, o *output.Output, goal image.Rectangle) image.Rectangle {
-	st := c.animations.Style(e)
+func styled(st anim.Style, o *output.Output, goal image.Rectangle) image.Rectangle {
 	if st.Kind == anim.Bud {
 		st = anim.Style{Kind: anim.Popin, Percent: budFallback}
 	}
@@ -119,10 +118,15 @@ func (c *Compositor) neighbour(w *window, r image.Rectangle) (image.Rectangle, b
 }
 
 func (c *Compositor) appear(w *window, goal image.Rectangle, now time.Duration) {
+	if c.stillWindow(w) {
+		w.motion.Jump(goal)
+		return
+	}
 	w.bud = image.Rectangle{}
 	if o := c.outputAtRect(goal); o != nil {
-		start := c.styled(anim.WindowsIn, o, goal)
-		if c.animations.Style(anim.WindowsIn).Kind == anim.Bud {
+		style := c.windowStyle(w, anim.WindowsIn)
+		start := styled(style, o, goal)
+		if style.Kind == anim.Bud {
 			if n, ok := c.neighbour(w, goal); ok {
 				w.bud, start = n, budRect(n, goal)
 			}
@@ -201,7 +205,7 @@ func (c *Compositor) keepSnapshot(s *surface.Surface) error {
 }
 
 func (c *Compositor) startClosing(w *window, now time.Duration) error {
-	if !c.closeAnimated() {
+	if !c.closeAnimated() || c.stillWindow(w) {
 		return nil
 	}
 	tt, fr := w.snapshot, w.frost
@@ -219,8 +223,9 @@ func (c *Compositor) startClosing(w *window, now time.Duration) error {
 	}
 	cl := &closing{snapshot: tt, frost: fr, output: w.output, level: windowLevel, motion: anim.NewTween(start, anim.LerpRect), fade: anim.NewTween(1.0, anim.Lerp)}
 	if curve := c.animations.Curve(anim.WindowsOut); curve != anim.Instant {
-		end := c.styled(anim.WindowsOut, w.output, goal)
-		if c.animations.Style(anim.WindowsOut).Kind == anim.Bud {
+		style := c.windowStyle(w, anim.WindowsOut)
+		end := styled(style, w.output, goal)
+		if style.Kind == anim.Bud {
 			if n, ok := c.neighbour(w, w.tile); ok {
 				cl.bud, end = n, budRect(n, w.tile)
 			}

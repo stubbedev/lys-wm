@@ -1032,3 +1032,45 @@ func TestPlacementRules(t *testing.T) {
 		}
 	}
 }
+
+func TestBehaviourRules(t *testing.T) {
+	c, err := Parse("t.yaml", []byte(`rules:
+  - {app_id: ^mpv$, is_fullscreen: true, idle_inhibit: visible, vrr: true, animation: false}
+  - {app_id: ^foot$, is_captured: true, border: {active: red, width: 3}, rounding: 0, shadow: false, dim_inactive: false}
+  - {app_id: ^gimp$, scroll_factor: 0.5, min_size: 300x200, max_size: 1200x900, keep_aspect: true, animation: {in: slide, out: fade}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := wm.Decide(c.Rules, wm.Subject{AppID: "mpv", State: wm.WindowState{Fullscreen: true}})
+	if d.IdleInhibit != wm.IdleInhibitVisible || d.VRR == nil || !*d.VRR || d.Animation == nil || !d.Animation.Off {
+		t.Errorf("mpv fullscreen: %+v", d.Props)
+	}
+	if d := wm.Decide(c.Rules, wm.Subject{AppID: "mpv"}); d.IdleInhibit != wm.IdleInhibitUnset {
+		t.Errorf("mpv windowed matched is_fullscreen: %+v", d.Props)
+	}
+	d = wm.Decide(c.Rules, wm.Subject{AppID: "foot", State: wm.WindowState{Captured: true}})
+	if d.ActiveBorder == nil || d.ActiveBorder.Colors()[0] != (render.Color{R: 0xf3, G: 0x8b, B: 0xa8, A: 0xff}) || d.BorderWidth == nil || *d.BorderWidth != 3 || d.Rounding == nil || *d.Rounding != 0 || d.Shadow == nil || *d.Shadow || d.DimInactive == nil {
+		t.Errorf("captured foot: %+v", d.Props)
+	}
+	d = wm.Decide(c.Rules, wm.Subject{AppID: "gimp"})
+	if d.ScrollFactor == nil || *d.ScrollFactor != 0.5 || d.MinSize != image.Pt(300, 200) || d.MaxSize != image.Pt(1200, 900) || d.KeepAspect == nil || d.Animation.In.Kind != anim.Slide || d.Animation.Out.Kind != anim.FadeStyle {
+		t.Errorf("gimp: %+v", d.Props)
+	}
+	for text, want := range map[string]string{
+		"rules:\n  - {app_id: a, idle_inhibit: always}\n":  "t.yaml:2: rules[0].idle_inhibit:",
+		"rules:\n  - {app_id: a, scroll_factor: 0}\n":      "t.yaml:2: rules[0].scroll_factor:",
+		"rules:\n  - {app_id: a, min_size: big}\n":         "t.yaml:2: rules[0].min_size:",
+		"rules:\n  - {app_id: a, animation: {in: spin}}\n": "t.yaml:2: rules[0].animation.in:",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", text, err, want)
+		}
+	}
+	if _, err := ParseProp("border", "{width: 4}"); err != nil {
+		t.Errorf("setprop border: %v", err)
+	}
+	if _, err := ParseProp("bordr", "4"); err == nil {
+		t.Error("setprop took an unknown key")
+	}
+}

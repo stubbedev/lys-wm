@@ -38,7 +38,7 @@ func (c *Compositor) showAdaptiveSync(o *output.Output, s *surface.Surface, alon
 	if !ok || !as.AdaptiveSyncCapable() {
 		return nil
 	}
-	on := c.wantsVRR(c.outputRule(b).VRR, s, alone)
+	on := c.wantsVRR(c.outputRule(b).VRR, s, alone) || c.rulesWantVRR(o)
 	if on == as.AdaptiveSync() {
 		return nil
 	}

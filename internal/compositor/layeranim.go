@@ -42,7 +42,7 @@ func (c *Compositor) layerStyled(e anim.Event, l *layer) (image.Rectangle, float
 	case anim.Slide:
 		return anchoredSlide(l.output.Logical(), goal, l.surface.Current().Anchor), 1
 	case anim.Popin:
-		return c.styled(e, l.output, goal), 1
+		return styled(c.animations.Style(e), l.output, goal), 1
 	}
 	return goal, 0
 }

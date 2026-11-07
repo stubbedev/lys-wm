@@ -64,32 +64,33 @@ type window struct {
 }
 
 type decided struct {
-	subject wm.Subject
-	rules   uint64
-	d       wm.Decision
-	look    wm.Look
-	mica    bool
+	decider  wm.Decider
+	override *wm.Decision
+	lookGen  uint64
+	looked   bool
+	look     wm.Look
+	mica     bool
 }
 
 func (c *Compositor) subject(w *window) wm.Subject {
 	s := subjectOf(w.top, w.layer == wm.LayerFloating)
 	s.InitialAppID, s.InitialTitle = w.initialAppID, w.initialTitle
+	s.State.Focused, s.State.Fullscreen, s.State.Urgent, s.State.Captured = w == c.active, w.layer == wm.LayerFullscreen, w.urgent, c.shared(w)
 	return s
 }
 
 func subjectOf(t toplevel, floating bool) wm.Subject {
 	_, x := t.(xToplevel)
-	return wm.Subject{AppID: t.AppID(), Title: t.Title(), Tag: t.Tag(), InitialAppID: t.AppID(), InitialTitle: t.Title(), XWayland: x, Floating: floating}
+	return wm.Subject{AppID: t.AppID(), Title: t.Title(), Tag: t.Tag(), InitialAppID: t.AppID(), InitialTitle: t.Title(), XWayland: x, State: wm.WindowState{Floating: floating}}
 }
 
 func (c *Compositor) decision(w *window) *wm.Decision {
-	subject := c.subject(w)
 	k := &w.decided
-	if k.rules != c.rulesGen || k.subject != subject {
-		*k = decided{subject: subject, rules: c.rulesGen, d: wm.Decide(c.rules, subject)}
-		k.look, k.mica = k.d.Look.Over(c.decor.Blur.Look), micaOf(&k.d, c.decor.Blur.Mica.Enabled)
+	d, changed := k.decider.Decide(c.rules, c.rulesGen, c.subject(w), k.override)
+	if changed || !k.looked || k.lookGen != c.rulesGen {
+		k.look, k.mica, k.lookGen, k.looked = d.Look.Over(c.decor.Blur.Look), micaOf(d, c.decor.Blur.Mica.Enabled), c.rulesGen, true
 	}
-	return &k.d
+	return d
 }
 
 func (c *Compositor) windowOrigin(w *window) origin {
@@ -278,7 +279,7 @@ func (c *Compositor) reconcile() error {
 }
 
 func (c *Compositor) publish() error {
-	return errors.Join(c.syncOverview(c.clock()), c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions())
+	return errors.Join(c.syncOverview(c.clock()), c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions(), c.updateInhibition())
 }
 
 func errUnknownWindow(id wm.WindowID) error {
@@ -295,7 +296,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			continue
 		}
 		c.stack = append(c.stack, w)
-		rect := c.content(p.Rect, p.Layer)
+		rect := content(p.Rect, p.Layer, c.borderWidth(w))
 		moved := rect != w.rect
 		switch {
 		case c.overview != nil:
@@ -356,11 +357,11 @@ func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	})
 }
 
-func (c *Compositor) content(tile image.Rectangle, layer wm.PlacementLayer) image.Rectangle {
+func content(tile image.Rectangle, layer wm.PlacementLayer, border int) image.Rectangle {
 	if layer == wm.LayerFullscreen {
 		return tile
 	}
-	return tile.Inset(c.decor.BorderWidth)
+	return tile.Inset(border)
 }
 
 func sameState(a, b shell.State) bool {
@@ -397,7 +398,8 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	}
 	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == c.nextWindow {
-			return t.apply(c.wanted(c.content(p.Rect, p.Layer), p, true))
+			d, _ := c.ruled(t)
+			return t.apply(c.wanted(content(p.Rect, p.Layer, c.borderWidthOf(&d)), p, true))
 		}
 	}
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)
@@ -472,7 +474,8 @@ func (c *Compositor) openingArea(t toplevel, o wm.Opening) image.Rectangle {
 }
 
 func (c *Compositor) floatRect(t toplevel, d wm.Decision, area image.Rectangle) image.Rectangle {
-	size := floatSize(t, d.Size.In(area.Size())).Add(image.Pt(2*c.decor.BorderWidth, 2*c.decor.BorderWidth))
+	border := c.borderWidthOf(&d)
+	size := floatSize(t, d.Size.In(area.Size())).Add(image.Pt(2*border, 2*border))
 	switch d.Position.Kind {
 	case wm.PositionCursor:
 		at := c.cursor.pixel().Sub(size.Div(2))
@@ -503,9 +506,11 @@ func floatSize(t toplevel, ruled image.Point) image.Point {
 	return wm.Limits{Min: minimum, Max: maximum}.Fit(size)
 }
 
-func (c *Compositor) frameLimits(t toplevel) wm.Limits {
-	minimum, maximum := t.sizeLimits()
-	frame := 2 * c.decor.BorderWidth
+func (c *Compositor) frameLimits(w *window) wm.Limits {
+	minimum, maximum := w.top.sizeLimits()
+	d := c.decision(w)
+	minimum, maximum = ruledLimits(d, minimum, maximum)
+	frame := 2 * c.borderWidthOf(d)
 	framed := func(p image.Point) image.Point {
 		if p.X > 0 {
 			p.X += frame
@@ -523,7 +528,7 @@ func (c *Compositor) refreshLimits(t toplevel) error {
 	if w == nil {
 		return nil
 	}
-	s, err := c.wm.SetLimits(w.id, c.frameLimits(t))
+	s, err := c.wm.SetLimits(w.id, c.frameLimits(w))
 	if err != nil {
 		return err
 	}
@@ -602,7 +607,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	if err != nil {
 		return err
 	}
-	if s, err = s.SetLimits(w.id, c.frameLimits(t)); err != nil {
+	if s, err = s.SetLimits(w.id, c.frameLimits(w)); err != nil {
 		return err
 	}
 	for _, p := range s.Arrange(c.spacing()).Windows {
@@ -724,4 +729,24 @@ func (c *Compositor) clientMaximize(w *window, on bool) error {
 		return nil
 	}
 	return c.update(c.wm.SetMaximized(w.id, on))
+}
+
+func (c *Compositor) shared(w *window) bool {
+	return slices.ContainsFunc(c.captureSessions, func(s *captureSession) bool {
+		switch src := s.source.(type) {
+		case windowSource:
+			return src.window == w
+		case outputSource:
+			return src.output == w.output
+		}
+		return false
+	})
+}
+
+func (c *Compositor) RuleEvaluations() int {
+	n := 0
+	for _, w := range c.windows {
+		n += w.decided.decider.Evaluations
+	}
+	return n
 }

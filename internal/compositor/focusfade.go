@@ -23,7 +23,7 @@ func colorWords(c render.Color) [4]uint8 {
 }
 
 func (c *Compositor) dimTarget(w *window) float64 {
-	if !c.decor.Dim.Inactive || w == c.active {
+	if !c.dimsInactive(w) || w == c.active {
 		return 0
 	}
 	return float64(c.decor.Dim.Strength)
@@ -74,15 +74,16 @@ func (c *Compositor) shownShadow(w *window) render.Color {
 }
 
 func (c *Compositor) borderTarget(w *window) render.Border {
+	active, inactive := c.borderColours(w)
 	if w == c.active {
-		return c.decor.ActiveBorder
+		return active
 	}
-	return c.decor.InactiveBorder
+	return inactive
 }
 
 func (c *Compositor) refreshBorder(w *window, now time.Duration, first bool) {
 	if first {
-		w.border = c.decor.InactiveBorder
+		_, w.border = c.borderColours(w)
 		w.borderAngle = anim.NewTween(1.0, anim.Lerp)
 	}
 	to := c.borderTarget(w)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	chgs "github.com/stubbedev/lys-wm/internal/protocol/client/hyprlandglobalshortcuts"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
@@ -78,6 +79,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	reloads, exits := 0, 0
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Overview.Blur = false
+		cfg.Hooks.ParseProp = config.ParseProp
 		cfg.Hooks.Reload = func() func() error {
 			return func() error {
 				reloads++
@@ -110,7 +112,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	}
 	actions := []string{
 		"focus left", "move right", "makegroup tab ephemeral", "togglefloating", "togglefloating",
-		"minimize", "restore", "fullscreen", "fullscreen", "maximize", "maximize off", "fullscreen on fake", "fullscreen fake", "pin", "pin off", "showdesktop on", "showdesktop all", "movetoscratchpad notes", "scratchpad toggle notes", "scratchpad hide", "scratchpad toggle notes", "movetoworkspace 1", "resizeactive 10 0", "submap resize", "submap reset", "zoom in", "zoom set 2", "zoom out 1.2", "zoom reset", "overview toggle", "overview hide", "overview show", "overview hide",
+		"minimize", "restore", "fullscreen", "fullscreen", "maximize", "maximize off", "fullscreen on fake", "fullscreen fake", "pin", "pin off", "showdesktop on", "showdesktop all", "setprop 1 opacity 0.5", "movetoscratchpad notes", "scratchpad toggle notes", "scratchpad hide", "scratchpad toggle notes", "movetoworkspace 1", "resizeactive 10 0", "submap resize", "submap reset", "zoom in", "zoom set 2", "zoom out 1.2", "zoom reset", "overview toggle", "overview hide", "overview show", "overview hide",
 		"movetoworkspace 3", "workspace 3", "workspace e-1", "exec true", "nextlayout", "stickykeys on", "stickykeys off", "slowkeys 300", "slowkeys 0", "global voice:ptt", "reload", "dismissconfignotice", "exit", "dpms off", "dpms toggle HEADLESS-1", "kill",
 	}
 	mouseOnly := []string{"movewindow", "resizewindow"}

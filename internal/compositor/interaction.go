@@ -127,7 +127,11 @@ func (c *Compositor) dragTo(it *interaction) error {
 	case floating && it.mode == wm.DragMove:
 		return c.dragged(c.wm.SetFloatingRect(it.w.id, it.rect.Add(total)))
 	case floating:
-		return c.dragged(c.wm.ResizeFloating(it.w.id, it.rect, total, it.edges))
+		edges := it.edges
+		if k := c.decision(it.w).KeepAspect; k != nil && *k {
+			total, edges = wm.KeptAspect(it.rect, total, edges)
+		}
+		return c.dragged(c.wm.ResizeFloating(it.w.id, it.rect, total, edges))
 	case it.mode == wm.DragResize:
 		s := c.wm
 		var err error

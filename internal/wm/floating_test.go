@@ -304,3 +304,32 @@ func TestAFloatingResizeMovesOnlyTheGrabbedEdges(t *testing.T) {
 		}
 	}
 }
+
+func TestKeptAspectResizesBothAxesTogether(t *testing.T) {
+	from := image.Rect(100, 100, 500, 400)
+	for _, tc := range []struct {
+		d      image.Point
+		moving Edges
+		want   image.Rectangle
+	}{
+		{image.Pt(80, 0), EdgeRight, image.Rect(100, 100, 580, 460)},
+		{image.Pt(0, -30), EdgeTop, image.Rect(100, 70, 540, 400)},
+		{image.Pt(-40, 10), EdgeLeft | EdgeBottom, image.Rect(60, 100, 500, 430)},
+	} {
+		d, moving := KeptAspect(from, tc.d, tc.moving)
+		r := from
+		if moving.Has(EdgeLeft) {
+			r.Min.X += d.X
+		} else {
+			r.Max.X += d.X
+		}
+		if moving.Has(EdgeTop) {
+			r.Min.Y += d.Y
+		} else {
+			r.Max.Y += d.Y
+		}
+		if r != tc.want || r.Dx()*from.Dy() != r.Dy()*from.Dx() {
+			t.Errorf("%v on %v: %v, want %v", tc.d, tc.moving, r, tc.want)
+		}
+	}
+}

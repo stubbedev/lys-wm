@@ -227,6 +227,11 @@
                 "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
               },
               {
+                "name": "setprop",
+                "args": "<id> <key> <value>",
+                "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+              },
+              {
                 "name": "showdesktop",
                 "args": "[toggle|on|off] [all]",
                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
@@ -771,6 +776,11 @@
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
                   },
                   {
+                    "name": "setprop",
+                    "args": "<id> <key> <value>",
+                    "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                  },
+                  {
                     "name": "showdesktop",
                     "args": "[toggle|on|off] [all]",
                     "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
@@ -950,6 +960,11 @@
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
                   },
                   {
+                    "name": "setprop",
+                    "args": "<id> <key> <value>",
+                    "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                  },
+                  {
                     "name": "showdesktop",
                     "args": "[toggle|on|off] [all]",
                     "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
@@ -1127,6 +1142,11 @@
                     "name": "fullscreen",
                     "args": "[toggle|on|off] [fake]",
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                  },
+                  {
+                    "name": "setprop",
+                    "args": "<id> <key> <value>",
+                    "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
                   },
                   {
                     "name": "showdesktop",
@@ -1528,6 +1548,21 @@
       "items": {
         "type": "object",
         "properties": {
+          "animation": {
+            "type": "object",
+            "properties": {
+              "-": {
+                "type": "boolean"
+              },
+              "in": {
+                "type": "string"
+              },
+              "out": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
           "app_id": {
             "type": "string",
             "format": "regex"
@@ -1581,6 +1616,61 @@
             },
             "additionalProperties": false
           },
+          "border": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "lys-wm-color"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "angle": {
+                        "type": "number"
+                      },
+                      "colors": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "inactive": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "lys-wm-color"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "angle": {
+                        "type": "number"
+                      },
+                      "colors": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "width": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          },
           "content": {
             "type": "string",
             "enum": [
@@ -1593,20 +1683,35 @@
           "dim_around": {
             "type": "boolean"
           },
+          "dim_inactive": {
+            "type": "boolean"
+          },
           "exclude": {
             "type": "object",
             "properties": {
               "app_id": {
                 "type": "string"
               },
-              "floating": {
-                "type": "boolean"
-              },
               "initial_app_id": {
                 "type": "string"
               },
               "initial_title": {
                 "type": "string"
+              },
+              "is_captured": {
+                "type": "boolean"
+              },
+              "is_floating": {
+                "type": "boolean"
+              },
+              "is_focused": {
+                "type": "boolean"
+              },
+              "is_fullscreen": {
+                "type": "boolean"
+              },
+              "is_urgent": {
+                "type": "boolean"
               },
               "tag": {
                 "type": "string"
@@ -1623,9 +1728,6 @@
           "float": {
             "type": "boolean"
           },
-          "floating": {
-            "type": "boolean"
-          },
           "focus": {
             "type": "boolean"
           },
@@ -1635,10 +1737,34 @@
           "group": {
             "type": "string"
           },
+          "idle_inhibit": {
+            "type": "string"
+          },
           "initial_app_id": {
             "type": "string"
           },
           "initial_title": {
+            "type": "string"
+          },
+          "is_captured": {
+            "type": "boolean"
+          },
+          "is_floating": {
+            "type": "boolean"
+          },
+          "is_focused": {
+            "type": "boolean"
+          },
+          "is_fullscreen": {
+            "type": "boolean"
+          },
+          "is_urgent": {
+            "type": "boolean"
+          },
+          "keep_aspect": {
+            "type": "boolean"
+          },
+          "max_size": {
             "type": "string"
           },
           "maximized": {
@@ -1646,6 +1772,9 @@
           },
           "mica": {
             "type": "boolean"
+          },
+          "min_size": {
+            "type": "string"
           },
           "on_activate": {
             "type": "string",
@@ -1666,6 +1795,15 @@
           },
           "position": {
             "type": "string"
+          },
+          "rounding": {
+            "type": "integer"
+          },
+          "scroll_factor": {
+            "type": "number"
+          },
+          "shadow": {
+            "type": "boolean"
           },
           "size": {
             "type": "string"
@@ -1689,6 +1827,9 @@
           "title": {
             "type": "string",
             "format": "regex"
+          },
+          "vrr": {
+            "type": "boolean"
           },
           "workspace": {
             "type": "string"
@@ -1856,6 +1997,11 @@
                   "name": "fullscreen",
                   "args": "[toggle|on|off] [fake]",
                   "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                },
+                {
+                  "name": "setprop",
+                  "args": "<id> <key> <value>",
+                  "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
                 },
                 {
                   "name": "showdesktop",

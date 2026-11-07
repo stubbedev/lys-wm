@@ -627,6 +627,7 @@ func run(args []string) (err error) {
 	cfg := first.cfg
 	cfg.Cursor = s.cursor
 	cfg.Hooks.Reload = s.reload
+	cfg.Hooks.ParseProp = config.ParseProp
 	for _, kv := range first.env {
 		if err := os.Setenv(kv[0], kv[1]); err != nil {
 			return fmt.Errorf("set %s from the config: %w", kv[0], err)

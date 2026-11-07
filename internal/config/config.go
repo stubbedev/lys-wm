@@ -235,6 +235,34 @@ func (b *rawBorder) UnmarshalYAML(n *yaml.Node) error {
 	return n.Decode((*plain)(b))
 }
 
+type rawRuleBorder struct {
+	Active   *At[rawBorder] `yaml:"active"`
+	Inactive *At[rawBorder] `yaml:"inactive"`
+	Width    *At[int]       `yaml:"width"`
+}
+
+type rawRuleAnim struct {
+	Off bool        `yaml:"-"`
+	In  *At[string] `yaml:"in"`
+	Out *At[string] `yaml:"out"`
+}
+
+func (a *rawRuleAnim) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var on bool
+		if err := n.Decode(&on); err != nil {
+			return err
+		}
+		if on {
+			return fmt.Errorf("line %d: animation takes false or {in, out}, not true", n.Line)
+		}
+		a.Off = true
+		return nil
+	}
+	type plain rawRuleAnim
+	return n.Decode((*plain)(a))
+}
+
 type rawAnimations struct {
 	Enabled       *bool                   `yaml:"enabled"`
 	ReducedMotion *bool                   `yaml:"reduced_motion"`
@@ -403,7 +431,11 @@ type rawMatch struct {
 	InitialAppID *At[string] `yaml:"initial_app_id"`
 	InitialTitle *At[string] `yaml:"initial_title"`
 	XWayland     *bool       `yaml:"xwayland"`
-	Floating     *bool       `yaml:"floating"`
+	Floating     *bool       `yaml:"is_floating"`
+	Focused      *bool       `yaml:"is_focused"`
+	Fullscreen   *bool       `yaml:"is_fullscreen"`
+	Urgent       *bool       `yaml:"is_urgent"`
+	Captured     *bool       `yaml:"is_captured"`
 }
 
 func (m rawMatch) empty() bool {
@@ -411,28 +443,39 @@ func (m rawMatch) empty() bool {
 }
 
 type rawRule struct {
-	rawMatch   `yaml:",inline"`
-	Exclude    *At[rawMatch] `yaml:"exclude"`
-	Workspace  *At[string]   `yaml:"workspace"`
-	Output     *At[string]   `yaml:"output"`
-	Focus      *bool         `yaml:"focus"`
-	Fullscreen *bool         `yaml:"fullscreen"`
-	Maximized  *bool         `yaml:"maximized"`
-	Position   *At[string]   `yaml:"position"`
-	Group      *At[string]   `yaml:"group"`
-	Suppress   []At[string]  `yaml:"suppress"`
-	Pin        *bool         `yaml:"pin"`
-	Float      bool          `yaml:"float"`
-	Tile       bool          `yaml:"tile"`
-	Size       *At[string]   `yaml:"size"`
-	Tearing    *bool         `yaml:"tearing"`
-	Opacity    *At[float64]  `yaml:"opacity"`
-	DimAround  bool          `yaml:"dim_around"`
-	Blur       *bool         `yaml:"blur"`
-	BlurLook   rawLook       `yaml:"blur_look"`
-	Mica       *bool         `yaml:"mica"`
-	OnActivate *At[string]   `yaml:"on_activate"`
-	Content    *At[string]   `yaml:"content"`
+	rawMatch     `yaml:",inline"`
+	Exclude      *At[rawMatch]    `yaml:"exclude"`
+	Workspace    *At[string]      `yaml:"workspace"`
+	Output       *At[string]      `yaml:"output"`
+	Focus        *bool            `yaml:"focus"`
+	Fullscreen   *bool            `yaml:"fullscreen"`
+	Maximized    *bool            `yaml:"maximized"`
+	Position     *At[string]      `yaml:"position"`
+	Group        *At[string]      `yaml:"group"`
+	Suppress     []At[string]     `yaml:"suppress"`
+	Pin          *bool            `yaml:"pin"`
+	Border       *rawRuleBorder   `yaml:"border"`
+	Rounding     *At[int]         `yaml:"rounding"`
+	Shadow       *bool            `yaml:"shadow"`
+	DimInactive  *bool            `yaml:"dim_inactive"`
+	Animation    *At[rawRuleAnim] `yaml:"animation"`
+	IdleInhibit  *At[string]      `yaml:"idle_inhibit"`
+	VRR          *bool            `yaml:"vrr"`
+	ScrollFactor *At[float64]     `yaml:"scroll_factor"`
+	MinSize      *At[string]      `yaml:"min_size"`
+	MaxSize      *At[string]      `yaml:"max_size"`
+	KeepAspect   *bool            `yaml:"keep_aspect"`
+	Float        bool             `yaml:"float"`
+	Tile         bool             `yaml:"tile"`
+	Size         *At[string]      `yaml:"size"`
+	Tearing      *bool            `yaml:"tearing"`
+	Opacity      *At[float64]     `yaml:"opacity"`
+	DimAround    bool             `yaml:"dim_around"`
+	Blur         *bool            `yaml:"blur"`
+	BlurLook     rawLook          `yaml:"blur_look"`
+	Mica         *bool            `yaml:"mica"`
+	OnActivate   *At[string]      `yaml:"on_activate"`
+	Content      *At[string]      `yaml:"content"`
 }
 
 type Error struct {
@@ -1325,6 +1368,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 		rule.Match.Exclude = &exclude
 	}
 	rule.Decision = p.placement(r, key, rule.Decision)
+	rule.Props = p.props(r, key)
 	switch {
 	case r.Float && r.Tile:
 		p.fail(at.Line, key, "cannot both float and tile")
@@ -1357,7 +1401,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 		rule.Opacity = &o
 	}
 	if r.empty() {
-		p.fail(at.Line, key, "matches every window; give app_id, title, tag, initial_app_id, initial_title, xwayland or floating")
+		p.fail(at.Line, key, "matches every window; give app_id, title, tag, initial_app_id, initial_title, xwayland or an is_ state")
 	}
 	return rule
 }
@@ -1611,7 +1655,7 @@ func (p *parser) match(m rawMatch, key string) wm.Match {
 	return wm.Match{
 		AppID: p.regexp(m.AppID, key+".app_id"), Title: p.regexp(m.Title, key+".title"), Tag: p.regexp(m.Tag, key+".tag"),
 		InitialAppID: p.regexp(m.InitialAppID, key+".initial_app_id"), InitialTitle: p.regexp(m.InitialTitle, key+".initial_title"),
-		XWayland: m.XWayland, Floating: m.Floating,
+		XWayland: m.XWayland, Floating: m.Floating, Focused: m.Focused, Fullscreen: m.Fullscreen, Urgent: m.Urgent, Captured: m.Captured,
 	}
 }
 
@@ -1675,4 +1719,80 @@ func (p *parser) placement(r rawRule, key string, d wm.Decision) wm.Decision {
 		}
 	}
 	return d
+}
+
+var idleInhibits = map[string]wm.IdleInhibit{"focus": wm.IdleInhibitFocus, "fullscreen": wm.IdleInhibitFullscreen, "visible": wm.IdleInhibitVisible}
+
+func (p *parser) props(r rawRule, key string) wm.Props {
+	var props wm.Props
+	if b := r.Border; b != nil {
+		ruled := func(a *At[rawBorder], k string) *render.Border {
+			if a == nil {
+				return nil
+			}
+			border := p.border(a, key+".border."+k, render.Border{})
+			return &border
+		}
+		props.ActiveBorder, props.InactiveBorder = ruled(b.Active, "active"), ruled(b.Inactive, "inactive")
+		if b.Width != nil {
+			width := p.nonNegative(b.Width, key+".border.width", 0)
+			props.BorderWidth = &width
+		}
+	}
+	if r.Rounding != nil {
+		rounding := p.nonNegative(r.Rounding, key+".rounding", 0)
+		props.Rounding = &rounding
+	}
+	props.Shadow, props.DimInactive, props.VRR, props.KeepAspect = r.Shadow, r.DimInactive, r.VRR, r.KeepAspect
+	if a := r.Animation; a != nil {
+		style := func(s *At[string], k string) anim.Style {
+			if s == nil {
+				return anim.Style{}
+			}
+			st, err := anim.ParseStyle(s.V)
+			if err != nil {
+				p.fail(s.Line, key+".animation."+k, "%v", err)
+			}
+			return st
+		}
+		props.Animation = &wm.WindowAnimation{Off: a.V.Off, In: style(a.V.In, "in"), Out: style(a.V.Out, "out")}
+	}
+	if v := choice(p, r.IdleInhibit, key+".idle_inhibit", idleInhibits); v != nil {
+		props.IdleInhibit = *v
+	}
+	props.ScrollFactor = p.between(r.ScrollFactor, key+".scroll_factor", 0, 100, true)
+	size := func(a *At[string], k string) image.Point {
+		if a == nil {
+			return image.Point{}
+		}
+		s, ok := parsePair(a.V)
+		if !ok || s.X <= 0 || s.Y <= 0 {
+			p.fail(a.Line, key+"."+k, "%q is not <width>x<height> in pixels", a.V)
+		}
+		return s
+	}
+	props.MinSize, props.MaxSize = size(r.MinSize, "min_size"), size(r.MaxSize, "max_size")
+	return props
+}
+
+func ParseProp(key, value string) (wm.Decision, error) {
+	var v yaml.Node
+	if err := yaml.Unmarshal([]byte(value), &v); err != nil || len(v.Content) != 1 {
+		return wm.Decision{}, fmt.Errorf("config: setprop %s: %q is not a YAML value", key, value)
+	}
+	scalar := func(s string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Value: s, Tag: "!!str"} }
+	rule := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalar("title"), scalar(""), scalar(key), v.Content[0]}}
+	doc := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalar("rules"), {Kind: yaml.SequenceNode, Content: []*yaml.Node{rule}}}}
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		return wm.Decision{}, fmt.Errorf("config: setprop %s: %w", key, err)
+	}
+	cfg, err := Parse("setprop", data)
+	if err != nil {
+		return wm.Decision{}, err
+	}
+	if len(cfg.Warnings) > 0 {
+		return wm.Decision{}, errors.Join(cfg.Warnings...)
+	}
+	return cfg.Rules[0].Decision, nil
 }

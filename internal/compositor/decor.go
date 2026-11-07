@@ -328,10 +328,10 @@ func (c *Compositor) dimAroundColor() render.Color {
 }
 
 func (c *Compositor) outerRadius(o *output.Output, w *window) float32 {
-	if w.layer == wm.LayerFullscreen {
+	if w.layer == wm.LayerFullscreen || c.rounding(w) <= 0 {
 		return 0
 	}
-	return c.decorRadius(o)
+	return deviceLength(o, c.rounding(w)+c.borderWidth(w))
 }
 
 func (c *Compositor) tabsJoin() bool {
@@ -360,7 +360,7 @@ func (c *Compositor) outline(o *output.Output, w *window) image.Rectangle {
 
 func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
 	sh := c.decor.Shadow
-	if !sh.Enabled || w.layer == wm.LayerFullscreen {
+	if !c.shadowed(w) || w.layer == wm.LayerFullscreen {
 		return
 	}
 	tile := c.outline(o, w)
@@ -389,7 +389,7 @@ func (c *Compositor) drawShadow(pass *frame, o *output.Output, w *window) {
 }
 
 func (c *Compositor) rounded(w *window) bool {
-	return c.decor.Rounding > 0 && w.layer != wm.LayerFullscreen
+	return c.rounding(w) > 0 && w.layer != wm.LayerFullscreen
 }
 
 func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
@@ -399,7 +399,7 @@ func (c *Compositor) windowMask(o *output.Output, w *window) render.Mask {
 		}
 		return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect)}}
 	}
-	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.decor.Rounding)}}
+	return render.Mask{Keep: render.RoundRect{Rect: deviceRect(o, w.rect), Radius: deviceLength(o, c.rounding(w))}}
 }
 
 func (c *Compositor) drawnMask(o *output.Output, w *window) render.Mask {
@@ -413,7 +413,7 @@ func (c *Compositor) drawnMask(o *output.Output, w *window) render.Mask {
 func (c *Compositor) drawOutlined(pass *frame, o *output.Output, w *window) {
 	outer := c.outline(o, w)
 	inner := deviceRect(o, w.rect)
-	inner.Min.Y = min(inner.Min.Y, outer.Min.Y+o.Scale().ToDevice(c.decor.BorderWidth))
+	inner.Min.Y = min(inner.Min.Y, outer.Min.Y+o.Scale().ToDevice(c.borderWidth(w)))
 	c.drawBorderIn(pass, o, w, outer, inner)
 }
 
@@ -438,12 +438,13 @@ func (c *Compositor) drawBorder(pass *frame, o *output.Output, w *window) {
 }
 
 func (c *Compositor) drawBorderIn(pass *frame, o *output.Output, w *window, outer, inner image.Rectangle) {
-	if c.decor.BorderWidth <= 0 || w.layer == wm.LayerFullscreen {
+	if c.borderWidth(w) <= 0 || w.layer == wm.LayerFullscreen {
 		return
 	}
+	c.refreshBorder(w, c.frameTime, false)
 	ring := render.Mask{Keep: render.RoundRect{Rect: outer}, Cut: render.RoundRect{Rect: inner}}
 	if c.rounded(w) {
-		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.decor.Rounding)
+		ring.Keep.Radius, ring.Cut.Radius = c.outerRadius(o, w), deviceLength(o, c.rounding(w))
 	}
 	c.paintBorder(pass, w.border, outer, inner, ring, 1, c.borderTurn(w))
 }

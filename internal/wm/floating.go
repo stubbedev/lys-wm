@@ -319,3 +319,39 @@ func (s State) DropTarget(id WindowID, at image.Point, auto Autotile, sp Spacing
 	}
 	return image.Rectangle{}, fmt.Errorf("drop window %d: %w", id, ErrUnknownWindow)
 }
+
+func KeptAspect(from image.Rectangle, d image.Point, moving Edges) (image.Point, Edges) {
+	if from.Dx() <= 0 || from.Dy() <= 0 {
+		return d, moving
+	}
+	signed := func(lo, hi Edges, delta int) int {
+		switch {
+		case moving.Has(lo):
+			return -delta
+		case moving.Has(hi):
+			return delta
+		}
+		return 0
+	}
+	horizontal, vertical := moving.Has(EdgeLeft) || moving.Has(EdgeRight), moving.Has(EdgeTop) || moving.Has(EdgeBottom)
+	grow := image.Pt(signed(EdgeLeft, EdgeRight, d.X), signed(EdgeTop, EdgeBottom, d.Y))
+	if !vertical || horizontal && grow.X*from.Dy() >= grow.Y*from.Dx() {
+		grow.Y = grow.X * from.Dy() / from.Dx()
+	} else {
+		grow.X = grow.Y * from.Dx() / from.Dy()
+	}
+	if !horizontal {
+		moving |= EdgeRight
+	}
+	if !vertical {
+		moving |= EdgeBottom
+	}
+	out := grow
+	if moving.Has(EdgeLeft) {
+		out.X = -grow.X
+	}
+	if moving.Has(EdgeTop) {
+		out.Y = -grow.Y
+	}
+	return out, moving
+}

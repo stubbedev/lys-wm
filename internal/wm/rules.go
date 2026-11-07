@@ -1,10 +1,15 @@
 package wm
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/stubbedev/lys-wm/internal/anim"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 type RuleMode uint8
@@ -104,14 +109,26 @@ const (
 type Subject struct {
 	AppID, Title, Tag          string
 	InitialAppID, InitialTitle string
-	XWayland, Floating         bool
+	XWayland                   bool
+	State                      WindowState
+}
+
+type WindowState struct {
+	Floating, Focused, Fullscreen, Urgent, Captured bool
 }
 
 type Match struct {
 	AppID, Title, Tag          *regexp.Regexp
 	InitialAppID, InitialTitle *regexp.Regexp
-	XWayland, Floating         *bool
+	XWayland                   *bool
+	Floating, Focused          *bool
+	Fullscreen, Urgent         *bool
+	Captured                   *bool
 	Exclude                    *Match
+}
+
+func (m Match) HasState() bool {
+	return m.Floating != nil || m.Focused != nil || m.Fullscreen != nil || m.Urgent != nil || m.Captured != nil || m.Exclude != nil && m.Exclude.HasState()
 }
 
 func matchText(re *regexp.Regexp, s string) bool {
@@ -125,7 +142,8 @@ func matchFlag(want *bool, is bool) bool {
 func (m Match) Matches(s Subject) bool {
 	if !matchText(m.AppID, s.AppID) || !matchText(m.Title, s.Title) || !matchText(m.Tag, s.Tag) ||
 		!matchText(m.InitialAppID, s.InitialAppID) || !matchText(m.InitialTitle, s.InitialTitle) ||
-		!matchFlag(m.XWayland, s.XWayland) || !matchFlag(m.Floating, s.Floating) {
+		!matchFlag(m.XWayland, s.XWayland) || !matchFlag(m.Floating, s.State.Floating) || !matchFlag(m.Focused, s.State.Focused) ||
+		!matchFlag(m.Fullscreen, s.State.Fullscreen) || !matchFlag(m.Urgent, s.State.Urgent) || !matchFlag(m.Captured, s.State.Captured) {
 		return false
 	}
 	return m.Exclude == nil || !m.Exclude.Matches(s)
@@ -156,19 +174,71 @@ type Decision struct {
 	Group      *Layout
 	Suppress   Suppress
 	Pin        *bool
+	Props
+}
+
+type IdleInhibit uint8
+
+const (
+	IdleInhibitUnset IdleInhibit = iota
+	IdleInhibitFocus
+	IdleInhibitFullscreen
+	IdleInhibitVisible
+)
+
+type WindowAnimation struct {
+	Off     bool
+	In, Out anim.Style
+}
+
+type Props struct {
+	ActiveBorder, InactiveBorder *render.Border
+	BorderWidth                  *int
+	Rounding                     *int
+	Shadow                       *bool
+	DimInactive                  *bool
+	Animation                    *WindowAnimation
+	IdleInhibit                  IdleInhibit
+	VRR                          *bool
+	ScrollFactor                 *float64
+	MinSize, MaxSize             image.Point
+	KeepAspect                   *bool
+}
+
+func (p Props) merged(r Props) Props {
+	p.ActiveBorder = pick(p.ActiveBorder, r.ActiveBorder)
+	p.InactiveBorder = pick(p.InactiveBorder, r.InactiveBorder)
+	p.BorderWidth = pick(p.BorderWidth, r.BorderWidth)
+	p.Rounding = pick(p.Rounding, r.Rounding)
+	p.Shadow = pick(p.Shadow, r.Shadow)
+	p.DimInactive = pick(p.DimInactive, r.DimInactive)
+	p.Animation = pick(p.Animation, r.Animation)
+	if r.IdleInhibit != IdleInhibitUnset {
+		p.IdleInhibit = r.IdleInhibit
+	}
+	p.VRR = pick(p.VRR, r.VRR)
+	p.ScrollFactor = pick(p.ScrollFactor, r.ScrollFactor)
+	if r.MinSize != (image.Point{}) {
+		p.MinSize = r.MinSize
+	}
+	if r.MaxSize != (image.Point{}) {
+		p.MaxSize = r.MaxSize
+	}
+	p.KeepAspect = pick(p.KeepAspect, r.KeepAspect)
+	return p
 }
 
 func Decide(rules []Rule, s Subject) Decision {
 	var d Decision
 	for _, r := range rules {
 		if r.Match.Matches(s) {
-			d = d.then(r.Decision)
+			d = d.Then(r.Decision)
 		}
 	}
 	return d
 }
 
-func (d Decision) then(r Decision) Decision {
+func (d Decision) Then(r Decision) Decision {
 	if r.Mode != RuleUnset {
 		d.Mode = r.Mode
 	}
@@ -196,6 +266,7 @@ func (d Decision) then(r Decision) Decision {
 		d.Position = r.Position
 	}
 	d.Suppress |= r.Suppress
+	d.Props = d.merged(r.Props)
 	return d
 }
 
@@ -274,4 +345,82 @@ func pick[T any](earlier, later *T) *T {
 		return later
 	}
 	return earlier
+}
+
+type Decider struct {
+	gen         uint64
+	static      Subject
+	matched     []bool
+	state       WindowState
+	decided     bool
+	d           Decision
+	Evaluations int
+}
+
+func (k *Decider) Decide(rules []Rule, gen uint64, s Subject, override *Decision) (*Decision, bool) {
+	static := s
+	static.State = WindowState{}
+	restatic := gen != k.gen || static != k.static || len(k.matched) != len(rules)
+	if restatic {
+		k.gen, k.static = gen, static
+		k.matched = k.matched[:0]
+		for _, r := range rules {
+			k.matched = append(k.matched, !r.Match.HasState() && r.Match.Matches(static))
+		}
+	}
+	if !restatic && k.decided && s.State == k.state {
+		return &k.d, false
+	}
+	k.state, k.decided = s.State, true
+	var d Decision
+	for i, r := range rules {
+		matched := k.matched[i]
+		if r.Match.HasState() {
+			k.Evaluations++
+			matched = r.Match.Matches(s)
+		}
+		if matched {
+			d = d.Then(r.Decision)
+		}
+	}
+	if override != nil {
+		d = d.Then(*override)
+	}
+	changed := d != k.d
+	k.d = d
+	return &k.d, changed
+}
+
+func (k *Decider) Forget() {
+	k.decided = false
+}
+
+type SetPropAction struct {
+	ID         WindowID
+	Key, Value string
+}
+
+func (SetPropAction) isEffect() {}
+
+func (a SetPropAction) String() string {
+	return "setprop " + strconv.FormatUint(uint64(a.ID), 10) + " " + a.Key + " " + a.Value
+}
+
+func (a SetPropAction) apply(s State, _ Settings) (State, []Effect, error) {
+	if _, ok := s.WorkspaceOf(a.ID); !ok {
+		return State{}, nil, fmt.Errorf("set a property of window %d: %w", a.ID, ErrUnknownWindow)
+	}
+	return emit(s, a)
+}
+
+func parseSetProp(spec ActionSpec, args []string, rest string) (Action, error) {
+	if len(args) < 3 {
+		return nil, badArgs(spec, "takes a window ID, a rule key and a value")
+	}
+	id, err := strconv.ParseUint(args[0], 10, 64)
+	if err != nil || id == 0 {
+		return nil, badArgs(spec, "window ID %q is not a positive number", args[0])
+	}
+	value := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(rest, args[0])), args[1]))
+	return SetPropAction{ID: WindowID(id), Key: args[1], Value: value}, nil
 }

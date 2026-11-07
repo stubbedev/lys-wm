@@ -349,6 +349,11 @@ func (c *Compositor) inputAxis(e backend.PointerAxis) error {
 		}
 	}
 	a := seat.Axis{Orientation: sw.WlPointerAxisVerticalScroll, Source: sw.WlPointerAxisSource(e.Source), Value: e.Value, Value120: e.Value120}
+	if _, _, w := c.pointerTarget(); w != nil {
+		if k := c.decision(w).ScrollFactor; k != nil {
+			a.Value, a.Value120 = a.Value**k, int32(math.Round(float64(a.Value120)**k))
+		}
+	}
 	if e.Orientation == backend.Horizontal {
 		a.Orientation = sw.WlPointerAxisHorizontalScroll
 	}

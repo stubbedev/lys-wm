@@ -954,7 +954,7 @@ rules:
 ```
 
 `app_id`, `title` and `tag` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
-a rule needs at least one matcher. `initial_app_id` and `initial_title` match the values the window had when it first mapped, so a browser that retitles itself still matches; `xwayland: true` or `false` matches X11 windows or Wayland ones; `floating: true` or `false` matches by whether the window floats (when it opens: whether it asks to); `exclude:` takes the same matchers and drops the windows it matches. `tag` matches the stable tag a client gives its
+a rule needs at least one matcher. `initial_app_id` and `initial_title` match the values the window had when it first mapped, so a browser that retitles itself still matches; `xwayland: true` or `false` matches X11 windows or Wayland ones; `is_floating`, `is_focused`, `is_fullscreen`, `is_urgent` and `is_captured` (`true` or `false`) match the window's state, checked again whenever it changes: floating (when it opens, whether it asks to), holding the keyboard focus, fullscreen, asking for attention, and being captured by a screen share (an `ext-image-copy-capture` session of the window or its output); `exclude:` takes the same matchers and drops the windows it matches. `tag` matches the stable tag a client gives its
 window through `xdg_toplevel_tag_v1` (`main window`, `settings`), and the
 empty string for a window without one, X11 windows included. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
@@ -994,6 +994,28 @@ so it is never drawn where it does not belong:
 
 A window launched through `exec` opens on the workspace it was launched from;
 a rule's `workspace` or `output` wins over that.
+
+These keys change how a window looks and behaves for as long as the rule
+matches; a rule with `is_` matchers is checked again only when the window's
+state changes, never on a plain frame:
+
+| Key | Value |
+| --- | --- |
+| `border` | `active`, `inactive` (a colour or gradient, as in `borders`) and `width` in pixels, each optional |
+| `rounding` | Corner radius in pixels; 0 for square corners |
+| `shadow` | `false`: no shadow |
+| `dim_inactive` | `true` or `false` in place of `decoration.dim_inactive` |
+| `animation` | `false`: open and close with no animation; or `{in: <style>, out: <style>}` with `windows_in` and `windows_out` styles |
+| `idle_inhibit` | `visible`, `focus` or `fullscreen`: keep the session from going idle while the window is shown, focused and shown, or fullscreen and shown, for players that never ask |
+| `vrr` | `true`: turn adaptive sync on for the output while the window shows on it |
+| `scroll_factor` | Multiplies the window's scroll events, above 0 and below 100 |
+| `min_size`, `max_size` | `<w>x<h>` in pixels: lys-wm configures the window no smaller or larger |
+| `keep_aspect` | `true`: resizing the floating window keeps its aspect ratio |
+
+Example: `{is_captured: true, border: {active: red}}` shows which window a
+screen share sees. `lys-wmctl dispatch setprop <id> <key> <value>` gives one
+window any rule key until it closes, after every rule, with the value written
+as in this file: `setprop 7 border {width: 4}`.
 
 X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 `jetbrains-idea`). Without a rule, a window floats when it has a parent

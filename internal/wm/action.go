@@ -804,6 +804,11 @@ var Actions = []ActionSpec{
 		},
 	},
 	{
+		Name: "setprop", Args: "<id> <key> <value>",
+		Summary: "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file.",
+		parse:   parseSetProp,
+	},
+	{
 		Name: "showdesktop", Args: "[toggle|on|off] [all]",
 		Summary: "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told.",
 		parse:   parseShowDesktop,

@@ -168,7 +168,8 @@ func (m imageCaptures) CreateSession(obj *seic.ExtImageCopyCaptureManagerV1, res
 func (c *Compositor) openCaptureSession(s *captureSession) (*captureSession, error) {
 	server.Track(s.res, &c.captureSessions, s)
 	server.OnDestroy(s.res, s.scratch.drop)
-	return s, s.sync()
+	server.OnDestroy(s.res, c.captureSetChanged)
+	return s, errors.Join(s.sync(), c.captureSetChanged())
 }
 
 func (m imageCaptures) CreatePointerCursorSession(_ *seic.ExtImageCopyCaptureManagerV1, res *seic.ExtImageCopyCaptureCursorSessionV1, source *seis.ExtImageCaptureSourceV1, _ *sw.WlPointer) (seic.ExtImageCopyCaptureCursorSessionV1Handler, error) {

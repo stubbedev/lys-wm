@@ -51,11 +51,11 @@ func TestMatchersAndExclusions(t *testing.T) {
 		s    Subject
 		want bool
 	}{
-		{Subject{InitialTitle: "Open File", Floating: true}, true},
-		{Subject{InitialTitle: "Open File", Title: "Save", Floating: true}, true},
-		{Subject{Title: "Open File", Floating: true}, false},
+		{Subject{InitialTitle: "Open File", State: WindowState{Floating: true}}, true},
+		{Subject{InitialTitle: "Open File", Title: "Save", State: WindowState{Floating: true}}, true},
+		{Subject{Title: "Open File", State: WindowState{Floating: true}}, false},
 		{Subject{InitialTitle: "Open File"}, false},
-		{Subject{InitialTitle: "Open File", Floating: true, XWayland: true}, false},
+		{Subject{InitialTitle: "Open File", XWayland: true, State: WindowState{Floating: true}}, false},
 	} {
 		if got := m.Matches(tc.s); got != tc.want {
 			t.Errorf("%+v: %t, want %t", tc.s, got, tc.want)

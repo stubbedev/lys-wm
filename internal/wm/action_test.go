@@ -67,6 +67,7 @@ var everyAction = []Action{
 	MaximizeAction{},
 	PinAction{},
 	ShowDesktopAction{},
+	SetPropAction{ID: 7, Key: "border", Value: "{active: red, width: 3}"},
 	ShowDesktopAction{Switch: SwitchOff, All: true},
 	PinAction{Switch: SwitchOn},
 	MaximizeAction{Switch: SwitchOff},

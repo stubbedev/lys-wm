@@ -136,6 +136,9 @@ func (c *Compositor) dropFrame(o *output.Output, err error) error {
 }
 
 func (c *Compositor) updateInhibition() error {
+	if c.rulesInhibitIdle() {
+		return c.idle.SetInhibited(true)
+	}
 	for i := range c.idle.Inhibitors() {
 		for _, shown := range c.shown {
 			if slices.Contains(shown, i.Surface()) {
@@ -376,7 +379,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 		shown = c.drawClippedTree(pass, o, top, c.windowOrigin(w), shown, mask, c.shownOpacity(w))
 	}
 	c.stretchStale(pass, o, tree, w)
-	if c.decor.Dim.Inactive {
+	if c.dimsInactive(w) {
 		pass.fillMasked(deviceRect(o, w.rect), c.shownDim(w), mask)
 	}
 	if err := c.drawRims(pass, o, rims); err != nil {
@@ -390,7 +393,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	}
 	if wholeBorder {
 		outer := deviceRect(o, at)
-		c.drawBorderIn(pass, o, w, outer, outer.Inset(o.Scale().ToDevice(c.decor.BorderWidth)))
+		c.drawBorderIn(pass, o, w, outer, outer.Inset(o.Scale().ToDevice(c.borderWidth(w))))
 	}
 	if alpha < 1 {
 		pass.fade(from, float32(max(alpha, 0)))
