@@ -27,8 +27,8 @@
     shift
     ${pkgs.util-linux}/bin/setsid -f ${pkgs.bash}/bin/bash -c '"$@" > "/tmp/$0.log" 2>&1; echo $? > "/tmp/$0.status"' "$name" "$@" < /dev/null > /dev/null 2>&1
   '';
-  selectSources = pkgs.writeShellScript "select-sources" ''
-    exec ${pkgs.dbus}/bin/dbus-monitor --session "type='method_call',interface='org.freedesktop.impl.portal.ScreenCast',member='SelectSources'"
+  methodCalls = pkgs.writeShellScript "method-calls" ''
+    exec ${pkgs.dbus}/bin/dbus-monitor --session "type='method_call',interface='$1',member='$2'"
   '';
   portals = {
     wlr = {
@@ -64,7 +64,6 @@
             inherit wallpaper;
             fit-mode = "fill";
           };
-          share-picker.default-page = "windows";
         };
       in {
         imports = [lysShell];
@@ -98,6 +97,7 @@ in
     lysWMConfig = ''
       rules:
         - {title: ^presentation-shm:, tile: true}
+        - {app_id: ^firefox$, suppress: [maximize]}
     '';
     machineConfig = {
       imports = [chosen.machineConfig];
@@ -114,7 +114,7 @@ in
         chooser_ran = chosen.chooserRan;
         max_gap_ms = 2000;
         background = "${background}";
-        select_sources = "${selectSources}";
+        method_calls = "${methodCalls}";
         page_source = "${./screencast.html}";
         inherit launchers portal seconds;
       };

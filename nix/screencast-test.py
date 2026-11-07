@@ -12,18 +12,18 @@ WINDOW = f"Window: {ANIMATION}"
 KEYS = {MONITOR: "m", WINDOW: "w"}
 ABS_MAX = 0x7FFF
 CURSOR_BOX = 64
-PICKER_PANEL = "262638"
-PICKER_PROBE = (630, 630, 20, 10)
-PICKER_APPEARS_S = 60
+CHOOSER_APPEARS_S = 60
+ENCODER_ROUNDING = 1
+BEFORE_OVERLAY = "/tmp/before-overlay.ppm"
+NOT_DIMMED = 3
 PAGE_LOADS_S = 300
 DIALOG_READY_S = 60
 CAST_LINKED = "jq -e '([.[] | select(.type == \"PipeWire:Interface:Node\" and .info.props[\"media.class\"] == \"Stream/Input/Video\") | .id]) as $viewers | any(.[]; .type == \"PipeWire:Interface:Link\" and .info.state == \"active\" and (.info[\"input-node-id\"] as $node | $viewers | index($node)))'"
 PICKER_SERVICE = "dev.stubbe.lys.SharePicker1"
 SOURCE_MONITOR = 1
 SOURCE_WINDOW = 2
-PICKER_PAGES = [("Windows", SOURCE_WINDOW), ("Outputs", SOURCE_MONITOR), ("Region", SOURCE_MONITOR)]
-PICKER_OPENS_ON = "Windows"
 SELECT_SOURCES_TYPES = re.compile(r'string "types"\s+variant\s+uint32 (\d+)')
+SELECT_SOURCES_RESTORES = re.compile(r'string "restore_data"')
 SHARE_FIELDS = re.compile(r"^shared (\d+x\d+) frames (\d+) seconds ([\d.]+) fps ([\d.]+) gap (\d+) distinct (\d+) background ([\d.]+)")
 
 
@@ -67,18 +67,27 @@ def chooser_runs():
     return int(machine.succeed(chooser_runs_command()).strip())
 
 
-def requested_types():
-    log = machine.succeed("cat /tmp/select-sources.log")
-    types = []
-    for call in log.split("method call ")[1:]:
-        found = SELECT_SOURCES_TYPES.search(call)
-        types.append(int(found.group(1)) if found else SOURCE_MONITOR)
-    return types
+def select_sources_calls():
+    return machine.succeed("cat /tmp/select-sources.log").split("method call ")[1:]
+
+
+def requested_types(call):
+    found = SELECT_SOURCES_TYPES.search(call)
+    return int(found.group(1)) if found else SOURCE_MONITOR
+
+
+def method_calls_command(log):
+    return f"grep -c '^method call ' /tmp/{log}.log || true"
+
+
+def method_calls(log):
+    return int(machine.succeed(method_calls_command(log)).strip())
 
 
 def choose(label):
     if params["portal"] != "wlr":
-        return len(requested_types())
+        screen_to(BEFORE_OVERLAY)
+        return len(select_sources_calls()), method_calls("pick-window")
     machine.succeed(f"printf '%s\\n' {shlex.quote(label)} > /tmp/share-pick")
     return chooser_runs()
 
@@ -95,38 +104,76 @@ def move_pointer(x, y):
     ])
 
 
-def locate(color, x, y, width, height):
-    status, out = machine.execute(as_alice(f"WAYLAND_DISPLAY={display} grim -g \"{x},{y} {width}x{height}\" -t ppm - | {params['screencast']} locate {color}"))
-    if status != 0:
-        return None
-    cx, cy, count = map(int, out.split())
-    return x + cx, y + cy, count
+def screen_to(path):
+    machine.succeed(as_alice(f"WAYLAND_DISPLAY={display} grim -t ppm {path}"))
 
 
-def picker_shown():
-    found = locate(PICKER_PANEL, *PICKER_PROBE)
-    return found is not None and found[2] == PICKER_PROBE[2] * PICKER_PROBE[3]
+def overlay_shown():
+    status, out = machine.execute(as_alice(f"WAYLAND_DISPLAY={display} grim -t ppm - | {params['screencast']} dimmed {BEFORE_OVERLAY}"))
+    if status not in (0, NOT_DIMMED):
+        raise AssertionError(f"cannot tell whether the click-to-pick overlay shows: {out}")
+    print(out.strip())
+    return status == 0
 
 
-def keys(*names):
-    for name in names:
-        machine.send_key(name)
-        machine.sleep(0.3)
+def click_at(x, y):
+    move_pointer(x, y)
+    machine.sleep(0.3)
+    for down in (True, False):
+        pointer_events([{"type": "btn", "data": {"down": down, "button": "left"}}])
+        machine.sleep(0.1)
 
 
-def pick_in_picker(label, ran):
-    machine.wait_until_succeeds(f"[ $(grep -c '^method call ' /tmp/select-sources.log) -gt {ran} ]", timeout=PICKER_APPEARS_S)
-    types = requested_types()[-1]
-    pages = [name for name, source in PICKER_PAGES if types & source]
-    wanted = "Outputs" if label == MONITOR else "Windows"
-    assert wanted in pages, f"sharing {label} asked for source types {types:#x}, which the picker shows as {pages}"
-    opened = PICKER_OPENS_ON if PICKER_OPENS_ON in pages else pages[0]
-    keys(*["ctrl-pgdn"] * ((pages.index(wanted) - pages.index(opened)) % len(pages)))
+def window_titled(prefix):
+    [found] = [w for w in windows() if w["title"].startswith(prefix)]
+    return found
+
+
+def inside(rect, x, y):
+    return rect["x"] <= x < rect["x"] + rect["width"] and rect["y"] <= y < rect["y"] + rect["height"]
+
+
+def click_window(title_prefix):
+    target = window_titled(title_prefix)
+    r = target["rect"]
+    x, y = r["x"] + r["width"] // 2, r["y"] + r["height"] * 3 // 4
+    covering = [w for w in windows() if w["id"] != target["id"] and inside(w["rect"], x, y)]
+    assert not covering, f"{x},{y} in {title_prefix} is under {covering}, so a click there picks another window"
+    click_at(x, y)
+
+
+def park_pointer_off_windows():
+    top = min(w["rect"]["y"] for w in windows())
+    assert top > 0, f"no window leaves the top of {OUTPUT} free to park the pointer off every window: {windows()}"
+    move_pointer(OUTPUT_PIXELS[0] // 2, top // 2)
+
+
+def pick_in_overlay(label, ran):
+    selects, picks = ran
+    machine.wait_until_succeeds(f"[ $({method_calls_command('select-sources')}) -gt {selects} ]", timeout=CHOOSER_APPEARS_S)
+    call = select_sources_calls()[selects]
+    types = requested_types(call)
+    wanted = SOURCE_MONITOR if label == MONITOR else SOURCE_WINDOW
+    assert types & wanted, f"sharing {label} asked for source types {types:#x}"
+    if not types & SOURCE_WINDOW or SELECT_SOURCES_RESTORES.search(call):
+        return selects + 1, picks
+    park_pointer_off_windows()
+    try:
+        machine.wait_until_succeeds(f"[ $({method_calls_command('pick-window')}) -gt {picks} ]", timeout=CHOOSER_APPEARS_S)
+        deadline = time.monotonic() + CHOOSER_APPEARS_S
+        while not overlay_shown():
+            if time.monotonic() > deadline:
+                raise AssertionError(f"the portal asked for the click-to-pick overlay sharing {label}, but none dimmed the desktop within {CHOOSER_APPEARS_S} s; the request: {call}")
+            machine.sleep(1)
+    except Exception:
+        print(f"the request left unanswered: {call}")
+        machine.screenshot("no-overlay")
+        raise
     if label == WINDOW:
-        shown = sorted(windows(), key=lambda w: w["id"])
-        assert shown[0]["title"].startswith(f"{ANIMATION}:"), f"{ANIMATION} is not the oldest window, so not the last card: {[w['title'] for w in shown]}"
-        keys(*["down"] * len(shown), *["right"] * len(shown))
-    keys("ret")
+        click_window(f"{ANIMATION}:")
+    else:
+        machine.send_key("ret")
+    return selects + 1, picks + 1
 
 
 def cast_linked():
@@ -153,25 +200,18 @@ def confirm_in_dialog(window_id):
 def answer(label, ran, done, confirm):
     if params["portal"] == "wlr":
         if confirm:
-            machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=PICKER_APPEARS_S)
+            machine.wait_until_succeeds(f"[ $({chooser_runs_command()}) -gt {ran} ]", timeout=CHOOSER_APPEARS_S)
             confirm()
         return
-    answered = 0
-    deadline = time.monotonic() + PICKER_APPEARS_S
+    ran = pick_in_overlay(label, ran)
+    if confirm:
+        confirm()
+    deadline = time.monotonic() + params["seconds"] + CHOOSER_APPEARS_S
     while not done():
-        if time.monotonic() > deadline:
-            if answered == 0:
-                machine.screenshot("no-picker")
-                raise AssertionError(f"no share picker for {label} within {PICKER_APPEARS_S} s, after {len(requested_types()) - ran} SelectSources calls; windows: {[(w['title'], w['focused']) for w in windows()]}")
+        if len(select_sources_calls()) > ran[0]:
+            ran = pick_in_overlay(label, ran)
+        elif time.monotonic() > deadline:
             raise AssertionError(f"sharing {label} did not finish after the pick")
-        if picker_shown():
-            machine.sleep(2)
-            pick_in_picker(label, ran)
-            answered += 1
-            if answered == 1:
-                if confirm:
-                    confirm()
-                deadline = time.monotonic() + params["seconds"] + PICKER_APPEARS_S
         machine.sleep(1)
 
 
@@ -304,7 +344,7 @@ def share(app, label, confirms):
     finished = as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {shown['id']} and (.title | test(\"^(shared|failed)\")))'"
     try:
         answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
-        machine.wait_until_succeeds(finished, timeout=params["seconds"] + PICKER_APPEARS_S)
+        machine.wait_until_succeeds(finished, timeout=params["seconds"] + CHOOSER_APPEARS_S)
     except Exception:
         dump(app)
         title = next((w["title"] for w in windows() if w["id"] == shown["id"]), "closed")
@@ -325,16 +365,20 @@ def share(app, label, confirms):
     if label == MONITOR:
         assert size == OUTPUT_SIZE, f"{app} shared {OUTPUT} at {size}"
     else:
-        assert size != OUTPUT_SIZE, f"{app} shared {label} at the output's size"
+        target = window_titled(f"{ANIMATION}:")
+        shared_size = [int(v) for v in size.split("x")]
+        target_size = [target["rect"]["width"], target["rect"]["height"]]
+        assert all(abs(s - t) <= ENCODER_ROUNDING for s, t in zip(shared_size, target_size)), f"{app} shared a {size} window, not the {target_size} {ANIMATION} window clicked: {[(w['id'], w['title'], w['rect']) for w in windows()]}"
         assert float(background) <= 0.01, f"{app} shared {label} with {background} of it the desktop"
     machine.succeed(f"kill {shown['pid']}")
     machine.wait_until_fails(f"kill -0 {shown['pid']}", timeout=60)
 
 
 if params["portal"] != "wlr":
-    machine.succeed(as_alice(f"{params['background']} select-sources {params['select_sources']}"))
-    machine.wait_until_succeeds("pgrep -u alice -x dbus-monitor", timeout=30)
-    machine.wait_until_succeeds(as_alice(f"busctl --user list --no-legend | grep -q {PICKER_SERVICE}"), timeout=PICKER_APPEARS_S)
+    machine.succeed(as_alice(f"{params['background']} select-sources {params['method_calls']} org.freedesktop.impl.portal.ScreenCast SelectSources"))
+    machine.succeed(as_alice(f"{params['background']} pick-window {params['method_calls']} {PICKER_SERVICE} PickWindow"))
+    machine.wait_until_succeeds("[ $(pgrep -c -u alice -x dbus-monitor) -eq 2 ]", timeout=30)
+    machine.wait_until_succeeds(as_alice(f"busctl --user list --no-legend | grep -q {PICKER_SERVICE}"), timeout=CHOOSER_APPEARS_S)
 launch("animation")
 machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'length == 1'", timeout=30)
 machine.sleep(3)

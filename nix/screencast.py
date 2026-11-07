@@ -15,6 +15,12 @@ FIRST_FRAME_MS = 10000
 MAX_GAP_MS = 2000
 SETTLED_SHARE = 0.002
 COLOR_TOLERANCE = 3
+MIN_DESKTOP_SEEN = 200
+DIMMED = 0.8
+DIMMED_SHARE = 0.8
+NOT_DIMMED = 3
+MAP_COLUMNS = 64
+MAP_ROWS = 20
 
 
 def start_cast(source, cursor_mode):
@@ -188,17 +194,25 @@ def read_ppm(data):
     return width, height, pixels
 
 
-def locate(args):
-    width, height, pixels = read_ppm(sys.stdin.buffer.read())
-    color = bytes.fromhex(args.color)
-    found = [
-        (at // 3 % width, at // 3 // width)
-        for at in range(0, len(pixels), 3)
-        if all(abs(pixels[at + i] - color[i]) <= COLOR_TOLERANCE for i in range(3))
-    ]
-    if not found:
-        sys.exit(f"screencast: no #{args.color} in {width}x{height}")
-    print(sum(x for x, _ in found) // len(found), sum(y for _, y in found) // len(found), len(found))
+def dimmed(args):
+    with open(args.before, "rb") as f:
+        width, height, before = read_ppm(f.read())
+    now_width, now_height, now = read_ppm(sys.stdin.buffer.read())
+    if (now_width, now_height) != (width, height):
+        sys.exit(f"screencast: the screen was {width}x{height} and is {now_width}x{now_height}")
+    desktop = BACKGROUND[::-1]
+    shown = [at for at in range(0, len(before), 3) if all(abs(before[at + i] - desktop[i]) <= COLOR_TOLERANCE for i in range(3))]
+    if len(shown) < MIN_DESKTOP_SEEN:
+        sys.exit(f"screencast: only {len(shown)} pixels of the desktop showed, too few to see an overlay dim it")
+    dark = {at for at in shown if all(now[at + i] <= before[at + i] * DIMMED for i in range(3))}
+    print(f"screencast: {len(dark)} of {len(shown)} desktop pixels dimmed", flush=True)
+    if len(dark) < len(shown) * DIMMED_SHARE:
+        desk = set(shown)
+        step_x, step_y = width // MAP_COLUMNS, height // MAP_ROWS
+        for y in range(step_y // 2, height, step_y):
+            at_row = [(y * width + x) * 3 for x in range(step_x // 2, width, step_x)]
+            print("".join("D" if at in dark else "o" if at in desk else "." for at in at_row), flush=True)
+        sys.exit(NOT_DIMMED)
 
 
 def main():
@@ -224,9 +238,9 @@ def main():
     for name in ("x", "y", "width", "height"):
         unp.add_argument(name, type=int)
     unp.set_defaults(run=unpainted)
-    loc = commands.add_parser("locate")
-    loc.add_argument("color")
-    loc.set_defaults(run=locate)
+    dim = commands.add_parser("dimmed")
+    dim.add_argument("before")
+    dim.set_defaults(run=dimmed)
     args = parser.parse_args()
     args.run(args)
 
