@@ -54,6 +54,7 @@ var refused = map[string]string{
 }
 
 var retired = map[string][]string{
+	"hyprland_toplevel_export_frame_v1":        {"failed"},
 	"xx_hotkey_v1":                             {"revoked"},
 	"hyprland_focus_grab_v1":                   {"cleared"},
 	"ext_data_control_offer_v1":                {},
@@ -106,6 +107,7 @@ var retireAlways = map[string][]string{
 }
 
 var dropped = map[string][]string{
+	"hyprland_toplevel_export_manager_v1":      {"capture_toplevel", "capture_toplevel_with_wlr_toplevel_handle"},
 	"ext_data_control_device_v1":               {"set_selection", "set_primary_selection"},
 	"ext_data_control_manager_v1":              {"create_data_source"},
 	"ext_foreign_toplevel_list_v1":             {"stop"},

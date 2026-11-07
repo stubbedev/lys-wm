@@ -91,6 +91,20 @@ hyprland_global_shortcut_v1.destroy = destructor
 hyprland_global_shortcuts_manager_v1 = journal retire=
 hyprland_global_shortcuts_manager_v1.register_shortcut = create
 hyprland_global_shortcuts_manager_v1.destroy = destructor
+hyprland_surface_manager_v1 = journal retire=
+hyprland_surface_manager_v1.get_hyprland_surface = create
+hyprland_surface_manager_v1.destroy = destructor
+hyprland_surface_v1 = journal retire=
+hyprland_surface_v1.set_opacity = latest
+hyprland_surface_v1.destroy = destructor
+hyprland_surface_v1.set_visible_region = latest
+hyprland_toplevel_export_frame_v1 = inert retire=failed
+hyprland_toplevel_export_frame_v1.copy = latest
+hyprland_toplevel_export_frame_v1.destroy = destructor
+hyprland_toplevel_export_manager_v1 = journal retire=
+hyprland_toplevel_export_manager_v1.capture_toplevel = dropped
+hyprland_toplevel_export_manager_v1.destroy = destructor
+hyprland_toplevel_export_manager_v1.capture_toplevel_with_wlr_toplevel_handle = dropped
 lys_escape_arm_v1 = journal retire=
 lys_escape_arm_v1.destroy = destructor
 lys_escape_manager_v1 = journal retire=
