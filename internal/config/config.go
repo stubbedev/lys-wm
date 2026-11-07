@@ -144,6 +144,12 @@ type rawConfig struct {
 	Fullscreen      rawFullscreen                `yaml:"fullscreen"`
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
 	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
+	LayerRules      []At[rawLayerRule]           `yaml:"layer_rules"`
+}
+
+type rawLayerRule struct {
+	Namespace    *At[string] `yaml:"namespace"`
+	BlockOutFrom *At[string] `yaml:"block_out_from"`
 }
 
 type rawShowDesktop struct {
@@ -465,6 +471,7 @@ type rawRule struct {
 	MinSize      *At[string]      `yaml:"min_size"`
 	MaxSize      *At[string]      `yaml:"max_size"`
 	KeepAspect   *bool            `yaml:"keep_aspect"`
+	BlockOutFrom *At[string]      `yaml:"block_out_from"`
 	Float        bool             `yaml:"float"`
 	Tile         bool             `yaml:"tile"`
 	Size         *At[string]      `yaml:"size"`
@@ -532,6 +539,7 @@ type Config struct {
 	LidSuspend      bool
 	Animations      anim.Table
 	BlurLayers      []string
+	LayerRules      []wm.LayerRule
 	Gestures        compositor.Gestures
 	Overview        compositor.OverviewStyle
 	Slower          map[render.Speed]compositor.Effects
@@ -1526,6 +1534,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		cfg.WM.NewOverCover = *v
 	}
 	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
+	cfg.LayerRules = p.layerRules(raw.LayerRules)
 	if v := raw.ShowDesktop.Peek; v != nil {
 		if v.V < 1 || v.V > 50 {
 			p.fail(v.Line, "showdesktop.peek", "%d is not a percentage from 1 to 50", v.V)
@@ -1635,6 +1644,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
 	cfg.PowerSaverRate = c.PowerSaverRate
 	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
+	cfg.LayerRules = c.LayerRules
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err
@@ -1772,6 +1782,9 @@ func (p *parser) props(r rawRule, key string) wm.Props {
 		return s
 	}
 	props.MinSize, props.MaxSize = size(r.MinSize, "min_size"), size(r.MaxSize, "max_size")
+	if v := choice(p, r.BlockOutFrom, key+".block_out_from", blockFroms); v != nil {
+		props.BlockOutFrom = *v
+	}
 	return props
 }
 
@@ -1795,4 +1808,23 @@ func ParseProp(key, value string) (wm.Decision, error) {
 		return wm.Decision{}, errors.Join(cfg.Warnings...)
 	}
 	return cfg.Rules[0].Decision, nil
+}
+
+var blockFroms = map[string]wm.BlockFrom{"screencast": wm.BlockScreencast, "capture": wm.BlockCapture}
+
+func (p *parser) layerRules(raw []At[rawLayerRule]) []wm.LayerRule {
+	out := make([]wm.LayerRule, 0, len(raw))
+	for i, at := range raw {
+		key := fmt.Sprintf("layer_rules[%d]", i)
+		if at.V.Namespace == nil {
+			p.fail(at.Line, key+".namespace", "is missing; give a regular expression for the layer namespace")
+			continue
+		}
+		r := wm.LayerRule{Namespace: p.regexp(at.V.Namespace, key+".namespace")}
+		if v := choice(p, at.V.BlockOutFrom, key+".block_out_from", blockFroms); v != nil {
+			r.BlockOutFrom = *v
+		}
+		out = append(out, r)
+	}
+	return out
 }

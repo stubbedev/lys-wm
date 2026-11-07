@@ -203,6 +203,7 @@ type Props struct {
 	ScrollFactor                 *float64
 	MinSize, MaxSize             image.Point
 	KeepAspect                   *bool
+	BlockOutFrom                 BlockFrom
 }
 
 func (p Props) merged(r Props) Props {
@@ -225,6 +226,9 @@ func (p Props) merged(r Props) Props {
 		p.MaxSize = r.MaxSize
 	}
 	p.KeepAspect = pick(p.KeepAspect, r.KeepAspect)
+	if r.BlockOutFrom != BlockNone {
+		p.BlockOutFrom = r.BlockOutFrom
+	}
 	return p
 }
 
@@ -423,4 +427,42 @@ func parseSetProp(spec ActionSpec, args []string, rest string) (Action, error) {
 	}
 	value := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(rest, args[0])), args[1]))
 	return SetPropAction{ID: WindowID(id), Key: args[1], Value: value}, nil
+}
+
+type BlockFrom uint8
+
+const (
+	BlockNone BlockFrom = iota
+	BlockScreencast
+	BlockCapture
+)
+
+func (b BlockFrom) Blocks(screencast bool) bool {
+	return b == BlockCapture || b == BlockScreencast && screencast
+}
+
+type LayerProps struct {
+	BlockOutFrom BlockFrom
+}
+
+func (p LayerProps) then(r LayerProps) LayerProps {
+	if r.BlockOutFrom != BlockNone {
+		p.BlockOutFrom = r.BlockOutFrom
+	}
+	return p
+}
+
+type LayerRule struct {
+	Namespace *regexp.Regexp
+	LayerProps
+}
+
+func DecideLayer(rules []LayerRule, namespace string) LayerProps {
+	var p LayerProps
+	for _, r := range rules {
+		if r.Namespace.MatchString(namespace) {
+			p = p.then(r.LayerProps)
+		}
+	}
+	return p
 }

@@ -1437,6 +1437,21 @@
       },
       "additionalProperties": false
     },
+    "layer_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "block_out_from": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "lid_suspend": {
       "type": "boolean",
       "default": true
@@ -1566,6 +1581,9 @@
           "app_id": {
             "type": "string",
             "format": "regex"
+          },
+          "block_out_from": {
+            "type": "string"
           },
           "blur": {
             "type": "boolean"

@@ -88,8 +88,8 @@ func (src outputRegionSource) area(c *Compositor) (*output.Output, image.Rectang
 	return src.output, src.region, c.outputLive(src.output)
 }
 
-func (src outputRegionSource) paint(c *Compositor, o *output.Output, area image.Rectangle, cursor bool) (render.Color, func(render.Pass) error) {
-	return opaque, c.outputDraw(o, area, cursor)
+func (src outputRegionSource) paint(c *Compositor, o *output.Output, area image.Rectangle, cursor, screencast bool) (render.Color, func(render.Pass) error) {
+	return opaque, c.outputDraw(o, area, cursor, screencast)
 }
 
 type toplevelExports struct {
@@ -177,6 +177,7 @@ type copyFrame struct {
 	cursor  bool
 	dmabufs bool
 	damage  region.Set
+	oneshot bool
 	frameLife
 }
 
@@ -247,7 +248,7 @@ func (f *copyFrame) copy(wl *sw.WlBuffer, waitForDamage bool) error {
 	if err != nil {
 		return f.events.invalidBuffer(err)
 	}
-	clear, draw := f.source.paint(f.c, o, area, f.cursor)
+	clear, draw := f.source.paint(f.c, o, area, f.cursor, !f.oneshot)
 	k := &capture{output: o, size: f.size, clear: clear, draw: draw, target: target}
 	f.start(k)
 	window, isWindow := f.source.(windowSource)

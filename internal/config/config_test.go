@@ -1074,3 +1074,24 @@ func TestBehaviourRules(t *testing.T) {
 		t.Error("setprop took an unknown key")
 	}
 }
+
+func TestBlockOutFrom(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: ^keepassxc$, block_out_from: capture}\nlayer_rules:\n  - {namespace: ^lys-shell-notification-popup$, block_out_from: screencast}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := wm.Decide(c.Rules, wm.Subject{AppID: "keepassxc"}); d.BlockOutFrom != wm.BlockCapture {
+		t.Errorf("window rule: %v", d.BlockOutFrom)
+	}
+	if p := wm.DecideLayer(c.LayerRules, "lys-shell-notification-popup"); p.BlockOutFrom != wm.BlockScreencast {
+		t.Errorf("layer rule: %v", p.BlockOutFrom)
+	}
+	for text, want := range map[string]string{
+		"rules:\n  - {app_id: a, block_out_from: all}\n": "t.yaml:2: rules[0].block_out_from:",
+		"layer_rules:\n  - {block_out_from: capture}\n":  "t.yaml:2: layer_rules[0].namespace:",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", text, err, want)
+		}
+	}
+}

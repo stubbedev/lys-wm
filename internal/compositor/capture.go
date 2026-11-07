@@ -280,11 +280,11 @@ func (c *Compositor) runCapture(k *capture) error {
 	return errors.Join(err, k.target.fill(c, k, func(err error) error { return k.done(at, err) }))
 }
 
-func (c *Compositor) outputDraw(o *output.Output, region image.Rectangle, cursor bool) func(render.Pass) error {
+func (c *Compositor) outputDraw(o *output.Output, region image.Rectangle, cursor, screencast bool) func(render.Pass) error {
 	return func(p render.Pass) error {
 		last := c.sceneOf(o).prev
 		to := c.captureOut(o)
-		(&frame{ops: last.ops[:last.cursorFrom]}).replayFrom(p, region.Min, to)
+		(&frame{ops: c.blockedOut(last.ops[:last.cursorFrom], screencast)}).replayFrom(p, region.Min, to)
 		if !cursor {
 			return nil
 		}
@@ -303,14 +303,18 @@ func (c *Compositor) windowRegion(w *window) image.Rectangle {
 	return w.output.Scale().Rect(w.rect.Sub(w.output.Position()))
 }
 
-func (c *Compositor) windowDraw(w *window, cursor bool) func(render.Pass) error {
+func (c *Compositor) windowDraw(w *window, cursor, screencast bool) func(render.Pass) error {
 	return func(p render.Pass) error {
 		if w.output == nil {
 			return nil
 		}
 		var f frame
-		c.drawTree(&f, w.output, w.top.Surface(), c.windowOrigin(w), nil)
-		c.drawPopups(&f, w.output, c.popups(w), nil, popupBlur{})
+		if c.decision(w).BlockOutFrom.Blocks(screencast) {
+			f.FillRect(deviceRect(w.output, w.rect), opaque)
+		} else {
+			c.drawTree(&f, w.output, w.top.Surface(), c.windowOrigin(w), nil)
+			c.drawPopups(&f, w.output, c.popups(w), nil, popupBlur{})
+		}
 		if cursor {
 			if _, err := c.drawCursor(&f, w.output, nil); err != nil {
 				return err

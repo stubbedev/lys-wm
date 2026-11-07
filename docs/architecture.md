@@ -1022,6 +1022,19 @@ use, so two never collide. A device adds the touch capability to the seat while
 it exists; destroying it, or its client going, cancels the points it left down.
 Sandboxed clients cannot bind it, and an upgrade in place drops its points.
 
+## Blocking surfaces out of captures
+
+A window or layer rule's `block_out_from` keeps a surface out of screen
+sharing. Each capture is classified at the protocol boundary and fails closed:
+it is a screencast unless its client declared it a one-shot screenshot through
+`lys_capture_hint_v1`, a private protocol pinned from lys-lib that sandboxed
+clients cannot bind, before its first frame. Painting a capture replays the
+output's last frame with each blocked surface's ops replaced by an opaque fill
+of the same shape, one for one, so it costs no extra pass and the screen is
+untouched; a capture of a blocked window itself is a black rectangle. While
+the blocked rects stay where they were, their damage is left out of a
+screencast's, so content changes behind the mask wake no cast frame.
+
 ## Focus grabs
 
 `hyprland_focus_grab_v1` (#313) works as an xdg popup grab does, over the

@@ -32,7 +32,7 @@ const (
 
 type captureSource interface {
 	area(c *Compositor) (*output.Output, image.Rectangle, bool)
-	paint(c *Compositor, o *output.Output, area image.Rectangle, cursor bool) (render.Color, func(render.Pass) error)
+	paint(c *Compositor, o *output.Output, area image.Rectangle, cursor, screencast bool) (render.Color, func(render.Pass) error)
 }
 
 type outputSource struct{ output *output.Output }
@@ -270,6 +270,8 @@ type captureSession struct {
 	cursorAt image.Rectangle
 	captured bool
 	stopped  bool
+	oneshot  bool
+	blocked  []image.Rectangle
 }
 
 func (src outputSource) area(c *Compositor) (*output.Output, image.Rectangle, bool) {
@@ -279,8 +281,8 @@ func (src outputSource) area(c *Compositor) (*output.Output, image.Rectangle, bo
 	return src.output, c.captureRegion(src.output, image.Rectangle{}), true
 }
 
-func (src outputSource) paint(c *Compositor, o *output.Output, area image.Rectangle, cursor bool) (render.Color, func(render.Pass) error) {
-	return opaque, c.outputDraw(o, area, cursor)
+func (src outputSource) paint(c *Compositor, o *output.Output, area image.Rectangle, cursor, screencast bool) (render.Color, func(render.Pass) error) {
+	return opaque, c.outputDraw(o, area, cursor, screencast)
 }
 
 func (src windowSource) area(c *Compositor) (*output.Output, image.Rectangle, bool) {
@@ -291,8 +293,8 @@ func (src windowSource) area(c *Compositor) (*output.Output, image.Rectangle, bo
 	return w.output, c.windowRegion(w), true
 }
 
-func (src windowSource) paint(c *Compositor, _ *output.Output, _ image.Rectangle, cursor bool) (render.Color, func(render.Pass) error) {
-	return opaque, c.windowDraw(src.window, cursor)
+func (src windowSource) paint(c *Compositor, _ *output.Output, _ image.Rectangle, cursor, screencast bool) (render.Color, func(render.Pass) error) {
+	return opaque, c.windowDraw(src.window, cursor, screencast)
 }
 
 func (src cursorSource) area(c *Compositor) (*output.Output, image.Rectangle, bool) {
@@ -303,7 +305,7 @@ func (src cursorSource) area(c *Compositor) (*output.Output, image.Rectangle, bo
 	return o, src.session.box, true
 }
 
-func (cursorSource) paint(c *Compositor, o *output.Output, _ image.Rectangle, _ bool) (render.Color, func(render.Pass) error) {
+func (cursorSource) paint(c *Compositor, o *output.Output, _ image.Rectangle, _, _ bool) (render.Color, func(render.Pass) error) {
 	return render.Color{}, c.pointerDraw(o)
 }
 
@@ -311,7 +313,7 @@ func (goneSource) area(*Compositor) (*output.Output, image.Rectangle, bool) {
 	return nil, image.Rectangle{}, false
 }
 
-func (goneSource) paint(*Compositor, *output.Output, image.Rectangle, bool) (render.Color, func(render.Pass) error) {
+func (goneSource) paint(*Compositor, *output.Output, image.Rectangle, bool, bool) (render.Color, func(render.Pass) error) {
 	return render.Color{}, func(render.Pass) error { return nil }
 }
 
@@ -355,8 +357,35 @@ func (s *captureSession) noteDamage(o *output.Output, frame *region.Set, cursorO
 	if s.stopped || !ok || src.output != o || (cursorOnly && !s.cursor) {
 		return
 	}
-	if _, area, ok := s.target(); ok {
+	_, area, ok := s.target()
+	if !ok {
+		return
+	}
+	if s.oneshot {
 		addDamage(&s.damage, frame, area)
+		return
+	}
+	cur := s.c.blockedRects(o, s.c.blockedScratch)
+	s.c.blockedScratch = cur
+	if !slices.Equal(cur, s.blocked) {
+		addDamage(&s.damage, frame, area)
+		for _, r := range slices.Concat(s.blocked, cur) {
+			if r = r.Intersect(area); !r.Empty() {
+				s.damage.Add(r.Sub(area.Min))
+			}
+		}
+		s.blocked = slices.Clone(cur)
+		return
+	}
+	except := s.c.exceptScratch[:0]
+	for _, r := range cur {
+		except = append(except, r.Sub(area.Min))
+	}
+	s.c.exceptScratch = except
+	for _, r := range frame.Rects() {
+		if r = r.Intersect(area); !r.Empty() {
+			s.damage.AddExcept(r.Sub(area.Min), except)
+		}
 	}
 }
 
@@ -365,7 +394,7 @@ func (c *Compositor) noteCommit(sf *surface.Surface) error {
 	errs = append(errs, c.noteWindowCopies(sf))
 	for _, s := range c.captureSessions {
 		src, ok := s.source.(windowSource)
-		if !ok || s.stopped || !c.inWindow(src.window, sf) {
+		if !ok || s.stopped || !c.inWindow(src.window, sf) || !s.oneshot && c.decision(src.window).BlockOutFrom.Blocks(true) {
 			continue
 		}
 		o, area, ok := s.target()
@@ -502,7 +531,7 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 	if err != nil {
 		return f.broke(err)
 	}
-	clear, draw := s.source.paint(s.c, o, area, s.cursor)
+	clear, draw := s.source.paint(s.c, o, area, s.cursor, !s.oneshot)
 	k := &capture{output: o, size: size, clear: clear, draw: draw, target: target}
 	f.start(k)
 	k.waits = func(*region.Set) bool {
@@ -511,6 +540,7 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 	}
 	var damage []image.Rectangle
 	k.painted = func() error {
+		s.blocked = slices.Clone(s.c.blockedRects(o, s.c.blockedScratch))
 		damage = []image.Rectangle{{Max: size}}
 		if s.captured {
 			damage = slices.Clone(s.damage.Rects())

@@ -900,6 +900,25 @@ leaves a window where it is and only tells it it is fullscreen, so a video
 player or browser fills its tile instead of the output; the window's own
 request to leave fullscreen ends it.
 
+## layer_rules
+
+```yaml
+layer_rules:
+  - {namespace: ^lys-shell-notification-popup$, block_out_from: screencast}
+```
+
+Rules for layer-shell surfaces, matched on the namespace the client gave
+(a regular expression), later rules overriding earlier ones. `block_out_from`
+works as for windows.
+
+What counts as a screenshot: a capture whose client declared it one-shot
+through `lys_capture_hint_v1` before its first frame, which lys-shell's
+Screenshot portal does. Every other `ext-image-copy-capture` session,
+`wlr-screencopy` frame and toplevel export is treated as a screencast, so a
+screenshot tool that does not declare its captures sees blocked surfaces
+masked. Sandboxed clients cannot declare. The surfaces draw normally on the
+screen, and changes inside a blocked window do not wake a screencast.
+
 ## scratchpads
 
 ```yaml
@@ -1013,6 +1032,7 @@ state changes, never on a plain frame:
 | `scroll_factor` | Multiplies the window's scroll events, above 0 and below 100 |
 | `min_size`, `max_size` | `<w>x<h>` in pixels: lys-wm configures the window no smaller or larger |
 | `keep_aspect` | `true`: resizing the floating window keeps its aspect ratio |
+| `block_out_from` | `screencast`: the window shows as a black shape in screen shares and other continuous captures, but in screenshots; `capture`: in every capture |
 
 Example: `{is_captured: true, border: {active: red}}` shows which window a
 screen share sees. `lys-wmctl dispatch setprop <id> <key> <value>` gives one

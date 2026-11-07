@@ -87,6 +87,7 @@ type Config struct {
 	HoldOpening     bool
 	Animations      anim.Table
 	BlurLayers      []string
+	LayerRules      []wm.LayerRule
 	Gestures        Gestures
 	Overview        OverviewStyle
 	Slower          map[render.Speed]Effects
@@ -340,6 +341,10 @@ type Compositor struct {
 	jellyGen           uint64
 	genieStrips        []anim.GenieStrip
 	blurLayers         []string
+	layerRules         []wm.LayerRule
+	maskedOps          []drawOp
+	blockedScratch     []image.Rectangle
+	exceptScratch      []image.Rectangle
 	overview           *overview
 	overviewStyle      OverviewStyle
 	keptBackdrop       bool
@@ -428,7 +433,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.colorManagement = cfg.ColorManagement
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
-	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
+	c.animations, c.clock, c.blurLayers, c.layerRules = cfg.Animations, cfg.Clock, cfg.BlurLayers, cfg.LayerRules
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
 	c.powerSaverRate = cfg.PowerSaverRate
@@ -602,7 +607,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.addImageCapture(display, offer); err != nil {
 		return err
 	}
-	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display), c.syncHotkeys()); err != nil {
+	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display), c.addCaptureHint(display), c.syncHotkeys()); err != nil {
 		return err
 	}
 	if c.data, err = data.New(display, c); err != nil {

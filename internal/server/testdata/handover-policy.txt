@@ -105,6 +105,10 @@ hyprland_toplevel_export_manager_v1 = journal retire=
 hyprland_toplevel_export_manager_v1.capture_toplevel = dropped
 hyprland_toplevel_export_manager_v1.destroy = destructor
 hyprland_toplevel_export_manager_v1.capture_toplevel_with_wlr_toplevel_handle = dropped
+lys_capture_hint_manager_v1 = journal retire=
+lys_capture_hint_manager_v1.destroy = destructor
+lys_capture_hint_manager_v1.oneshot_session = dropped
+lys_capture_hint_manager_v1.oneshot_screencopy = dropped
 lys_escape_arm_v1 = journal retire=
 lys_escape_arm_v1.destroy = destructor
 lys_escape_manager_v1 = journal retire=

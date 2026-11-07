@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type layer struct {
@@ -25,6 +26,9 @@ type layer struct {
 	fade     anim.Tween[float64]
 	snapshot render.TextureTarget
 	frost    *frost
+	props    wm.LayerProps
+	ruled    bool
+	ruledGen uint64
 }
 
 func (e *layer) bounds() image.Rectangle {
