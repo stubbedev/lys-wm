@@ -6,6 +6,7 @@ import (
 	"time"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 )
@@ -303,5 +304,28 @@ func TestADriverWithoutAVblankSequenceExtrapolatesAndIsAskedOnce(t *testing.T) {
 	o.planesWait()
 	if r.dev.vblankReads != 1 || r.reports != nil || o.lastFlip != flip {
 		t.Fatalf("a driver without a vblank sequence was asked %d times, reports %v, last flip moved %v", r.dev.vblankReads, r.reports, o.lastFlip-flip)
+	}
+}
+
+func TestAPoweredOnCRTCIsNotAskedForItsVblankBeforeItsModeset(t *testing.T) {
+	r := start(t)
+	r.pinned = backend.Now()
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	r.dev.vblank = func(uint32) (kdrm.Vblank, error) {
+		return kdrm.Vblank{}, unix.EINVAL
+	}
+	mode := modeOf(o.mode)
+	if err := o.Commit(backend.OutputState{Power: backend.PoweredOff, Mode: mode}); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: mode}); err != nil {
+		t.Fatal(err)
+	}
+	r.pinned = o.lastFlip + 100*interval
+	o.frameWait()
+	o.planesWait()
+	if r.dev.vblankReads != 0 || r.reports != nil || o.unanchored {
+		t.Fatalf("a CRTC powered on but not yet modeset was asked for its vblank %d times, reports %v, unanchored %v", r.dev.vblankReads, r.reports, o.unanchored)
 	}
 }

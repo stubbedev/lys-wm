@@ -2174,7 +2174,7 @@ func (o *Output) frameWait() time.Duration {
 }
 
 func (o *Output) vblank(now time.Duration) time.Duration {
-	if o.lastFlip == 0 || now-o.lastFlip <= modeOf(o.mode).Interval() || o.unanchored || !o.lit || o.off {
+	if o.lastFlip == 0 || now-o.lastFlip <= modeOf(o.mode).Interval() || o.unanchored || !o.lit || o.off || o.kms != kmsFlip {
 		return o.lastFlip
 	}
 	v, err := o.b.dev.CRTCSequence(o.crtc.id)
