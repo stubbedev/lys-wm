@@ -952,6 +952,7 @@ Everything lives under `internal/` except the commands.
 | `ipc` | The IPC socket and event stream (#31) |
 | `systemd` | Hands the session's environment to D-Bus activation and the systemd user manager, and runs `lys-wm-session.target` while lys-wm runs |
 | `session` | logind, udev and libinput: device access, hotplug and VT switching (#38, #39, #42); the `handle-lid-switch` inhibitor, logind's Suspend, and the power supplies' AC state for the lid policy (#179) |
+| `powerprofile` | power-profiles-daemon's `ActiveProfile` on the system bus, followed off the loop, for the power saver frame cap (#384) |
 | `tabletinput` | Drawing tablets, their tools' proximity, motion, tip and button events, and their pads' layout and button, ring, strip and dial events, from libinput to the compositor (#308) |
 | `harness` | The compositor-in-the-loop harness (#10) |
 | `testclient` | A scripted Wayland client that maps toplevels and animates shm frames, for integration tests |
@@ -1062,6 +1063,20 @@ needs it, never an implicit global. [GPU](#gpu) has the selection rule (#62).
   `XDG_RUNTIME_DIR`, and drives real clients from the dev shell against it.
   `just test` runs it with `LYS_WM_HEADLESS=1`, which turns a missing
   client into a failure; it is part of `just gates`, so CI runs it too.
+
+## Power saver
+
+While power-profiles-daemon reports `power-saver` (#384), every output above
+`power_saver_frame_rate` paces its frames on its k-th vblank, k the refresh over
+the cap rounded up. The cap is a pacing interval the backends use wherever a
+frame aims at a vblank: the frame clock's latch and the render budget, the
+aimed vblank a frame is timed against, idle refreshes and the refresh in
+presentation feedback, so animations sample the vblank they land on and take
+as long. The cursor plane keeps the mode's own latch, and under adaptive sync
+the cap is a minimum frame interval. `internal/powerprofile` follows
+`ActiveProfile` on the system bus off the loop (the UPower name, then the
+legacy `net.hadess` one) and posts changes; a daemon that is absent or leaves
+means no cap, and nothing polls.
 
 ## The lid
 

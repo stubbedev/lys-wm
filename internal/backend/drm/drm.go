@@ -159,6 +159,7 @@ var (
 	_ backend.Inheriting   = (*Output)(nil)
 	_ backend.FrameTearing = (*Output)(nil)
 	_ backend.FrameFilling = (*Output)(nil)
+	_ backend.FrameRateCap = (*Output)(nil)
 )
 
 type Backend struct {
@@ -1067,6 +1068,7 @@ type Output struct {
 	vrrSent       bool
 	vrrHold       time.Duration
 	filled        bool
+	frameCap      int
 	tearFrame     bool
 	commitLatch   *loop.Timer
 	late          *scanout
@@ -1564,7 +1566,7 @@ func (o *Output) frameReady() bool {
 }
 
 func (o *Output) pipelines() bool {
-	interval := modeOf(o.mode).Interval()
+	interval := o.paceInterval()
 	return o.kms == kmsFlip && o.queued != nil && o.queued.client == nil && o.queued.prepare == nil && o.queued.prepareLater == nil && o.budget.Overruns(interval)
 }
 
@@ -1590,7 +1592,7 @@ func (o *Output) emptyFrame() error {
 		return nil
 	}
 	now := o.b.now()
-	at, _ := backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
+	at, _ := backend.NextVblank(o.vblank(now), now, o.paceInterval())
 	if err := o.pacer.Arm(at - now); err != nil {
 		return fmt.Errorf("drm: pace the frames of %s: %w", o.Name(), err)
 	}
@@ -1602,7 +1604,7 @@ func (o *Output) paceElapsed() error {
 	o.empties = 0
 	var err error
 	if o.queued == nil && o.enabled && !o.off {
-		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: modeOf(o.mode).Interval(), Idle: true})
+		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: o.paceInterval(), Idle: true})
 	}
 	return errors.Join(err, o.clock.Kick(), o.flushPlanes())
 }
@@ -1824,7 +1826,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	o.aimedAt = 0
 	if !o.vrrSent {
 		now := o.b.now()
-		o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, modeOf(o.mode).Interval())
+		o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, o.paceInterval())
 	}
 	o.sentOverlay()
 	if flags&kdrm.AtomicAllowModeset != 0 {
@@ -2131,11 +2133,14 @@ func (o *Output) planesWait() time.Duration {
 }
 
 func (o *Output) frameWait() time.Duration {
-	if o.vrrSent {
-		return 0
-	}
 	now := o.b.now()
-	return o.budget.Deadline(o.vblank(now), now, modeOf(o.mode).Interval()) - now
+	if o.vrrSent {
+		if o.frameCap <= 0 || o.lastFlip == 0 {
+			return 0
+		}
+		return max(o.lastFlip+o.paceInterval()-now, 0)
+	}
+	return o.budget.Deadline(o.vblank(now), now, o.paceInterval()) - now
 }
 
 func (o *Output) vblank(now time.Duration) time.Duration {
@@ -2165,7 +2170,7 @@ func (o *Output) dropRenderFence() error {
 }
 
 func (o *Output) timeFrame(flip time.Duration) error {
-	interval := modeOf(o.mode).Interval()
+	interval := o.paceInterval()
 	if o.aimedAt != 0 && flip > o.aimedAt+interval/2 {
 		o.budget.Missed(interval)
 	}
@@ -2335,7 +2340,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 }
 
 func (o *Output) presentation(e kdrm.FlipEvent) backend.Presentation {
-	return backend.Presentation{Time: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Seq: uint64(e.Sequence), Torn: o.torn, Hardware: e.Sequence != 0, Variable: o.vrrSent}
+	return backend.Presentation{Time: o.lastFlip, Refresh: o.paceInterval(), Seq: uint64(e.Sequence), Torn: o.torn, Hardware: e.Sequence != 0, Variable: o.vrrSent}
 }
 
 func (o *Output) dropScanout(s *scanout) error {

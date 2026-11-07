@@ -184,6 +184,7 @@ func annotations() map[string]annotation {
 		"color_management":                 {def: false},
 		"client_hotkeys":                   {def: false},
 		"hidden_frame_rate":                atLeastAnn(1, int(time.Second/compositor.DefaultHiddenFrame)),
+		"power_saver_frame_rate":           atLeastAnn(0, compositor.DefaultPowerSaverRate),
 		"hold_opening":                     {def: false},
 		"tearing":                          {def: false},
 		"lid_suspend":                      {def: true},

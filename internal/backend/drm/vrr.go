@@ -82,3 +82,11 @@ func (o *Output) addVRR(r *kdrm.Request) {
 	}
 	o.setCRTCs(r, propVRREnabled, on)
 }
+
+func (o *Output) CapFrameRate(hz int) {
+	o.frameCap = hz
+}
+
+func (o *Output) paceInterval() time.Duration {
+	return modeOf(o.mode).PacedInterval(o.frameCap, o.vrrSent)
+}

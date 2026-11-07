@@ -204,8 +204,10 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
 			now := backend.Now()
-			interval := o.state.Mode.Interval()
-			return o.budget.Deadline(o.lastVblank, now, interval) - now
+			if o.vrr && o.frameCap > 0 && o.lastVblank != 0 {
+				return max(o.lastVblank+o.paceInterval()-now, 0)
+			}
+			return o.budget.Deadline(o.lastVblank, now, o.paceInterval()) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
@@ -300,6 +302,7 @@ type Output struct {
 	torn           uint64
 	tearFrame      bool
 	filled         bool
+	frameCap       int
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
@@ -486,7 +489,7 @@ func (o *Output) runFrame() error {
 	o.frames++
 	o.budget.Started()
 	o.frameStart = backend.Now()
-	o.aimedAt, _ = backend.NextVblank(o.lastVblank, o.frameStart, o.state.Mode.Interval())
+	o.aimedAt, _ = backend.NextVblank(o.lastVblank, o.frameStart, o.paceInterval())
 	if err := o.backend.handler.Frame(o); err != nil {
 		return err
 	}
@@ -614,7 +617,7 @@ func (o *Output) settleFence(now time.Duration) {
 }
 
 func (o *Output) timeFrame(flip time.Duration, flipped bool) error {
-	interval := o.state.Mode.Interval()
+	interval := o.paceInterval()
 	missed := flipped && o.aimedAt != 0 && flip > o.aimedAt+interval/2
 	if flipped {
 		o.aimedAt = 0
@@ -704,6 +707,14 @@ func (o *Output) FillsFrame() bool {
 	return o.filled
 }
 
+func (o *Output) CapFrameRate(hz int) {
+	o.frameCap = hz
+}
+
+func (o *Output) paceInterval() time.Duration {
+	return o.state.Mode.PacedInterval(o.frameCap, o.vrr)
+}
+
 func (o *Output) SetContentType(t wm.ContentType) {
 	o.contentType = t
 }
@@ -783,7 +794,7 @@ func (o *Output) vblank() error {
 			return err
 		}
 	case idle && o.backend.handler != nil:
-		if err := o.backend.handler.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Idle: true}); err != nil {
+		if err := o.backend.handler.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.paceInterval(), Seq: o.seq, Idle: true}); err != nil {
 			return err
 		}
 	}
@@ -805,7 +816,7 @@ func (o *Output) present() error {
 	}
 	torn := o.queuedTorn
 	o.queuedTorn = false
-	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.state.Mode.Interval(), Seq: o.seq, Torn: torn, Hardware: o.hardwareClock, Variable: o.vrr})
+	return h.Presented(o, backend.Presentation{Time: o.lastVblank, Refresh: o.paceInterval(), Seq: o.seq, Torn: torn, Hardware: o.hardwareClock, Variable: o.vrr})
 }
 
 type device struct {

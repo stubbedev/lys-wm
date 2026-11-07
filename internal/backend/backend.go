@@ -61,6 +61,18 @@ func (m Mode) Interval() time.Duration {
 	return time.Duration(int64(time.Second) * 1000 / int64(m.RefreshMHz))
 }
 
+func (m Mode) PacedInterval(capHz int, variable bool) time.Duration {
+	interval := m.Interval()
+	switch {
+	case capHz <= 0:
+		return interval
+	case variable:
+		return max(interval, time.Second/time.Duration(capHz))
+	}
+	capMHz := int64(capHz) * 1000
+	return time.Duration((int64(m.RefreshMHz)+capMHz-1)/capMHz) * interval
+}
+
 type Power uint8
 
 const (
@@ -216,6 +228,10 @@ type FrameTearing interface {
 
 type FrameFilling interface {
 	FillFrame(filled bool)
+}
+
+type FrameRateCap interface {
+	CapFrameRate(hz int)
 }
 
 type AdaptiveSync interface {

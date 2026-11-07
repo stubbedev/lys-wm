@@ -117,6 +117,7 @@ type rawConfig struct {
 	ColorManagement bool                     `yaml:"color_management"`
 	ClientHotkeys   bool                     `yaml:"client_hotkeys"`
 	HiddenFrameRate *At[int]                 `yaml:"hidden_frame_rate"`
+	PowerSaverRate  *At[int]                 `yaml:"power_saver_frame_rate"`
 	HoldOpening     bool                     `yaml:"hold_opening"`
 	Outputs         []At[rawOutput]          `yaml:"outputs"`
 	Input           rawInput                 `yaml:"input"`
@@ -437,6 +438,7 @@ type Config struct {
 	ColorManagement bool
 	ClientHotkeys   bool
 	HiddenFrame     time.Duration
+	PowerSaverRate  int
 	HoldOpening     bool
 	Decor           compositor.Decor
 	Font            string
@@ -1388,6 +1390,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		ColorManagement: raw.ColorManagement,
 		ClientHotkeys:   raw.ClientHotkeys,
 		HiddenFrame:     p.hiddenFrame(raw.HiddenFrameRate),
+		PowerSaverRate:  p.nonNegative(raw.PowerSaverRate, "power_saver_frame_rate", compositor.DefaultPowerSaverRate),
 		HoldOpening:     raw.HoldOpening,
 		LidSuspend:      raw.LidSuspend == nil || *raw.LidSuspend,
 	}
@@ -1516,6 +1519,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.ColorManagement = c.ColorManagement
 	cfg.ClientHotkeys = c.ClientHotkeys
 	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
+	cfg.PowerSaverRate = c.PowerSaverRate
 	cfg.Animations, cfg.BlurLayers, cfg.Slower = c.Animations, c.BlurLayers, c.Slower
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {

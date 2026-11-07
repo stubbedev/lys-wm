@@ -55,3 +55,31 @@ func TestNextVblankStaysOnTheGrid(t *testing.T) {
 		}
 	}
 }
+
+func TestAPacedIntervalIsAWholeNumberOfRefreshesUnderTheCap(t *testing.T) {
+	for _, tc := range []struct {
+		refreshMHz int32
+		capHz      int
+		variable   bool
+		refreshes  int64
+	}{
+		{120000, 60, false, 2},
+		{119998, 60, false, 2},
+		{165000, 60, false, 3},
+		{144000, 60, false, 3},
+		{60000, 60, false, 1},
+		{59940, 60, false, 1},
+		{120000, 0, false, 1},
+	} {
+		m := Mode{RefreshMHz: tc.refreshMHz}
+		if got, want := m.PacedInterval(tc.capHz, tc.variable), time.Duration(tc.refreshes)*m.Interval(); got != want {
+			t.Errorf("%d mHz under %d Hz: %v, want %d refreshes of %v", tc.refreshMHz, tc.capHz, got, tc.refreshes, m.Interval())
+		}
+	}
+	if got := (Mode{RefreshMHz: 165000}).PacedInterval(60, true); got != time.Second/60 {
+		t.Errorf("under VRR a 60 Hz cap on a 165 Hz mode paces at %v, want %v", got, time.Second/60)
+	}
+	if got := (Mode{RefreshMHz: 48000}).PacedInterval(60, true); got != (Mode{RefreshMHz: 48000}).Interval() {
+		t.Errorf("under VRR a cap above the mode's refresh paces at %v, want the mode's interval", got)
+	}
+}

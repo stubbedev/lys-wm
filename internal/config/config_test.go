@@ -946,3 +946,15 @@ func TestFullscreenNewWindowPolicy(t *testing.T) {
 		t.Errorf("fullscreen.new_window: above was not refused: %v", err)
 	}
 }
+
+func TestPowerSaverFrameRate(t *testing.T) {
+	for text, want := range map[string]int{"": compositor.DefaultPowerSaverRate, "power_saver_frame_rate: 30\n": 30, "power_saver_frame_rate: 0\n": 0} {
+		c, err := Parse("t.yaml", []byte(text))
+		if err != nil || c.PowerSaverRate != want {
+			t.Errorf("%q: %d, %v; want %d", text, c.PowerSaverRate, err, want)
+		}
+	}
+	if _, err := Parse("t.yaml", []byte("power_saver_frame_rate: -1\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:1: power_saver_frame_rate:") {
+		t.Errorf("a negative rate was not refused: %v", err)
+	}
+}

@@ -36,6 +36,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/handover"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/powerprofile"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/session"
@@ -711,6 +712,16 @@ func run(args []string) (err error) {
 	s.comp.OnStateChange(srv.Changed)
 	if b.onPower != nil {
 		b.onPower(s.comp.PowerChanged)
+	}
+	if b.native != nil {
+		profiles, err := powerprofile.Watch(l, session.SystemBus(os.Getenv), func(saver bool) error {
+			s.comp.SetPowerSaver(saver)
+			return nil
+		}, cfg.Report)
+		if err != nil {
+			return err
+		}
+		defer leave(profiles.Close)
 	}
 	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {ipc.SocketEnv, socket}}
 	var xwRunning *xwayland.Server

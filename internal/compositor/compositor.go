@@ -80,6 +80,7 @@ type Config struct {
 	InheritTimeout  time.Duration
 	HoldBound       time.Duration
 	HiddenFrame     time.Duration
+	PowerSaverRate  int
 	HoldOpening     bool
 	Animations      anim.Table
 	BlurLayers      []string
@@ -142,6 +143,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		InheritTimeout: DefaultInheritTimeout,
 		HoldBound:      DefaultHoldBound,
 		HiddenFrame:    DefaultHiddenFrame,
+		PowerSaverRate: DefaultPowerSaverRate,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
 		Overview:       DefaultOverviewStyle(),
@@ -244,6 +246,8 @@ type Compositor struct {
 	outputRules        OutputRules
 	disabled           []backend.Output
 	virtualOutputs     []virtualOutput
+	powerSaver         bool
+	powerSaverRate     int
 	hooks              Hooks
 	ipcEvents          IPCEvents
 	changed            func()
@@ -377,6 +381,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.HoldBound <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: layout hold bound %v is not positive", cfg.HoldBound)
 	}
+	if cfg.PowerSaverRate < 0 {
+		return binds.Map{}, fmt.Errorf("compositor: the power saver frame rate %d is negative", cfg.PowerSaverRate)
+	}
 	if cfg.HiddenFrame <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: hidden surfaces' frame interval %v is not positive", cfg.HiddenFrame)
 	}
@@ -414,6 +421,8 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.animations, c.clock, c.blurLayers = cfg.Animations, cfg.Clock, cfg.BlurLayers
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
+	c.powerSaverRate = cfg.PowerSaverRate
+	c.capFrameRates()
 	c.holdOpening = cfg.HoldOpening
 	c.overviewStyle = cfg.Overview
 	c.rulesGen++

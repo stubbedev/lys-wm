@@ -1009,6 +1009,22 @@ windows cover it whole or no output shows it, so a client drawing under them
 draws and uploads at this rate instead of the output's refresh. A positive
 whole number.
 
+## power_saver_frame_rate
+
+```yaml
+power_saver_frame_rate: 0
+```
+
+60 by default: while power-profiles-daemon's active profile is `power-saver`,
+an output refreshing faster composites on every k-th vblank, k being its
+refresh divided by this rate and rounded up (a 120 Hz panel at 60, a 165 Hz
+one at 55), and the surfaces on it get their frame callbacks at that rate.
+Animations take as long with fewer frames, presentation feedback reports the
+longer refresh, and the cursor plane still moves every refresh. Under
+adaptive sync the rate is a minimum time between frames instead. The rate
+returns on the next frame once the profile changes, with no modeset; without
+the daemon nothing changes. `0` turns it off. A whole number, zero or more.
+
 ## hold_opening
 
 ```yaml

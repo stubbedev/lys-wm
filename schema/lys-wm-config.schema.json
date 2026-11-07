@@ -897,6 +897,11 @@
         "type": "string"
       }
     },
+    "power_saver_frame_rate": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 60
+    },
     "rules": {
       "type": "array",
       "items": {
