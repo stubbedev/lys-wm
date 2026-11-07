@@ -18,7 +18,6 @@ const (
 	propHDRMetadata = "HDR_OUTPUT_METADATA"
 	propColorspace  = "Colorspace"
 	propMaxBPC      = "max bpc"
-	propDegammaLUT  = "DEGAMMA_LUT"
 	colorspaceHDR   = "BT2020_RGB"
 	hdrBPC          = 10
 
@@ -139,7 +138,6 @@ func (o *Output) addSignal(r *kdrm.Request) {
 	}
 	o.setConnectors(r, propColorspace, colorspace)
 	o.setConnectors(r, propHDRMetadata, uint64(o.signal.blob))
-	o.setCRTCs(r, propDegammaLUT, 0)
 }
 
 func (o *Output) releaseSignal() error {

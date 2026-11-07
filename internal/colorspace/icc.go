@@ -200,3 +200,47 @@ func sameCurve(x, y lgpu.ColorFunc) bool {
 	near := func(a, b float32) bool { return math.Abs(float64(a-b)) < close }
 	return x.Kind == y.Kind && near(x.G, y.G) && near(x.A, y.A) && near(x.B, y.B) && near(x.C, y.C) && near(x.D, y.D) && near(x.E, y.E) && near(x.F, y.F)
 }
+
+func inverse(f lgpu.ColorFunc) lgpu.ColorFunc {
+	if f.Kind != lgpu.ColorCurve {
+		return f
+	}
+	g, a, b, c, d, e, ff := float64(f.G), float64(f.A), float64(f.B), float64(f.C), float64(f.D), float64(f.E), float64(f.F)
+	ag := gomath.Pow(a, -g)
+	inv := lgpu.ColorFunc{Kind: lgpu.ColorCurve, G: float32(1 / g), A: float32(ag), B: float32(-e * ag), E: float32(-b / a), D: float32(gomath.Pow(a*d+b, g) + e)}
+	if c != 0 {
+		inv.C, inv.F, inv.D = float32(1/c), float32(-ff/c), float32(c*d+ff)
+	}
+	return inv
+}
+
+func ProfileTarget(d *Description) *Target {
+	return &Target{desc: d, encode: inverse(d.decode()), matrix: unitMatrix}
+}
+
+func (t *Target) EncodeRamp(n int) []float64 {
+	return ramp(lgpu.ColorTransform{Matrix: unitMatrix, Scale: 1, Encode: t.encode}, n)
+}
+
+func (d *Description) DecodeRamp(n int) []float64 {
+	return ramp(lgpu.ColorTransform{Decode: d.decode(), Matrix: unitMatrix, Scale: 1}, n)
+}
+
+func ramp(t lgpu.ColorTransform, n int) []float64 {
+	out := make([]float64, n)
+	for i := range out {
+		x := float32(i) / float32(n-1)
+		out[i] = float64(t.Apply([4]float32{x, x, x, 1})[0])
+	}
+	return out
+}
+
+func Conversion(from, to Primaries) ([9]float64, bool) {
+	m, ok := conversion(from, to)
+	return [9]float64(m), ok
+}
+
+func (t *Target) encodeOne(v float64) float64 {
+	tr := lgpu.ColorTransform{Matrix: unitMatrix, Scale: 1, Encode: t.encode}
+	return float64(tr.Apply([4]float32{float32(v), float32(v), float32(v), 1})[0])
+}

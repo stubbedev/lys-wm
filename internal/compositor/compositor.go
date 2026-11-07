@@ -306,6 +306,7 @@ type Compositor struct {
 	overlays           map[*output.Output]overlaysShown
 	candidates         map[*surface.Surface]*candidacy
 	hdrSwitches        map[backend.Output]*hdrSwitch
+	profiles           map[backend.Output]*profile
 	hdrHold            time.Duration
 	overlayWork        overlayWork
 	lookPath           func(string) (string, error)
@@ -472,6 +473,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},
 		hdrSwitches:    map[backend.Output]*hdrSwitch{},
+		profiles:       map[backend.Output]*profile{},
 		dropped:        map[*output.Output]int{},
 		inherited:      map[*output.Output]*loop.Timer{},
 		loop:           l,

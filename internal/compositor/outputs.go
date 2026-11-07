@@ -27,6 +27,8 @@ type OutputRule struct {
 	HDR           HDRPolicy
 	SDRBrightness float64
 	HDRPeak       float64
+	ICC           *colorspace.Description
+	ICCPath       string
 }
 
 const refreshToleranceMHz = 1000
@@ -201,9 +203,15 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (changed, r
 	}
 	if !next.Enabled() {
 		delete(c.hdr, b)
+		delete(c.profiles, b)
 		return changed, false, nil
 	}
 	recolored, err = c.setOutputColor(b, color)
+	if color != nil {
+		delete(c.profiles, b)
+	} else {
+		err = errors.Join(err, c.applyProfile(b, rule))
+	}
 	return changed, recolored, errors.Join(c.commitAdaptiveSync(b, rule.VRR), err)
 }
 
@@ -319,6 +327,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.overlays, o)
 	c.dropCandidates(o)
 	errs = append(errs, c.dropHDRSwitch(o.Backend()))
+	delete(c.profiles, o.Backend())
 	delete(c.blanked, o)
 	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())
 	delete(c.usable, o)

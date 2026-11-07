@@ -57,6 +57,7 @@ const (
 	propNonDesktop
 	propLinkStatusID
 	propDegammaID
+	propDegammaSizeID
 	propInFormatsAsync
 	propContentTypeID
 	propColorEncodingID
@@ -132,6 +133,7 @@ type fakeDevice struct {
 	refuseLone        bool
 	refuseScaling     bool
 	secondOverlay     bool
+	degammaSize       uint64
 	overlayBudget     int
 	noMaster          bool
 	refuseMode        func(m kdrm.Mode) bool
@@ -304,6 +306,9 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		props := map[string]kdrm.Property{"ACTIVE": {ID: propActive, Value: active}, "MODE_ID": {ID: propModeID, Value: mode}, "GAMMA_LUT": {ID: propGammaLUT}, "GAMMA_LUT_SIZE": {ID: propGammaSize, Value: 4}, propDegammaLUT: {ID: propDegammaID, Value: f.staleDegamma}}
 		if !f.noCTM {
 			props["CTM"] = kdrm.Property{ID: propCTM}
+		}
+		if f.degammaSize > 0 {
+			props["DEGAMMA_LUT_SIZE"] = kdrm.Property{ID: propDegammaSizeID, Value: f.degammaSize}
 		}
 		if f.vrr {
 			props[propVRREnabled] = kdrm.Property{ID: propVRREnabledID}

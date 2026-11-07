@@ -306,6 +306,9 @@ type Output struct {
 	filled         bool
 	frameCap       int
 	hdrCommits     uint64
+	degammaSize    int
+	degamma        []uint16
+	colorSets      ColorSets
 	scannedAt      backend.Placement
 	overlayNext    overlayLayers
 	overlayQueued  overlayLayers
@@ -341,11 +344,41 @@ func (o *Output) SetGamma(ramps []uint16) error {
 		return fmt.Errorf("headless: %s takes 3 ramps of %d gamma entries, not %d entries", o.name, o.gammaSize, len(ramps))
 	}
 	o.gamma = slices.Clone(ramps)
+	o.colorSets.Gamma++
 	return nil
 }
 
 func (o *Output) Gamma() []uint16 {
 	return slices.Clone(o.gamma)
+}
+
+type ColorSets struct {
+	Gamma, Degamma, CTM int
+}
+
+func (o *Output) ColorSets() ColorSets {
+	return o.colorSets
+}
+
+func (o *Output) SetDegammaSize(n int) {
+	o.degammaSize = n
+}
+
+func (o *Output) DegammaSize() int {
+	return o.degammaSize
+}
+
+func (o *Output) SetDegamma(ramps []uint16) error {
+	if ramps != nil && len(ramps) != 3*o.degammaSize {
+		return fmt.Errorf("headless: %s takes 3 ramps of %d degamma entries, not %d entries", o.name, o.degammaSize, len(ramps))
+	}
+	o.degamma = slices.Clone(ramps)
+	o.colorSets.Degamma++
+	return nil
+}
+
+func (o *Output) Degamma() []uint16 {
+	return slices.Clone(o.degamma)
 }
 
 func (b *Backend) EnableAdaptiveSync() {
@@ -378,6 +411,7 @@ func (o *Output) SetColorTransform(m backend.Matrix) error {
 		return fmt.Errorf("headless: %s has no colour transform", o.name)
 	}
 	o.ctm = m
+	o.colorSets.CTM++
 	return nil
 }
 

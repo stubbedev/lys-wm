@@ -1584,6 +1584,9 @@
           "hdr_peak": {
             "type": "number"
           },
+          "icc": {
+            "type": "string"
+          },
           "match": {
             "type": "string"
           },

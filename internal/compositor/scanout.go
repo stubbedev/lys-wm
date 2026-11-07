@@ -111,6 +111,9 @@ func (c *Compositor) scanoutTarget(o *output.Output) *colorspace.Target {
 	if hc := c.hdr[o.Backend()]; hc != nil {
 		return hc.signal
 	}
+	if p := c.shaderProfile(o); p != nil {
+		return p.target
+	}
 	return colorspace.SDRTarget
 }
 

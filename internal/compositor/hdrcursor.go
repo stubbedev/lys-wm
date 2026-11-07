@@ -11,11 +11,13 @@ import (
 )
 
 func (c *Compositor) cursorPlan(o *output.Output) *render.ColorTransform {
-	hc := c.hdr[o.Backend()]
-	if hc == nil {
-		return nil
+	if hc := c.hdr[o.Backend()]; hc != nil {
+		return c.plans.Of(colorspace.SDR, hc.signal)
 	}
-	return c.plans.Of(colorspace.SDR, hc.signal)
+	if p := c.cursorProfile(o); p != nil {
+		return c.plans.Of(colorspace.SDR, p.target)
+	}
+	return nil
 }
 
 func encodeCursor(plan *render.ColorTransform, dst, src []byte, dstStride, srcStride int, size image.Point) {

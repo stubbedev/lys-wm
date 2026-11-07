@@ -229,6 +229,11 @@ type Matrix [9]float64
 
 var Identity = Matrix{1, 0, 0, 0, 1, 0, 0, 0, 1}
 
+type Degamma interface {
+	DegammaSize() int
+	SetDegamma(ramps []uint16) error
+}
+
 type ColorTransform interface {
 	HasColorTransform() bool
 	SetColorTransform(m Matrix) error

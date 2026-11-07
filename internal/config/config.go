@@ -28,6 +28,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -198,6 +199,7 @@ type rawOutput struct {
 	SDRBrightness *At[float64] `yaml:"sdr_brightness"`
 	HDRPeak       *At[float64] `yaml:"hdr_peak"`
 	Shader        *At[string]  `yaml:"shader"`
+	ICC           *At[string]  `yaml:"icc"`
 }
 
 type rawInput struct {
@@ -1092,7 +1094,7 @@ func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
 		rule.VRR = *v
 	}
 	if r.Shader != nil {
-		rule.Shader = p.shaderPath(*r.Shader, key+".shader")
+		rule.Shader = p.filePath(*r.Shader, key+".shader", "shader")
 	}
 	if v := choice(p, r.HDR, key+".hdr", hdrPolicies); v != nil {
 		rule.HDR = *v
@@ -1103,12 +1105,33 @@ func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
 	if v := p.between(r.HDRPeak, key+".hdr_peak", minLuminance, maxLuminance, false); v != nil {
 		rule.HDRPeak = *v
 	}
+	if r.ICC != nil {
+		rule.ICC, rule.ICCPath = p.profile(*r.ICC, key+".icc")
+	}
 	return rule
 }
 
-func (p *parser) shaderPath(a At[string], key string) string {
+func (p *parser) profile(a At[string], key string) (*colorspace.Description, string) {
+	path := p.filePath(a, key, "profile")
+	if path == "" {
+		return nil, ""
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // the profile the config names
+	if err != nil {
+		p.warn(a.Line, key, "%v; the output stays sRGB", err)
+		return nil, ""
+	}
+	d, err := colorspace.ParseICC(data)
+	if err != nil {
+		p.warn(a.Line, key, "%s: %v; the output stays sRGB", path, err)
+		return nil, ""
+	}
+	return d, path
+}
+
+func (p *parser) filePath(a At[string], key, what string) string {
 	if a.V == "" {
-		p.fail(a.Line, key, "an empty path; leave the key out for no shader")
+		p.fail(a.Line, key, "an empty path; leave the key out for no %s", what)
 		return ""
 	}
 	if rest, ok := strings.CutPrefix(a.V, "~/"); ok {

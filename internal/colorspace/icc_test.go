@@ -163,3 +163,23 @@ func TestICCTagsThatOverrunAreRefused(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestAProfilesEncodeUndoesItsToneCurve(t *testing.T) {
+	for _, d := range []*Description{
+		{TF: TF{Name: Compound24}, Primaries: SRGB},
+		{TF: TF{Name: Gamma22}, Primaries: SRGB},
+		{TF: TF{Name: Curve, Curve: curve(1/0.45, 1/1.099, 0.099/1.099, 1/4.5, 0.081, 0, 0)}, Primaries: SRGB},
+	} {
+		dec, enc := d.DecodeRamp(256), ProfileTarget(d).EncodeRamp(256)
+		for i, lin := range dec {
+			want := float64(i) / 255
+			got := ProfileTarget(d).encodeOne(lin)
+			if math.Abs(got-want) > 1e-3 {
+				t.Fatalf("%v: encode(decode(%v)) = %v", d.TF, want, got)
+			}
+		}
+		if enc[0] > 1e-3 || math.Abs(enc[255]-1) > 1e-3 {
+			t.Fatalf("%v: the encode ramp runs %v to %v, want 0 to 1", d.TF, enc[0], enc[255])
+		}
+	}
+}

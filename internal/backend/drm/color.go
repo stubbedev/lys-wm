@@ -14,6 +14,7 @@ import (
 var (
 	_ backend.Gamma          = (*Output)(nil)
 	_ backend.ColorTransform = (*Output)(nil)
+	_ backend.Degamma        = (*Output)(nil)
 )
 
 type colorProp uint8
@@ -21,10 +22,13 @@ type colorProp uint8
 const (
 	gammaLUT colorProp = iota
 	colorMatrix
+	degammaLUT
 	colorProps
 )
 
-var colorPropNames = [colorProps]string{gammaLUT: "GAMMA_LUT", colorMatrix: "CTM"}
+var colorPropNames = [colorProps]string{gammaLUT: "GAMMA_LUT", colorMatrix: "CTM", degammaLUT: propDegammaLUT}
+
+const propDegammaLUT = "DEGAMMA_LUT"
 
 func (p colorProp) String() string { return colorPropNames[p] }
 
@@ -71,6 +75,23 @@ func (o *Output) SetGamma(ramps []uint16) error {
 		return o.setColor(gammaLUT, nil)
 	}
 	return o.setColor(gammaLUT, lut(ramps))
+}
+
+func (o *Output) DegammaSize() int {
+	if _, ok := o.crtc.props[degammaLUT.String()]; !ok {
+		return 0
+	}
+	return int(o.crtc.props["DEGAMMA_LUT_SIZE"].Value) //nolint:gosec // a LUT size is a small count
+}
+
+func (o *Output) SetDegamma(ramps []uint16) error {
+	if size := o.DegammaSize(); ramps != nil && len(ramps) != 3*size {
+		return fmt.Errorf("drm: %s takes 3 ramps of %d degamma entries, not %d entries", o.Name(), size, len(ramps))
+	}
+	if ramps == nil {
+		return o.setColor(degammaLUT, nil)
+	}
+	return o.setColor(degammaLUT, lut(ramps))
 }
 
 func (o *Output) HasColorTransform() bool {
@@ -176,4 +197,8 @@ func (o *Output) releaseColor() error {
 	}
 	o.color = colorBlobs{}
 	return errors.Join(errs...)
+}
+
+func (o *Output) CursorSkipsCRTCColor() bool {
+	return o.b.driver == nvidiaDriver
 }

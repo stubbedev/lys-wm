@@ -88,7 +88,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 		if err != nil {
 			return nil, err
 		}
-		sc.cur.replayOnPrimary(p, colorOut{plans: &c.plans})
+		sc.cur.replayOnPrimary(p, c.sdrOut(o))
 		return repaint, p.End()
 	}
 	if err := c.ensureWorking(o, sc, bounds); err != nil {
@@ -262,14 +262,7 @@ func (c *Compositor) ApplyColorMatrix(o *output.Output, m backend.Matrix) error 
 	}
 	hc := c.hdr[b]
 	if hc == nil {
-		ct, ok := b.(backend.ColorTransform)
-		switch {
-		case ok && ct.HasColorTransform():
-			return ct.SetColorTransform(m)
-		case m == backend.Identity:
-			return nil
-		}
-		return fmt.Errorf("%s has no colour transform", b.Name())
+		return c.applySDRMatrix(b)
 	}
 	hc.signal = hc.signal.WithMatrix(matrix32(m))
 	c.recolorCursor(o)
@@ -284,6 +277,9 @@ func (c *Compositor) GammaBlocked(o *output.Output) bool {
 func (c *Compositor) OutputDescription(o *output.Output) *colorspace.Description {
 	if hc := c.hdr[o.Backend()]; hc != nil {
 		return hc.signal.Description()
+	}
+	if p := c.profiles[o.Backend()]; p != nil {
+		return p.desc
 	}
 	return colorspace.SDR
 }

@@ -190,6 +190,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes; `fullscreen` only while one surface alone fills the output and its image description is HDR (a PQ or HLG transfer function, or primaries wider than sRGB), switching back to SDR a second after that stops. Default `false` |
 | `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
 | `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
+| `icc` | A matrix-shaper ICC profile for an SDR output, a path absolute, under `~/` or beside the config file. Where the CRTC has `DEGAMMA_LUT`, `CTM` and `GAMMA_LUT` the correction runs there (sRGB decode, sRGB to the profile's primaries, the profile's inverse curve, with gamma-control ramps applied after it and a colour matrix before), so frames and direct scanout cost what they cost without one; otherwise every draw is converted to the profile. Colour-managed clients are told the profile's primaries and curve. A profile lys-wm cannot read is a warning naming the file, and the output stays sRGB |
 | `disabled` | `true` turns the output off |
 | `shader` | A fragment shader for the output's final image: see [Screen shaders](./shaders). A shader that does not compile leaves the output unshaded and says why. Reloading the config reads the file again |
 

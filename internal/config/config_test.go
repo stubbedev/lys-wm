@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"maps"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -1122,5 +1123,31 @@ func TestLayerRules(t *testing.T) {
 	c, err = Parse("t.yaml", []byte("decoration:\n  blur: {layers: [waybar]}\n"))
 	if err != nil || len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0].Error(), "decoration.blur.layers: removed; blur a layer surface with layer_rules") {
 		t.Errorf("the removed key: %v, %v", c.Warnings, err)
+	}
+}
+
+func TestAnOutputsICCProfile(t *testing.T) {
+	dir := t.TempDir()
+	good, err := os.ReadFile("../harness/testdata/display-p3.icc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(os.WriteFile(filepath.Join(dir, "p3.icc"), good, 0o600), os.WriteFile(filepath.Join(dir, "lut.icc"), []byte("not a matrix-shaper profile"), 0o600)); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(filepath.Join(dir, "config.yaml"), []byte("outputs:\n  - match: DP-1\n    icc: p3.icc\n  - match: DP-2\n    icc: lut.icc\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := cfg.Outputs.Named[0]; r.ICC == nil || r.ICC.Primaries.G.Y < 0.65 || r.ICCPath != filepath.Join(dir, "p3.icc") {
+		t.Errorf("a Display P3 profile gave %+v from %q", r.ICC, r.ICCPath)
+	}
+	if r := cfg.Outputs.Named[1]; r.ICC != nil {
+		t.Errorf("a profile ParseICC cannot read gave %+v", r.ICC)
+	}
+	if !slices.ContainsFunc(cfg.Warnings, func(w error) bool {
+		return strings.Contains(w.Error(), "lut.icc") && strings.Contains(w.Error(), "stays sRGB")
+	}) {
+		t.Errorf("the unreadable profile was not named in a warning: %v", cfg.Warnings)
 	}
 }
