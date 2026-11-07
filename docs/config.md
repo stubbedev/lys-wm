@@ -1015,6 +1015,28 @@ workspace it matches, after the `id` rules' and in order.
 
 A `match` rule takes only the look keys.
 
+## swallow
+
+```yaml
+swallow:
+  terminals: ^(foot|kitty|Alacritty|org\.wezfurlong\.wezterm)$
+  except_title: wev|lazygit
+```
+
+A window started from a terminal, an image viewer or a video player run in a
+shell, takes the terminal's place in the layout: the same slot, size and tab, so
+nothing else moves, and the terminal hides until the window closes, then comes
+back where it was with focus. A terminal is a window whose `app_id` matches
+`terminals` and whose process is an ancestor, up to eight levels, of the new
+window's; lys-wm reads `/proc/<pid>/status` once per level when the window maps
+and never afterwards. Floating windows, dialogs, windows whose title matches
+`except_title`, windows asking for a workspace, output, group or fullscreen by
+rule, sandboxed clients (`wp_security_context_v1`) and clients in another pid
+namespace never swallow, and neither does a floating terminal. If the terminal
+closes first, the window stays. `swallow off` shows the terminal beside the
+window, `swallow on` hides it again; `lys-wmctl windows` reports `swallowed_by`.
+Without `terminals` nothing swallows.
+
 ## scratchpads
 
 ```yaml

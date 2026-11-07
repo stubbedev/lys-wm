@@ -17,6 +17,7 @@ type Opening struct {
 	NoFocus    bool
 	Group      *Layout
 	Pin        bool
+	Swallow    WindowID
 	Mode       WindowMode
 	Cover      CoverPolicy
 	Autotile   Autotile
@@ -60,6 +61,9 @@ func (s State) Open(id WindowID, o Opening) (State, error) {
 	}
 	if s.windowWorkspace(id) != nil {
 		return State{}, fmt.Errorf("wm: open window %d: already mapped", id)
+	}
+	if o.Swallow != 0 {
+		return s.openSwallowing(id, o)
 	}
 	s = s.clone()
 	w, err := s.openingTarget(id, o)

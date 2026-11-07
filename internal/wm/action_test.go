@@ -84,6 +84,8 @@ var everyAction = []Action{
 	PlaceAction{Target: PlaceTopLeft},
 	PlaceAction{Target: PlaceRestore},
 	FocusFloatingAction{},
+	SwallowAction{},
+	SwallowAction{Switch: SwitchOff},
 	FocusFloatingAction{Switch: SwitchOn},
 	FullscreenAction{},
 	ScratchpadAction{Name: "term"},

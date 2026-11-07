@@ -76,6 +76,7 @@ type Config struct {
 	Font            *gtext.Typeface
 	Icons           *icontheme.Theme
 	Rules           []wm.Rule
+	Swallow         Swallow
 	Outputs         OutputRules
 	ColorManagement bool
 	Tearing         bool
@@ -145,6 +146,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Seat:           seat.Config{Keymap: keymap, RepeatRate: seat.DefaultRepeatRate, RepeatDelay: seat.DefaultRepeatDelay},
 		Cursor:         CursorConfig{Size: DefaultCursorSize},
 		WM:             PlainSettings(),
+		Swallow:        Swallow{Proc: procFS},
 		Report:         func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
 		Decor:          PlainDecor(),
 		Font:           font,
@@ -236,6 +238,9 @@ type Compositor struct {
 	wm                 wm.State
 	settings           wm.Settings
 	rules              []wm.Rule
+	swallow            Swallow
+	procKnown          bool
+	procNSDepth        int
 	rulesGen           uint64
 	decor              Decor
 	font               *gtext.Typeface
@@ -453,6 +458,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
 	c.animations, c.clock, c.layerRules, c.workspaceRules = cfg.Animations, cfg.Clock, cfg.LayerRules, cfg.WorkspaceRules
+	c.swallow = cfg.Swallow
 	c.syncWorkspaceRules()
 	c.gestures = cfg.Gestures
 	c.hotCorners = cfg.HotCorners

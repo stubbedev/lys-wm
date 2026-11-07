@@ -102,6 +102,9 @@ Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
 `pinned` is true while the window stays on screen through workspace switches of its output (the `pin` action); its `workspace` is the one its output shows.
+
+`swallowed_by` is the ID of the window that took this terminal's place in the layout when it was started from it (see `swallow` in config.md); it is left out while the terminal shows.
+
 A window in a scratchpad has `workspace` 0 and `scratchpad`, its name; other
 windows leave `scratchpad` out.
 `maximized` is true while the window fills the usable area (the `maximize`
@@ -260,6 +263,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `layer` | `change` (`open`, `close`), `id`, `namespace`, `output`, `layer` | A layer surface mapped or went away; the fields are as in `layers` |
 | `bell` | `window` (ID or `null`) | A client rang the system bell (`xdg_system_bell_v1`), for its window or for none |
 | `pin` | `window`, `pinned` | A window was pinned to its output (the `pin` action) or unpinned |
+| `swallow` | `window`, `swallowed_by` | A terminal was swallowed by the window started from it (`swallowed_by` its ID) or came back (`swallowed_by` 0) |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |
 | `stack` | `window`, `stack` (index or `null`) | A window's front-to-back index on its output changed, or it was shown or hidden |

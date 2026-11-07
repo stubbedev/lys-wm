@@ -46,6 +46,10 @@ func (t xToplevel) pid() int32 {
 	return t.Pid()
 }
 
+func (xToplevel) sandboxed() bool {
+	return false
+}
+
 func (t xToplevel) parent() toplevel {
 	if p := t.Parent(); p != nil {
 		return xToplevel{p, t.c}

@@ -85,6 +85,10 @@ type (
 		Window wm.WindowID `json:"window"`
 		Pinned bool        `json:"pinned"`
 	}
+	SwallowEvent struct {
+		Window      wm.WindowID `json:"window"`
+		SwallowedBy wm.WindowID `json:"swallowed_by"`
+	}
 	UnresponsiveEvent struct {
 		Window       wm.WindowID `json:"window"`
 		Unresponsive bool        `json:"unresponsive"`
@@ -160,6 +164,7 @@ func (MinimizedEvent) Name() string      { return "minimized" }
 func (ModeEvent) Name() string           { return "mode" }
 func (UnresponsiveEvent) Name() string   { return "unresponsive" }
 func (PinEvent) Name() string            { return "pin" }
+func (SwallowEvent) Name() string        { return "swallow" }
 func (StackEvent) Name() string          { return "stack" }
 func (FocusEvent) Name() string          { return "focus" }
 func (SubmapEvent) Name() string         { return "submap" }
@@ -281,6 +286,9 @@ func Diff(prev, next Snapshot) []Event {
 		}
 		if p.Pinned != w.Pinned {
 			out = append(out, PinEvent{Window: w.ID, Pinned: w.Pinned})
+		}
+		if p.SwallowedBy != w.SwallowedBy {
+			out = append(out, SwallowEvent{Window: w.ID, SwallowedBy: w.SwallowedBy})
 		}
 		if p.Unresponsive != w.Unresponsive {
 			out = append(out, UnresponsiveEvent{Window: w.ID, Unresponsive: w.Unresponsive})

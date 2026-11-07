@@ -393,7 +393,7 @@ func fixedSize(minimum, maximum image.Point) bool {
 
 func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	t := xdgToplevel{st}
-	s, err := c.mapped(t, c.nextWindow)
+	s, err := c.mapped(t, c.nextWindow, false)
 	if err != nil {
 		return err
 	}
@@ -406,7 +406,7 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)
 }
 
-func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
+func (c *Compositor) mapped(t toplevel, id wm.WindowID, swallow bool) (wm.State, error) {
 	d, float := c.ruled(t)
 	o := wm.Opening{
 		Float:    float,
@@ -432,6 +432,9 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
 	}
 	if float {
 		o.Rect = c.floatRect(t, d, c.openingArea(t, o))
+	}
+	if swallow && o.Workspace == 0 && o.Output == "" && o.Scratchpad == "" && o.Group == nil && o.Mode == wm.ModeNormal {
+		o.Swallow = c.swallowTarget(t, float)
 	}
 	return c.wm.Open(id, o)
 }
@@ -604,7 +607,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	}
 	_, w.floated = c.ruled(t)
 	w.stated = *c.decision(w)
-	s, err := c.mapped(t, w.id)
+	s, err := c.mapped(t, w.id, true)
 	if err != nil {
 		return err
 	}

@@ -127,6 +127,7 @@ type State struct {
 	restore    map[WindowID]restorePoint
 	fake       map[WindowID]struct{}
 	pinned     map[WindowID]struct{}
+	swallows   []Swallow
 	wsRules    []WorkspaceRule
 }
 
@@ -145,6 +146,7 @@ func (s State) clone() State {
 		restore:    maps.Clone(s.restore),
 		fake:       maps.Clone(s.fake),
 		pinned:     maps.Clone(s.pinned),
+		swallows:   slices.Clone(s.swallows),
 		wsRules:    s.wsRules,
 	}
 	maps.Copy(c.remembered, s.remembered)
@@ -235,17 +237,10 @@ func (s State) Workspace(id WorkspaceID) (Workspace, bool) {
 }
 
 func (s *State) windowWorkspace(id WindowID) *Workspace {
-	for i := range s.workspaces {
-		if s.workspaces[i].contains(id) {
-			return &s.workspaces[i]
-		}
+	if by, hidden := s.hiddenBy(id); hidden {
+		return s.windowWorkspace(by)
 	}
-	for i := range s.scratch {
-		if s.scratch[i].contains(id) {
-			return &s.scratch[i]
-		}
-	}
-	return nil
+	return s.workspaceHolding(id)
 }
 
 func (s *State) create(id WorkspaceID, output string) *Workspace {
@@ -455,9 +450,10 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 	if w == nil {
 		return State{}, fmt.Errorf("unmap window %d: %w", id, ErrUnknownWindow)
 	}
-	if err := w.remove(id); err != nil {
+	if err := s.unmapFrom(w, id); err != nil {
 		return State{}, err
 	}
+	s.dropSwallows(id)
 	delete(s.limits, id)
 	delete(s.restore, id)
 	delete(s.fake, id)
@@ -467,6 +463,9 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 }
 
 func (s State) FocusWindow(id WindowID) (State, error) {
+	if by, hidden := s.hiddenBy(id); hidden {
+		id = by
+	}
 	s = s.clone()
 	w := s.windowWorkspace(id)
 	if w == nil {
@@ -679,6 +678,7 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 	for i := range s.scratch {
 		s.placeScratchpad(all, &s.scratch[i], sp)
 	}
+	s.placeSwallowed(all)
 	if len(s.fake) == 0 && len(s.pinned) == 0 {
 		return
 	}

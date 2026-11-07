@@ -269,6 +269,7 @@ type Window struct {
 	ContentSource wm.ContentSource  `json:"content_source"`
 	Icon          *Icon             `json:"icon"`
 	Stack         *int              `json:"stack,omitempty"`
+	SwallowedBy   wm.WindowID       `json:"swallowed_by,omitempty"`
 	Group         *Group            `json:"group"`
 }
 

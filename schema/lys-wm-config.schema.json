@@ -304,6 +304,11 @@
                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
               },
               {
+                "name": "swallow",
+                "args": "[toggle|on|off]",
+                "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+              },
+              {
                 "name": "pin",
                 "args": "[toggle|on|off]",
                 "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -929,6 +934,11 @@
                     "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                   },
                   {
+                    "name": "swallow",
+                    "args": "[toggle|on|off]",
+                    "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                  },
+                  {
                     "name": "pin",
                     "args": "[toggle|on|off]",
                     "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -1180,6 +1190,11 @@
                     "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                   },
                   {
+                    "name": "swallow",
+                    "args": "[toggle|on|off]",
+                    "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                  },
+                  {
                     "name": "pin",
                     "args": "[toggle|on|off]",
                     "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -1429,6 +1444,11 @@
                     "name": "showdesktop",
                     "args": "[toggle|on|off] [all]",
                     "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                  },
+                  {
+                    "name": "swallow",
+                    "args": "[toggle|on|off]",
+                    "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
                   },
                   {
                     "name": "pin",
@@ -1707,6 +1727,11 @@
                       "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                     },
                     {
+                      "name": "swallow",
+                      "args": "[toggle|on|off]",
+                      "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                    },
+                    {
                       "name": "pin",
                       "args": "[toggle|on|off]",
                       "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -1954,6 +1979,11 @@
                       "name": "showdesktop",
                       "args": "[toggle|on|off] [all]",
                       "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "swallow",
+                      "args": "[toggle|on|off]",
+                      "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
                     },
                     {
                       "name": "pin",
@@ -2214,6 +2244,11 @@
                       "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                     },
                     {
+                      "name": "swallow",
+                      "args": "[toggle|on|off]",
+                      "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                    },
+                    {
                       "name": "pin",
                       "args": "[toggle|on|off]",
                       "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -2461,6 +2496,11 @@
                       "name": "showdesktop",
                       "args": "[toggle|on|off] [all]",
                       "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "swallow",
+                      "args": "[toggle|on|off]",
+                      "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
                     },
                     {
                       "name": "pin",
@@ -3204,6 +3244,11 @@
                                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                               },
                               {
+                                "name": "swallow",
+                                "args": "[toggle|on|off]",
+                                "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                              },
+                              {
                                 "name": "pin",
                                 "args": "[toggle|on|off]",
                                 "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -3451,6 +3496,11 @@
                                 "name": "showdesktop",
                                 "args": "[toggle|on|off] [all]",
                                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "swallow",
+                                "args": "[toggle|on|off]",
+                                "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
                               },
                               {
                                 "name": "pin",
@@ -3702,6 +3752,11 @@
                                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                               },
                               {
+                                "name": "swallow",
+                                "args": "[toggle|on|off]",
+                                "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                              },
+                              {
                                 "name": "pin",
                                 "args": "[toggle|on|off]",
                                 "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -3949,6 +4004,11 @@
                                 "name": "showdesktop",
                                 "args": "[toggle|on|off] [all]",
                                 "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "swallow",
+                                "args": "[toggle|on|off]",
+                                "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
                               },
                               {
                                 "name": "pin",
@@ -4624,6 +4684,11 @@
                   "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                 },
                 {
+                  "name": "swallow",
+                  "args": "[toggle|on|off]",
+                  "summary": "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told."
+                },
+                {
                   "name": "pin",
                   "args": "[toggle|on|off]",
                   "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -4671,6 +4736,18 @@
           "additionalProperties": false
         }
       }
+    },
+    "swallow": {
+      "type": "object",
+      "properties": {
+        "except_title": {
+          "type": "string"
+        },
+        "terminals": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "tabs": {
       "type": "object",

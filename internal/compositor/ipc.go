@@ -119,6 +119,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			ContentSource: contentSource,
 			Icon:          ipcIcon(w.top.Icon()),
 			Stack:         stackOf(stack, w.id),
+			SwallowedBy:   swallowedBy(s, w.id),
 			Group:         ipcGroup(ws, w.id),
 		})
 	}

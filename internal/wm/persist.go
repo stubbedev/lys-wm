@@ -63,6 +63,7 @@ type savedState struct {
 	Limits     []savedLimit           `json:"limits,omitempty"`
 	Fake       []WindowID             `json:"fake_fullscreen,omitempty"`
 	Pinned     []WindowID             `json:"pinned,omitempty"`
+	Swallows   []Swallow              `json:"swallows,omitempty"`
 }
 
 func saveGroup(g *Group) *savedGroup {
@@ -148,6 +149,7 @@ func (s State) Save() ([]byte, error) {
 	}
 	slices.Sort(saved.Fake)
 	saved.Pinned = slices.Sorted(maps.Keys(s.pinned))
+	saved.Swallows = s.swallows
 	for id, l := range s.limits {
 		saved.Limits = append(saved.Limits, savedLimit{ID: id, Limits: l})
 	}
@@ -176,6 +178,7 @@ func LoadState(data []byte) (State, error) {
 	for _, l := range saved.Limits {
 		s.limits[l.ID] = l.Limits
 	}
+	s.swallows = saved.Swallows
 	for _, id := range saved.Pinned {
 		if s.pinned == nil {
 			s.pinned = map[WindowID]struct{}{}

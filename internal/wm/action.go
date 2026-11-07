@@ -958,6 +958,11 @@ var Actions = []ActionSpec{
 		parse:   parseShowDesktop,
 	},
 	{
+		Name: "swallow", Args: "[toggle|on|off]",
+		Summary: "For a window that swallowed the terminal it was started from (see `swallow` in config.md), or that terminal: off shows the terminal again beside the window, on hides it in the window's place once more; toggle unless told.",
+		parse:   parseSwallow,
+	},
+	{
 		Name: "pin", Args: "[toggle|on|off]",
 		Summary: "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it.",
 		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {

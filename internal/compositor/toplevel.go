@@ -30,6 +30,7 @@ type toplevel interface {
 	Tag() string
 	Icon() *shell.Icon
 	pid() int32
+	sandboxed() bool
 	parent() toplevel
 	modal() bool
 	prefersFloating() bool
@@ -55,6 +56,11 @@ type xdgToplevel struct {
 
 func (t xdgToplevel) pid() int32 {
 	return t.Surface().Client().Creds().Pid
+}
+
+func (t xdgToplevel) sandboxed() bool {
+	_, sandboxed := t.Surface().Client().SecurityContext()
+	return sandboxed
 }
 
 func (t xdgToplevel) parent() toplevel {

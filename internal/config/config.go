@@ -153,6 +153,7 @@ type rawConfig struct {
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
 	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
 	Floating        rawFloating                  `yaml:"floating"`
+	Swallow         rawSwallow                   `yaml:"swallow"`
 	LayerRules      []At[rawLayerRule]           `yaml:"layer_rules"`
 	Workspaces      []At[rawWorkspaceRule]       `yaml:"workspaces"`
 }
@@ -185,6 +186,11 @@ type rawWorkspaceRule struct {
 
 type rawWorkspaceBorders struct {
 	Width *At[int] `yaml:"width"`
+}
+
+type rawSwallow struct {
+	Terminals   *At[string] `yaml:"terminals"`
+	ExceptTitle *At[string] `yaml:"except_title"`
 }
 
 type rawFloating struct {
@@ -661,6 +667,7 @@ type Config struct {
 	Animations      anim.Table
 	LayerRules      []wm.LayerRule
 	WorkspaceRules  []compositor.WorkspaceRule
+	Swallow         compositor.Swallow
 	Gestures        compositor.Gestures
 	HotCorners      compositor.HotCorners
 	Overview        compositor.OverviewStyle
@@ -1747,6 +1754,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
 	cfg.LayerRules = p.layerRules(raw.LayerRules)
 	cfg.WorkspaceRules = p.workspaceRules(raw.Workspaces, cfg.WM.Gaps)
+	cfg.Swallow.Terminals, cfg.Swallow.ExceptTitle = p.regexp(raw.Swallow.Terminals, "swallow.terminals"), p.regexp(raw.Swallow.ExceptTitle, "swallow.except_title")
 	cfg.WM.FloatStep = p.positive(raw.Floating.Step, "floating.step", cfg.WM.FloatStep)
 	if v := raw.ShowDesktop.Peek; v != nil {
 		if v.V < 1 || v.V > 50 {
@@ -1857,6 +1865,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.PowerSaverRate = c.PowerSaverRate
 	cfg.Animations, cfg.Slower = c.Animations, c.Slower
 	cfg.LayerRules, cfg.WorkspaceRules = c.LayerRules, c.WorkspaceRules
+	cfg.Swallow.Terminals, cfg.Swallow.ExceptTitle = c.Swallow.Terminals, c.Swallow.ExceptTitle
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err

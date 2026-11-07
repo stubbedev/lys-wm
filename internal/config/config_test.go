@@ -1329,3 +1329,16 @@ func TestDeviceSettingsParseIntoTypedValues(t *testing.T) {
 		}
 	}
 }
+
+func TestSwallowTakesTerminalAndExceptionPatterns(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("swallow:\n  terminals: ^foot$\n  except_title: wev\n"))
+	if err != nil || c.Swallow.Terminals.String() != "^foot$" || c.Swallow.ExceptTitle.String() != "wev" {
+		t.Fatalf("swallow parsed to %+v, %v", c.Swallow, err)
+	}
+	if c, err := Parse("t.yaml", nil); err != nil || c.Swallow.Terminals != nil {
+		t.Fatalf("swallowing is on unasked: %+v, %v", c.Swallow, err)
+	}
+	if _, err := Parse("t.yaml", []byte("swallow:\n  terminals: (foot\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: swallow.terminals") {
+		t.Fatalf("a bad pattern: %v", err)
+	}
+}
