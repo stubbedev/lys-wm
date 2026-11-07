@@ -137,14 +137,14 @@ func PlainDecor() Decor {
 const lookUnit = 8
 
 var (
-	lookAccent   = render.Color{R: 0xe0, G: 0x94, B: 0x7a, A: 0xff}
-	lookHairline = render.Color{R: 0xff, G: 0xff, B: 0xff, A: 0x14}
+	DefaultAccent = render.Color{R: 0xe0, G: 0x94, B: 0x7a, A: 0xff}
+	lookHairline  = render.Color{R: 0xff, G: 0xff, B: 0xff, A: 0x14}
 )
 
-func DefaultDecor() Decor {
+func DefaultDecor(accent render.Color) Decor {
 	d := PlainDecor()
 	d.Rounding = lookUnit
-	d.ActiveBorder, d.InactiveBorder = SolidBorder(lookAccent), SolidBorder(lookHairline)
+	d.ActiveBorder, d.InactiveBorder = SolidBorder(accent), SolidBorder(lookHairline)
 	d.Shadow = Shadow{
 		Enabled: true, Range: 24, Power: 2, Scale: 1, Offset: image.Pt(0, 8),
 		Active:   render.Color{A: 0x60},
@@ -153,7 +153,7 @@ func DefaultDecor() Decor {
 	d.Blur = Blur{Size: 6, Passes: 2, Look: wm.Look{SaturationShift: 0.3}}
 	d.Tab = TabStyle{
 		Height: 24, Padding: 0, TextHeight: 11, TextPadding: 8,
-		Active:   TabColors{Background: lookAccent, Text: crust},
+		Active:   TabColors{Background: accent, Text: crust},
 		Inactive: TabColors{Background: surface0, Text: textFg},
 		Urgent:   TabColors{Background: red, Text: crust},
 	}
@@ -166,8 +166,8 @@ type Look struct {
 	Overview OverviewStyle
 }
 
-func DefaultLook(s render.Speed) Look {
-	l := Look{Decor: DefaultDecor(), Motion: anim.DefaultMotion(), Overview: DefaultOverviewStyle()}
+func DefaultLook(s render.Speed, accent render.Color) Look {
+	l := Look{Decor: DefaultDecor(accent), Motion: anim.DefaultMotion(), Overview: DefaultOverviewStyle()}
 	if s == render.GPU {
 		return l
 	}

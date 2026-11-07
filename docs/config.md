@@ -292,19 +292,28 @@ the host compositor configures the devices.
 
 A colour is a palette name or `#rrggbb[aa]`. The palette starts as
 [Catppuccin Mocha](https://catppuccin.com/palette) (`mauve`, `crust`,
-`surface0`, …); `palette` adds names or overrides them:
+`surface0`, …) and `accent`, the desktop's accent colour; `palette` adds
+names or overrides them:
 
 ```yaml
 palette:
   accent: "#ff8800"
 ```
 
+`accent` is the `accent-color` xdg-desktop-portal publishes, which in a
+lys-shell session is lys-shell's `styling.palette.primary`, the accent
+lys-settings edits. lys-wm follows it while it runs: a new accent reloads the
+config, so the focus border and the active tab change with it, with no
+`lys-wmctl reload`. Until the desktop publishes one, `accent` is `#e0947a`,
+lys-shell's default. A colour the config names, or `accent` set under
+`palette`, wins over the desktop's.
+
 ## borders
 
 | Key | Default |
 | --- | --- |
 | `width` | 1 |
-| `active` | `#e0947a`, lys-shell's accent |
+| `active` | `accent`, the desktop's accent colour |
 | `inactive` | `#ffffff14`, a white hairline |
 
 `active` and `inactive` take a colour, or a gradient of 2 to 10 colours spread
@@ -764,7 +773,7 @@ client's drag and drop.
 | `text_padding` | 8 |
 | `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |
 | `icon_theme` | The freedesktop icon theme tab icons named by windows resolve in, searched in the XDG data directories. Default: `Adwaita`, which falls back to `hicolor` |
-| `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `#e0947a`/`crust`, `surface0`/`text` and `red`/`crust` |
+| `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `accent`/`crust`, `surface0`/`text` and `red`/`crust` |
 
 A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
 the title, as a square as tall as the tab less `text_padding` on each side,

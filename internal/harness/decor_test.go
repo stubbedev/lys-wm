@@ -229,7 +229,7 @@ func TestATitleChangeRastersItsLabelOutsideTheFrame(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.WM = compositor.DefaultSettings()
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.DefaultDecor(compositor.DefaultAccent)
 	}, small)
 	c := testclient.Connect(t, h.Socket())
 	a := c.Window("first", quadrants)

@@ -19,7 +19,7 @@ func BenchmarkLookFullFrame(b *testing.B) {
 		}{
 			{"plain", func(*compositor.Config) {}},
 			{"default", func(cfg *compositor.Config) {
-				cfg.Decor, cfg.WM = compositor.DefaultDecor(), compositor.DefaultSettings()
+				cfg.Decor, cfg.WM = compositor.DefaultDecor(compositor.DefaultAccent), compositor.DefaultSettings()
 			}},
 		} {
 			b.Run(look.name, func(b *testing.B) {
@@ -68,7 +68,7 @@ func BenchmarkLookAnimatedFrame(b *testing.B) {
 		s := open(b)
 		slow := 20 * time.Second
 		s.configure = func(cfg *compositor.Config) {
-			cfg.Decor, cfg.WM = compositor.DefaultDecor(), compositor.DefaultSettings()
+			cfg.Decor, cfg.WM = compositor.DefaultDecor(compositor.DefaultAccent), compositor.DefaultSettings()
 			off := false
 			table, errs := anim.Resolve(true, map[anim.Event]anim.Setting{anim.Global: {Enabled: &off}, anim.Workspaces: {Enabled: new(true), Shape: anim.Linear, Duration: &slow}})
 			if len(errs) != 0 {

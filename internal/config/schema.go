@@ -107,7 +107,7 @@ func lookAnnotations(prefix string, saturation any) map[string]annotation {
 }
 
 func annotations() map[string]annotation {
-	look := compositor.DefaultLook(render.GPU)
+	look := compositor.DefaultLook(render.GPU, compositor.DefaultAccent)
 	d := look.Decor
 	s := compositor.DefaultSettings()
 	out := map[string]annotation{

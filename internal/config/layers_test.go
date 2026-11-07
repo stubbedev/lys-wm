@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-wm/internal/compositor"
 )
 
 func layers(config, runtime string) []Layer {
@@ -13,7 +15,7 @@ func layers(config, runtime string) []Layer {
 }
 
 func TestARuntimeOverrideWinsAndWhatItLeavesOutFallsThrough(t *testing.T) {
-	cfg, err := ParseLayers(layers("gaps:\n  inner: 3\nborders:\n  width: 5\n", "gaps:\n  inner: 7\n")...)
+	cfg, err := ParseLayers(compositor.DefaultAccent, layers("gaps:\n  inner: 3\nborders:\n  width: 5\n", "gaps:\n  inner: 7\n")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +32,7 @@ func TestARuntimeOverrideWinsAndWhatItLeavesOutFallsThrough(t *testing.T) {
 }
 
 func TestARuntimeOverrideReplacesAListWhole(t *testing.T) {
-	cfg, err := ParseLayers(layers("autostart: [a, b]\n", "autostart: [c]\n")...)
+	cfg, err := ParseLayers(compositor.DefaultAccent, layers("autostart: [a, b]\n", "autostart: [c]\n")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +43,7 @@ func TestARuntimeOverrideReplacesAListWhole(t *testing.T) {
 
 func TestARuntimeOverrideAppliesOverTheBuiltInConfig(t *testing.T) {
 	cfg, err := ParseLayers(
+		compositor.DefaultAccent,
 		Layer{Source: SourceBuiltIn, File: "built-in config", Data: Default},
 		Layer{Source: SourceRuntime, File: RuntimeFile, Data: []byte("gaps:\n  inner: 9\n")},
 	)
@@ -57,29 +60,29 @@ func TestARuntimeOverrideAppliesOverTheBuiltInConfig(t *testing.T) {
 }
 
 func TestABadOverrideNamesItsOwnFileLineAndKey(t *testing.T) {
-	_, err := ParseLayers(layers("borders:\n  width: 2\n", "\ngaps:\n  inner: -1\n")...)
+	_, err := ParseLayers(compositor.DefaultAccent, layers("borders:\n  width: 2\n", "\ngaps:\n  inner: -1\n")...)
 	if err == nil || !strings.Contains(err.Error(), RuntimeFile+":3: gaps.inner: -1 is not zero or more") {
 		t.Fatalf("%v", err)
 	}
-	_, err = ParseLayers(layers("gaps:\n  inner: -1\n", "borders:\n  width: 2\n")...)
+	_, err = ParseLayers(compositor.DefaultAccent, layers("gaps:\n  inner: -1\n", "borders:\n  width: 2\n")...)
 	if err == nil || !strings.Contains(err.Error(), "config.yaml:2: gaps.inner") {
 		t.Fatalf("a bad config.yaml key below an override: %v", err)
 	}
 }
 
 func TestAnOverrideThatDoesNotDecodeNamesItsOwnFileAndLine(t *testing.T) {
-	_, err := ParseLayers(layers("gaps:\n  inner: 1\n", "\ntabs:\n  height: tall\n")...)
+	_, err := ParseLayers(compositor.DefaultAccent, layers("gaps:\n  inner: 1\n", "\ntabs:\n  height: tall\n")...)
 	if err == nil || !strings.Contains(err.Error(), RuntimeFile+": yaml: unmarshal errors:\n  line 3: cannot unmarshal") {
 		t.Fatalf("%v", err)
 	}
-	_, err = ParseLayers(layers("", "gaps: [\n")...)
+	_, err = ParseLayers(compositor.DefaultAccent, layers("", "gaps: [\n")...)
 	if err == nil || !strings.HasPrefix(err.Error(), RuntimeFile+": ") {
 		t.Fatalf("an override that is not YAML: %v", err)
 	}
 }
 
 func TestAnUnknownKeyInAnOverrideWarnsAtItsLine(t *testing.T) {
-	cfg, err := ParseLayers(layers("gaps:\n  inner: 1\n", "gaps:\n  wide: 1\n")...)
+	cfg, err := ParseLayers(compositor.DefaultAccent, layers("gaps:\n  inner: 1\n", "gaps:\n  wide: 1\n")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +92,7 @@ func TestAnUnknownKeyInAnOverrideWarnsAtItsLine(t *testing.T) {
 }
 
 func TestEachBindRemembersTheFileItCameFrom(t *testing.T) {
-	cfg, err := ParseLayers(layers("binds:\n  - {chord: SUPER + Q, action: kill}\n", "submaps:\n  resize:\n    - {chord: SUPER + Q, action: kill}\n")...)
+	cfg, err := ParseLayers(compositor.DefaultAccent, layers("binds:\n  - {chord: SUPER + Q, action: kill}\n", "submaps:\n  resize:\n    - {chord: SUPER + Q, action: kill}\n")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +131,7 @@ func TestSourcesSayWhichLayerEachKeyComesFrom(t *testing.T) {
 func TestOneLayerParsesAsParseDoes(t *testing.T) {
 	text := []byte("gaps:\n  inner: 3\ntabs:\n  height: 0\n")
 	_, one := Parse("config.yaml", text)
-	_, layered := ParseLayers(Layer{Source: SourceConfig, File: "config.yaml", Data: text})
+	_, layered := ParseLayers(compositor.DefaultAccent, Layer{Source: SourceConfig, File: "config.yaml", Data: text})
 	if one == nil || layered == nil || one.Error() != layered.Error() {
 		t.Fatalf("%v, %v", one, layered)
 	}

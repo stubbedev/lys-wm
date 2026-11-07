@@ -441,6 +441,8 @@ type Config struct {
 	Slower          map[render.Speed]compositor.Effects
 }
 
+const accentName = "accent"
+
 var mocha = map[string]render.Color{
 	"rosewater": rgb(0xf5e0dc), "flamingo": rgb(0xf2cdcd), "pink": rgb(0xf5c2e7), "mauve": rgb(0xcba6f7),
 	"red": rgb(0xf38ba8), "maroon": rgb(0xeba0ac), "peach": rgb(0xfab387), "yellow": rgb(0xf9e2af),
@@ -1285,10 +1287,10 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 }
 
 func Parse(file string, data []byte) (Config, error) {
-	return ParseLayers(Layer{Source: SourceConfig, File: file, Data: data})
+	return ParseLayers(compositor.DefaultAccent, Layer{Source: SourceConfig, File: file, Data: data})
 }
 
-func ParseLayers(layers ...Layer) (Config, error) {
+func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	doc, l, err := merged(layers)
 	if err != nil {
 		return Config{}, err
@@ -1303,6 +1305,7 @@ func ParseLayers(layers ...Layer) (Config, error) {
 		}
 	}
 	maps.Copy(p.palette, mocha)
+	p.palette[accentName] = accent
 	for _, name := range slices.Sorted(maps.Keys(raw.Palette)) {
 		a := raw.Palette[name]
 		c, ok := parseHex(a.V)
@@ -1311,7 +1314,7 @@ func ParseLayers(layers ...Layer) (Config, error) {
 		}
 		p.palette[name] = c
 	}
-	look := compositor.DefaultLook(render.GPU)
+	look := compositor.DefaultLook(render.GPU, p.palette[accentName])
 	cfg := Config{
 		layered:         l,
 		File:            file,
@@ -1353,7 +1356,7 @@ func ParseLayers(layers ...Layer) (Config, error) {
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
 	again := &parser{layered: l, palette: p.palette}
 	for _, speed := range compositor.SlowerSpeeds {
-		slower := compositor.DefaultLook(speed)
+		slower := compositor.DefaultLook(speed, p.palette[accentName])
 		cfg.Slower[speed] = compositor.Effects{Decor: again.decor(raw, slower.Decor), Animations: again.animations(raw.Animations, slower.Motion), Overview: again.overview(raw.Overview, slower.Overview)}
 	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))

@@ -89,7 +89,7 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {title: ^Open, dim_around: true}\n")); err != nil || !wm.Decide(c.Rules, "", "Open File").DimAround {
 		t.Errorf("a rule's dim_around: %+v, %v", c.Rules, err)
 	}
-	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != compositor.DefaultDecor().Shadow.Power || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
+	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != compositor.DefaultDecor(compositor.DefaultAccent).Shadow.Power || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
 		t.Errorf("decoration.shadow parsed to %+v", s)
 	}
 	if c, err := Parse("t.yaml", []byte("borders:\n  active: {colors: [mauve, \"#00ff0080\"], angle: 45}\n")); err != nil || !slices.Equal(c.Decor.ActiveBorder.Colors(), []render.Color{{R: 0xcb, G: 0xa6, B: 0xf7, A: 0xff}, {G: 0xff, A: 0x80}}) {
@@ -98,7 +98,7 @@ func TestExampleConfig(t *testing.T) {
 	if c, err := Parse("t.yaml", []byte("decoration:\n  blur:\n    xray: true\n")); err != nil || !c.Decor.Blur.XRay {
 		t.Errorf("decoration.blur.xray: %+v, %v", c.Decor.Blur, err)
 	}
-	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor().Blur.Size, Passes: compositor.DefaultDecor().Blur.Passes, Look: compositor.DefaultDecor().Blur.Look}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
+	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Size, Passes: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Passes, Look: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Look}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
 		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
 	}
 	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Blur {
@@ -107,7 +107,7 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.Rounding != 8 {
 		t.Errorf("decoration.rounding parsed to %d", cfg.Decor.Rounding)
 	}
-	if cfg.Decor.Tab.Padding != compositor.DefaultDecor().Tab.Padding {
+	if cfg.Decor.Tab.Padding != compositor.DefaultDecor(compositor.DefaultAccent).Tab.Padding {
 		t.Error("an unset tab field lost its default")
 	}
 	if c := cfg.Animations.Curve(anim.Global); c.Duration() != 300*time.Millisecond || c.At(150*time.Millisecond) <= 0.5 {
@@ -200,7 +200,7 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 	if cfg.Animations != anim.MustResolve(anim.DefaultMotion()) {
 		t.Fatalf("animations %+v without config", cfg.Animations)
 	}
-	if cfg.Decor != compositor.DefaultDecor() || cfg.WM != compositor.DefaultSettings() || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
+	if cfg.Decor != compositor.DefaultDecor(compositor.DefaultAccent) || cfg.WM != compositor.DefaultSettings() || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
 		t.Fatalf("defaults %+v", cfg)
 	}
 }
@@ -351,7 +351,7 @@ func TestTheBuiltInConfigBuildsACompositorConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Binds) != len(file.Binds) || cfg.Seat.RepeatRate != seat.DefaultRepeatRate || cfg.Decor != compositor.DefaultDecor() {
+	if len(cfg.Binds) != len(file.Binds) || cfg.Seat.RepeatRate != seat.DefaultRepeatRate || cfg.Decor != compositor.DefaultDecor(compositor.DefaultAccent) {
 		t.Fatalf("%d binds of %d, seat %+v", len(cfg.Binds), len(file.Binds), cfg.Seat)
 	}
 	if _, err := binds.NewMap(cfg.Binds, 0); err != nil {
@@ -626,7 +626,7 @@ func TestAnEmptyConfigGetsTheDefaultLook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	def := compositor.DefaultDecor()
+	def := compositor.DefaultDecor(compositor.DefaultAccent)
 	if def.Rounding == 0 || !def.Shadow.Enabled || cfg.WM.Gaps == (wm.Gaps{}) {
 		t.Fatalf("the default look is plain: %+v, gaps %+v", def, cfg.WM.Gaps)
 	}
@@ -802,5 +802,57 @@ func TestTiledWindowsBlurLiveOnlyWhenTheConfigAsks(t *testing.T) {
 		if got := compositorOf(t, text).Decor.Blur.LiveTiled; got != want {
 			t.Errorf("%q: live tiled blur %v, want %v", text, got, want)
 		}
+	}
+}
+
+func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T) {
+	desktop := render.Color{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+	parse := func(t *testing.T, text string) Config {
+		t.Helper()
+		cfg, err := ParseLayers(desktop, Layer{Source: SourceConfig, File: "t.yaml", Data: []byte(text)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	focus := func(cfg Config) []compositor.Border {
+		out := []compositor.Border{cfg.Decor.ActiveBorder}
+		for _, speed := range compositor.SlowerSpeeds {
+			out = append(out, cfg.Slower[speed].Decor.ActiveBorder)
+		}
+		return out
+	}
+
+	cfg := parse(t, "")
+	for _, b := range focus(cfg) {
+		if b != compositor.SolidBorder(desktop) {
+			t.Errorf("the default focus border is %+v, want the desktop accent", b)
+		}
+	}
+	if got := cfg.Decor.Tab.Active.Background; got != desktop {
+		t.Errorf("the default active tab is %+v, want the desktop accent", got)
+	}
+
+	gradient, err := compositor.GradientBorder([]render.Color{desktop, mocha["blue"]}, 45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parse(t, "borders:\n  active: {colors: [accent, blue], angle: 45}\n").Decor.ActiveBorder; got != gradient {
+		t.Errorf("a gradient naming accent is %+v, want it from the desktop accent", got)
+	}
+
+	explicit := render.Color{R: 0xff, G: 0x88, A: 0xff}
+	for name, text := range map[string]string{
+		"an explicit border":  "borders:\n  active: \"#ff8800\"\n",
+		"an explicit palette": "palette:\n  accent: \"#ff8800\"\n",
+	} {
+		for _, b := range focus(parse(t, text)) {
+			if b != compositor.SolidBorder(explicit) {
+				t.Errorf("%s: the focus border is %+v, want the config's #ff8800", name, b)
+			}
+		}
+	}
+	if got := parse(t, "borders:\n  active: \"#ff8800\"\n").Decor.Tab.Active.Background; got != desktop {
+		t.Errorf("an explicit border moved the active tab to %+v", got)
 	}
 }

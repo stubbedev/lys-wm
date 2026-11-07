@@ -311,12 +311,12 @@ type loaded struct {
 	warnings  []error
 }
 
-func (s source) load() (loaded, error) {
+func (s source) load(accent render.Color) (loaded, error) {
 	layers, err := s.read()
 	if err != nil {
 		return loaded{}, err
 	}
-	file, err := config.ParseLayers(layers...)
+	file, err := config.ParseLayers(accent, layers...)
 	if err != nil {
 		return loaded{}, err
 	}
@@ -345,7 +345,7 @@ func printHandoverInfo(path, runtime string, getenv func(string) string, out io.
 	if err != nil {
 		return err
 	}
-	l, err := s.load()
+	l, err := s.load(compositor.DefaultAccent)
 	if err != nil {
 		info.Config = err.Error()
 	} else {
@@ -364,7 +364,7 @@ func checkConfigFile(path, runtime string, getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	l, err := s.load()
+	l, err := s.load(compositor.DefaultAccent)
 	if err != nil {
 		return err
 	}
@@ -419,6 +419,7 @@ func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
 type reloader struct {
 	source
 	loading        sync.Mutex
+	accent         render.Color
 	cursor         compositor.CursorConfig
 	comp           *compositor.Compositor
 	exit           func() error
@@ -433,9 +434,19 @@ const (
 
 func (s *reloader) reload() func() error {
 	s.loading.Lock()
-	next, err := s.load()
+	next, err := s.load(s.accent)
 	s.loading.Unlock()
 	return func() error { return s.apply(next, err) }
+}
+
+func (s *reloader) follow(accent render.Color) bool {
+	s.loading.Lock()
+	defer s.loading.Unlock()
+	if s.accent == accent {
+		return false
+	}
+	s.accent = accent
+	return true
 }
 
 func (s *reloader) apply(next loaded, err error) error {
@@ -594,14 +605,14 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	s := &reloader{source: src}
+	s := &reloader{source: src, accent: compositor.DefaultAccent}
 	if *handoverFD >= 0 {
 		unix.CloseOnExec(*handoverFD)
 		if incoming, err = receiveHandover(*handoverFD); err != nil {
 			return err
 		}
 	}
-	first, err := s.load()
+	first, err := s.load(s.accent)
 	if err != nil {
 		return err
 	}
@@ -738,6 +749,21 @@ func run(args []string) (err error) {
 			defer leave(func() error { return sess.Close() })
 		}
 	}
+	accents := followAccent(func(accent render.Color) {
+		if !s.follow(accent) {
+			return
+		}
+		if err := l.Post(func() error {
+			s.comp.ReloadConfig()
+			return nil
+		}); err != nil && !errors.Is(err, loop.ErrClosed) {
+			cfg.Report(fmt.Errorf("follow the desktop accent: %w", err))
+		}
+	})
+	defer leave(func() error {
+		accents.Close()
+		return nil
+	})
 	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, opened: b}
 	srv.OnUpgrade(u.start)
 	if incoming == nil {

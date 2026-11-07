@@ -25,7 +25,7 @@ func BenchmarkGCCountPerThousandFrames(b *testing.B) {
 			now := time.Second
 			h := start(b, setup{open: softBackend, configure: func(cfg *compositor.Config) {
 				cfg.WM = compositor.DefaultSettings()
-				cfg.Decor = compositor.DefaultDecor()
+				cfg.Decor = compositor.DefaultDecor(compositor.DefaultAccent)
 				cfg.Animations = anim.MustResolve(anim.DefaultMotion())
 				cfg.Clock = func() time.Duration { return now }
 			}}, mode)
@@ -79,7 +79,7 @@ func TestAnimatedFramesAllocateAlmostNothing(t *testing.T) {
 	now := time.Second
 	h := start(t, setup{open: softBackend, configure: func(cfg *compositor.Config) {
 		cfg.WM = compositor.DefaultSettings()
-		cfg.Decor = compositor.DefaultDecor()
+		cfg.Decor = compositor.DefaultDecor(compositor.DefaultAccent)
 		cfg.Animations = anim.MustResolve(anim.DefaultMotion())
 		cfg.Clock = func() time.Duration { return now }
 	}}, mode)

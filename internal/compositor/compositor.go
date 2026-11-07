@@ -149,10 +149,10 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 
 func DefaultConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 	cfg := PlainConfig(keymap, font)
-	cfg.WM, cfg.Decor, cfg.Animations = DefaultSettings(), DefaultDecor(), anim.MustResolve(anim.DefaultMotion())
+	cfg.WM, cfg.Decor, cfg.Animations = DefaultSettings(), DefaultDecor(DefaultAccent), anim.MustResolve(anim.DefaultMotion())
 	cfg.Slower = map[render.Speed]Effects{}
 	for _, s := range SlowerSpeeds {
-		l := DefaultLook(s)
+		l := DefaultLook(s, DefaultAccent)
 		cfg.Slower[s] = Effects{Decor: l.Decor, Animations: anim.MustResolve(l.Motion), Overview: l.Overview}
 	}
 	return cfg

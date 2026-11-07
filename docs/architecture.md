@@ -767,6 +767,11 @@ xdg-desktop-portal-wlr speaks wlr-screencopy, so screen sharing still works
 without lys-shell. GlobalShortcuts needs `hyprland-global-shortcuts-v1` in the
 compositor (#89).
 
+lys-wm reads one setting back from the portal: `org.freedesktop.appearance
+accent-color`, the `accent` palette colour the focus border and active tab
+default to. lys-ui's `portalsettings` monitor follows it on its own goroutine,
+and a change posts a config reload to the loop (stubbedev/lys-settings#4).
+
 ## Packages
 
 Everything lives under `internal/` except the commands.

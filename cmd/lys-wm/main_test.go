@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testenv"
@@ -119,7 +120,7 @@ func (s source) withRuntime(path string) source {
 func TestLoadingTheConfig(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.yaml")
-	first, err := testSource(t, missing, false).load()
+	first, err := testSource(t, missing, false).load(compositor.DefaultAccent)
 	if err != nil {
 		t.Fatalf("a missing default config: %v", err)
 	}
@@ -129,21 +130,21 @@ func TestLoadingTheConfig(t *testing.T) {
 	if err := first.keymap.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := testSource(t, missing, true).load(); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := testSource(t, missing, true).load(compositor.DefaultAccent); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("a missing --config file: %v", err)
 	}
 	bad := filepath.Join(dir, "bad.yaml")
 	if err := os.WriteFile(bad, []byte("binds:\n  - chord: SUPER + Nope\n    action: kill\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := testSource(t, bad, true).load(); err == nil || !strings.HasPrefix(err.Error(), bad+":2: chord: bad chord") {
+	if _, err := testSource(t, bad, true).load(compositor.DefaultAccent); err == nil || !strings.HasPrefix(err.Error(), bad+":2: chord: bad chord") {
 		t.Errorf("an unknown key: %v", err)
 	}
 	layout := filepath.Join(dir, "layout.yaml")
 	if err := os.WriteFile(layout, []byte("input:\n  keyboard:\n    layout: no-such-layout\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := testSource(t, layout, true).load(); err == nil || !strings.Contains(err.Error(), "no-such-layout") {
+	if _, err := testSource(t, layout, true).load(compositor.DefaultAccent); err == nil || !strings.Contains(err.Error(), "no-such-layout") {
 		t.Errorf("an unknown layout: %v", err)
 	}
 }
@@ -196,6 +197,12 @@ const noXwayland = "xwayland:\n  enabled: false\n"
 
 func startSession(t *testing.T, config string) (string, string, <-chan error) {
 	t.Helper()
+	return startSessionOnBus(t, config, "")
+}
+
+func startSessionOnBus(t *testing.T, config, bus string) (string, string, <-chan error) {
+	t.Helper()
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", bus)
 	testenv.Font(t)
 	testenv.XKBCompiler(t)
 	dir := testenv.SocketDir(t)
@@ -476,7 +483,7 @@ func TestCheckConfigWithACandidateOverrideJudgesItAsAReloadWould(t *testing.T) {
 		if err != nil && !strings.Contains(err.Error(), "no-such-layout") && !strings.Contains(err.Error(), candidate+":1:") {
 			t.Errorf("%q: the error does not name the candidate: %v", content, err)
 		}
-		_, reload := testSource(t, main, true).withRuntime(candidate).load()
+		_, reload := testSource(t, main, true).withRuntime(candidate).load(compositor.DefaultAccent)
 		if (reload == nil) != accepted {
 			t.Errorf("%q: a reload says %v, the check %v", content, reload, err)
 		}
@@ -504,7 +511,7 @@ func TestAReadOnlyLinkedConfigLoadsWithItsOverrides(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, config.RuntimeFile), []byte("gaps:\n  inner: 8\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	l, err := testSource(t, link, false).load()
+	l, err := testSource(t, link, false).load(compositor.DefaultAccent)
 	if err != nil {
 		t.Fatal(err)
 	}

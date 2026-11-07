@@ -42,7 +42,7 @@ func TestTheDefaultLookFitsTheRenderer(t *testing.T) {
 		w := c.Window("look", testclient.Fill(0xff, 0xff, 0xff))
 		c.DispatchUntil("the window to map", w.Mapped)
 		size := tall.Size
-		gap, border := compositor.DefaultSettings().Gaps.Inner, compositor.DefaultDecor().BorderWidth
+		gap, border := compositor.DefaultSettings().Gaps.Inner, compositor.DefaultDecor(compositor.DefaultAccent).BorderWidth
 		inset := 2 * (gap + border)
 		c.DispatchUntil("the window to fill its tile", func() bool { return w.Logical == image.Pt(size.X-inset, size.Y-inset) })
 		pump(c, 2*time.Second)
@@ -118,7 +118,7 @@ func TestATabStripAndItsWindowAreOneRoundedShape(t *testing.T) {
 		h.dispatch("makegroup tab")
 		second := c.Window("second", testclient.Fill(0xff, 0xff, 0xff))
 		c.DispatchUntil("the second to map", second.Mapped)
-		decor := compositor.DefaultDecor()
+		decor := compositor.DefaultDecor(compositor.DefaultAccent)
 		gap, border := compositor.DefaultSettings().Gaps.Outer.Left, decor.BorderWidth
 		belowStrip := gap + decor.Tab.Height + decor.Tab.Padding
 		size := tall.Size
