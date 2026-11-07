@@ -683,7 +683,7 @@ func (c *Compositor) outputAt(p point) *output.Output {
 }
 
 func (c *Compositor) hitWindow(w *window, p point) (*surface.Surface, point) {
-	if !w.visible || !w.clip.Empty() && !p.pixel().In(w.clip) || c.drag != nil && w == c.dragCarried() {
+	if !w.visible || !w.clip.Empty() && !p.pixel().In(w.clip) || c.carried(w) {
 		return nil, point{}
 	}
 	if s, local := hitPopups(c.popups(w), p); s != nil {
@@ -735,7 +735,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 		return s, local, nil
 	}
 	for _, w := range slices.Backward(c.stack) {
-		if w.layer != wm.LayerFullscreen && !w.scratch && !c.peekHidesInput(w) {
+		if w.layer != wm.LayerFullscreen && !w.scratch && !c.peekHidesInput(w) && !c.carried(w) {
 			if s, local := hitPopups(c.popups(w), p); s != nil {
 				return s, local, w
 			}
@@ -743,7 +743,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 	}
 	for _, layer := range slices.Backward(windowLayers) {
 		for _, w := range slices.Backward(c.stack) {
-			if w.layer != layer || !w.visible || w.scratch || c.peekHidesInput(w) {
+			if w.layer != layer || !w.visible || w.scratch || c.peekHidesInput(w) || c.carried(w) {
 				continue
 			}
 			if s, local := hitTree(w.top.Surface(), c.windowOrigin(w), p); s != nil {

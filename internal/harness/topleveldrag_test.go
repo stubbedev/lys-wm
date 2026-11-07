@@ -2,7 +2,9 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -177,4 +179,50 @@ func TestATabDragSourceCannotBeTheSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.c.ExpectProtocolError(uint32(cxtd.XdgToplevelDragManagerV1ErrorInvalidSource))
+}
+
+func TestADropTargetIsTheWindowUnderTheDraggedToplevel(t *testing.T) {
+	t.Parallel()
+	h := Start(t, desktop)
+	a := join(t, h, "a")
+	tab := a.c.Window("tab", quadrants)
+	a.c.DispatchUntil("the tab window to map", tab.Mapped)
+	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	under, origin := windows[0].Rect, windows[1].Rect
+	pressOn(h, a.c, a.in, image.Pt(origin.X+20, origin.Y+20))
+	m, err := cxtd.NewXdgToplevelDragManagerV1(a.c.Display, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.c.Bind(m)
+	source := a.c.DataSource(map[string]string{"text/plain": "tab"})
+	drag, err := m.GetXdgToplevelDrag(source.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(source.Data.SetActions(cw.WlDataDeviceManagerDndActionMove), a.cb.Device.StartDrag(source.Data, tab.Surface, nil, a.in.Press), drag.Attach(tab.Toplevel, 20, 20), a.c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	tabID := windows[1].ID
+	h.Eventually("the tab floating", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		for _, w := range windowsOf(c) {
+			if w.ID == tabID {
+				return w.Floating
+			}
+		}
+		return false
+	})
+	a.c.DispatchUntil("the tab at its floating size", func() bool {
+		w, _ := windowRect(h, tabID)
+		return tab.Logical == image.Pt(w.Rect.Width, w.Rect.Height)
+	})
+	settle(t, h)
+	at := image.Pt(under.X+100, under.Y+80)
+	h.movePointer(at)
+	want := fmt.Sprintf("motion %d,%d", at.X-under.X, at.Y-under.Y)
+	a.c.Sync()
+	if !slices.Contains(a.cb.Log, want) {
+		t.Fatalf("the drag logged %v, want %q", a.cb.Log, want)
+	}
+	h.button(false)
 }

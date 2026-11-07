@@ -121,9 +121,10 @@ func (c *Compositor) touchDragging() bool {
 }
 
 func (c *Compositor) dragMotion(at time.Duration) error {
+	moved := c.followDrag()
 	p := c.drag.by.at(c)
 	s, local, _ := c.surfaceAt(p)
-	err := errors.Join(c.drag.Motion(s, local.X, local.Y, at), c.trackDragHold(), c.followDrag())
+	err := errors.Join(moved, c.drag.Motion(s, local.X, local.Y, at), c.trackDragHold())
 	if c.overviewHolds() {
 		err = errors.Join(err, c.overviewMoved(p))
 	}
