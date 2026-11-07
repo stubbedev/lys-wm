@@ -164,7 +164,7 @@ func (c *Compositor) drawDragPreview(pass *frame, o *output.Output) {
 		c.drawBlur(pass, o, glassDraw{shape: p.shape[:], extent: d, mask: keep, alpha: strength, look: &c.decor.Blur.Look})
 	}
 	border := c.decor.ActiveBorder
-	pass.fillMasked(d, scaleColor(border.colors[0].Premultiply(), strength*cfg.Opacity), keep)
+	pass.fillMasked(d, scaleColor(border.Colors()[0].Premultiply(), strength*cfg.Opacity), keep)
 	width := int(math.Ceil(float64(deviceLength(o, dragPreviewRing))))
 	inner := d.Inset(width)
 	if inner.Empty() {

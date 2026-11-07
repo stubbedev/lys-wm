@@ -143,7 +143,7 @@ func (c *Compositor) drawGooSwitch(pass *frame, o *output.Output) {
 		if a.Empty() || b.Empty() {
 			continue
 		}
-		color := scaleColor(c.borderTarget(target).colors[0].Premultiply(), float32(strength))
+		color := scaleColor(c.borderTarget(target).Colors()[0].Premultiply(), float32(strength))
 		radius := c.outerRadius(o, target)
 		smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy())) / 2
 		pass.fillGoo(a.Union(b), color, render.Goo{A: render.RoundRect{Rect: a, Radius: radius}, B: render.RoundRect{Rect: b, Radius: radius}, Smooth: smooth})

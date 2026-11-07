@@ -73,7 +73,7 @@ func (c *Compositor) shownShadow(w *window) render.Color {
 	return render.Color{R: v[0], G: v[1], B: v[2], A: v[3]}
 }
 
-func (c *Compositor) borderTarget(w *window) Border {
+func (c *Compositor) borderTarget(w *window) render.Border {
 	if w == c.active {
 		return c.decor.ActiveBorder
 	}
@@ -90,7 +90,7 @@ func (c *Compositor) refreshBorder(w *window, now time.Duration, first bool) {
 		return
 	}
 	w.border = to
-	if to.n > 1 {
+	if to.Gradient() {
 		w.borderAngle = anim.NewTween(0.0, anim.Lerp)
 		w.borderAngle.Set(1, now, c.animations.Curve(anim.BorderAngle))
 	}
@@ -110,5 +110,5 @@ func (c *Compositor) borderTurn(w *window) float64 {
 }
 
 func (c *Compositor) borderMoving(w *window, now time.Duration) bool {
-	return !w.borderAngle.Done(now) || (c.loopingBorders() && w.border.n > 1 && w.layer != wm.LayerFullscreen)
+	return !w.borderAngle.Done(now) || (c.loopingBorders() && w.border.Gradient() && w.layer != wm.LayerFullscreen)
 }

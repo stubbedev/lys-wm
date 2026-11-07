@@ -75,7 +75,7 @@ func TestExampleConfig(t *testing.T) {
 	if mx := in.Devices["Logitech MX Master 3"]; len(in.Devices) != 1 || *mx.AccelProfile != session.AccelAdaptive || !*mx.NaturalScroll {
 		t.Errorf("devices %+v", in.Devices)
 	}
-	if cfg.Decor.BorderWidth != 2 || cfg.Decor.ActiveBorder != compositor.SolidBorder(render.Color{R: 0xff, G: 0x88, A: 0xff}) || cfg.Decor.Tab.Height != 18 || cfg.Decor.Tab.Urgent.Text != (render.Color{A: 0xff}) {
+	if cfg.Decor.BorderWidth != 2 || cfg.Decor.ActiveBorder != render.SolidBorder(render.Color{R: 0xff, G: 0x88, A: 0xff}) || cfg.Decor.Tab.Height != 18 || cfg.Decor.Tab.Urgent.Text != (render.Color{A: 0xff}) {
 		t.Errorf("decor %+v", cfg.Decor)
 	}
 	if cfg.Decor.Opacity != (compositor.Opacity{Active: 1, Inactive: 0.9, Fullscreen: 1}) {
@@ -288,7 +288,7 @@ func TestErrorsNameFileLineAndKey(t *testing.T) {
 		"decoration:\n  shadow:\n    offset: [1]\n":                             "t.yaml:3: decoration.shadow.offset: [1] is not [x, y]",
 		"decoration:\n  shadow:\n    scale: 0\n":                                "t.yaml:3: decoration.shadow.scale: 0 is not above 0 to 1",
 		"borders:\n  active: {colors: [red, nope]}\n":                           `t.yaml:2: borders.active.colors[1]: "nope" is neither`,
-		"borders:\n  active: {colors: []}\n":                                    "t.yaml:2: borders.active: compositor: a gradient border takes 2 to 10 colours, not 0",
+		"borders:\n  active: {colors: []}\n":                                    "t.yaml:2: borders.active: render: a gradient border takes 2 to 10 colours, not 0",
 		"decoration:\n  blur:\n    passes: 5\n":                                 "t.yaml:3: decoration.blur.passes: 5 is not from 1 to 4",
 		"decoration:\n  rounding: -1\n":                                         "t.yaml:2: decoration.rounding: -1 is not zero or more",
 		"gaps:\n  inner: -2\n":                                                  "t.yaml:2: gaps.inner: -2 is not zero or more",
@@ -817,8 +817,8 @@ func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T
 		}
 		return cfg
 	}
-	focus := func(cfg Config) []compositor.Border {
-		out := []compositor.Border{cfg.Decor.ActiveBorder}
+	focus := func(cfg Config) []render.Border {
+		out := []render.Border{cfg.Decor.ActiveBorder}
 		for _, speed := range compositor.SlowerSpeeds {
 			out = append(out, cfg.Slower[speed].Decor.ActiveBorder)
 		}
@@ -827,7 +827,7 @@ func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T
 
 	cfg := parse(t, "")
 	for _, b := range focus(cfg) {
-		if b != compositor.SolidBorder(desktop) {
+		if b != render.SolidBorder(desktop) {
 			t.Errorf("the default focus border is %+v, want the desktop accent", b)
 		}
 	}
@@ -835,7 +835,7 @@ func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T
 		t.Errorf("the default active tab is %+v, want the desktop accent", got)
 	}
 
-	gradient, err := compositor.GradientBorder([]render.Color{desktop, mocha["blue"]}, 45)
+	gradient, err := render.GradientBorder([]render.Color{desktop, mocha["blue"]}, 45)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,7 +849,7 @@ func TestTheDesktopAccentColoursTheFocusUnlessTheConfigNamesAColour(t *testing.T
 		"an explicit palette": "palette:\n  accent: \"#ff8800\"\n",
 	} {
 		for _, b := range focus(parse(t, text)) {
-			if b != compositor.SolidBorder(explicit) {
+			if b != render.SolidBorder(explicit) {
 				t.Errorf("%s: the focus border is %+v, want the config's #ff8800", name, b)
 			}
 		}

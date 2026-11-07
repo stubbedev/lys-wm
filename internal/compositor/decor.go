@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	gtext "github.com/stubbedev/lys-lib/render"
-	"github.com/stubbedev/lys-lib/third_party/gomath"
 	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
@@ -47,50 +46,6 @@ type Shadow struct {
 	Active, Inactive render.Color
 }
 
-const MaxBorderColors = 10
-
-type Border struct {
-	colors [MaxBorderColors]render.Color
-	n      int
-	angle  float64
-}
-
-func SolidBorder(c render.Color) Border {
-	return Border{colors: [MaxBorderColors]render.Color{c}, n: 1}
-}
-
-func GradientBorder(colors []render.Color, degrees float64) (Border, error) {
-	if len(colors) < 2 || len(colors) > MaxBorderColors {
-		return Border{}, fmt.Errorf("compositor: a gradient border takes 2 to %d colours, not %d", MaxBorderColors, len(colors))
-	}
-	if math.IsNaN(degrees) || math.IsInf(degrees, 0) {
-		return Border{}, fmt.Errorf("compositor: gradient angle %v is not finite", degrees)
-	}
-	b := Border{n: len(colors), angle: degrees}
-	copy(b.colors[:], colors)
-	return b, nil
-}
-
-func (b Border) Colors() []render.Color {
-	return b.colors[:b.n]
-}
-
-func (b Border) stops() stopsKey {
-	return stopsKey{colors: b.colors, n: b.n}
-}
-
-type stopsKey struct {
-	colors [MaxBorderColors]render.Color
-	n      int
-}
-
-func (b Border) line(r image.Rectangle) (from, to [2]float32) {
-	s, c := gomath.Sincos(b.angle * math.Pi / 180)
-	cx, cy := float64(float64(r.Min.X+r.Max.X)/2), float64(float64(r.Min.Y+r.Max.Y)/2)
-	h := math.Abs(float64(r.Dx())/2*c) + math.Abs(float64(r.Dy())/2*s)
-	return [2]float32{float32(cx - float64(h*c)), float32(cy - float64(h*s))}, [2]float32{float32(cx + float64(h*c)), float32(cy + float64(h*s))}
-}
-
 type Decor struct {
 	BorderWidth                  int
 	Rounding                     int
@@ -98,7 +53,7 @@ type Decor struct {
 	Dim                          Dim
 	Shadow                       Shadow
 	Blur                         Blur
-	ActiveBorder, InactiveBorder Border
+	ActiveBorder, InactiveBorder render.Border
 	Tab                          TabStyle
 	DragPreview                  DragPreview
 }
@@ -122,8 +77,8 @@ func PlainDecor() Decor {
 			Active:   render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
 			Inactive: render.Color{R: 0x1a, G: 0x1a, B: 0x1a, A: 0xee},
 		},
-		ActiveBorder:   SolidBorder(mauve),
-		InactiveBorder: SolidBorder(crust),
+		ActiveBorder:   render.SolidBorder(mauve),
+		InactiveBorder: render.SolidBorder(crust),
 		Tab: TabStyle{
 			Height: 15, Padding: 5, TextHeight: 8, TextPadding: 3,
 			Active:   TabColors{Background: mauve, Text: crust},
@@ -144,7 +99,7 @@ var (
 func DefaultDecor(accent render.Color) Decor {
 	d := PlainDecor()
 	d.Rounding = lookUnit
-	d.ActiveBorder, d.InactiveBorder = SolidBorder(accent), SolidBorder(lookHairline)
+	d.ActiveBorder, d.InactiveBorder = render.SolidBorder(accent), render.SolidBorder(lookHairline)
 	d.Shadow = Shadow{
 		Enabled: true, Range: 24, Power: 2, Scale: 1, Offset: image.Pt(0, 8),
 		Active:   render.Color{A: 0x60},
@@ -493,15 +448,14 @@ func (c *Compositor) drawBorderIn(pass *frame, o *output.Output, w *window, oute
 	c.paintBorder(pass, w.border, outer, inner, ring, 1, c.borderTurn(w))
 }
 
-func (c *Compositor) paintBorder(pass *frame, border Border, outer, inner image.Rectangle, ring render.Mask, alpha float32, turn float64) {
-	if border.n > 1 {
+func (c *Compositor) paintBorder(pass *frame, border render.Border, outer, inner image.Rectangle, ring render.Mask, alpha float32, turn float64) {
+	if border.Gradient() {
 		stops, err := c.borderStops(border)
 		if err != nil {
 			c.report(err)
 			return
 		}
-		border.angle += turn
-		from, to := border.line(outer)
+		from, to := border.Turned(turn).Line(outer)
 		for _, strip := range ringStrips(outer, inner, ring.Cut.Radius) {
 			if !strip.Empty() {
 				pass.fillGradient(strip, render.Gradient{Stops: stops, From: from, To: to, Alpha: alpha}, ring)
@@ -509,7 +463,7 @@ func (c *Compositor) paintBorder(pass *frame, border Border, outer, inner image.
 		}
 		return
 	}
-	color := scaleColor(border.colors[0].Premultiply(), alpha)
+	color := scaleColor(border.Colors()[0].Premultiply(), alpha)
 	for _, strip := range ringStrips(outer, inner, ring.Cut.Radius) {
 		switch {
 		case strip.Empty():
@@ -521,17 +475,17 @@ func (c *Compositor) paintBorder(pass *frame, border Border, outer, inner image.
 	}
 }
 
-func (c *Compositor) borderStops(b Border) (render.Texture, error) {
-	key := b.stops()
+func (c *Compositor) borderStops(b render.Border) (render.Texture, error) {
+	key := b.Stops()
 	if t, ok := c.stops[key]; ok {
 		return t, nil
 	}
-	pix := make([]byte, 0, 4*b.n)
+	pix := make([]byte, 0, 4*len(b.Colors()))
 	for _, col := range b.Colors() {
 		p := col.Premultiply()
 		pix = append(pix, p.B, p.G, p.R, p.A)
 	}
-	t, err := c.renderer.NewTexture(render.ARGB8888, image.Pt(b.n, 1), 4*b.n, pix)
+	t, err := c.renderer.NewTexture(render.ARGB8888, image.Pt(len(b.Colors()), 1), 4*len(b.Colors()), pix)
 	if err != nil {
 		return nil, fmt.Errorf("compositor: border gradient stops %v: %w", b.Colors(), err)
 	}

@@ -43,7 +43,7 @@ type window struct {
 	scratch       bool
 	pinned        bool
 	looked        bool
-	border        Border
+	border        render.Border
 	borderAngle   anim.Tween[float64]
 	snapshot      render.TextureTarget
 	frost         *frost

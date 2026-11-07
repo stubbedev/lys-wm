@@ -1159,7 +1159,7 @@ func TestABorderStaysWholeAsAWindowShrinks(t *testing.T) {
 			cfg.Animations = springTable(t)
 			cfg.Clock = func() time.Duration { return now }
 			cfg.Decor.BorderWidth = 1
-			cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(magenta), compositor.SolidBorder(magenta)
+			cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = render.SolidBorder(magenta), render.SolidBorder(magenta)
 			plainOverview(cfg)
 		}, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -1960,7 +1960,7 @@ func TestTheStripIsGlassOverTheBlurredLayers(t *testing.T) {
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			plainOverview(cfg)
-			cfg.Decor.ActiveBorder = compositor.SolidBorder(magenta)
+			cfg.Decor.ActiveBorder = render.SolidBorder(magenta)
 		}, overviewMode)
 		c := testclient.Connect(t, h.Socket())
 		wallpaper := c.Layer(testclient.LayerSpec{

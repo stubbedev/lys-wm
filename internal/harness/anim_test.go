@@ -375,7 +375,7 @@ func testBorderColoursChangeAtOnceAndGradientsTurnOnlyTheRing(t *testing.T, star
 		t.Fatal(errs)
 	}
 	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
-	gradient, err := compositor.GradientBorder([]render.Color{red, blue}, 0)
+	gradient, err := render.GradientBorder([]render.Color{red, blue}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func testBorderColoursChangeAtOnceAndGradientsTurnOnlyTheRing(t *testing.T, star
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
-		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = compositor.SolidBorder(red), compositor.SolidBorder(blue)
+		cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder = render.SolidBorder(red), render.SolidBorder(blue)
 		next = *cfg
 		next.Decor.ActiveBorder = gradient
 	}, tall)
@@ -453,8 +453,8 @@ func startBorderScene(t *testing.T, start gpuStarter, motion map[anim.Event]anim
 		cfg.Rules = rules
 		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
-		cfg.Decor.ActiveBorder = compositor.SolidBorder(render.Color{R: 0xff, A: 0xff})
-		cfg.Decor.InactiveBorder = compositor.SolidBorder(render.Color{B: 0xff, A: 0xff})
+		cfg.Decor.ActiveBorder = render.SolidBorder(render.Color{R: 0xff, A: 0xff})
+		cfg.Decor.InactiveBorder = render.SolidBorder(render.Color{B: 0xff, A: 0xff})
 	}, tall)
 	return borderScene{Harness: h, client: testclient.Connect(t, h.Socket()), at: func(d time.Duration) {
 		h.Do(func(*headless.Backend, *compositor.Compositor) error {

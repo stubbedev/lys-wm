@@ -77,7 +77,7 @@ func colorAnn(def any) annotation { return annotation{format: colorFormat, def: 
 
 func formatAnn(format string) annotation { return annotation{format: format} }
 
-var borderColors = annotation{minItems: new(1), maxItems: new(compositor.MaxBorderColors)}
+var borderColors = annotation{minItems: new(1), maxItems: new(render.MaxBorderColors)}
 
 func sidesValue(in wm.Insets) any {
 	if in.Top == in.Right && in.Top == in.Bottom && in.Top == in.Left {

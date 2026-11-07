@@ -98,13 +98,13 @@ const (
 	rimResting = 40
 )
 
-var rimStops = func() Border {
+var rimStops = func() render.Border {
 	alphas := [8]uint8{0xff, 0x96, 0x32, 0, 0, 0, 0x28, 0x6e}
 	colors := make([]render.Color, len(alphas))
 	for i, a := range alphas {
 		colors[i] = render.Color{R: 0xff, G: 0xff, B: 0xff, A: a}
 	}
-	b, err := GradientBorder(colors, 0)
+	b, err := render.GradientBorder(colors, 0)
 	if err != nil {
 		panic(err)
 	}

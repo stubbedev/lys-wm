@@ -810,7 +810,7 @@ func (p *parser) shadow(r rawShadow, def compositor.Shadow) compositor.Shadow {
 	return s
 }
 
-func (p *parser) border(a *At[rawBorder], key string, fallback compositor.Border) compositor.Border {
+func (p *parser) border(a *At[rawBorder], key string, fallback render.Border) render.Border {
 	if a == nil {
 		return fallback
 	}
@@ -823,9 +823,9 @@ func (p *parser) border(a *At[rawBorder], key string, fallback compositor.Border
 		colors = append(colors, p.color(c, k, render.Color{}))
 	}
 	if len(colors) == 1 {
-		return compositor.SolidBorder(colors[0])
+		return render.SolidBorder(colors[0])
 	}
-	b, err := compositor.GradientBorder(colors, a.V.Angle)
+	b, err := render.GradientBorder(colors, a.V.Angle)
 	if err != nil {
 		p.fail(a.Line, key, "%v", err)
 		return fallback

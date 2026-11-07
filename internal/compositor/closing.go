@@ -92,7 +92,7 @@ func (c *Compositor) drawBud(pass *frame, o *output.Output, neighbour, at image.
 	if strength <= 0 || a.Empty() || b.Empty() {
 		return
 	}
-	color := scaleColor(c.decor.InactiveBorder.colors[0].Premultiply(), float32(strength))
+	color := scaleColor(c.decor.InactiveBorder.Colors()[0].Premultiply(), float32(strength))
 	smooth := float32(min(a.Dx(), a.Dy(), b.Dx(), b.Dy()))
 	pass.fillGoo(a.Union(b), color, render.Goo{A: render.RoundRect{Rect: a, Radius: c.decorRadius(o)}, B: render.RoundRect{Rect: b, Radius: c.decorRadius(o)}, Smooth: smooth})
 }

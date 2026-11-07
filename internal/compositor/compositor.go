@@ -233,7 +233,7 @@ type Compositor struct {
 	font               *gtext.Typeface
 	icons              *icontheme.Theme
 	labels             map[*output.Output]map[labelKey]*label
-	stops              map[stopsKey]render.Texture
+	stops              map[render.BorderStops]render.Texture
 	scenes             map[*output.Output]*scene
 	dropped            map[*output.Output]int
 	inherited          map[*output.Output]*loop.Timer
@@ -397,8 +397,8 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.InheritTimeout <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: inherited frame timeout %v is not positive", cfg.InheritTimeout)
 	}
-	for _, b := range [2]Border{cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder} {
-		if b.n == 0 {
+	for _, b := range [2]render.Border{cfg.Decor.ActiveBorder, cfg.Decor.InactiveBorder} {
+		if len(b.Colors()) == 0 {
 			return binds.Map{}, errors.New("compositor: a border without a colour; use SolidBorder or GradientBorder")
 		}
 	}
@@ -450,7 +450,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		footprints:     map[*surface.Surface]footprint{},
 		touches:        map[int32]touchAt{},
 		labels:         map[*output.Output]map[labelKey]*label{},
-		stops:          map[stopsKey]render.Texture{},
+		stops:          map[render.BorderStops]render.Texture{},
 		switches:       map[*output.Output]*workspaceSwitch{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scratchSlideOf: map[*output.Output]*workspaceSwitch{},

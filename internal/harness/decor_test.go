@@ -152,7 +152,7 @@ func testATranslucentBorderBlendsWithoutDroppingFrames(t *testing.T, start gpuSt
 		cfg.Report = r.report
 		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth = 4
-		cfg.Decor.ActiveBorder = compositor.SolidBorder(render.Color{R: 0xff, A: 0x80})
+		cfg.Decor.ActiveBorder = render.SolidBorder(render.Color{R: 0xff, A: 0x80})
 	}, tall)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("bordered", testclient.Fill(0x60, 0x60, 0x60))
@@ -204,7 +204,7 @@ func TestAGradientBorderRunsAlongItsAngle(t *testing.T) {
 
 func testAGradientBorderRunsAlongItsAngle(t *testing.T, start gpuStarter) {
 	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
-	border, err := compositor.GradientBorder([]render.Color{red, blue}, 45)
+	border, err := render.GradientBorder([]render.Color{red, blue}, 45)
 	if err != nil {
 		t.Fatal(err)
 	}
