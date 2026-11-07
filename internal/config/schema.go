@@ -31,6 +31,7 @@ const (
 	regexFormat     = "regex"
 	actionFormat    = "lys-wm-action"
 	chordFormat     = "lys-wm-chord"
+	pixelsPattern   = "^[1-9][0-9]*px$"
 )
 
 type schemaNode struct {
@@ -38,6 +39,7 @@ type schemaNode struct {
 	ID                   string                 `json:"$id,omitempty"`
 	Type                 string                 `json:"type,omitempty"`
 	Format               string                 `json:"format,omitempty"`
+	Pattern              string                 `json:"pattern,omitempty"`
 	Enum                 []any                  `json:"enum,omitempty"`
 	Minimum              *float64               `json:"minimum,omitempty"`
 	ExclusiveMinimum     *float64               `json:"exclusiveMinimum,omitempty"`
@@ -298,6 +300,7 @@ var (
 	sidesType  = reflect.TypeFor[sides]()
 	borderType = reflect.TypeFor[rawBorder]()
 	buttonType = reflect.TypeFor[buttonName]()
+	widthType  = reflect.TypeFor[columnWidth]()
 )
 
 func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schemaNode {
@@ -313,6 +316,8 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 		n.OneOf = []*schemaNode{{Type: "integer"}, {Type: "array", Items: &schemaNode{Type: "integer"}}}
 	case t == buttonType:
 		n.OneOf = []*schemaNode{{Type: "string", Enum: enumValues(annotation{enum: slices.Sorted(maps.Keys(buttons))})}, {Type: "integer", Minimum: new(1.0)}}
+	case t == widthType:
+		n.OneOf = []*schemaNode{{Type: "number", ExclusiveMinimum: new(0.0), Maximum: new(1.0)}, {Type: "string", Pattern: pixelsPattern}}
 	case t == borderType:
 		object := objectSchema(t, path, notes)
 		n.OneOf = []*schemaNode{{Type: "string", Format: colorFormat}, object}

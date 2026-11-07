@@ -459,7 +459,12 @@ func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) 
 	if g.Layout == Scrolled && want == SplitH && span > 0 {
 		c := *g
 		c.Children = slices.Clone(g.Children)
-		c.Children[i].Ratio = min(max(c.Children[i].Ratio+float64(delta)/float64(span), minColumnWidth), 1)
+		ch := &c.Children[i]
+		w := Share(ch.Ratio + float64(delta)/float64(span))
+		if ch.Fixed > 0 {
+			w = Pixels(ch.Fixed + delta)
+		}
+		ch.setWidth(w, span, 0)
 		return &c, true
 	}
 	j := step(i, d)

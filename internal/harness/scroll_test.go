@@ -124,3 +124,26 @@ func TestAViewSwipeTracksTheFingersAndSettlesOnAColumnEdge(t *testing.T) {
 	}
 	r.expectNoMoreFrames()
 }
+
+func TestAFixedPixelColumnWidthConfiguresTheClientToThosePixels(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		scrolled(cfg)
+		cfg.WM.Scroll.Presets = []wm.ColumnWidth{wm.Share(0.5), wm.Pixels(40)}
+	}, tall)
+	s := openStrip(t, h)
+	green := s.windows[2]
+	for _, step := range []struct {
+		action string
+		width  int
+	}{
+		{"columnwidth 100px", 100},
+		{"columnwidth -30px", 70},
+		{"columnwidth preset next", 80},
+		{"columnwidth preset next", 40},
+	} {
+		h.ctl(step.action)
+		s.c.DispatchUntil(step.action+" to configure green", func() bool { return green.Size.X == step.width })
+		s.settle()
+	}
+}

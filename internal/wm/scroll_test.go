@@ -221,3 +221,80 @@ func TestWorkspacesTakeTheirLayoutFromTheRuleOrTheDefault(t *testing.T) {
 		t.Fatal("a handover lost the scroll layout")
 	}
 }
+
+func TestAFixedColumnWidthStaysInPixelsWhateverTheOutput(t *testing.T) {
+	s := scrolling(t, 1, 2)
+	settings := scrollSettings()
+	for _, step := range []struct {
+		action string
+		width  int
+	}{
+		{"columnwidth 420px", 420},
+		{"columnwidth +30px", 450},
+		{"columnwidth -50px", 400},
+		{"resizeactive 20 0", 420},
+		{"columnwidth 5000px", 1000},
+		{"columnwidth 50%", 500},
+		{"columnwidth +10%", 600},
+		{"columnwidth 420px", 420},
+	} {
+		s = runWith(t, s, step.action, settings)
+		if got := rectAt(t, s, 2).Dx(); got != step.width {
+			t.Fatalf("%s gave a column %d wide, want %d", step.action, got, step.width)
+		}
+	}
+	w, _ := s.Workspace(1)
+	wide := w.Tree.Arrange(image.Rect(0, 0, 2000, 600), Spacing{})
+	for _, p := range wide.Windows {
+		if want := map[WindowID]int{1: 1000, 2: 420}[p.ID]; p.Rect.Dx() != want {
+			t.Fatalf("on a 2000 wide output window %d is %d wide, want %d", p.ID, p.Rect.Dx(), want)
+		}
+	}
+	data, err := s.Save()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadState(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rectAt(t, loaded, 2).Dx(); got != 420 {
+		t.Fatalf("a handover made the fixed column %d wide, want 420", got)
+	}
+	tree := run(t, s, "setlayout tree")
+	tw, _ := tree.Workspace(1)
+	for _, p := range tw.Tree.Arrange(image.Rect(0, 0, 2000, 600), Spacing{}).Windows {
+		if p.ID == 2 && p.Rect.Dx() <= 840 {
+			t.Fatalf("as a tree the fixed column kept its pixels: %v", p.Rect)
+		}
+	}
+}
+
+func TestPresetsMixSharesAndPixelsInWidthOrder(t *testing.T) {
+	s := scrolling(t, 1)
+	settings := scrollSettings()
+	settings.Scroll.Presets = []ColumnWidth{Pixels(800), Share(0.5), Pixels(300)}
+	for _, step := range []struct {
+		action string
+		width  int
+	}{
+		{"columnwidth preset next", 800},
+		{"columnwidth preset next", 300},
+		{"columnwidth preset next", 500},
+		{"columnwidth preset prev", 300},
+		{"columnwidth preset prev", 800},
+	} {
+		s = runWith(t, s, step.action, settings)
+		if got := rectAt(t, s, 1).Dx(); got != step.width {
+			t.Fatalf("%s gave a column %d wide, want %d", step.action, got, step.width)
+		}
+	}
+}
+
+func TestColumnWidthRejectsMalformedPixels(t *testing.T) {
+	for _, arg := range []string{"0px", "px", "+0px", "-px", "1.5px", "+x20px"} {
+		if _, err := ParseAction("columnwidth " + arg); err == nil {
+			t.Errorf("columnwidth %s parsed", arg)
+		}
+	}
+}

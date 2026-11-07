@@ -895,8 +895,8 @@ var Actions = []ActionSpec{
 		parse:   parseSetLayout,
 	},
 	{
-		Name: "columnwidth", Args: "<preset next|preset prev|+n%|-n%|n%>",
-		Summary: "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent.",
+		Name: "columnwidth", Args: "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+		Summary: "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels.",
 		parse:   parseColumnWidth,
 	},
 	{

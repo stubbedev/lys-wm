@@ -74,6 +74,7 @@ func (w Window) clone() Node {
 type Child struct {
 	Node  Node
 	Ratio float64
+	Fixed int
 }
 
 type GroupID uint32
@@ -93,7 +94,7 @@ func (g *Group) clone() Node {
 	c := *g
 	c.Children = make([]Child, len(g.Children))
 	for i, ch := range g.Children {
-		c.Children[i] = Child{Node: ch.Node.clone(), Ratio: ch.Ratio}
+		c.Children[i] = Child{Node: ch.Node.clone(), Ratio: ch.Ratio, Fixed: ch.Fixed}
 	}
 	return &c
 }

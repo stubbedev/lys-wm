@@ -1,6 +1,7 @@
 package wm
 
 import (
+	"cmp"
 	"fmt"
 	"image"
 	"math"
@@ -41,12 +42,12 @@ func ParseCenterMode(s string) (CenterMode, bool) {
 }
 
 type Scrolling struct {
-	Presets []float64
+	Presets []ColumnWidth
 	Center  CenterMode
 }
 
 func DefaultScrolling() Scrolling {
-	return Scrolling{Presets: []float64{1.0 / 3, 0.5, 2.0 / 3}, Center: CenterNever}
+	return Scrolling{Presets: []ColumnWidth{Share(1.0 / 3), Share(0.5), Share(2.0 / 3)}, Center: CenterNever}
 }
 
 func (s State) WithLayoutDefault(k LayoutKind) State {
@@ -86,7 +87,7 @@ func spanOf(g *Group, span, inner, target int) columnSpan {
 	var c columnSpan
 	x := 0
 	for i, ch := range g.Children {
-		w := columnWidth(ch, span+inner) - inner
+		w := ch.width().at(span, inner)
 		if i == target {
 			c.lo, c.hi = x, x+w
 		}
@@ -173,15 +174,64 @@ func (s State) withScrollTree(settings Settings, op func(t Tree, area image.Rect
 	return s
 }
 
+type ColumnWidth struct {
+	share  float64
+	pixels int
+}
+
+func Share(f float64) ColumnWidth { return ColumnWidth{share: f} }
+
+func Pixels(n int) ColumnWidth { return ColumnWidth{pixels: n} }
+
+func (w ColumnWidth) String() string {
+	if w.pixels != 0 {
+		return strconv.Itoa(w.pixels) + "px"
+	}
+	return strconv.FormatFloat(w.share*100, 'f', -1, 64) + "%"
+}
+
+func (w ColumnWidth) at(area, inner int) int {
+	if w.pixels != 0 {
+		return w.pixels
+	}
+	return max(int(math.Round(w.share*float64(area+inner))), minTile) - inner
+}
+
+func (w ColumnWidth) shareOf(area, inner int) float64 {
+	if w.pixels == 0 {
+		return w.share
+	}
+	return float64(w.pixels+inner) / float64(area+inner)
+}
+
+func (w ColumnWidth) clamped(area, inner int) ColumnWidth {
+	if w.pixels == 0 {
+		return Share(min(max(w.share, minColumnWidth), 1))
+	}
+	return Pixels(min(max(w.pixels, Share(minColumnWidth).at(area, inner)), area))
+}
+
+func (c Child) width() ColumnWidth {
+	if c.Fixed > 0 {
+		return Pixels(c.Fixed)
+	}
+	return Share(c.Ratio)
+}
+
+func (c *Child) setWidth(w ColumnWidth, area, inner int) {
+	w = w.clamped(area, inner)
+	c.Ratio, c.Fixed = w.shareOf(area, inner), w.pixels
+}
+
 type WidthChange interface {
 	fmt.Stringer
-	next(current float64, presets []float64) (float64, bool)
+	next(current ColumnWidth, area, inner int, presets []ColumnWidth) (ColumnWidth, bool)
 }
 
 type (
 	PresetStep int
-	WidthBy    float64
-	WidthTo    float64
+	WidthBy    ColumnWidth
+	WidthTo    ColumnWidth
 )
 
 func (p PresetStep) String() string {
@@ -191,59 +241,70 @@ func (p PresetStep) String() string {
 	return "preset next"
 }
 
-func (p PresetStep) next(current float64, presets []float64) (float64, bool) {
+func (p PresetStep) next(current ColumnWidth, area, inner int, presets []ColumnWidth) (ColumnWidth, bool) {
 	if len(presets) == 0 {
 		return current, false
 	}
+	now := current.at(area, inner)
+	sorted := slices.SortedStableFunc(slices.Values(presets), func(a, b ColumnWidth) int {
+		return cmp.Compare(a.at(area, inner), b.at(area, inner))
+	})
 	if p > 0 {
-		for _, w := range presets {
-			if w > current+1e-6 {
+		for _, w := range sorted {
+			if w.at(area, inner) > now {
 				return w, true
 			}
 		}
-		return presets[0], true
+		return sorted[0], true
 	}
-	for _, w := range slices.Backward(presets) {
-		if w < current-1e-6 {
+	for _, w := range slices.Backward(sorted) {
+		if w.at(area, inner) < now {
 			return w, true
 		}
 	}
-	return presets[len(presets)-1], true
+	return sorted[len(sorted)-1], true
 }
 
 func (b WidthBy) String() string {
-	text := strconv.FormatFloat(float64(b)*100, 'f', -1, 64) + "%"
-	if b > 0 {
+	text := ColumnWidth(b).String()
+	if b.share > 0 || b.pixels > 0 {
 		return "+" + text
 	}
 	return text
 }
 
-func (b WidthBy) next(current float64, _ []float64) (float64, bool) {
-	return current + float64(b), true
+func (b WidthBy) next(current ColumnWidth, area, inner int, _ []ColumnWidth) (ColumnWidth, bool) {
+	if b.pixels != 0 {
+		return Pixels(current.at(area, inner) + b.pixels), true
+	}
+	return Share(current.shareOf(area, inner) + b.share), true
 }
 
-func (w WidthTo) String() string { return strconv.FormatFloat(float64(w)*100, 'f', -1, 64) + "%" }
+func (w WidthTo) String() string { return ColumnWidth(w).String() }
 
-func (w WidthTo) next(float64, []float64) (float64, bool) {
-	return float64(w), true
+func (w WidthTo) next(ColumnWidth, int, int, []ColumnWidth) (ColumnWidth, bool) {
+	return ColumnWidth(w), true
 }
 
 const minColumnWidth = 0.05
 
-func (t Tree) ColumnWidth(c WidthChange, presets []float64) (Tree, bool) {
+func (t Tree) ColumnWidth(c WidthChange, presets []ColumnWidth, area, inner int) (Tree, bool) {
 	col, ok := t.focusedColumn()
 	if !ok {
 		return t, false
 	}
-	t = t.clone()
-	ch := &t.root.Children[col]
-	width, changes := c.next(ch.Ratio, presets)
-	width = min(max(width, minColumnWidth), 1)
-	if !changes || width == ch.Ratio {
+	before := t.root.Children[col]
+	w, changes := c.next(before.width(), area, inner, presets)
+	if !changes {
 		return t, false
 	}
-	ch.Ratio = width
+	after := before
+	after.setWidth(w, area, inner)
+	if after.Ratio == before.Ratio && after.Fixed == before.Fixed {
+		return t, false
+	}
+	t = t.clone()
+	t.root.Children[col].Ratio, t.root.Children[col].Fixed = after.Ratio, after.Fixed
 	return t, true
 }
 
@@ -414,6 +475,9 @@ func toTree(t Tree) Tree {
 	t.scroll = false
 	if t.root != nil {
 		t.root.Layout, t.root.view = SplitH, 0
+		for i := range t.root.Children {
+			t.root.Children[i].Fixed = 0
+		}
 	}
 	return t
 }
@@ -456,8 +520,8 @@ func (a SetLayoutAction) apply(s State, _ Settings) (State, []Effect, error) {
 }
 
 func (a ColumnWidthAction) apply(s State, settings Settings) (State, []Effect, error) {
-	return s.withScrollTree(settings, func(t Tree, _ image.Rectangle, _ int) (Tree, bool) {
-		return t.ColumnWidth(a.Change, settings.Scroll.Presets)
+	return s.withScrollTree(settings, func(t Tree, area image.Rectangle, inner int) (Tree, bool) {
+		return t.ColumnWidth(a.Change, settings.Scroll.Presets, area.Dx(), inner)
 	}), nil, nil
 }
 
@@ -490,6 +554,14 @@ func parseSetLayout(spec ActionSpec, args []string, _ string) (Action, error) {
 	return SetLayoutAction{Kind: k}, nil
 }
 
+func ParsePixels(s string) (int, bool) {
+	text, ok := strings.CutSuffix(s, "px")
+	n, err := strconv.Atoi(text)
+	return n, ok && err == nil && text[0] >= '1' && text[0] <= '9'
+}
+
+func relative(arg string) bool { return arg != "" && (arg[0] == '+' || arg[0] == '-') }
+
 func parseColumnWidth(spec ActionSpec, args []string, _ string) (Action, error) {
 	if len(args) == 2 && args[0] == "preset" {
 		switch args[1] {
@@ -501,23 +573,44 @@ func parseColumnWidth(spec ActionSpec, args []string, _ string) (Action, error) 
 		return nil, badArgs(spec, "%q is not next or prev", args[1])
 	}
 	if len(args) != 1 {
-		return nil, badArgs(spec, "takes preset next, preset prev or a percentage")
+		return nil, badArgs(spec, "takes preset next, preset prev, a percentage or pixels")
+	}
+	if text, ok := strings.CutSuffix(args[0], "px"); ok {
+		return parsePixelWidth(spec, args[0], text)
 	}
 	text, ok := strings.CutSuffix(args[0], "%")
 	v, err := strconv.ParseFloat(text, 64)
 	if !ok || err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-		return nil, badArgs(spec, "%q is not a percentage", args[0])
+		return nil, badArgs(spec, "%q is not a percentage or pixels", args[0])
 	}
-	if text[0] == '+' || text[0] == '-' {
+	if relative(text) {
 		if v == 0 {
 			return nil, badArgs(spec, "%q changes nothing", args[0])
 		}
-		return ColumnWidthAction{Change: WidthBy(v / 100)}, nil
+		return ColumnWidthAction{Change: WidthBy(Share(v / 100))}, nil
 	}
 	if v <= 0 || v > 100 {
 		return nil, badArgs(spec, "%q is not above 0%% and up to 100%%", args[0])
 	}
-	return ColumnWidthAction{Change: WidthTo(v / 100)}, nil
+	return ColumnWidthAction{Change: WidthTo(Share(v / 100))}, nil
+}
+
+func parsePixelWidth(spec ActionSpec, arg, text string) (Action, error) {
+	if !relative(text) {
+		n, ok := ParsePixels(arg)
+		if !ok {
+			return nil, badArgs(spec, "%q is not a width above 0px", arg)
+		}
+		return ColumnWidthAction{Change: WidthTo(Pixels(n))}, nil
+	}
+	n, err := strconv.Atoi(text)
+	if err != nil {
+		return nil, badArgs(spec, "%q is not a change in pixels", arg)
+	}
+	if n == 0 {
+		return nil, badArgs(spec, "%q changes nothing", arg)
+	}
+	return ColumnWidthAction{Change: WidthBy(Pixels(n))}, nil
 }
 
 func parseConsume(spec ActionSpec, args []string, rest string) (Action, error) {

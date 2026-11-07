@@ -13,6 +13,7 @@ type savedNode struct {
 	Window WindowID    `json:"window,omitempty"`
 	Group  *savedGroup `json:"group,omitempty"`
 	Ratio  float64     `json:"ratio"`
+	Fixed  int         `json:"fixed,omitempty"`
 }
 
 type savedGroup struct {
@@ -74,7 +75,7 @@ func saveGroup(g *Group) *savedGroup {
 	}
 	out := &savedGroup{ID: g.id, Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, View: g.view, Children: make([]savedNode, len(g.Children))}
 	for i, ch := range g.Children {
-		out.Children[i].Ratio = ch.Ratio
+		out.Children[i].Ratio, out.Children[i].Fixed = ch.Ratio, ch.Fixed
 		switch n := ch.Node.(type) {
 		case Window:
 			out.Children[i].Window = n.ID
@@ -118,7 +119,7 @@ func (t *Tree) loadGroup(g *savedGroup) (*Group, error) {
 	t.minted = max(t.minted, g.ID)
 	out := &Group{id: g.ID, Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, view: g.View, Children: make([]Child, len(g.Children))}
 	for i, ch := range g.Children {
-		out.Children[i].Ratio = ch.Ratio
+		out.Children[i].Ratio, out.Children[i].Fixed = ch.Ratio, ch.Fixed
 		switch {
 		case ch.Group != nil:
 			sub, err := t.loadGroup(ch.Group)

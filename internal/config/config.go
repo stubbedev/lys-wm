@@ -196,9 +196,11 @@ type rawWorkspaceBorders struct {
 }
 
 type rawScroll struct {
-	Presets *At[[]float64] `yaml:"presets"`
-	Center  *At[string]    `yaml:"center"`
+	Presets *At[[]columnWidth] `yaml:"presets"`
+	Center  *At[string]        `yaml:"center"`
 }
+
+type columnWidth string
 
 type rawSwallow struct {
 	Terminals   *At[string] `yaml:"terminals"`
@@ -2528,16 +2530,27 @@ func (p *parser) scroll(r rawScroll, def wm.Scrolling) wm.Scrolling {
 		p.fail(r.Presets.Line, "scroll.presets", "needs at least one width")
 		return out
 	}
+	presets := make([]wm.ColumnWidth, 0, len(r.Presets.V))
 	for _, w := range r.Presets.V {
-		if !(w > 0 && w <= 1) {
-			p.fail(r.Presets.Line, "scroll.presets", "%g is not a share of the output above 0 and up to 1", w)
+		width, ok := parseColumnWidth(string(w))
+		if !ok {
+			p.fail(r.Presets.Line, "scroll.presets", "%s is not a share of the output above 0 and up to 1 or a width in pixels like 1280px", w)
 			return out
 		}
+		if !slices.Contains(presets, width) {
+			presets = append(presets, width)
+		}
 	}
-	presets := slices.Clone(r.Presets.V)
-	slices.Sort(presets)
-	out.Presets = slices.Compact(presets)
+	out.Presets = presets
 	return out
+}
+
+func parseColumnWidth(s string) (wm.ColumnWidth, bool) {
+	if n, ok := wm.ParsePixels(s); ok {
+		return wm.Pixels(n), true
+	}
+	share, err := strconv.ParseFloat(s, 64)
+	return wm.Share(share), err == nil && share > 0 && share <= 1
 }
 
 var (

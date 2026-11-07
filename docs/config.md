@@ -1039,7 +1039,7 @@ colours. A middle click minimizes, and a right click sends the `windowmenu`
 ```yaml
 layout: tree
 scroll:
-  presets: [0.333, 0.5, 0.667]
+  presets: [0.333, 0.5, 0.667, 1280px]
   center: never
 ```
 
@@ -1051,7 +1051,9 @@ focused one, half the output wide, and nothing else is resized. A column holds o
 window, or several stacked (`consume`, `expel`, `columndisplay stack`) or as tabs
 (`columndisplay tab`). `focus left` and `right` move between columns and `up` and
 `down` within one; `move` moves a window or column; `columnwidth` cycles `presets`,
-shares of the output's width, or changes the width; `center` puts the focused column
+shares of the output's width or fixed widths in pixels (`1280px`) taken in order of width,
+or changes the width by or to a share (`+10%`, `50%`) or pixels (`-40px`, `900px`); a
+column with a fixed width keeps its pixels when the output changes size; `center` puts the focused column
 in the middle. Scrolling only moves windows, so it sends them no configure, and a
 column outside its output is not shown: it draws nothing, takes no input and gets
 frame callbacks at `hidden_frame_rate`.

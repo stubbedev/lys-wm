@@ -1445,11 +1445,11 @@ func TestBindFlagsDescriptionsAndModifierTaps(t *testing.T) {
 }
 
 func TestLayoutScrollAndWorkspaceLayoutsParse(t *testing.T) {
-	c, err := Parse("t.yaml", []byte("layout: scroll\nscroll:\n  presets: [0.5, 0.25, 0.5]\n  center: on-overflow\nworkspaces:\n  - id: 3\n    layout: tree\n"))
+	c, err := Parse("t.yaml", []byte("layout: scroll\nscroll:\n  presets: [0.5, 640px, 0.25, 0.5]\n  center: on-overflow\nworkspaces:\n  - id: 3\n    layout: tree\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.WM.Layout != wm.ScrollLayout || c.WM.Scroll.Center != wm.CenterOnOverflow || !slices.Equal(c.WM.Scroll.Presets, []float64{0.25, 0.5}) {
+	if c.WM.Layout != wm.ScrollLayout || c.WM.Scroll.Center != wm.CenterOnOverflow || !slices.Equal(c.WM.Scroll.Presets, []wm.ColumnWidth{wm.Share(0.5), wm.Pixels(640), wm.Share(0.25)}) {
 		t.Fatalf("layout %v scroll %+v", c.WM.Layout, c.WM.Scroll)
 	}
 	if len(c.WorkspaceRules) != 1 || c.WorkspaceRules[0].Layout != wm.TreeLayout {
@@ -1459,9 +1459,11 @@ func TestLayoutScrollAndWorkspaceLayoutsParse(t *testing.T) {
 		t.Fatalf("defaults: layout %v scroll %+v, %v", d.WM.Layout, d.WM.Scroll, err)
 	}
 	for text, want := range map[string]string{
-		"scroll:\n  presets: [0]\n":                                                   "t.yaml:2: scroll.presets: 0 is not a share",
-		"scroll:\n  presets: []\n":                                                    "t.yaml:2: scroll.presets: needs at least one width",
-		"workspaces:\n  - match: any\n    layout: scroll\n":                           "a match rule takes only",
+		"scroll:\n  presets: [0]\n":                         "t.yaml:2: scroll.presets: 0 is not a share",
+		"scroll:\n  presets: []\n":                          "t.yaml:2: scroll.presets: needs at least one width",
+		"scroll:\n  presets: [0px]\n":                       "t.yaml:2: scroll.presets: 0px is not a share",
+		"scroll:\n  presets: [1.5]\n":                       "t.yaml:2: scroll.presets: 1.5 is not a share",
+		"workspaces:\n  - match: any\n    layout: scroll\n": "a match rule takes only",
 		"gestures:\n  swipe:\n    - {fingers: 3, direction: vertical, drive: view}\n": "view scrolls sideways",
 	} {
 		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {

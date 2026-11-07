@@ -239,8 +239,8 @@
               },
               {
                 "name": "columnwidth",
-                "args": "<preset next|preset prev|+n%|-n%|n%>",
-                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
               },
               {
                 "name": "consume",
@@ -368,6 +368,11 @@
                 "name": "debug",
                 "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                 "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+              },
+              {
+                "name": "casttarget",
+                "args": "<window [id]|output [name]|clear>",
+                "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
               },
               {
                 "name": "focuslast",
@@ -1003,8 +1008,8 @@
                   },
                   {
                     "name": "columnwidth",
-                    "args": "<preset next|preset prev|+n%|-n%|n%>",
-                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                    "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                   },
                   {
                     "name": "consume",
@@ -1132,6 +1137,11 @@
                     "name": "debug",
                     "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                     "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                  },
+                  {
+                    "name": "casttarget",
+                    "args": "<window [id]|output [name]|clear>",
+                    "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                   },
                   {
                     "name": "focuslast",
@@ -1313,8 +1323,8 @@
                   },
                   {
                     "name": "columnwidth",
-                    "args": "<preset next|preset prev|+n%|-n%|n%>",
-                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                    "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                   },
                   {
                     "name": "consume",
@@ -1442,6 +1452,11 @@
                     "name": "debug",
                     "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                     "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                  },
+                  {
+                    "name": "casttarget",
+                    "args": "<window [id]|output [name]|clear>",
+                    "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                   },
                   {
                     "name": "focuslast",
@@ -1623,8 +1638,8 @@
                   },
                   {
                     "name": "columnwidth",
-                    "args": "<preset next|preset prev|+n%|-n%|n%>",
-                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                    "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                   },
                   {
                     "name": "consume",
@@ -1752,6 +1767,11 @@
                     "name": "debug",
                     "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                     "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                  },
+                  {
+                    "name": "casttarget",
+                    "args": "<window [id]|output [name]|clear>",
+                    "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                   },
                   {
                     "name": "focuslast",
@@ -1938,8 +1958,8 @@
                   },
                   {
                     "name": "columnwidth",
-                    "args": "<preset next|preset prev|+n%|-n%|n%>",
-                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                    "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                    "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                   },
                   {
                     "name": "consume",
@@ -2067,6 +2087,11 @@
                     "name": "debug",
                     "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                     "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                  },
+                  {
+                    "name": "casttarget",
+                    "args": "<window [id]|output [name]|clear>",
+                    "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                   },
                   {
                     "name": "focuslast",
@@ -2270,8 +2295,8 @@
                     },
                     {
                       "name": "columnwidth",
-                      "args": "<preset next|preset prev|+n%|-n%|n%>",
-                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                      "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                     },
                     {
                       "name": "consume",
@@ -2399,6 +2424,11 @@
                       "name": "debug",
                       "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                       "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                    },
+                    {
+                      "name": "casttarget",
+                      "args": "<window [id]|output [name]|clear>",
+                      "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                     },
                     {
                       "name": "focuslast",
@@ -2575,8 +2605,8 @@
                     },
                     {
                       "name": "columnwidth",
-                      "args": "<preset next|preset prev|+n%|-n%|n%>",
-                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                      "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                     },
                     {
                       "name": "consume",
@@ -2704,6 +2734,11 @@
                       "name": "debug",
                       "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                       "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                    },
+                    {
+                      "name": "casttarget",
+                      "args": "<window [id]|output [name]|clear>",
+                      "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                     },
                     {
                       "name": "focuslast",
@@ -2889,8 +2924,8 @@
                     },
                     {
                       "name": "columnwidth",
-                      "args": "<preset next|preset prev|+n%|-n%|n%>",
-                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                      "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                     },
                     {
                       "name": "consume",
@@ -3018,6 +3053,11 @@
                       "name": "debug",
                       "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                       "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                    },
+                    {
+                      "name": "casttarget",
+                      "args": "<window [id]|output [name]|clear>",
+                      "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                     },
                     {
                       "name": "focuslast",
@@ -3194,8 +3234,8 @@
                     },
                     {
                       "name": "columnwidth",
-                      "args": "<preset next|preset prev|+n%|-n%|n%>",
-                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                      "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                      "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                     },
                     {
                       "name": "consume",
@@ -3323,6 +3363,11 @@
                       "name": "debug",
                       "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                       "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                    },
+                    {
+                      "name": "casttarget",
+                      "args": "<window [id]|output [name]|clear>",
+                      "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                     },
                     {
                       "name": "focuslast",
@@ -4028,8 +4073,8 @@
                               },
                               {
                                 "name": "columnwidth",
-                                "args": "<preset next|preset prev|+n%|-n%|n%>",
-                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                                "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                               },
                               {
                                 "name": "consume",
@@ -4157,6 +4202,11 @@
                                 "name": "debug",
                                 "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                                 "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                              },
+                              {
+                                "name": "casttarget",
+                                "args": "<window [id]|output [name]|clear>",
+                                "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                               },
                               {
                                 "name": "focuslast",
@@ -4333,8 +4383,8 @@
                               },
                               {
                                 "name": "columnwidth",
-                                "args": "<preset next|preset prev|+n%|-n%|n%>",
-                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                                "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                               },
                               {
                                 "name": "consume",
@@ -4462,6 +4512,11 @@
                                 "name": "debug",
                                 "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                                 "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                              },
+                              {
+                                "name": "casttarget",
+                                "args": "<window [id]|output [name]|clear>",
+                                "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                               },
                               {
                                 "name": "focuslast",
@@ -4638,8 +4693,8 @@
                               },
                               {
                                 "name": "columnwidth",
-                                "args": "<preset next|preset prev|+n%|-n%|n%>",
-                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                                "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                               },
                               {
                                 "name": "consume",
@@ -4767,6 +4822,11 @@
                                 "name": "debug",
                                 "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                                 "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                              },
+                              {
+                                "name": "casttarget",
+                                "args": "<window [id]|output [name]|clear>",
+                                "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                               },
                               {
                                 "name": "focuslast",
@@ -4943,8 +5003,8 @@
                               },
                               {
                                 "name": "columnwidth",
-                                "args": "<preset next|preset prev|+n%|-n%|n%>",
-                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                                "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                                "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                               },
                               {
                                 "name": "consume",
@@ -5072,6 +5132,11 @@
                                 "name": "debug",
                                 "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                                 "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                              },
+                              {
+                                "name": "casttarget",
+                                "args": "<window [id]|output [name]|clear>",
+                                "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                               },
                               {
                                 "name": "focuslast",
@@ -5560,7 +5625,17 @@
         "presets": {
           "type": "array",
           "items": {
-            "type": "number"
+            "oneOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*px$"
+              }
+            ]
           }
         }
       },
@@ -5718,8 +5793,8 @@
                 },
                 {
                   "name": "columnwidth",
-                  "args": "<preset next|preset prev|+n%|-n%|n%>",
-                  "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent."
+                  "args": "<preset next|preset prev|+n%|-n%|n%|+npx|-npx|npx>",
+                  "summary": "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width or n pixels, or set it to n percent or a fixed n pixels."
                 },
                 {
                   "name": "consume",
@@ -5847,6 +5922,11 @@
                   "name": "debug",
                   "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
                   "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
+                },
+                {
+                  "name": "casttarget",
+                  "args": "<window [id]|output [name]|clear>",
+                  "summary": "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one."
                 },
                 {
                   "name": "focuslast",

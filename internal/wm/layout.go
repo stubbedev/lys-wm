@@ -240,14 +240,10 @@ func (a *Arrangement) inWorkspace(from int, id WorkspaceID) {
 
 const DefaultColumnWidth = 0.5
 
-func columnWidth(c Child, span int) int {
-	return max(int(math.Round(c.Ratio*float64(span))), minTile)
-}
-
 func appendColumns(out []image.Rectangle, g *Group, r image.Rectangle, inner int) []image.Rectangle {
 	x := r.Min.X - g.view
 	for _, c := range g.Children {
-		w := columnWidth(c, r.Dx()+inner) - inner
+		w := c.width().at(r.Dx(), inner)
 		out = append(out, image.Rect(x, r.Min.Y, x+max(w, 1), r.Max.Y))
 		x += w + inner
 	}
