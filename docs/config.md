@@ -214,8 +214,10 @@ headless, the connector lacks `HDR_OUTPUT_METADATA` or `Colorspace`, the EDID li
 no ST 2084 or no BT.2020 RGB, the renderer has no float targets, or the kernel
 refuses the modeset.
 
-On an HDR output the cursor draws in the frame, so moving it repaints; a screen
-shader stays off, reported in the log, as shaders take SDR code values; only a
+On an HDR output the cursor keeps its plane: its image is encoded to the signal
+once per change of image, colour matrix or `sdr_brightness`, at the SDR white,
+so moving it repaints nothing (the frame draws it only where the plane refuses);
+a screen shader stays off, reported in the log, as shaders take SDR code values; only a
 fullscreen buffer tagged PQ and BT.2020 that fits the panel and shares the
 reference white scans out directly; `zwlr_gamma_control_manager_v1` refuses it,
 as gamma ramps act on code values; and a colour matrix applies in linear light.

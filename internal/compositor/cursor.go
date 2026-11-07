@@ -218,6 +218,7 @@ func (c *Compositor) cursorTip(o *output.Output) image.Point {
 
 type hwCursor struct {
 	plane   backend.CursorPlane
+	encoded []byte
 	loaded  cursorImage
 	holds   bool
 	inFrame bool
@@ -242,9 +243,6 @@ type cursorImage struct {
 }
 
 func (c *Compositor) addCursorPlane(o *output.Output) {
-	if c.hdr[o.Backend()] != nil {
-		return
-	}
 	plane, err := o.Backend().CursorPlane()
 	switch {
 	case err == nil:
@@ -334,11 +332,12 @@ func (c *Compositor) surfacePixels() (*cursorPixels, bool) {
 }
 
 func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, box image.Rectangle, hotspot image.Point) error {
+	plan := c.cursorPlan(o)
 	if ct, ok := c.themePixels(o); ok {
-		return hw.plane.LoadCursor(ct.pixels, ct.size.X*4, ct.size, hotspot)
+		return hw.load(plan, ct.pixels, ct.size.X*4, ct.size, hotspot)
 	}
 	if cp, ok := c.surfacePixels(); ok {
-		return hw.plane.LoadCursor(cp.pix, cp.size.X*4, cp.size, hotspot)
+		return hw.load(plan, cp.pix, cp.size.X*4, cp.size, hotspot)
 	}
 	if r, ok := c.asyncReader(); ok {
 		return c.readCursor(r, hw, o, box, hotspot)
@@ -357,6 +356,7 @@ func (c *Compositor) loadCursor(hw *hwCursor, o *output.Output, box image.Rectan
 	if err := p.End(); err != nil {
 		return err
 	}
+	encodeDrawn(plan, f.Target)
 	return hw.plane.SetCursor(hotspot)
 }
 
@@ -404,7 +404,7 @@ func (r *cursorRead) waited(err error) error {
 	if current && err == nil {
 		pix, stride, mapErr := r.pending.Map()
 		if err = mapErr; err == nil {
-			err = hw.plane.LoadCursor(pix, stride, r.target.Size(), r.hotspot)
+			err = hw.load(c.cursorPlan(r.o), pix, stride, r.target.Size(), r.hotspot)
 		}
 	}
 	keep := current && hw.target == nil

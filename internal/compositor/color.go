@@ -225,11 +225,12 @@ func (c *Compositor) setOutputColor(b backend.Output, co *colorspace.Output) (bo
 }
 
 func (c *Compositor) outputColorChanged(o *output.Output, b backend.Output, wasHDR, isHDR bool, ctm backend.Matrix) error {
+	c.recolorCursor(o)
 	sc := c.sceneOf(o)
 	sc.invalidate()
 	errs := []error{sc.dropWorking(), c.dropBlurs(), c.dropClosingOn(o), c.dropLockSnapshotOn(o)}
 	if wasHDR != isHDR {
-		errs = append(errs, c.crtcColor(o, b, isHDR, ctm), c.cursorPlaneFollows(o, isHDR))
+		errs = append(errs, c.crtcColor(o, b, isHDR, ctm))
 	}
 	if c.colorManager != nil {
 		errs = append(errs, c.colorManager.OutputChanged(o), c.colorManager.AllPreferredChanged())
@@ -252,19 +253,6 @@ func (c *Compositor) crtcColor(o *output.Output, b backend.Output, isHDR bool, c
 	return errors.Join(errs...)
 }
 
-func (c *Compositor) cursorPlaneFollows(o *output.Output, isHDR bool) error {
-	if !isHDR {
-		c.addCursorPlane(o)
-		return nil
-	}
-	hw, ok := c.hwCursors[o]
-	if !ok {
-		return nil
-	}
-	delete(c.hwCursors, o)
-	return errors.Join(hw.plane.HideCursor(), hw.release())
-}
-
 func (c *Compositor) ApplyColorMatrix(o *output.Output, m backend.Matrix) error {
 	b := o.Backend()
 	if m == backend.Identity {
@@ -284,6 +272,7 @@ func (c *Compositor) ApplyColorMatrix(o *output.Output, m backend.Matrix) error 
 		return fmt.Errorf("%s has no colour transform", b.Name())
 	}
 	hc.signal = hc.signal.WithMatrix(matrix32(m))
+	c.recolorCursor(o)
 	c.sceneOf(o).invalidate()
 	return c.schedule(o)
 }
