@@ -77,7 +77,7 @@ focused one, or `null`:
 
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
- "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
+ "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"inhibits_shortcuts":false,
  "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
 ```
 
@@ -97,6 +97,9 @@ windows leave `scratchpad` out.
 action or its own request); `client_fullscreen` while it is told it is
 fullscreen, which a window under `fullscreen on fake` is while it stays in its
 tile.
+`inhibits_shortcuts` is true while the window holds a
+`zwp_keyboard_shortcuts_inhibitor_v1` that is active, so only `locked` binds
+run while it has the keyboard (a shortcut recorder, a virtual machine).
 A minimized window stays on its workspace, and in the workspace's `windows`
 count, with `minimized` true and the `rect` it comes back to when floating.
 `content_type` is what lys-wm takes the window to show: `none`, `photo`,

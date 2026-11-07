@@ -3,7 +3,9 @@ package harness
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/binds"
+	"github.com/stubbedev/lys-wm/internal/compositor"
 	cksi "github.com/stubbedev/lys-wm/internal/protocol/client/keyboardshortcutsinhibit"
 )
 
@@ -33,9 +35,18 @@ func TestShortcutInhibitorPassesKeysButKeepsLockedBinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.await(l, "active")
+	h.Eventually("the window reported as inhibiting shortcuts", inhibiting(true))
 	h.tap(48)
 	r.expect("key 48 1", "key 48 0")
 	h.tap(30)
 	h.Eventually("the locked bind ran", showingWorkspace(2))
 	r.await(l, "active", "inactive")
+	h.Eventually("the window no longer reported as inhibiting shortcuts", inhibiting(false))
+}
+
+func inhibiting(want bool) func(*headless.Backend, *compositor.Compositor) bool {
+	return func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := c.Snapshot().Windows
+		return len(ws) == 1 && ws[0].InhibitsKeys == want
+	}
 }

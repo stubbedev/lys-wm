@@ -247,6 +247,7 @@ type Window struct {
 	Urgent        bool              `json:"urgent"`
 	Unresponsive  bool              `json:"unresponsive"`
 	Focused       bool              `json:"focused"`
+	InhibitsKeys  bool              `json:"inhibits_shortcuts"`
 	ContentType   wm.ContentType    `json:"content_type"`
 	ContentSource wm.ContentSource  `json:"content_source"`
 	Icon          *Icon             `json:"icon"`

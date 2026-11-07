@@ -110,6 +110,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Urgent:        w.urgent,
 			Unresponsive:  w.hung,
 			Focused:       hasFocus && w.id == focused,
+			InhibitsKeys:  c.inhibiting != nil && c.inhibiting.surface == w.top.Surface(),
 			ContentType:   contentType,
 			ContentSource: contentSource,
 			Icon:          ipcIcon(w.top.Icon()),

@@ -60,6 +60,7 @@ func (c *Compositor) dropShortcutsInhibitor(i *shortcutsInhibitor) error {
 	i.surface.RemoveHooks(i.hooks)
 	if c.inhibiting == i {
 		c.inhibiting = nil
+		c.stateChanged()
 	}
 	return nil
 }
@@ -80,5 +81,6 @@ func (c *Compositor) refreshShortcutsInhibitor() error {
 	if want != nil {
 		errs = append(errs, want.res.SendActive())
 	}
+	c.stateChanged()
 	return errors.Join(errs...)
 }
