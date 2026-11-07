@@ -172,6 +172,7 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 		if !ok || !had || prev == active {
 			continue
 		}
+		c.setPeek(o, false, now)
 		sw, switching := c.switches[o]
 		if switching && (active == sw.from || active == sw.to) {
 			sw.pos.Set(sw.restOn(active), now, curve)
@@ -188,6 +189,12 @@ func (c *Compositor) trackSwitches(now time.Duration) {
 }
 
 func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
+	v, drawn := c.switchView(o, w)
+	v.offset = v.offset.Add(c.peekOffset(o, w))
+	return v, drawn
+}
+
+func (c *Compositor) switchView(o *output.Output, w *window) (view, bool) {
 	if w.pinned {
 		return identity, w.visible
 	}

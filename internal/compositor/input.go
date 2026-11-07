@@ -310,6 +310,12 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 			return err
 		}
 	}
+	if o := c.outputAt(c.cursor); e.Pressed && c.peeking(o) {
+		if w := c.sliverAt(o, c.cursor.pixel()); w != nil {
+			c.consumed = append(c.consumed, e.Button)
+			return errors.Join(c.endPeek(o), c.activate(w))
+		}
+	}
 	if e.Pressed && c.overviewHolds() && c.seat.PointerFocus() == nil {
 		c.consumed = append(c.consumed, e.Button)
 		return c.overviewPressed(e.Button, 0, false, c.cursor)
@@ -588,7 +594,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 		}
 	}
 	for _, w := range slices.Backward(c.stack) {
-		if w.layer == wm.LayerFullscreen && !w.scratch {
+		if w.layer == wm.LayerFullscreen && !w.scratch && !c.peekHidesInput(w) {
 			if s, local := c.hitWindow(w, p); s != nil {
 				return s, local, w
 			}
@@ -598,7 +604,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 		return s, local, nil
 	}
 	for _, w := range slices.Backward(c.stack) {
-		if w.layer != wm.LayerFullscreen && !w.scratch {
+		if w.layer != wm.LayerFullscreen && !w.scratch && !c.peekHidesInput(w) {
 			if s, local := hitPopups(c.popups(w), p); s != nil {
 				return s, local, w
 			}
@@ -606,7 +612,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 	}
 	for _, layer := range slices.Backward(windowLayers) {
 		for _, w := range slices.Backward(c.stack) {
-			if w.layer != layer || !w.visible || w.scratch {
+			if w.layer != layer || !w.visible || w.scratch || c.peekHidesInput(w) {
 				continue
 			}
 			if s, local := hitTree(w.top.Surface(), c.windowOrigin(w), p); s != nil {

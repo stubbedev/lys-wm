@@ -92,6 +92,7 @@ func (c *Compositor) frame(o *output.Output) error {
 	}
 	c.finishSwitches(o, c.frameTime)
 	c.finishScratchSlides(o, c.frameTime)
+	c.finishPeek(o, c.frameTime)
 	c.settleGenies(c.frameTime)
 	c.settlePreview(c.frameTime)
 	if err := c.settleLockFade(c.frameTime); err != nil {

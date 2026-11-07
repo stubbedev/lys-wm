@@ -57,6 +57,8 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.overviewAction(e.Mode)
 	case wm.ExecAction:
 		return c.spawn(e.Command, "")
+	case wm.ShowDesktopAction:
+		return c.showDesktop(e)
 	case wm.ScratchpadExecAction:
 		return c.spawn(e.Command, e.Name)
 	case wm.GlobalAction:

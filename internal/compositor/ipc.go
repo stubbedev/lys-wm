@@ -67,6 +67,11 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Focused: visible && w.Output == focusedOutput,
 		})
 	}
+	for _, o := range c.outputs {
+		if c.peeking(o) {
+			snap.ShowDesktop = append(snap.ShowDesktop, o.Backend().Name())
+		}
+	}
 	for _, w := range s.Scratchpads() {
 		snap.Scratchpads = append(snap.Scratchpads, ipc.Scratchpad{
 			Name:    w.Scratch.Name,

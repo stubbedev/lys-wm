@@ -83,6 +83,7 @@ type Settings struct {
 	OnActivate   ActivatePolicy
 	NewOverCover CoverPolicy
 	Scratchpads  map[ScratchpadName]ScratchpadSpec
+	Peek         int
 }
 
 type WorkspaceTarget interface {
@@ -801,6 +802,11 @@ var Actions = []ActionSpec{
 			sw, err := optionalSwitch(spec, args)
 			return FullscreenAction{Switch: sw, Fake: fake}, err
 		},
+	},
+	{
+		Name: "showdesktop", Args: "[toggle|on|off] [all]",
+		Summary: "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told.",
+		parse:   parseShowDesktop,
 	},
 	{
 		Name: "pin", Args: "[toggle|on|off]",

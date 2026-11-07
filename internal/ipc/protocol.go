@@ -287,6 +287,7 @@ type Snapshot struct {
 	Outputs        []Output
 	Workspaces     []Workspace
 	Scratchpads    []Scratchpad
+	ShowDesktop    []string
 	Windows        []Window
 	Submap         string
 	Layout         Layout

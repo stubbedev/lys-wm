@@ -143,6 +143,11 @@ type rawConfig struct {
 	Focus           rawFocus                     `yaml:"focus"`
 	Fullscreen      rawFullscreen                `yaml:"fullscreen"`
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
+	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
+}
+
+type rawShowDesktop struct {
+	Peek *At[int] `yaml:"peek"`
 }
 
 type rawScratchpad struct {
@@ -1461,6 +1466,13 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		cfg.WM.NewOverCover = *v
 	}
 	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
+	if v := raw.ShowDesktop.Peek; v != nil {
+		if v.V < 1 || v.V > 50 {
+			p.fail(v.Line, "showdesktop.peek", "%d is not a percentage from 1 to 50", v.V)
+		} else {
+			cfg.WM.Peek = v.V
+		}
+	}
 	cfg.Animations = p.animations(raw.Animations, look.Motion)
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
 	again := &parser{layered: l, palette: p.palette}

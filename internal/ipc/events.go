@@ -112,6 +112,10 @@ type (
 	ScratchpadEvent struct {
 		Scratchpad
 	}
+	ShowDesktopEvent struct {
+		Output string `json:"output"`
+		On     bool   `json:"on"`
+	}
 	WindowMenuEvent struct {
 		Window wm.WindowID `json:"window"`
 		X      int         `json:"x"`
@@ -144,6 +148,7 @@ func (DispatchEvent) Name() string       { return "dispatch" }
 func (OverviewEvent) Name() string       { return "overview" }
 func (ConfigProblemsEvent) Name() string { return "configproblems" }
 func (WindowMenuEvent) Name() string     { return "windowmenu" }
+func (ShowDesktopEvent) Name() string    { return "showdesktop" }
 func (ScratchpadEvent) Name() string     { return "scratchpad" }
 
 func Encode(e Event) ([]byte, error) {
@@ -260,6 +265,16 @@ func Diff(prev, next Snapshot) []Event {
 		out = append(out, e)
 	}
 	out = appendScratchpadEvents(out, prev.Scratchpads, next.Scratchpads)
+	for _, o := range next.ShowDesktop {
+		if !slices.Contains(prev.ShowDesktop, o) {
+			out = append(out, ShowDesktopEvent{Output: o, On: true})
+		}
+	}
+	for _, o := range prev.ShowDesktop {
+		if !slices.Contains(next.ShowDesktop, o) {
+			out = append(out, ShowDesktopEvent{Output: o})
+		}
+	}
 	if prev.Submap != next.Submap {
 		out = append(out, SubmapEvent{Submap: next.Submap})
 	}

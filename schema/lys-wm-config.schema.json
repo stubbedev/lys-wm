@@ -1028,6 +1028,15 @@
         "additionalProperties": false
       }
     },
+    "showdesktop": {
+      "type": "object",
+      "properties": {
+        "peek": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
     "submaps": {
       "type": "object",
       "additionalProperties": {

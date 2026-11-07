@@ -245,6 +245,9 @@ func (c *Compositor) reconcile() error {
 	}
 	focusMoved := target != c.active
 	if focusMoved {
+		if target != nil {
+			c.setPeek(target.output, false, now)
+		}
 		c.active = target
 		if target != nil {
 			if target.urgent {
@@ -336,7 +339,7 @@ func (c *Compositor) Animating(o *output.Output) bool {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || c.overviewAnimating(o, now) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.scratchSlideOf[o] != nil || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || c.lockFading(now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
+	}) || c.overviewAnimating(o, now) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.scratchSlideOf[o] != nil || c.peekAnimates(o, now) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || c.lockFading(now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
 }
@@ -506,7 +509,7 @@ func (c *Compositor) keyboardTarget() *surface.Surface {
 		return exclusive.Surface()
 	case c.layerFocus != nil && c.layerFocus.Mapped():
 		return c.layerFocus.Surface()
-	case c.active != nil:
+	case c.active != nil && !c.peekHidesInput(c.active):
 		return c.active.top.Surface()
 	}
 	return nil
@@ -543,7 +546,10 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	}
 	c.windows = append(c.windows, w)
 	c.consumeLaunch(t)
-	return c.update(s, nil)
+	if err := c.update(s, nil); err != nil {
+		return err
+	}
+	return c.endPeek(w.output)
 }
 
 func (c *Compositor) ToplevelUnmapped(t *shell.Toplevel) error {

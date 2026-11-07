@@ -976,3 +976,15 @@ func TestScratchpads(t *testing.T) {
 		t.Errorf("size 60x50 was not refused: %v", err)
 	}
 }
+
+func TestShowDesktopPeek(t *testing.T) {
+	for text, want := range map[string]int{"": wm.DefaultPeek, "showdesktop:\n  peek: 5\n": 5} {
+		c, err := Parse("t.yaml", []byte(text))
+		if err != nil || c.WM.Peek != want {
+			t.Errorf("%q: %d, %v; want %d", text, c.WM.Peek, err, want)
+		}
+	}
+	if _, err := Parse("t.yaml", []byte("showdesktop:\n  peek: 0\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: showdesktop.peek:") {
+		t.Errorf("peek 0 was not refused: %v", err)
+	}
+}

@@ -125,6 +125,7 @@ func PlainSettings() wm.Settings {
 	return wm.Settings{
 		Collapse: wm.CollapseEmptySplits,
 		Autotile: wm.Autotile{Enabled: true, Ephemeral: true, MinTrigger: 400, Divisor: 3},
+		Peek:     wm.DefaultPeek,
 	}
 }
 
@@ -349,6 +350,7 @@ type Compositor struct {
 	shmSyncReads       uint64
 	switches           map[*output.Output]*workspaceSwitch
 	scratchSlideOf     map[*output.Output]*workspaceSwitch
+	peeks              map[*output.Output]*peek
 	shownScratch       map[string]wm.WorkspaceID
 	drawnSwitch        *workspaceSwitch
 	gooFrom, gooTo     []*window
@@ -452,6 +454,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		switches:       map[*output.Output]*workspaceSwitch{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scratchSlideOf: map[*output.Output]*workspaceSwitch{},
+		peeks:          map[*output.Output]*peek{},
 		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},

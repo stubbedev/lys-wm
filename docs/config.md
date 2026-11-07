@@ -923,6 +923,24 @@ its output hides it unless `hide_on_workspace_switch: false`. Focusing a window
 beneath it hides it too. The `scratchpad` animation event slides it in and out.
 Scratchpads need no entry here to be used; one without an entry has no `exec`.
 
+## showdesktop
+
+```yaml
+showdesktop:
+  peek: 2
+```
+
+The `showdesktop` action slides the windows of the output under the pointer
+(or of every output, with `all`) toward their nearest edges, leaving `peek`
+percent of the output's width of each in view, on the `windows_move` curve.
+Nothing is resized and no configure is sent; the windows take no pointer input
+but their slivers, keyboard focus leaves them, and clicks on the wallpaper reach
+the `background` and `bottom` layer surfaces. A click on a sliver brings the
+windows back and focuses that one; so does a window opening or being activated
+on that output, a workspace switch there, a focus action or the action again.
+Bind it to a key or to a gesture, as `gestures.pinch: [{fingers: 4,
+direction: out, action: showdesktop toggle}]`.
+
 ## rules
 
 ```yaml

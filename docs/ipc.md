@@ -212,6 +212,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `configproblems` | `rejected`, `messages` | A load of the config left something out or was refused, or a later one fixed it |
 | `overview` | `open` | The overview opened or started closing. `open` is true from the moment it takes input, before its animation ends |
 | `scratchpad` | `name`, `output`, `shown`, `windows` | A scratchpad appeared, showed, hid, moved or changed its window count; one that went away comes with only its `name` |
+| `showdesktop` | `output`, `on` | The `showdesktop` action slid an output's windows aside, or they came back |
 | `windowmenu` | `window`, `x`, `y` | A window asked for its window menu (`xdg_toplevel.show_window_menu`) in answer to a press; `x`, `y` are the point in layout coordinates, for a shell to draw the menu at |
 
 A watcher that falls 256 events behind is disconnected. Reconnect and
