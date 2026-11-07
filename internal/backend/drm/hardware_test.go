@@ -2,6 +2,7 @@ package drm
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
@@ -160,8 +161,17 @@ func TestStartOnEveryCardWithoutMaster(t *testing.T) {
 func scanoutFrame(t *testing.T, b *Backend, o *Output) {
 	t.Helper()
 	s := o.buffers[0]
-	size := s.target.Size()
-	p, err := b.Renderer().Begin(s.target, render.Region{{Max: size}})
+	read, ok := s.target.(render.ReadTarget)
+	if !ok {
+		t.Fatalf("%s: a %T scanout buffer cannot be read back", o.Name(), s.target)
+	}
+	testFrame(t, b.Renderer(), read, o.Name())
+}
+
+func testFrame(t *testing.T, r render.Renderer, target render.ReadTarget, what string) {
+	t.Helper()
+	size := target.Size()
+	p, err := r.Begin(target, render.Region{{Max: size}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,12 +180,8 @@ func scanoutFrame(t *testing.T, b *Backend, o *Output) {
 	if err := p.End(); err != nil {
 		t.Fatal(err)
 	}
-	read, ok := s.target.(render.ReadTarget)
-	if !ok {
-		t.Fatalf("%s: a %T scanout buffer cannot be read back", o.Name(), s.target)
-	}
 	pix := make([]byte, size.X*size.Y*4)
-	if err := read.Read(pix, size.X*4); err != nil {
+	if err := target.Read(pix, size.X*4); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []struct {
@@ -184,7 +190,7 @@ func scanoutFrame(t *testing.T, b *Backend, o *Output) {
 	}{{image.Pt(1, 1), [3]byte{0, 0, 0xff}}, {size.Sub(image.Pt(2, 2)), [3]byte{0xff, 0x80, 0}}} {
 		i := c.at.Y*size.X*4 + c.at.X*4
 		if got := [3]byte(pix[i:]); got != c.want {
-			t.Errorf("%s: scanout pixel %v is %v, want %v", o.Name(), c.at, got, c.want)
+			t.Errorf("%s: scanout pixel %v is %v, want %v", what, c.at, got, c.want)
 		}
 	}
 }
@@ -311,5 +317,68 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestTenBitScanoutBuffersDrawOnEveryRenderNodeOnHardware(t *testing.T) {
+	nodes, err := filepath.Glob("/dev/dri/renderD*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) == 0 {
+		t.Skip("no render node")
+	}
+	for _, node := range nodes {
+		for _, stack := range []struct {
+			name string
+			open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
+		}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}} {
+			t.Run(filepath.Base(node)+"/"+stack.name, func(t *testing.T) { tenBitOnRenderNode(t, node, stack.open) })
+		}
+	}
+}
+
+func tenBitOnRenderNode(t *testing.T, node string, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) {
+	unpin := gpu.PinThread()
+	defer func() {
+		if err := unpin(); err != nil {
+			t.Error(err)
+		}
+	}()
+	a := stackOn(t, node, open)
+	t.Cleanup(func() {
+		if err := a.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	size := image.Pt(64, 32)
+	drawn := 0
+	for _, f := range deepFormats {
+		mods, err := a.renderable(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bo, err := a.gbm.Allocate(size, f, mods, gpu.UseRendering|gpu.UseScanout)
+		if err != nil {
+			t.Logf("%s: GBM allocates no %v scanout buffer with the renderer's %d modifiers: %v", node, f, len(mods), err)
+			continue
+		}
+		target, err := a.gpu.ImportTarget(bo.DMABUF)
+		if err != nil {
+			t.Errorf("%s: GBM allocated a %v buffer with modifier %v, but the renderer cannot draw into it: %v", node, f, bo.Modifier, err)
+			if err := bo.Close(); err != nil {
+				t.Error(err)
+			}
+			continue
+		}
+		testFrame(t, a.gpu, target, fmt.Sprintf("%s %v", node, f))
+		if err := errors.Join(target.Destroy(), bo.Close()); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%s draws 10-bit scanout buffers as %v with modifier %v", node, f, bo.Modifier)
+		drawn++
+	}
+	if drawn == 0 {
+		t.Fatalf("%s draws none of the 10-bit scanout formats %v", node, deepFormats)
 	}
 }
