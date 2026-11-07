@@ -403,3 +403,66 @@ func framesAndBlurs(h *Harness) (frames, redraws uint64) {
 	})
 	return frames, redraws
 }
+
+func filteredPixels(h *Harness) uint64 {
+	var n uint64
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		n = c.FilteredPixels()
+		return nil
+	})
+	return n
+}
+
+const bandFrames = 6
+
+var glassBand = testclient.Band{Height: 12, Step: 7}
+
+func glassOverBand(t *testing.T, start gpuStarter, damage testclient.Damager) (rendered *soft.Buffer, filtered uint64, last int) {
+	t.Helper()
+	h := start(t, func(cfg *compositor.Config) {
+		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1}
+		cfg.Rules = []wm.Rule{clearWindowRule("glass")}
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	bg := c.PartialWindow("background", func(pix []byte, stride int, size image.Point, frame int) {
+		last = frame
+		glassBand.Paint(pix, stride, size, frame)
+	}, damage)
+	c.DispatchUntil("the background to map", bg.Mapped)
+	bg.Stop()
+	glass := c.Window("glass", testclient.Fill(0, 0, 0))
+	c.DispatchUntil("the glass to map", glass.Mapped)
+	glass.Stop()
+	settle(t, h)
+	before := filteredPixels(h)
+	for range bandFrames {
+		if err := bg.Redraw(); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+		settle(t, h)
+	}
+	return h.Rendered(0), filteredPixels(h) - before, last
+}
+
+func TestGlassOverAMovingBandRefiltersOnlyItsReachToTheSamePixelsAsAWholeRedraw(t *testing.T) {
+	t.Parallel()
+	whole := func(size image.Point, _ int) []image.Rectangle { return []image.Rectangle{{Max: size}} }
+	onEachGPURenderer(t, func(t *testing.T, start gpuStarter) {
+		got, partial, last := glassOverBand(t, start, glassBand.Damage)
+		want, everything, _ := glassOverBand(t, start, whole)
+		if d := maxDifference(want, got, image.Rectangle{Max: small.Size}); d != 0 {
+			t.Errorf("after %d band moves the band's damage alone shows pixels up to %d from the window's whole damage", bandFrames, d)
+		}
+		fresh := glassOn(t, start, func(pix []byte, stride int, size image.Point, _ int) {
+			glassBand.Paint(pix, stride, size, last)
+		}, func(*compositor.Config) {}).Rendered(0)
+		if d := maxDifference(fresh, got, image.Rectangle{Max: small.Size}); d != 0 {
+			t.Errorf("after %d band moves the output differs from a fresh whole redraw by %d", bandFrames, d)
+		}
+		t.Logf("%d band moves refiltered %d pixels, %d with the whole window damaged", bandFrames, partial, everything)
+		if partial*2 > everything {
+			t.Errorf("%d band moves refiltered %d pixels, over half the %d the whole window's damage costs", bandFrames, partial, everything)
+		}
+	})
+}

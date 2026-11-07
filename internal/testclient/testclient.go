@@ -195,6 +195,8 @@ func (c *Client) DispatchUntil(what string, cond func() bool) {
 
 type Painter func(pix []byte, stride int, size image.Point, frame int)
 
+type Damager func(size image.Point, frame int) []image.Rectangle
+
 func Fill(b, g, r byte) Painter {
 	return func(pix []byte, _ int, _ image.Point, _ int) {
 		for i := 0; i < len(pix); i += 4 {
@@ -304,6 +306,8 @@ type Window struct {
 	framePending bool
 	frame        *cw.WlCallback
 	paint        Painter
+	damage       Damager
+	committed    image.Point
 	scaling      Scaling
 	viewport     *cvp.WpViewport
 	pending      image.Point
@@ -343,6 +347,13 @@ func (w *Window) Redraw() error {
 func (c *Client) Window(title string, paint Painter) *Window {
 	c.t.Helper()
 	return c.ScaledWindow(title, Unscaled, paint)
+}
+
+func (c *Client) PartialWindow(title string, paint Painter, damage Damager) *Window {
+	c.t.Helper()
+	w := c.window(title, Unscaled, paint, nil)
+	w.damage = damage
+	return w
 }
 
 func (c *Client) Dialog(parent *Window, title string, paint Painter) *Window {
@@ -489,18 +500,24 @@ func (w *Window) draw() error {
 		return fmt.Errorf("testclient: the compositor holds every buffer of %v", w.Size)
 	}
 	w.paint(b.pix, w.Size.X*4, w.Size, w.drawn)
+	damage := []image.Rectangle{{Max: w.Size}}
+	if w.damage != nil && w.committed == w.Size {
+		damage = w.damage(w.Size, w.drawn)
+	}
 	b.busy = true
 	w.drawn++
+	w.committed = w.Size
 	cb, err := w.Surface.Frame(frameEvents{w})
 	if err != nil {
 		return err
 	}
 	w.frame, w.framePending = cb, true
-	return errors.Join(
-		w.Surface.Attach(b.wl, 0, 0),
-		w.Surface.DamageBuffer(0, 0, int32(w.Size.X), int32(w.Size.Y)), //nolint:gosec // test buffers are small
-		w.Surface.Commit(),
-	)
+	errs := make([]error, 0, len(damage)+2)
+	errs = append(errs, w.Surface.Attach(b.wl, 0, 0))
+	for _, r := range damage {
+		errs = append(errs, w.Surface.DamageBuffer(int32(r.Min.X), int32(r.Min.Y), int32(r.Dx()), int32(r.Dy()))) //nolint:gosec // test buffers are small
+	}
+	return errors.Join(append(errs, w.Surface.Commit())...)
 }
 
 type quietSurface struct{}
@@ -678,4 +695,30 @@ func (l *Log) Note(format string, args ...any) error {
 func (c *Client) HasGlobal(iface string) bool {
 	_, ok := c.globals.byName[iface]
 	return ok
+}
+
+type Band struct {
+	Height, Step int
+}
+
+func (b Band) Rows(size image.Point, frame int) image.Rectangle {
+	top := frame * b.Step % max(size.Y-b.Height, 1)
+	return image.Rect(0, top, size.X, min(top+b.Height, size.Y))
+}
+
+func (b Band) Paint(pix []byte, stride int, size image.Point, frame int) {
+	for i := range pix {
+		pix[i] = 0x50
+	}
+	rows := b.Rows(size, frame)
+	for y := rows.Min.Y; y < rows.Max.Y; y++ {
+		row := pix[y*stride : y*stride+size.X*4]
+		for x := 0; x < len(row); x += 4 {
+			row[x], row[x+1], row[x+2], row[x+3] = 0x20, 0xc0, 0xff, 0xff
+		}
+	}
+}
+
+func (b Band) Damage(size image.Point, frame int) []image.Rectangle {
+	return []image.Rectangle{b.Rows(size, frame-1), b.Rows(size, frame)}
 }

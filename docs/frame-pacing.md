@@ -80,6 +80,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
 | `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
 | `render_passes_after_first_frame`, `filter_passes_after_first_frame` | In the `glass-tiles` steps, the worst `Renderer.Begin` calls and Kawase passes of any composited frame but the first of a play, with no slack: 1 and 0, the frame's own pass and no filter, since tiled windows blur over the output's shared background chain | A tiled window that refilters its own chain on every frame of a slide or a resize |
+| `filter_pixels_per_frame`, `repaint_pixels_per_frame` | In `glass-over-busy`, whose client damages only the band it moves, the worst frame's pixels covered by Kawase passes within their damage and pixels of the output repainted | A change under glass that refilters or repaints the whole window instead of the band grown by the blur's reach |
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
 | `gpu_waits_per_frame` | Times the loop waited for the GPU to finish since the last composited frame, at worst, with no slack: a renderer's fence waits on Vulkan, `glFinish` on GLES | A frame or a resize that stalls the loop on the GPU, such as freeing a resource still in use |
 | `submits_per_frame` | GPU submissions since the last composited frame, at worst, with no slack: Vulkan queue submits from `Device.Submissions`, GLES flushes of ended passes at a fence export, `glFinish` or a read back. A frame is one, plus an upload flush when it uploads past the batch bound | A pass that submits on its own, as `glFlush` at every pass end did |
@@ -97,9 +98,9 @@ busy to reach 60 Hz draws fewer frames that each cost the same.
 The trace takes these with `runtime.ReadMemStats` and a read of `/proc/self/io`
 at both ends of each frame, outside the `cpu` column.
 
-The cost table also reports, ungated, the worst frame's `targets` (render targets created),
+The cost table also reports the worst frame's `targets` (render targets created),
 `filter px` (pixels a Kawase pass covered within its damage), `repaint px`
-(pixels of the output repainted) and `copied bytes` (capture bytes copied to
+(pixels of the output repainted, both gated in `glass-over-busy` only) and `copied bytes` (capture bytes copied to
 clients). The time table adds `sched`, the worst wait of a runnable goroutine
 for a processor, and `gc`, the worst GC stop-the-world pause, each frame
 taking the slowest bucket that gained a sample since the frame before from

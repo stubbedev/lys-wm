@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"image"
 	"io"
 	"slices"
 	"strconv"
@@ -43,6 +42,8 @@ rules:
   - {title: ^tile$, opacity: 0.6}
 `
 
+var busyBand = testclient.Band{Height: 64, Step: 8}
+
 const (
 	pileTitle = "pile"
 	tileTitle = "tile"
@@ -56,7 +57,6 @@ const (
 	steady       = 3 * time.Second
 	settleGap    = 150 * time.Millisecond
 	pumpChunk    = 4 * time.Second
-	bandHeight   = 64
 	swipeEvents  = 30
 	swipeStep    = 12.0
 	swipeEvery   = 8 * time.Millisecond
@@ -116,7 +116,10 @@ func (s *session) pump(d time.Duration) {
 }
 
 func (s *session) window(title string, paint testclient.Painter) *testclient.Window {
-	w := s.client.Window(title, paint)
+	return s.mapped(title, s.client.Window(title, paint))
+}
+
+func (s *session) mapped(title string, w *testclient.Window) *testclient.Window {
 	s.client.DispatchUntil("window "+title+" to map", w.Mapped)
 	s.client.DispatchUntil("window "+title+" to reach the layout", func() bool { return s.placed(title) })
 	s.windows = append(s.windows, w)
@@ -137,19 +140,6 @@ func (s *session) placed(title string) bool {
 
 func (s *session) still(title string, b, g, r byte) {
 	s.window(title, testclient.Fill(b, g, r)).Stop()
-}
-
-func movingBand(pix []byte, stride int, size image.Point, frame int) {
-	for i := range pix {
-		pix[i] = 0x50
-	}
-	top := frame * 8 % max(size.Y-bandHeight, 1)
-	for y := top; y < min(top+bandHeight, size.Y); y++ {
-		row := pix[y*stride : y*stride+size.X*4]
-		for x := 0; x < len(row); x += 4 {
-			row[x], row[x+1], row[x+2], row[x+3] = 0x20, 0xc0, 0xff, 0xff
-		}
-	}
 }
 
 func (s *session) settle() {
@@ -400,7 +390,7 @@ var scenarios = []scenario{
 		name: "glass-busy",
 		once: true,
 		setup: func(s *session) {
-			s.window("busy", movingBand)
+			s.mapped("busy", s.client.PartialWindow("busy", busyBand.Paint, busyBand.Damage))
 			s.still("glass", 0xf0, 0xf0, 0xf0)
 		},
 		steps: []step{{name: "glass-over-busy", measure: steady, continuous: true, act: func(*session) {}}},

@@ -327,6 +327,24 @@ func TestTiledGlassFiltersNothingAfterTheFirstFrameOfItsAnimation(t *testing.T) 
 	}
 }
 
+func TestABusyBandUnderGlassIsHeldToThePixelsItsReachTouches(t *testing.T) {
+	var band frametrace.CostSummary
+	band.FilterPx.Worst, band.RepaintPx.Worst = 400_000, 300_000
+	b := baseline{"gles/software": derive(costReport("glass-over-busy", band))}
+	l := b["gles/software"].Steps["glass-over-busy"]
+	if l["filter_pixels_per_frame"] != 500_000 || l["repaint_pixels_per_frame"] != 375_000 {
+		t.Fatalf("limits %v: want a quarter over what was measured", l)
+	}
+	whole := band
+	whole.FilterPx.Worst, whole.RepaintPx.Worst = 1_382_400, 2_073_600
+	err := checkBaseline(b, costReport("glass-over-busy", whole))
+	for _, want := range []string{"filter_pixels_per_frame 1382400, limit 500000", "repaint_pixels_per_frame 2073600, limit 375000"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("a band that refilters and repaints the whole window: %v, want %q", err, want)
+		}
+	}
+}
+
 func TestASecondSubmitInAFrameIsOverTheLimitOfOne(t *testing.T) {
 	var one frametrace.CostSummary
 	one.Submits.Worst = 1

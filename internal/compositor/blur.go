@@ -196,6 +196,10 @@ func (c *Compositor) BlurRedraws() uint64 {
 	return c.blurGen
 }
 
+func (c *Compositor) FilteredPixels() uint64 {
+	return c.tallied.filterPx
+}
+
 func (c *Compositor) dropBlurs() error {
 	var errs []error
 	for _, sc := range c.scenes {
