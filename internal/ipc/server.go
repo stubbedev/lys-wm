@@ -46,6 +46,7 @@ type Handler interface {
 	CreateOutput(spec OutputSpec) (CreatedOutput, error)
 	RemoveOutput(name string) error
 	Capture(send func(Event)) (CaptureSession, error)
+	PickWindow(answer func(*wm.WindowID, error)) (cancel func(), err error)
 }
 
 type Upgrader func(binary string, dropX11 bool, conn *os.File, done func(UpgradeResult, error))
@@ -353,7 +354,11 @@ func (s *Server) serve(conn *net.UnixConn) {
 		return
 	}
 	if req.kind == KindWatch {
-		s.watch(conn, true)
+		s.watch(conn, true, req.snapshot)
+		return
+	}
+	if req.kind == KindPickWindow {
+		s.pickWindow(conn, r)
 		return
 	}
 	if req.kind == KindIcon {
@@ -369,14 +374,14 @@ func (s *Server) serve(conn *net.UnixConn) {
 		s.capture(conn, r)
 		return
 	}
-	var loaded func() error
-	if req.kind == KindDispatch {
-		loaded = s.handler.PrepareDispatch(req.action)
+	loaded := make([]func() error, len(req.actions))
+	for i, a := range req.actions {
+		loaded[i] = s.handler.PrepareDispatch(a)
 	}
 	result, err := onLoop(s, func() (any, error) {
 		switch req.kind {
 		case KindDispatch:
-			return nil, s.handler.DispatchPrepared(req.action, loaded)
+			return nil, s.dispatch(req.actions, loaded)
 		case KindCreateOutput:
 			return s.handler.CreateOutput(req.output)
 		case KindRemoveOutput:
@@ -435,12 +440,12 @@ func (s *Server) AdoptWatcher(file *os.File) error {
 	s.mu.Unlock()
 	s.wg.Go(func() {
 		defer s.forget(conn)
-		s.watch(conn, false)
+		s.watch(conn, false, false)
 	})
 	return nil
 }
 
-func (s *Server) watch(conn *net.UnixConn, greet bool) {
+func (s *Server) watch(conn *net.UnixConn, greet, snapshot bool) {
 	s.mu.Lock()
 	s.watching[conn] = struct{}{}
 	s.mu.Unlock()
@@ -450,19 +455,26 @@ func (s *Server) watch(conn *net.UnixConn, greet bool) {
 		s.mu.Unlock()
 	}()
 	w := &watcher{lines: make(chan []byte, watchBacklog)}
-	if _, err := onLoop(s, func() (struct{}, error) {
+	state, err := onLoop(s, func() ([]byte, error) {
 		if len(s.watchers) == 0 {
 			s.last, s.pending, s.changed = s.handler.Snapshot(), nil, false
 		}
 		s.watchers = append(s.watchers, w)
-		return struct{}{}, nil
-	}); err != nil {
+		if !snapshot {
+			return nil, nil
+		}
+		return s.encode(nil, Diff(Snapshot{}, s.last), nil), nil
+	})
+	if err != nil {
 		s.reply(conn, nil, err)
 		return
 	}
 	defer s.post(func() { s.drop(w) })
 	if greet {
 		s.reply(conn, nil, nil)
+	}
+	if len(state) > 0 && write(conn, state) != nil {
+		return
 	}
 	for {
 		select {
@@ -507,12 +519,7 @@ func (s *Server) publish() error {
 	next := s.handler.Snapshot()
 	events := append(s.pending, Diff(s.last, next)...)
 	s.last, s.pending = next, nil
-	for _, e := range events {
-		line, err := Encode(e)
-		if err != nil {
-			s.report(err)
-			continue
-		}
+	s.encode(nil, events, func(line []byte) {
 		s.watchers = slices.DeleteFunc(s.watchers, func(w *watcher) bool {
 			select {
 			case w.lines <- line:
@@ -522,6 +529,63 @@ func (s *Server) publish() error {
 				return true
 			}
 		})
+	})
+	return nil
+}
+
+func (s *Server) encode(buf []byte, events []Event, each func(line []byte)) []byte {
+	for _, e := range events {
+		start := len(buf)
+		var err error
+		if buf, err = AppendEvent(buf, e); err != nil {
+			s.report(err)
+			continue
+		}
+		if each != nil {
+			each(buf[start:len(buf):len(buf)])
+		}
+	}
+	return buf
+}
+
+func (s *Server) dispatch(actions []wm.Action, loaded []func() error) error {
+	for i, a := range actions {
+		if err := s.handler.DispatchPrepared(a, loaded[i]); err != nil {
+			return batchError(len(actions), i, a.String(), err)
+		}
 	}
 	return nil
+}
+
+func (s *Server) pickWindow(conn *net.UnixConn, r *bufio.Reader) {
+	type outcome struct {
+		id  *wm.WindowID
+		err error
+	}
+	picked := make(chan outcome, 1)
+	cancel, err := onLoop(s, func() (func(), error) {
+		return s.handler.PickWindow(func(id *wm.WindowID, err error) { picked <- outcome{id, err} })
+	})
+	if err != nil {
+		s.reply(conn, nil, err)
+		return
+	}
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		if conn.SetReadDeadline(time.Time{}) == nil {
+			_, _ = r.ReadByte()
+		}
+	}()
+	select {
+	case o := <-picked:
+		if o.id == nil {
+			s.reply(conn, nil, o.err)
+			return
+		}
+		s.reply(conn, *o.id, o.err)
+	case <-gone:
+		s.post(cancel)
+	case <-s.done:
+	}
 }

@@ -291,6 +291,9 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 }
 
 func (c *Compositor) cursorShape() string {
+	if c.picking != nil {
+		return "crosshair"
+	}
 	if c.overviewDragging() {
 		return "grabbing"
 	}

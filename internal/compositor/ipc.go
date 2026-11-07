@@ -5,10 +5,13 @@ import (
 	"image"
 	"slices"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
+	swlr "github.com/stubbedev/lys-wm/internal/protocol/server/wlrlayershell"
 	"github.com/stubbedev/lys-wm/internal/shell"
+	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -116,9 +119,83 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			ContentSource: contentSource,
 			Icon:          ipcIcon(w.top.Icon()),
 			Stack:         stackOf(stack, w.id),
+			Group:         ipcGroup(ws, w.id),
 		})
 	}
+	snap.Layers = c.ipcLayers()
+	snap.Devices = c.ipcDevices()
 	return snap
+}
+
+func ipcGroup(ws wm.Workspace, id wm.WindowID) *ipc.Group {
+	m, ok := ws.Tree.MembershipOf(id)
+	if !ok {
+		return nil
+	}
+	return &ipc.Group{ID: uint64(uint32(ws.ID))<<32 | uint64(m.Group), Layout: m.Layout.String(), Index: m.Index} //nolint:gosec // workspace IDs fit in 32 bits, and scratchpads' negative ones wrap to distinct values
+}
+
+var (
+	ipcLayerLevels = [...]ipc.LayerLevel{
+		swlr.ZwlrLayerShellV1LayerBackground: ipc.LayerBackground,
+		swlr.ZwlrLayerShellV1LayerBottom:     ipc.LayerBottom,
+		swlr.ZwlrLayerShellV1LayerTop:        ipc.LayerTop,
+		swlr.ZwlrLayerShellV1LayerOverlay:    ipc.LayerOverlay,
+	}
+	ipcKeyboard = [...]ipc.KeyboardInteractivity{
+		swlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone:      ipc.KeyboardNone,
+		swlr.ZwlrLayerSurfaceV1KeyboardInteractivityExclusive: ipc.KeyboardExclusive,
+		swlr.ZwlrLayerSurfaceV1KeyboardInteractivityOnDemand:  ipc.KeyboardOnDemand,
+	}
+)
+
+func (c *Compositor) ipcLayers() []ipc.Layer {
+	var out []ipc.Layer
+	for _, e := range c.layers {
+		if !e.shown() {
+			continue
+		}
+		st := e.surface.Current()
+		out = append(out, ipc.Layer{
+			ID:        e.id,
+			Namespace: e.surface.Namespace(),
+			Layer:     ipcLayerLevels[st.Layer],
+			Output:    e.output.Backend().Name(),
+			Rect:      ipc.RectOf(e.bounds()),
+			Keyboard:  ipcKeyboard[st.Interactivity],
+		})
+	}
+	return out
+}
+
+func (c *Compositor) ipcDevices() []ipc.Device {
+	out := make([]ipc.Device, 0, len(c.devices))
+	for _, d := range c.devices {
+		dev := ipc.Device{Name: d.Name(), Capabilities: []ipc.Capability{}}
+		caps := d.Capabilities()
+		if caps.Has(backend.Keyboard) {
+			layout := c.keyboardLayout()
+			dev.Capabilities, dev.Layout = append(dev.Capabilities, ipc.CapKeyboard), &layout
+		}
+		if caps.Has(backend.Pointer) {
+			dev.Capabilities = append(dev.Capabilities, ipc.CapPointer)
+		}
+		if caps.Has(backend.Touch) {
+			dev.Capabilities = append(dev.Capabilities, ipc.CapTouch)
+		}
+		if t, ok := d.(tabletinput.Tablet); ok {
+			if _, tablet := t.Tablet(); tablet {
+				dev.Capabilities = append(dev.Capabilities, ipc.CapTablet)
+			}
+		}
+		if p, ok := d.(tabletinput.Pad); ok {
+			if _, pad := p.Pad(); pad {
+				dev.Capabilities = append(dev.Capabilities, ipc.CapTabletPad)
+			}
+		}
+		out = append(out, dev)
+	}
+	return out
 }
 
 func (c *Compositor) ipcZoom(o *output.Output) float64 {

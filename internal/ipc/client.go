@@ -30,7 +30,10 @@ func FindSocket(getenv func(string) string) (string, error) {
 	return matches[0], nil
 }
 
-const upgradeTimeout = 2 * time.Minute
+const (
+	upgradeTimeout = 2 * time.Minute
+	pickTimeout    = 2 * time.Minute
+)
 
 type conn struct {
 	wait time.Duration
@@ -103,8 +106,11 @@ func Do(path string, req Request) (result json.RawMessage, err error) {
 		return nil, err
 	}
 	defer func() { err = errors.Join(err, cn.close()) }()
-	if req.Request == KindUpgrade {
+	switch req.Request {
+	case KindUpgrade:
 		cn.wait = upgradeTimeout
+	case KindPickWindow:
+		cn.wait = pickTimeout
 	}
 	return cn.response()
 }
@@ -113,8 +119,8 @@ type Stream struct {
 	cn *conn
 }
 
-func Subscribe(path string) (*Stream, error) {
-	cn, err := send(path, Request{Request: KindWatch})
+func Subscribe(path string, snapshot bool) (*Stream, error) {
+	cn, err := send(path, Request{Request: KindWatch, Snapshot: snapshot})
 	if err != nil {
 		return nil, err
 	}

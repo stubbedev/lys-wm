@@ -40,20 +40,25 @@ const (
 	KindCreateOutput   Kind = "createoutput"
 	KindRemoveOutput   Kind = "removeoutput"
 	KindCapture        Kind = "capture"
+	KindLayers         Kind = "layers"
+	KindDevices        Kind = "devices"
+	KindPickWindow     Kind = "pickwindow"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture, KindLayers, KindDevices, KindPickWindow}
 
 type Request struct {
-	Request Kind        `json:"request"`
-	Action  string      `json:"action,omitempty"`
-	Window  wm.WindowID `json:"window,omitempty"`
-	Size    int         `json:"size,omitempty"`
-	Binary  string      `json:"binary,omitempty"`
-	DropX11 bool        `json:"drop_x11,omitempty"`
-	Name    string      `json:"name,omitempty"`
-	Mode    *Mode       `json:"mode,omitempty"`
-	Scale   float64     `json:"scale,omitempty"`
+	Request  Kind        `json:"request"`
+	Action   string      `json:"action,omitempty"`
+	Actions  []string    `json:"actions,omitempty"`
+	Snapshot bool        `json:"snapshot,omitempty"`
+	Window   wm.WindowID `json:"window,omitempty"`
+	Size     int         `json:"size,omitempty"`
+	Binary   string      `json:"binary,omitempty"`
+	DropX11  bool        `json:"drop_x11,omitempty"`
+	Name     string      `json:"name,omitempty"`
+	Mode     *Mode       `json:"mode,omitempty"`
+	Scale    float64     `json:"scale,omitempty"`
 }
 
 type OutputSpec struct {
@@ -88,12 +93,13 @@ type iconRequest struct {
 }
 
 type request struct {
-	kind    Kind
-	action  wm.Action
-	icon    iconRequest
-	binary  string
-	dropX11 bool
-	output  OutputSpec
+	kind     Kind
+	actions  []wm.Action
+	snapshot bool
+	icon     iconRequest
+	binary   string
+	dropX11  bool
+	output   OutputSpec
 }
 
 func parseRequest(line []byte) (request, error) {
@@ -106,8 +112,11 @@ func parseRequest(line []byte) (request, error) {
 	if !slices.Contains(kinds, raw.Request) {
 		return request{}, fmt.Errorf("%w: unknown request %q (known: %s)", ErrBadRequest, raw.Request, kindList())
 	}
-	if (raw.Request == KindDispatch) != (raw.Action != "") {
-		return request{}, fmt.Errorf("%w: only dispatch takes an action, and it needs one", ErrBadRequest)
+	if (raw.Request == KindDispatch) != ((raw.Action != "") != (len(raw.Actions) > 0)) {
+		return request{}, fmt.Errorf("%w: only dispatch takes an action or a list of actions, and it needs exactly one of them", ErrBadRequest)
+	}
+	if raw.Snapshot && raw.Request != KindWatch {
+		return request{}, fmt.Errorf("%w: only watch takes a snapshot", ErrBadRequest)
 	}
 	icon := raw.Window != 0 && raw.Size > 0
 	if raw.Request == KindIcon && !icon || raw.Request != KindIcon && (raw.Window != 0 || raw.Size != 0) {
@@ -120,13 +129,20 @@ func parseRequest(line []byte) (request, error) {
 	if err != nil {
 		return request{}, err
 	}
-	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}, binary: raw.Binary, dropX11: raw.DropX11, output: output}
-	if raw.Request == KindDispatch {
-		a, err := wm.ParseAction(raw.Action)
+	r := request{kind: raw.Request, snapshot: raw.Snapshot, icon: iconRequest{window: raw.Window, size: raw.Size}, binary: raw.Binary, dropX11: raw.DropX11, output: output}
+	if raw.Request != KindDispatch {
+		return r, nil
+	}
+	if raw.Action != "" {
+		raw.Actions = []string{raw.Action}
+	}
+	r.actions = make([]wm.Action, len(raw.Actions))
+	for i, text := range raw.Actions {
+		a, err := wm.ParseAction(text)
 		if err != nil {
-			return request{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+			return request{}, fmt.Errorf("%w: %w", ErrBadRequest, batchError(len(raw.Actions), i, text, err))
 		}
-		r.action = a
+		r.actions[i] = a
 	}
 	return r, nil
 }
@@ -253,6 +269,59 @@ type Window struct {
 	ContentSource wm.ContentSource  `json:"content_source"`
 	Icon          *Icon             `json:"icon"`
 	Stack         *int              `json:"stack,omitempty"`
+	Group         *Group            `json:"group"`
+}
+
+type Group struct {
+	ID     uint64 `json:"id"`
+	Layout string `json:"layout"`
+	Index  int    `json:"index"`
+}
+
+func sameGroup(a, b *Group) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+type LayerLevel string
+
+const (
+	LayerBackground LayerLevel = "background"
+	LayerBottom     LayerLevel = "bottom"
+	LayerTop        LayerLevel = "top"
+	LayerOverlay    LayerLevel = "overlay"
+)
+
+type KeyboardInteractivity string
+
+const (
+	KeyboardNone      KeyboardInteractivity = "none"
+	KeyboardExclusive KeyboardInteractivity = "exclusive"
+	KeyboardOnDemand  KeyboardInteractivity = "on_demand"
+)
+
+type Layer struct {
+	ID        uint64                `json:"id"`
+	Namespace string                `json:"namespace"`
+	Layer     LayerLevel            `json:"layer"`
+	Output    string                `json:"output"`
+	Rect      Rect                  `json:"rect"`
+	Keyboard  KeyboardInteractivity `json:"keyboard_interactivity"`
+}
+
+type Capability string
+
+const (
+	CapKeyboard  Capability = "keyboard"
+	CapPointer   Capability = "pointer"
+	CapTouch     Capability = "touch"
+	CapTablet    Capability = "tablet"
+	CapTabletPad Capability = "tablet_pad"
+)
+
+type Device struct {
+	Name         string       `json:"name"`
+	Capabilities []Capability `json:"capabilities"`
+	Layout       *Layout      `json:"layout,omitempty"`
 }
 
 type Icon struct {
@@ -291,6 +360,8 @@ type Snapshot struct {
 	Scratchpads    []Scratchpad
 	ShowDesktop    []string
 	Windows        []Window
+	Layers         []Layer
+	Devices        []Device
 	Submap         string
 	Layout         Layout
 	Locks          Locks
@@ -338,6 +409,10 @@ func (s Snapshot) answer(k Kind) any {
 		return s.Overview
 	case KindScratchpads:
 		return nonNil(s.Scratchpads)
+	case KindLayers:
+		return nonNil(s.Layers)
+	case KindDevices:
+		return nonNil(s.Devices)
 	case KindConfigProblems:
 		return ConfigProblems{Rejected: s.ConfigProblems.Rejected, Messages: nonNil(s.ConfigProblems.Messages)}
 	}
@@ -349,4 +424,11 @@ func nonNil[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+func batchError(n, i int, action string, err error) error {
+	if n == 1 {
+		return err
+	}
+	return fmt.Errorf("action %d (%s): %w", i, action, err)
 }

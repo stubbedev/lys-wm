@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,13 +30,18 @@ func TestParseArgs(t *testing.T) {
 		"reducedmotion":              {Request: ipc.KindReducedMotion},
 		"configproblems":             {Request: ipc.KindConfigProblems},
 		"watch":                      {Request: ipc.KindWatch},
+		"watch --snapshot":           {Request: ipc.KindWatch, Snapshot: true},
+		`batch submap\x20a kill`:     {Request: ipc.KindDispatch, Actions: []string{"submap a", "kill"}},
+		"layers":                     {Request: ipc.KindLayers},
+		"devices":                    {Request: ipc.KindDevices},
+		"pickwindow":                 {Request: ipc.KindPickWindow},
 		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {
-		if got, err := parseArgs(strings.Fields(args)); err != nil || got != want {
+		if got, err := parseArgs(splitArgs(args)); err != nil || !reflect.DeepEqual(got, want) {
 			t.Errorf("%q: %+v, %v; want %+v", args, got, err, want)
 		}
 	}
-	for _, args := range []string{"", "dispatch", "windows 2", "submap resize", "layout 1", "reload now", "teleport", "icon", "icon 7", "icon 0 64", "icon 7 0", "icon x 64", "icon 7 64 1"} {
+	for _, args := range []string{"", "dispatch", "windows 2", "submap resize", "layout 1", "reload now", "teleport", "icon", "icon 7", "icon 0 64", "icon 7 0", "icon x 64", "icon 7 64 1", "batch", "watch --all", "pickwindow 3"} {
 		if _, err := parseArgs(strings.Fields(args)); !errors.Is(err, errUsage) {
 			t.Errorf("%q: %v", args, err)
 		}
@@ -233,4 +239,16 @@ func TestOutputCreateAndRemove(t *testing.T) {
 
 func (h *handler) Capture(func(ipc.Event)) (ipc.CaptureSession, error) {
 	return nil, errors.New("lys-wmctl starts no input capture")
+}
+
+func (h *handler) PickWindow(func(*wm.WindowID, error)) (func(), error) {
+	return nil, errors.New("lys-wmctl picks no window")
+}
+
+func splitArgs(args string) []string {
+	fields := strings.Fields(args)
+	for i, f := range fields {
+		fields[i] = strings.ReplaceAll(f, `\x20`, " ")
+	}
+	return fields
 }

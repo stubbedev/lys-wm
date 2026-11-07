@@ -9,10 +9,12 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 
 ```sh
 lys-wmctl dispatch workspace 3     # any action from actions.md
+lys-wmctl batch "workspace 2" "exec foot" # several actions, in order and at once
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
 lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see Upgrading in place
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | version
-lys-wmctl watch                    # events as JSON lines, until lys-wm exits
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | layers | devices | version
+lys-wmctl watch [--snapshot]       # events as JSON lines, until lys-wm exits; the state first with --snapshot
+lys-wmctl pickwindow               # click a window to print its ID; Escape cancels
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
 lys-wmctl output create 1920x1080@60 # add a virtual output; prints {"name":"VIRT-1"}
 lys-wmctl output remove VIRT-1      # remove it again
@@ -31,10 +33,10 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `layers`, `devices`, `pickwindow`, `dispatch` (which needs `action` or `actions`, see [Batches](#batches)), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
 [Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
-takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` and `capture`
+takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` (which takes `snapshot`, see [Events](#events)) and `capture`
 (see [Input capture](#input-capture)). Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
@@ -80,8 +82,15 @@ focused one, or `null`:
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
  "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"inhibits_shortcuts":false,
- "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
+ "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0,
+ "group":{"id":4294967297,"layout":"h","index":0}}
 ```
+
+`group` is the container a tiled window sits in, or `null` for a floating one:
+`{"id":4294967298,"layout":"tab","index":1}`. `id` is opaque and stays the
+same while the container exists, however its members change; `layout` is `h`,
+`v` or `tab`; `index` is the window's place among the container's children, 0
+first, which in a tab group is its tab.
 
 `stack` is the window's front-to-back index among the windows its output
 shows, 0 on top: fullscreen windows, then maximized, then floating, then tiled, each in the
@@ -148,7 +157,43 @@ once.
 icon buffer; an icon given only by name is resolved through the icon theme by
 the client.
 
+`layers`: the mapped layer-shell surfaces (bars, docks, wallpapers, launchers),
+in the order they were created:
+
+```json
+{"id":3,"namespace":"waybar","layer":"top","output":"DP-1","rect":{"x":0,"y":0,"width":2048,"height":30},"keyboard_interactivity":"none"}
+```
+
+`id` is never reused while lys-wm runs; `layer` is `background`, `bottom`,
+`top` or `overlay`; `rect` is in layout coordinates; `keyboard_interactivity`
+is `none`, `exclusive` or `on_demand`.
+
+`devices`: the input devices, as
+`{"name":"AT Translated Set 2 keyboard","capabilities":["keyboard"],"layout":{"index":0,"name":"English (US)"}}`.
+`capabilities` lists `keyboard`, `pointer`, `touch`, `tablet` and
+`tablet_pad`, as the device has them; a keyboard also has `layout`, the
+seat's active layout group, which every keyboard shares.
+
+`pickwindow`: waits for the next click and answers with the ID of the window
+under it, or `null` over no window (a bar, the wallpaper). The cursor is a
+crosshair meanwhile, and no client sees the pointer or the click. Escape
+cancels with an error. Only one pick runs at a time; closing the connection
+cancels it. A client waits up to 2 minutes.
+
 `version`: the number 1.
+
+### Batches
+
+`dispatch` with `actions`, a list of action strings, runs them in order in one
+pass of lys-wm's loop, so they land in one transaction: a watcher sees one
+burst of events, each window's `rect` once. It stops at the first action that
+fails and answers with an error naming its index from 0 and its text,
+`action 1 (kill): ...`; the actions before it stay applied. A request has
+either `action` or `actions`.
+
+```json
+{"request":"dispatch","actions":["workspace 2","exec foot","togglefloating"]}
+```
 
 ### Virtual outputs
 
@@ -186,7 +231,13 @@ is refused while any exists.
 ## Events
 
 `watch` answers `{"version":1}`, then writes one JSON object per line. Each
-has an `event` field and the fields below. Events that happen together
+has an `event` field and the fields below. With `"snapshot":true` it first
+writes the current state as events: an `output` (`added`) and a `workspace`
+for each output, `focusedoutput`, an `open` for each window, `focus`, the
+scratchpads, a `layer` (`open`) for each layer surface and the submap,
+layout and locks, then the live events. Both are taken in one pass of the
+loop, so a window that maps meanwhile is in one or the other, never in
+neither. Events that happen together
 arrive in this order: dispatches, then each output with the workspace it
 shows, the focused output, windows, focus, submap, layout, locks and reduced motion.
 
@@ -204,7 +255,10 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `rect` | `window`, `output`, `rect` | A window moved, resized or went to another output; `rect` is as in `windows` |
 | `icon` | `window`, `icon` | A window set or cleared its icon |
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
-| `mode` | `window`, `fullscreen`, `maximized`, `client_fullscreen` | A window went fullscreen or maximized, or back, or was told it is fullscreen (fake fullscreen), or no longer |
+| `mode` | `window`, `floating`, `fullscreen`, `maximized`, `client_fullscreen` | A window floated or tiled, went fullscreen or maximized, or back, or was told it is fullscreen (fake fullscreen), or no longer |
+| `group` | `window`, `group` (as in `windows`, or `null`) | A window entered, left or moved within a container: tiled, floated, grouped with `makegroup`, or a sibling came or went before it |
+| `layer` | `change` (`open`, `close`), `id`, `namespace`, `output`, `layer` | A layer surface mapped or went away; the fields are as in `layers` |
+| `bell` | `window` (ID or `null`) | A client rang the system bell (`xdg_system_bell_v1`), for its window or for none |
 | `pin` | `window`, `pinned` | A window was pinned to its output (the `pin` action) or unpinned |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |
 | `unresponsive` | `window`, `unresponsive` | A window's client stopped answering pings, or answered again. lys-wm pings a window's client when the window gains focus (xdg clients, and X clients that list `_NET_WM_PING`) and marks it after 5 seconds without an answer |

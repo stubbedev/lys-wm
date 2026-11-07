@@ -1,6 +1,7 @@
 package compositor
 
 import (
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	ssb "github.com/stubbedev/lys-wm/internal/protocol/server/systembell"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -21,14 +22,29 @@ func (bell) Destroy(*ssb.XdgSystemBellV1) error { return nil }
 
 func (b bell) Ring(_ *ssb.XdgSystemBellV1, wl *sw.WlSurface) error {
 	if wl == nil {
+		b.c.announceBell(nil)
 		return nil
 	}
 	s, err := surface.From(wl)
 	if err != nil {
 		return err
 	}
-	if w := b.c.windowWithSurface(s); w != nil {
-		return b.c.markUrgent(w)
+	w := b.c.windowWithSurface(s)
+	b.c.announceBell(w)
+	if w == nil {
+		return nil
 	}
-	return nil
+	return b.c.markUrgent(w)
+}
+
+func (c *Compositor) announceBell(w *window) {
+	if c.ipcEvents == nil {
+		return
+	}
+	e := ipc.BellEvent{}
+	if w != nil {
+		id := w.id
+		e.Window = &id
+	}
+	c.ipcEvents.Announce(e)
 }

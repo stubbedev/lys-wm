@@ -38,7 +38,7 @@ func query[T any](h *Harness, kind ipc.Kind) T {
 
 func (h *Harness) watch() <-chan string {
 	h.t.Helper()
-	stream, err := ipc.Subscribe(h.IPCSocket())
+	stream, err := ipc.Subscribe(h.IPCSocket(), false)
 	if err != nil {
 		h.t.Fatal(err)
 	}

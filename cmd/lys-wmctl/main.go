@@ -23,6 +23,8 @@ import (
 const usage = `usage: lys-wmctl [--socket <path>] <command>
 
   dispatch <action> [args...]  run an action, as a keybind would (see docs/actions.md)
+  batch <action>...            run each argument as an action, in order and at once,
+                               stopping at the first that fails
   reload                       read the config file again; prints what it did not apply
   upgrade [--drop-x11] <path>  move this session to the lys-wm at path, keeping its clients; refused and unchanged if any client cannot be kept
   configproblems               print what the last load of the config did not apply as JSON
@@ -35,7 +37,12 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   locks                        print the Caps, Num and Scroll Lock state as JSON
   reducedmotion                print whether animations.reduced_motion is on as JSON
   version                      print the IPC protocol version
-  watch                        print events as JSON lines until lys-wm exits
+  layers                       print the mapped layer surfaces (bars, wallpapers) as JSON
+  devices                      print the input devices as JSON
+  pickwindow                   wait for a click on a window and print its ID, or null;
+                               Escape cancels
+  watch [--snapshot]           print events as JSON lines until lys-wm exits; with
+                               --snapshot, the current state first, as events
   icon <window> <size>         print a window's icon buffer closest to size pixels
                                as JSON, the PNG base64-encoded
   output create [--name <name>] [--scale <s>] <width>x<height>[@<hz>]
@@ -70,7 +77,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindWatch}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {
@@ -84,6 +91,19 @@ func parseArgs(args []string) (ipc.Request, error) {
 			return ipc.Request{}, fmt.Errorf("%w: dispatch needs an action", errUsage)
 		}
 		return ipc.Request{Request: ipc.KindDispatch, Action: strings.Join(rest, " ")}, nil
+	case cmd == "batch":
+		if len(rest) == 0 {
+			return ipc.Request{}, fmt.Errorf("%w: batch needs at least one action", errUsage)
+		}
+		return ipc.Request{Request: ipc.KindDispatch, Actions: rest}, nil
+	case kind == ipc.KindWatch:
+		switch {
+		case len(rest) == 0:
+			return ipc.Request{Request: ipc.KindWatch}, nil
+		case len(rest) == 1 && rest[0] == "--snapshot":
+			return ipc.Request{Request: ipc.KindWatch, Snapshot: true}, nil
+		}
+		return ipc.Request{}, fmt.Errorf("%w: watch takes only --snapshot", errUsage)
 	case kind == ipc.KindIcon:
 		return parseIcon(rest)
 	case kind == ipc.KindUpgrade:
@@ -182,8 +202,8 @@ func parseIcon(args []string) (ipc.Request, error) {
 	return ipc.Request{Request: ipc.KindIcon, Window: wm.WindowID(id), Size: size}, nil
 }
 
-func watch(path string, out io.Writer) (err error) {
-	stream, err := ipc.Subscribe(path)
+func watch(path string, snapshot bool, out io.Writer) (err error) {
+	stream, err := ipc.Subscribe(path, snapshot)
 	if err != nil {
 		return err
 	}
@@ -234,7 +254,7 @@ func run(args []string, getenv func(string) string, out, warnings io.Writer) err
 		}
 	}
 	if req.Request == ipc.KindWatch {
-		return watch(path, out)
+		return watch(path, req.Snapshot, out)
 	}
 	result, err := ipc.Do(path, req)
 	if err != nil {

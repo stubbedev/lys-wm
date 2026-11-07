@@ -272,7 +272,7 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	if got := outputScale(t, socket); got != 2 {
 		t.Fatalf("scale %g from the config, want 2", got)
 	}
-	stream, err := ipc.Subscribe(socket)
+	stream, err := ipc.Subscribe(socket, false)
 	if err != nil {
 		t.Fatal(err)
 	}

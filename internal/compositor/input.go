@@ -81,6 +81,8 @@ func wlCaps(c backend.Capability) sw.WlSeatCapability {
 }
 
 func (c *Compositor) DeviceAdded(d backend.Device) error {
+	c.devices = append(c.devices, d)
+	c.stateChanged()
 	if k, ok := d.(backend.KeyboardLEDs); ok && d.Capabilities().Has(backend.Keyboard) {
 		c.keyboards = append(c.keyboards, k)
 		k.SetLEDs(c.leds)
@@ -89,6 +91,8 @@ func (c *Compositor) DeviceAdded(d backend.Device) error {
 }
 
 func (c *Compositor) DeviceRemoved(d backend.Device) error {
+	c.devices = slices.DeleteFunc(c.devices, func(x backend.Device) bool { return x == d })
+	c.stateChanged()
 	c.keyboards = slices.DeleteFunc(c.keyboards, func(k backend.KeyboardLEDs) bool { return any(k) == any(d) })
 	return errors.Join(c.seat.RemoveDevice(wlCaps(d.Capabilities())), c.tabletRemoved(d))
 }
@@ -243,6 +247,10 @@ func (c *Compositor) acceptKey(e backend.Key) error {
 	if err := c.watchTap(e.Code, e.Pressed); err != nil {
 		return err
 	}
+	if e.Pressed && c.picking != nil && c.seat.Keysym(e.Code) == keysymEscape {
+		c.held = append(c.held, e.Code)
+		return c.cancelPick()
+	}
 	if e.Pressed && c.overviewHolds() {
 		if taken, err := c.overviewKey(e.Code); taken || err != nil {
 			return err
@@ -283,6 +291,10 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 			return nil
 		}
 		return c.drag.Drop()
+	}
+	if e.Pressed && c.picking != nil {
+		c.consumed = append(c.consumed, e.Button)
+		return c.pickAtCursor()
 	}
 	if i := slices.Index(c.consumed, e.Button); !e.Pressed && i >= 0 {
 		c.consumed = slices.Delete(c.consumed, i, i+1)
@@ -466,6 +478,9 @@ func (c *Compositor) pointerMoved(at time.Duration) error {
 		c.markDragged()
 		return c.scheduleAll()
 	}
+	if c.picking != nil {
+		return c.cursorMoved()
+	}
 	if c.overviewHolds() && c.overview.press != nil {
 		return errors.Join(c.overviewMoved(c.cursor), c.cursorMoved())
 	}
@@ -511,7 +526,7 @@ func (c *Compositor) refreshPointer() error {
 	if c.capturing != nil {
 		return nil
 	}
-	if c.interaction != nil {
+	if c.interaction != nil || c.picking != nil {
 		return nil
 	}
 	if c.pointerDrag() {

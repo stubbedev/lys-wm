@@ -12,6 +12,7 @@ import (
 	"net"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,8 @@ type fake struct {
 	created    []OutputSpec
 	removed    []string
 	captures   []*fakeCapture
+	pick       func(*wm.WindowID, error)
+	cancelled  int
 }
 
 func (f *fake) CreateOutput(spec OutputSpec) (CreatedOutput, error) {
@@ -58,6 +61,14 @@ func (f *fake) Snapshot() Snapshot {
 	snap := f.snap
 	snap.Windows = append([]Window(nil), f.snap.Windows...)
 	return snap
+}
+
+func (f *fake) PickWindow(answer func(*wm.WindowID, error)) (func(), error) {
+	if f.pick != nil {
+		return nil, errors.New("a pick is running")
+	}
+	f.pick = answer
+	return func() { f.cancelled++; f.pick = nil }, nil
 }
 
 func (f *fake) PrepareDispatch(wm.Action) func() error { return nil }
@@ -295,7 +306,7 @@ func TestWatchStreamsDiffsAndDispatches(t *testing.T) {
 	})
 	for _, want := range []string{
 		`{"event":"dispatch","action":"submap reset"}`,
-		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":false,"inhibits_shortcuts":false,"content_type":"none","content_source":"client","icon":null}}`,
+		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":false,"inhibits_shortcuts":false,"content_type":"none","content_source":"client","icon":null,"group":null}}`,
 		`{"event":"submap","submap":""}`,
 	} {
 		if got := next(t, lines); got != want {
@@ -454,4 +465,135 @@ func TestOutputsAreCreatedAndRemovedOnTheLoop(t *testing.T) {
 			t.Errorf("created %+v, removed %v", f.created, f.removed)
 		}
 	})
+}
+
+func TestABatchRunsInOrderAndStopsAtTheFirstFailure(t *testing.T) {
+	r := start(t)
+	if _, err := Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap a", "submap b"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap c", "kill", "submap d"}})
+	if err == nil || !strings.Contains(err.Error(), "action 1 (kill): nothing to kill") {
+		t.Fatalf("a batch failing at its second action: %v", err)
+	}
+	_, err = Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap e", "fly up"}})
+	if err == nil || !strings.Contains(err.Error(), `action 1 (fly up)`) {
+		t.Fatalf("a batch with an unknown action: %v", err)
+	}
+	r.do(func(f *fake) {
+		var got []string
+		for _, a := range f.dispatched {
+			got = append(got, a.String())
+		}
+		if want := []string{"submap a", "submap b", "submap c"}; !slices.Equal(got, want) {
+			t.Errorf("dispatched %v, want %v", got, want)
+		}
+	})
+	if _, err := Do(r.path, Request{Request: KindDispatch, Action: "submap a", Actions: []string{"submap b"}}); err == nil {
+		t.Fatal("a dispatch with both an action and actions was accepted")
+	}
+}
+
+func TestAWatchWithASnapshotStartsWithTheState(t *testing.T) {
+	r := start(t)
+	r.do(func(f *fake) {
+		f.snap.Outputs = []Output{{Name: "DP-1", Workspace: 1, Focused: true}}
+		f.snap.Windows = []Window{{ID: 1, Title: "one", Focused: true}}
+		f.snap.Layers = []Layer{{ID: 4, Namespace: "bar", Layer: LayerTop, Output: "DP-1"}}
+	})
+	stream, err := Subscribe(r.path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	r.do(func(f *fake) { f.snap.Windows = append(f.snap.Windows, Window{ID: 2, Title: "two"}) })
+	var got []string
+	for len(got) < 7 {
+		line, err := stream.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e struct{ Event string }
+		if err := json.Unmarshal(line, &e); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, e.Event)
+	}
+	if want := []string{"output", "workspace", "focusedoutput", "open", "focus", "layer", "open"}; !slices.Equal(got, want) {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	if _, err := Do(r.path, Request{Request: KindWindows, Snapshot: true}); err == nil {
+		t.Fatal("a query took a snapshot flag")
+	}
+}
+
+func TestLayersAndDevicesAreQueries(t *testing.T) {
+	r := start(t)
+	r.do(func(f *fake) {
+		f.snap.Layers = []Layer{{ID: 4, Namespace: "bar", Layer: LayerTop, Output: "DP-1", Rect: Rect{Width: 100, Height: 30}, Keyboard: KeyboardOnDemand}}
+		f.snap.Devices = []Device{{Name: "kbd", Capabilities: []Capability{CapKeyboard}, Layout: &Layout{Name: "Danish"}}}
+	})
+	for kind, want := range map[Kind]string{
+		KindLayers:  `[{"id":4,"namespace":"bar","layer":"top","output":"DP-1","rect":{"x":0,"y":0,"width":100,"height":30},"keyboard_interactivity":"on_demand"}]`,
+		KindDevices: `[{"name":"kbd","capabilities":["keyboard"],"layout":{"index":0,"name":"Danish"}}]`,
+	} {
+		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
+			t.Errorf("%s: %s, %v; want %s", kind, got, err, want)
+		}
+	}
+}
+
+func TestPickWindowAnswersWithThePickAndCancelsWhenTheClientLeaves(t *testing.T) {
+	r := start(t)
+	awaitPick := func() {
+		t.Helper()
+		deadline := time.Now().Add(testenv.HangLimit)
+		for {
+			armed := false
+			r.do(func(f *fake) { armed = f.pick != nil })
+			if armed {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the pick never started")
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	answered := make(chan string, 1)
+	go func() {
+		got, err := Do(r.path, Request{Request: KindPickWindow})
+		answered <- fmt.Sprint(string(got), err)
+	}()
+	awaitPick()
+	if _, err := Do(r.path, Request{Request: KindPickWindow}); err == nil || !strings.Contains(err.Error(), "a pick is running") {
+		t.Fatalf("a second pick: %v", err)
+	}
+	r.do(func(f *fake) {
+		id := wm.WindowID(6)
+		f.pick(&id, nil)
+		f.pick = nil
+	})
+	if got := <-answered; got != "6<nil>" {
+		t.Fatalf("pick answered %s", got)
+	}
+	c, err := net.Dial("unix", r.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Write([]byte(`{"request":"pickwindow"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitPick()
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(testenv.HangLimit)
+	for cancelled := 0; cancelled != 1; {
+		r.do(func(f *fake) { cancelled = f.cancelled })
+		if time.Now().After(deadline) {
+			t.Fatal("the pick of a client that left was not cancelled")
+		}
+		time.Sleep(time.Millisecond)
+	}
 }

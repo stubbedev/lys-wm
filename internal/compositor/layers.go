@@ -17,6 +17,7 @@ import (
 )
 
 type layer struct {
+	id        uint64
 	surface   *shell.LayerSurface
 	output    *output.Output
 	box       image.Rectangle
@@ -113,6 +114,7 @@ func (c *Compositor) rearrange(o *output.Output) (bool, error) {
 
 func (c *Compositor) layersChanged(o *output.Output) error {
 	c.overviewLayersChanged(o)
+	c.stateChanged()
 	var err error
 	if o != nil {
 		_, err = c.rearrange(o)
@@ -130,9 +132,11 @@ func (c *Compositor) LayerCommitted(l *shell.LayerSurface) error {
 		if o == nil {
 			return l.Close()
 		}
-		c.layers = append(c.layers, &layer{surface: l, output: o})
+		c.layerIDs++
+		c.layers = append(c.layers, &layer{id: c.layerIDs, surface: l, output: o})
 		return c.layersChanged(o)
 	}
+	c.stateChanged()
 	moved, err := c.rearrange(e.output)
 	if moved {
 		err = errors.Join(err, c.scheduleAll())

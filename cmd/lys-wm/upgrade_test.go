@@ -421,7 +421,7 @@ func TestUpgradeKeepsEveryRoleAClientHolds(t *testing.T) {
 	watcher.Bind(manager)
 	watcher.DispatchUntil("the watcher to see the window", func() bool { return list.titles()["main"] == 1 })
 	before := stable(s.windows())
-	stream, err := ipc.Subscribe(s.socket)
+	stream, err := ipc.Subscribe(s.socket, false)
 	if err != nil {
 		t.Fatal(err)
 	}

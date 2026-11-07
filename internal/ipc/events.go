@@ -20,6 +20,13 @@ const (
 	OutputChanged OutputChange = "changed"
 )
 
+type LayerChange string
+
+const (
+	LayerOpened LayerChange = "open"
+	LayerClosed LayerChange = "close"
+)
+
 type (
 	OutputEvent struct {
 		Change OutputChange `json:"change"`
@@ -65,6 +72,7 @@ type (
 	}
 	ModeEvent struct {
 		Window           wm.WindowID `json:"window"`
+		Floating         bool        `json:"floating"`
 		Fullscreen       bool        `json:"fullscreen"`
 		Maximized        bool        `json:"maximized"`
 		ClientFullscreen bool        `json:"client_fullscreen"`
@@ -116,6 +124,20 @@ type (
 		Output string `json:"output"`
 		On     bool   `json:"on"`
 	}
+	LayerEvent struct {
+		Change    LayerChange `json:"change"`
+		ID        uint64      `json:"id"`
+		Namespace string      `json:"namespace"`
+		Output    string      `json:"output"`
+		Layer     LayerLevel  `json:"layer"`
+	}
+	GroupEvent struct {
+		Window wm.WindowID `json:"window"`
+		Group  *Group      `json:"group"`
+	}
+	BellEvent struct {
+		Window *wm.WindowID `json:"window"`
+	}
 	WindowMenuEvent struct {
 		Window wm.WindowID `json:"window"`
 		X      int         `json:"x"`
@@ -150,18 +172,30 @@ func (ConfigProblemsEvent) Name() string { return "configproblems" }
 func (WindowMenuEvent) Name() string     { return "windowmenu" }
 func (ShowDesktopEvent) Name() string    { return "showdesktop" }
 func (ScratchpadEvent) Name() string     { return "scratchpad" }
+func (LayerEvent) Name() string          { return "layer" }
+func (GroupEvent) Name() string          { return "group" }
+func (BellEvent) Name() string           { return "bell" }
 
 func Encode(e Event) ([]byte, error) {
+	return AppendEvent(nil, e)
+}
+
+func AppendEvent(dst []byte, e Event) ([]byte, error) {
+	start := len(dst)
+	dst = append(dst, `{"event":`...)
+	dst = appendJSONString(dst, e.Name())
+	if a, ok := e.(lineAppender); ok {
+		return append(a.appendFields(dst), '}', '\n'), nil
+	}
 	body, err := json.Marshal(e)
 	if err != nil {
-		return nil, fmt.Errorf("ipc: encode %s event: %w", e.Name(), err)
+		return dst[:start], fmt.Errorf("ipc: encode %s event: %w", e.Name(), err)
 	}
-	line := fmt.Appendf(nil, `{"event":%q`, e.Name())
 	if len(body) > 2 {
-		line = append(line, ',')
+		dst = append(dst, ',')
 	}
-	line = append(line, body[1:]...)
-	return append(line, '\n'), nil
+	dst = append(dst, body[1:]...)
+	return append(dst, '\n'), nil
 }
 
 func sameOutput(a, b Output) bool {
@@ -239,8 +273,8 @@ func Diff(prev, next Snapshot) []Event {
 		if p.Urgent != w.Urgent {
 			out = append(out, UrgentEvent{Window: w.ID, Urgent: w.Urgent})
 		}
-		if p.Fullscreen != w.Fullscreen || p.Maximized != w.Maximized || p.ClientFull != w.ClientFull {
-			out = append(out, ModeEvent{Window: w.ID, Fullscreen: w.Fullscreen, Maximized: w.Maximized, ClientFullscreen: w.ClientFull})
+		if p.Floating != w.Floating || p.Fullscreen != w.Fullscreen || p.Maximized != w.Maximized || p.ClientFull != w.ClientFull {
+			out = append(out, ModeEvent{Window: w.ID, Floating: w.Floating, Fullscreen: w.Fullscreen, Maximized: w.Maximized, ClientFullscreen: w.ClientFull})
 		}
 		if p.Minimized != w.Minimized {
 			out = append(out, MinimizedEvent{Window: w.ID, Minimized: w.Minimized})
@@ -254,6 +288,9 @@ func Diff(prev, next Snapshot) []Event {
 		if !sameStack(p.Stack, w.Stack) {
 			out = append(out, StackEvent{Window: w.ID, Stack: w.Stack})
 		}
+		if !sameGroup(p.Group, w.Group) {
+			out = append(out, GroupEvent{Window: w.ID, Group: w.Group})
+		}
 	}
 	was, hadFocus := prev.active()
 	is, hasFocus := next.active()
@@ -265,6 +302,7 @@ func Diff(prev, next Snapshot) []Event {
 		out = append(out, e)
 	}
 	out = appendScratchpadEvents(out, prev.Scratchpads, next.Scratchpads)
+	out = appendLayerEvents(out, prev.Layers, next.Layers)
 	for _, o := range next.ShowDesktop {
 		if !slices.Contains(prev.ShowDesktop, o) {
 			out = append(out, ShowDesktopEvent{Output: o, On: true})
@@ -312,4 +350,22 @@ func appendScratchpadEvents(out []Event, prev, next []Scratchpad) []Event {
 		}
 	}
 	return out
+}
+
+func appendLayerEvents(out []Event, prev, next []Layer) []Event {
+	for _, p := range prev {
+		if !slices.ContainsFunc(next, func(n Layer) bool { return n.ID == p.ID }) {
+			out = append(out, layerEvent(LayerClosed, p))
+		}
+	}
+	for _, n := range next {
+		if !slices.ContainsFunc(prev, func(p Layer) bool { return p.ID == n.ID }) {
+			out = append(out, layerEvent(LayerOpened, n))
+		}
+	}
+	return out
+}
+
+func layerEvent(change LayerChange, l Layer) LayerEvent {
+	return LayerEvent{Change: change, ID: l.ID, Namespace: l.Namespace, Output: l.Output, Layer: l.Layer}
 }

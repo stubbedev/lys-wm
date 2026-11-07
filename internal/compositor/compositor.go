@@ -179,6 +179,7 @@ type Compositor struct {
 	shm                *shm.Manager
 	seat               *seat.Seat
 	keyboards          []backend.KeyboardLEDs
+	devices            []backend.Device
 	leds               xkb.Locks
 	shell              *shell.Shell
 	textures           map[*surface.Surface]texture
@@ -269,6 +270,8 @@ type Compositor struct {
 	consumed           []uint32
 	tokens             []activationToken
 	layers             []*layer
+	layerIDs           uint64
+	picking            *pick
 	data               *data.Manager
 	drag               *dragging
 	usable             map[*output.Output]image.Rectangle

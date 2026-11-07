@@ -12,7 +12,7 @@ import (
 
 func TestParseRequest(t *testing.T) {
 	r, err := parseRequest([]byte(`{"request":"dispatch","action":"workspace 3"}`))
-	if err != nil || r.kind != KindDispatch || r.action != (wm.WorkspaceAction{Target: wm.WorkspaceID(3)}) {
+	if err != nil || r.kind != KindDispatch || !slices.Equal(r.actions, []wm.Action{wm.WorkspaceAction{Target: wm.WorkspaceID(3)}}) {
 		t.Fatalf("dispatch parsed to %+v, %v", r, err)
 	}
 	if r, err := parseRequest([]byte(`{"request":"windows"}` + "\n")); err != nil || r.kind != KindWindows {
@@ -124,10 +124,10 @@ func TestDiff(t *testing.T) {
 		`{"event":"rect","window":2,"output":"HDMI-A-1","rect":{"x":100,"y":4,"width":50,"height":40}}`,
 		`{"event":"icon","window":2,"icon":{"serial":4,"name":"foot","sizes":[16,32]}}`,
 		`{"event":"urgent","window":2,"urgent":true}`,
-		`{"event":"mode","window":2,"fullscreen":false,"maximized":true,"client_fullscreen":false}`,
+		`{"event":"mode","window":2,"floating":false,"fullscreen":false,"maximized":true,"client_fullscreen":false}`,
 		`{"event":"move","window":1,"workspace":3}`,
 		`{"event":"title","window":1,"title":"a!"}`,
-		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"inhibits_shortcuts":false,"content_type":"none","content_source":"client","icon":null}}`,
+		`{"event":"open","window":{"id":3,"app_id":"mpv","title":"","pid":0,"workspace":3,"output":"HDMI-A-1","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"maximized":false,"client_fullscreen":false,"pinned":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,"inhibits_shortcuts":false,"content_type":"none","content_source":"client","icon":null,"group":null}}`,
 		`{"event":"focus","window":3}`,
 		`{"event":"submap","submap":"resize"}`,
 		`{"event":"layout","layout":{"index":1,"name":"Danish"}}`,
