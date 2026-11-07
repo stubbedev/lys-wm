@@ -810,6 +810,42 @@ func TestAnXWindowWhoseSurfaceGoesBeforeItsUnmapNotifyStillCloses(t *testing.T) 
 	})
 }
 
+func TestFocusingAnXWindowItsClientJustUnmappedIsNoError(t *testing.T) {
+	t.Parallel()
+	h := StartXwayland(t, func(err error) { t.Errorf("xwayland reported: %v", err) }, small)
+	xc := xDial(t, h)
+	left := xc.window(image.Rect(0, 0, 50, 50), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("left\x00left\x00")})
+	h.Eventually("the left window on screen", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return len(windowsOf(c)) == 1
+	})
+	xc.window(image.Rect(0, 0, 50, 50), 0x00ff00, false, map[string][]byte{"WM_CLASS": []byte("right\x00right\x00")})
+	h.Eventually("the right window focused", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 2 && ws[1].Focused
+	})
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if err := xproto.UnmapWindowChecked(xc.x, left).Check(); err != nil {
+			return err
+		}
+		a, err := wm.ParseAction("focus left")
+		if err != nil {
+			return err
+		}
+		return c.Dispatch(a)
+	})
+	h.Eventually("the window manager past the unmap its focus came after", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		ws := windowsOf(c)
+		return len(ws) == 1 && ws[0].AppID == "right" && ws[0].Focused
+	})
+	focus, err := xproto.GetInputFocus(xc.x).Reply()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if focus.Focus == left {
+		t.Errorf("X focus stayed on the unmapped window %#x", left)
+	}
+}
+
 func TestAFloatingXWindowWhoseMinimumArrivesAfterItsMapStaysCentred(t *testing.T) {
 	t.Parallel()
 	hints := make([]uint32, 18)

@@ -302,10 +302,14 @@ func (c *xconn) run() {
 	}
 }
 
+const opcodeSetInputFocus = 42
+
 func goneError(err xgb.Error) bool {
-	switch err.(type) {
+	switch e := err.(type) {
 	case xproto.WindowError, xsync.Error:
 		return true
+	case xproto.MatchError:
+		return e.MajorOpcode == opcodeSetInputFocus
 	}
 	return false
 }
