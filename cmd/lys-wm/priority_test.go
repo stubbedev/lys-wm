@@ -131,9 +131,10 @@ func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
 		if reason != "" || err != nil {
 			return
 		}
+		tid := unix.Gettid()
 		asked := make(chan uint32, 2)
-		release := demoteOnRTTimeout(unix.Gettid(), func() error {
-			attr, err := unix.SchedGetAttr(0, 0)
+		release := demoteOnRTTimeout(tid, func() error {
+			attr, err := unix.SchedGetAttr(tid, 0)
 			if err != nil {
 				return err
 			}
