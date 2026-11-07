@@ -93,7 +93,7 @@ func (c *Compositor) showContentType(o *output.Output, s *surface.Surface, alone
 	}
 	t := wm.ContentNone
 	if alone {
-		t = c.contentTypes.Of(s)
+		t = c.contentType(s)
 	}
 	ct.SetContentType(t)
 }

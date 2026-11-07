@@ -72,3 +72,28 @@ func TestAConnectorWithoutAContentTypeNeverCarriesOne(t *testing.T) {
 		t.Fatal("a pending content type kept a tearing scanout from flipping async")
 	}
 }
+
+func TestAGameGoingFullscreenSetsVRRAndItsContentTypeInOneCommit(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.contentTypes, d.vrr, d.asyncFlips = true, true, true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.b.Outputs()[0]
+	r.nextFrame(o)
+	for _, tc := range []struct {
+		on      bool
+		content wm.ContentType
+		want    uint64
+	}{{true, wm.ContentGame, 1}, {false, wm.ContentNone, 0}} {
+		o.SetContentType(tc.content)
+		if err := o.SetAdaptiveSync(tc.on); err != nil {
+			t.Fatal(err)
+		}
+		c := r.nextFrame(o)
+		vrr, vrrSet := vrrOf(c)
+		ct, ctSet := contentTypeOf(c)
+		if !vrrSet || vrr != tc.want || !ctSet || ct != 4*tc.want {
+			t.Fatalf("VRR %v and content %v went out as VRR_ENABLED %d (%v) and content type %d (%v), want both in the frame's commit", tc.on, tc.content, vrr, vrrSet, ct, ctSet)
+		}
+	}
+}

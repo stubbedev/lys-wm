@@ -113,6 +113,7 @@ type Rule struct {
 	Look       LookOverride
 	Mica       *bool
 	OnActivate *ActivatePolicy
+	Content    *ContentType
 }
 
 type Decision struct {
@@ -125,6 +126,7 @@ type Decision struct {
 	Look       LookOverride
 	Mica       *bool
 	OnActivate *ActivatePolicy
+	Content    *ContentType
 }
 
 func (r Rule) matches(appID, title, tag string) bool {
@@ -163,6 +165,9 @@ func DecideTagged(rules []Rule, appID, title, tag string) Decision {
 		}
 		if r.OnActivate != nil {
 			d.OnActivate = r.OnActivate
+		}
+		if r.Content != nil {
+			d.Content = r.Content
 		}
 	}
 	return d

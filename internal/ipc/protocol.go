@@ -155,22 +155,23 @@ type Workspace struct {
 }
 
 type Window struct {
-	ID           wm.WindowID    `json:"id"`
-	AppID        string         `json:"app_id"`
-	Title        string         `json:"title"`
-	PID          int32          `json:"pid"`
-	Workspace    wm.WorkspaceID `json:"workspace"`
-	Output       string         `json:"output"`
-	Rect         Rect           `json:"rect"`
-	Floating     bool           `json:"floating"`
-	Fullscreen   bool           `json:"fullscreen"`
-	Minimized    bool           `json:"minimized"`
-	Urgent       bool           `json:"urgent"`
-	Unresponsive bool           `json:"unresponsive"`
-	Focused      bool           `json:"focused"`
-	ContentType  wm.ContentType `json:"content_type"`
-	Icon         *Icon          `json:"icon"`
-	Stack        *int           `json:"stack,omitempty"`
+	ID            wm.WindowID      `json:"id"`
+	AppID         string           `json:"app_id"`
+	Title         string           `json:"title"`
+	PID           int32            `json:"pid"`
+	Workspace     wm.WorkspaceID   `json:"workspace"`
+	Output        string           `json:"output"`
+	Rect          Rect             `json:"rect"`
+	Floating      bool             `json:"floating"`
+	Fullscreen    bool             `json:"fullscreen"`
+	Minimized     bool             `json:"minimized"`
+	Urgent        bool             `json:"urgent"`
+	Unresponsive  bool             `json:"unresponsive"`
+	Focused       bool             `json:"focused"`
+	ContentType   wm.ContentType   `json:"content_type"`
+	ContentSource wm.ContentSource `json:"content_source"`
+	Icon          *Icon            `json:"icon"`
+	Stack         *int             `json:"stack,omitempty"`
 }
 
 type Icon struct {

@@ -24,3 +24,16 @@ func TestContentTypesRoundTripThroughJSON(t *testing.T) {
 		t.Fatalf("movie decoded to %v, want an error", ct)
 	}
 }
+
+func TestContentSourcesRoundTripThroughJSON(t *testing.T) {
+	for _, s := range []ContentSource{ContentFromClient, ContentFromRule} {
+		raw, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back ContentSource
+		if err := json.Unmarshal(raw, &back); err != nil || back != s {
+			t.Fatalf("%s decoded to %v, %v, want %v", raw, back, err, s)
+		}
+	}
+}

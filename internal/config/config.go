@@ -392,6 +392,7 @@ type rawRule struct {
 	BlurLook   rawLook      `yaml:"blur_look"`
 	Mica       *bool        `yaml:"mica"`
 	OnActivate *At[string]  `yaml:"on_activate"`
+	Content    *At[string]  `yaml:"content"`
 }
 
 type Error struct {
@@ -1011,7 +1012,19 @@ var (
 	vrrPolicies      = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
 	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
 	focusActivations = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent}
+	contentTypes     = byName(wm.ContentGame)
 )
+
+func byName[E interface {
+	~uint8
+	String() string
+}](last E) map[string]E {
+	names := make(map[string]E, int(last)+1)
+	for e := range last + 1 {
+		names[e.String()] = e
+	}
+	return names
+}
 
 func choice[T any](p *parser, a *At[string], key string, names map[string]T) *T {
 	if a == nil {
@@ -1270,6 +1283,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	rule.DimAround, rule.Blur, rule.Mica = r.DimAround, r.Blur, r.Mica
 	rule.Look = p.look(r.BlurLook, key+".blur_look")
 	rule.OnActivate = choice(p, r.OnActivate, key+".on_activate", activations)
+	rule.Content = choice(p, r.Content, key+".content", contentTypes)
 	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
 		o := float32(*v)
 		rule.Opacity = &o

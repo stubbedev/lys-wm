@@ -29,3 +29,29 @@ func (t *ContentType) UnmarshalText(b []byte) error {
 	*t = ct
 	return nil
 }
+
+type ContentSource uint8
+
+const (
+	ContentFromClient ContentSource = iota
+	ContentFromRule
+)
+
+var contentSourceNames = []string{ContentFromClient: "client", ContentFromRule: "rule"}
+
+func (s ContentSource) String() string {
+	return enumName(contentSourceNames, s, "ContentSource")
+}
+
+func (s ContentSource) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s *ContentSource) UnmarshalText(b []byte) error {
+	v, ok := parseEnum[ContentSource](contentSourceNames, string(b))
+	if !ok {
+		return fmt.Errorf("wm: content source %q is none of %v", b, contentSourceNames)
+	}
+	*s = v
+	return nil
+}

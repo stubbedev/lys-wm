@@ -75,23 +75,25 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			continue
 		}
 		ws, _ := s.Workspace(id)
+		contentType, contentSource := c.contentOf(w.top.Surface())
 		snap.Windows = append(snap.Windows, ipc.Window{
-			ID:           w.id,
-			AppID:        w.top.AppID(),
-			Title:        w.top.Title(),
-			PID:          w.top.pid(),
-			Workspace:    id,
-			Output:       ws.Output,
-			Rect:         ipc.RectOf(w.goal),
-			Floating:     s.Floats(w.id),
-			Fullscreen:   s.Fullscreen(w.id),
-			Minimized:    s.Minimized(w.id),
-			Urgent:       w.urgent,
-			Unresponsive: w.hung,
-			Focused:      hasFocus && w.id == focused,
-			ContentType:  c.contentTypes.Of(w.top.Surface()),
-			Icon:         ipcIcon(w.top.Icon()),
-			Stack:        stackOf(stack, w.id),
+			ID:            w.id,
+			AppID:         w.top.AppID(),
+			Title:         w.top.Title(),
+			PID:           w.top.pid(),
+			Workspace:     id,
+			Output:        ws.Output,
+			Rect:          ipc.RectOf(w.goal),
+			Floating:      s.Floats(w.id),
+			Fullscreen:    s.Fullscreen(w.id),
+			Minimized:     s.Minimized(w.id),
+			Urgent:        w.urgent,
+			Unresponsive:  w.hung,
+			Focused:       hasFocus && w.id == focused,
+			ContentType:   contentType,
+			ContentSource: contentSource,
+			Icon:          ipcIcon(w.top.Icon()),
+			Stack:         stackOf(stack, w.id),
 		})
 	}
 	return snap

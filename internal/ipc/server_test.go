@@ -279,7 +279,7 @@ func TestWatchStreamsDiffsAndDispatches(t *testing.T) {
 	})
 	for _, want := range []string{
 		`{"event":"dispatch","action":"submap reset"}`,
-		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":false,"content_type":"none","icon":null}}`,
+		`{"event":"open","window":{"id":1,"app_id":"","title":"one","pid":0,"workspace":0,"output":"","rect":{"x":0,"y":0,"width":0,"height":0},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":false,"content_type":"none","content_source":"client","icon":null}}`,
 		`{"event":"submap","submap":""}`,
 	} {
 		if got := next(t, lines); got != want {

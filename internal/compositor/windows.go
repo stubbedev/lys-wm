@@ -56,6 +56,7 @@ type window struct {
 	minimized     bool
 	icon          iconHint
 	genie         *genie
+	stated        wm.Decision
 }
 
 type decided struct {
@@ -450,8 +451,11 @@ func (c *Compositor) refreshLimits(t toplevel) error {
 
 func (c *Compositor) redecide(t toplevel) error {
 	w := c.windowOf(t)
-	if w == nil || c.wm.Minimized(w.id) || c.wm.Floats(w.id) != w.floated {
+	if w == nil {
 		return nil
+	}
+	if err := c.restate(w); err != nil || c.wm.Minimized(w.id) || c.wm.Floats(w.id) != w.floated {
+		return err
 	}
 	float, size := c.floats(t)
 	if float == w.floated {
@@ -507,6 +511,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 		c.nextWindow++
 	}
 	w.floated, _ = c.floats(t)
+	w.stated = *c.decision(w)
 	s, err := c.mapped(t, w.id)
 	if err != nil {
 		return err

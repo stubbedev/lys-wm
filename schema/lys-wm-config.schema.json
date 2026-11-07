@@ -940,6 +940,15 @@
             },
             "additionalProperties": false
           },
+          "content": {
+            "type": "string",
+            "enum": [
+              "game",
+              "none",
+              "photo",
+              "video"
+            ]
+          },
           "dim_around": {
             "type": "boolean"
           },

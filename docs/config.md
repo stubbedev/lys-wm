@@ -186,7 +186,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
 | `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
-| `vrr` | Variable refresh rate (adaptive sync, FreeSync, G-Sync Compatible): `off` (the default), `on` for always, or `fullscreen`: only while one surface alone fills the output and says through `wp_content_type_v1` that it is a game or a video. A frame then reaches the screen when it is ready instead of at the next fixed vblank. An output without it (no `vrr_capable` connector, or a CRTC without `VRR_ENABLED`) keeps a fixed refresh and says so in the log |
+| `vrr` | Variable refresh rate (adaptive sync, FreeSync, G-Sync Compatible): `off` (the default), `on` for always, or `fullscreen`: only while one surface alone fills the output and is a game or a video, as it says through `wp_content_type_v1` or a rule's `content` key says for it. A frame then reaches the screen when it is ready instead of at the next fixed vblank. An output without it (no `vrr_capable` connector, or a CRTC without `VRR_ENABLED`) keeps a fixed refresh and says so in the log |
 | `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes. Default `false` |
 | `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
 | `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
@@ -898,7 +898,13 @@ window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens
 `tearing: false` overrides what the window asks for through
 `wp_tearing_control_v1` (see [tearing](#tearing)). `on_activate: focus`,
 `urgent` or `ignore` overrides [`focus.on_activate`](#focus) for the window;
-`ignore` drops its activations altogether. Later rules override earlier ones.
+`ignore` drops its activations altogether.
+`content: none`, `photo`, `video` or `game` says what the window shows in
+place of what it says through `wp_content_type_v1`, for the many games that
+never say (every Wine or Proton title through Xwayland, most SDL and Vulkan
+games): it decides `vrr: fullscreen`, the content type the connector tells a
+TV (its game mode) and the tearing default, and `lys-wmctl windows` shows it
+with `content_source: rule`. Later rules override earlier ones.
 
 X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 `jetbrains-idea`). Without a rule, a window floats when it has a parent
@@ -964,8 +970,8 @@ Off by default. With `tearing: true`, a window that fills an output and
 scans out directly is presented with an async page flip, so frames show the
 moment they are ready and may tear, when a rule says `tearing: true`, when it asks
 for that through `wp_tearing_control_v1` (Mesa's Vulkan `IMMEDIATE` present
-mode does), or when it says nothing there and tags its surface as a game
-through `wp_content_type_v1`. A rule with `tearing: false` keeps a window on
+mode does), or when it says nothing there and is a game, as it tags its surface
+through `wp_content_type_v1` or a `content: game` rule says. A rule with `tearing: false` keeps a window on
 vblank whatever it asks, and so does a vsync hint without a rule. Drivers without atomic async flips (Linux before
 6.8), and frames that change more than the buffer, flip at vblank as
 usual.

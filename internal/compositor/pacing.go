@@ -38,7 +38,7 @@ func (c *Compositor) tears(s *surface.Surface) bool {
 	if w == nil {
 		return false
 	}
-	switch wm.DecideTagged(c.rules, w.top.AppID(), w.top.Title(), w.top.Tag()).Tearing {
+	switch c.decision(w).Tearing {
 	case wm.TearingAllow:
 		return true
 	case wm.TearingDeny:
@@ -50,7 +50,7 @@ func (c *Compositor) tears(s *surface.Surface) bool {
 	case tearingcontrol.Vsync:
 		return false
 	}
-	return c.contentTypes.Of(s) == wm.ContentGame
+	return c.contentType(s) == wm.ContentGame
 }
 
 func (c *Compositor) nextFlip(s *surface.Surface) (time.Duration, bool) {

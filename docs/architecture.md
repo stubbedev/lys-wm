@@ -707,8 +707,8 @@ judders; HDR, the other #40 non-goal, landed, and VRR needs nothing it lacks.
 
 An output rule picks `off`, `on` or `fullscreen` (Hyprland's `vrr` 0, 1 and 3).
 `fullscreen` follows the frame hints that already set the connector's content
-type and the tearing decision: one surface alone filling the output, tagged game
-or video. The compositor asks the backend through `backend.AdaptiveSync` on
+type and the tearing decision: one surface alone filling the output, a game or a video
+by its `wp_content_type_v1` tag or a rule's `content` key (#378). The compositor asks the backend through `backend.AdaptiveSync` on
 each frame it draws, and the DRM backend sets the CRTC's `VRR_ENABLED` only when
 it changes or on a modeset, never in an async flip. Capability is the
 connector's `vrr_capable` on a CRTC with `VRR_ENABLED`.

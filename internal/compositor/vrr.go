@@ -26,7 +26,7 @@ func (c *Compositor) wantsVRR(policy VRRPolicy, s *surface.Surface, alone bool) 
 		if !alone {
 			return false
 		}
-		t := c.contentTypes.Of(s)
+		t := c.contentType(s)
 		return t == wm.ContentGame || t == wm.ContentVideo
 	}
 	return false

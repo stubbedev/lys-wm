@@ -911,3 +911,26 @@ func TestStickyAndSlowKeysReachTheSeat(t *testing.T) {
 		t.Error("a negative slow_keys parsed")
 	}
 }
+
+func TestContentRules(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: ^steam_app_, content: game}\n  - {app_id: ^steam_app_, title: Launcher, content: none}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		appID, title string
+		want         *wm.ContentType
+	}{
+		{"steam_app_570", "Dota 2", new(wm.ContentGame)},
+		{"steam_app_570", "Launcher", new(wm.ContentNone)},
+		{"foot", "", nil},
+	} {
+		got := wm.Decide(c.Rules, tc.appID, tc.title).Content
+		if (got == nil) != (tc.want == nil) || got != nil && *got != *tc.want {
+			t.Errorf("%s %q: content %v, want %v", tc.appID, tc.title, got, tc.want)
+		}
+	}
+	if _, err := Parse("t.yaml", []byte("rules:\n  - {app_id: x, content: movie}\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: rules[0].content:") {
+		t.Errorf("content: movie was not refused: %v", err)
+	}
+}

@@ -66,7 +66,7 @@ focused one, or `null`:
 ```json
 {"id":7,"app_id":"foot","title":"~","pid":4242,"workspace":1,"output":"DP-1",
  "rect":{"x":0,"y":0,"width":1024,"height":1152},"floating":false,"fullscreen":false,"minimized":false,"urgent":false,"unresponsive":false,"focused":true,
- "content_type":"none","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
+ "content_type":"none","content_source":"client","icon":{"serial":3,"name":"foot","sizes":[32,64]},"stack":0}
 ```
 
 `stack` is the window's front-to-back index among the windows its output
@@ -80,8 +80,11 @@ the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
 A minimized window stays on its workspace, and in the workspace's `windows`
 count, with `minimized` true and the `rect` it comes back to when floating.
-`content_type` is what the window's surface says it shows through
-`wp_content_type_v1`: `none`, `photo`, `video` or `game`.
+`content_type` is what lys-wm takes the window to show: `none`, `photo`,
+`video` or `game`. `content_source` says where that came from: `rule` when a
+rule's `content` key sets it, otherwise `client`, what its surface says through
+`wp_content_type_v1`. It decides `vrr: fullscreen`, the connector's content type
+and whether a window that gives no tearing hint tears.
 
 `icon` is what the window set through `xdg_toplevel_icon_v1`, or `null` when
 it set none and the app ID's own icon applies. `name` is an icon theme name

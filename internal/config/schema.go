@@ -203,6 +203,7 @@ func annotations() map[string]annotation {
 		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
 		"focus.on_activate":                {enum: slices.Sorted(maps.Keys(focusActivations)), def: "focus"},
 		"rules[].on_activate":              {enum: slices.Sorted(maps.Keys(activations))},
+		"rules[].content":                  {enum: slices.Sorted(maps.Keys(contentTypes))},
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
 	}
