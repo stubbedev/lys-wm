@@ -110,7 +110,7 @@ func TestFontPath(t *testing.T) {
 func testSource(t *testing.T, path string, explicit bool) source {
 	t.Helper()
 	testenv.Font(t)
-	return source{path: path, explicit: explicit, runtime: filepath.Join(filepath.Dir(path), config.RuntimeFile), keymaps: testenv.XKBCompiler(t), getenv: os.Getenv}
+	return source{path: path, explicit: explicit, runtime: filepath.Join(filepath.Dir(path), config.RuntimeFile), keymaps: testenv.XKBCompiler(t), getenv: os.Getenv, notices: io.Discard}
 }
 
 func (s source) withRuntime(path string) source {
