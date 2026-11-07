@@ -110,6 +110,14 @@ var everyAction = []Action{
 	DragAction{Mode: DragResize},
 	ResizeAction{DX: 50, DY: 0},
 	ResizeAction{DX: 0, DY: -10},
+	FocusLastAction{},
+	FocusUrgentAction{},
+	CycleAction{Step: StepNext},
+	CycleAction{Step: StepPrev, Scope: ScopeApp},
+	CycleAction{Step: StepNext, Scope: ScopeWorkspace},
+	CycleAction{Step: StepPrev, Scope: ScopeOutput},
+	SwitcherAction{Step: StepNext},
+	SwitcherAction{Step: StepPrev, Scope: ScopeApp},
 }
 
 func TestEveryActionRoundTripsThroughTheParser(t *testing.T) {
@@ -336,7 +344,7 @@ func TestEnumArgumentsParseByName(t *testing.T) {
 			t.Errorf("%q parsed to %v (%v), want %v", tc.in, got, err, tc.want)
 		}
 	}
-	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms ", "zoom", "zoom sideways", "zoom set", "zoom set 0.5", "zoom set 17", "zoom in NaN", "zoom reset 2", "zoom in 2 3", "stickykeys", "stickykeys maybe", "slowkeys", "slowkeys -1", "slowkeys 70000"} {
+	for _, in := range []string{"focus x", "focus ", "move le", "makegroup q", "makegroup", "dpms maybe", "dpms ", "zoom", "zoom sideways", "zoom set", "zoom set 0.5", "zoom set 17", "zoom in NaN", "zoom reset 2", "zoom in 2 3", "stickykeys", "stickykeys maybe", "slowkeys", "slowkeys -1", "slowkeys 70000", "cycle", "cycle sideways", "cycle next everywhere", "switcher next workspace", "switcher next app now", "focuslast 3"} {
 		if a, err := ParseAction(in); !errors.Is(err, ErrBadAction) {
 			t.Errorf("%q parsed to %v, %v; want a bad action", in, a, err)
 		}

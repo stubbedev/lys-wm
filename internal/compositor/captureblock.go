@@ -51,7 +51,7 @@ func (c *Compositor) blockedOut(ops []drawOp, screencast bool) []drawOp {
 	}
 	out := c.maskedOps[:0]
 	for _, op := range ops {
-		if op.surface != nil && c.blockedBy(op.surface, screencast) {
+		if s := op.shows(); s != nil && c.blockedBy(s, screencast) {
 			op = drawOp{fill: true, color: opaque, dst: op.dst, mask: op.mask, opaque: true, alpha: 1}
 		}
 		out = append(out, op)

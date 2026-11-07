@@ -236,6 +236,7 @@ func annotations() map[string]annotation {
 		"focus.raise_on_hover":             {def: false},
 		"focus.warp_pointer":               {enum: slices.Sorted(maps.Keys(pointerWarps)), def: "off"},
 		"focus.on_close":                   {enum: slices.Sorted(maps.Keys(closeFocuses)), def: "next"},
+		"switcher.open_delay":              {def: compositor.DefaultSwitcherStyle().OpenDelay.Milliseconds()},
 		"fullscreen.new_window":            {enum: slices.Sorted(maps.Keys(coverPolicies)), def: "behind"},
 		"rules[].on_activate":              {enum: slices.Sorted(maps.Keys(activations))},
 		"rules[].content":                  {enum: slices.Sorted(maps.Keys(contentTypes))},

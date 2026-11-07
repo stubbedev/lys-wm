@@ -89,6 +89,9 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 		err = errors.Join(err, c.refreshPointer())
 	}
 	d := s.Damage()
+	if c.switcher != nil && (len(d) > 0 || reach) {
+		c.switcherCommitted(root)
+	}
 	if c.overview != nil && (len(d) > 0 || reach) {
 		c.overviewCommitted(root)
 	}

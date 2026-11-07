@@ -155,9 +155,7 @@ func (r *focusRig) motionIsFree(why string) {
 }
 
 func TestFocusFollowsMouseModes(t *testing.T) {
-	t.Parallel()
 	t.Run("off", func(t *testing.T) {
-		t.Parallel()
 		r := startFocus(t, wm.FocusSettings{FollowsMouse: wm.FollowsMouseOff})
 		r.window("a")
 		r.window("b")
@@ -170,7 +168,6 @@ func TestFocusFollowsMouseModes(t *testing.T) {
 		r.wantFocus("a", "after a click on it")
 	})
 	t.Run("loose", func(t *testing.T) {
-		t.Parallel()
 		r := startFocus(t, wm.FocusSettings{FollowsMouse: wm.FollowsMouseLoose})
 		r.window("a")
 		r.window("b")
@@ -188,7 +185,6 @@ func TestFocusFollowsMouseModes(t *testing.T) {
 		r.motionIsFree("pointer inside the focused window")
 	})
 	t.Run("always", func(t *testing.T) {
-		t.Parallel()
 		r := startFocus(t, wm.FocusSettings{FollowsMouse: wm.FollowsMouseAlways})
 		r.window("a")
 		r.window("b")

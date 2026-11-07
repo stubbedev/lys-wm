@@ -81,7 +81,7 @@ func (c *Compositor) frame(o *output.Output) error {
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
-	if err := c.redrawThumb(o); err != nil {
+	if err := errors.Join(c.redrawThumb(o), c.redrawSwitcherThumbs(o)); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
 	if err := c.checkGPU(); err != nil {
@@ -328,6 +328,10 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 		}
 	}
 	shown = c.drawScratchpad(pass, o, shown)
+	shown, err := c.drawSwitcher(pass, o, shown)
+	if err != nil {
+		return shown, err
+	}
 	if err := c.evictLabels(o); err != nil {
 		return shown, err
 	}
@@ -335,7 +339,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	for _, e := range c.layers {
 		shown = c.drawPopups(pass, o, c.layerPopups(e), shown, popupBlur{regions: true, whole: c.blursLayer(e), look: &c.decor.Blur.Look})
 	}
-	shown, err := c.drawInputPopups(pass, o, shown)
+	shown, err = c.drawInputPopups(pass, o, shown)
 	if err != nil {
 		return shown, err
 	}

@@ -95,6 +95,7 @@ type Config struct {
 	Gestures        Gestures
 	HotCorners      HotCorners
 	Overview        OverviewStyle
+	Switcher        SwitcherStyle
 	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
 	ClientHotkeys   bool
@@ -165,6 +166,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		Gestures:       DefaultGestures(),
 		HotCorners:     DefaultHotCorners(),
 		Overview:       DefaultOverviewStyle(),
+		Switcher:       DefaultSwitcherStyle(),
 	}
 }
 
@@ -385,6 +387,14 @@ type Compositor struct {
 	exceptScratch      []image.Rectangle
 	overview           *overview
 	overviewStyle      OverviewStyle
+	switcherStyle      SwitcherStyle
+	measuredLabel      measuredLabel
+	switcher           *switcher
+	switcherFrames     uint64
+	switcherRedraws    uint64
+	mru                mru
+	mruPending         *window
+	walk               *mruWalk
 	keptBackdrop       bool
 	tallied            tally
 	traced             tally
@@ -495,6 +505,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.capFrameRates()
 	c.holdOpening = cfg.HoldOpening
 	c.overviewStyle = cfg.Overview
+	c.switcherStyle = cfg.Switcher
 	c.rulesGen++
 }
 
@@ -731,7 +742,7 @@ func (c *Compositor) dropDecor() error {
 	for o := range c.labels {
 		errs = append(errs, c.dropLabels(o))
 	}
-	return errors.Join(append(errs, c.dropPointers(), c.dropStops(), c.dropGrain(), c.dropOverviewTargets())...)
+	return errors.Join(append(errs, c.dropPointers(), c.dropStops(), c.dropGrain(), c.dropOverviewTargets(), c.dropSwitcherTargets())...)
 }
 
 func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {

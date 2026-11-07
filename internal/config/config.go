@@ -138,6 +138,7 @@ type rawConfig struct {
 	Animations      rawAnimations                `yaml:"animations"`
 	Tabs            rawTabs                      `yaml:"tabs"`
 	Overview        rawOverview                  `yaml:"overview"`
+	Switcher        rawSwitcher                  `yaml:"switcher"`
 	Autotile        rawAutotile                  `yaml:"autotile"`
 	Binds           []At[rawBind]                `yaml:"binds"`
 	Submaps         map[string][]At[rawBind]     `yaml:"submaps"`
@@ -540,6 +541,10 @@ type rawTabColors struct {
 	Text       At[string] `yaml:"text"`
 }
 
+type rawSwitcher struct {
+	OpenDelay *At[int] `yaml:"open_delay"`
+}
+
 type rawOverview struct {
 	Blur *bool        `yaml:"blur"`
 	Dim  *At[float64] `yaml:"dim"`
@@ -708,6 +713,7 @@ type Config struct {
 	Gestures        compositor.Gestures
 	HotCorners      compositor.HotCorners
 	Overview        compositor.OverviewStyle
+	Switcher        compositor.SwitcherStyle
 	Slower          map[render.Speed]compositor.Effects
 }
 
@@ -1867,6 +1873,8 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
 	cfg.Overview = p.overview(raw.Overview, look.Overview)
+	cfg.Switcher = compositor.DefaultSwitcherStyle()
+	cfg.Switcher.OpenDelay = time.Duration(p.nonNegative(raw.Switcher.OpenDelay, "switcher.open_delay", int(cfg.Switcher.OpenDelay.Milliseconds()))) * time.Millisecond
 	cfg.HotCorners = p.hotCorners(raw.HotCorners)
 	fallback := false
 	for i, o := range raw.Outputs {
@@ -1984,6 +1992,7 @@ func (c Config) Compositor(keymaps xkb.Keymaps, font *gtext.Typeface) (composito
 		return compositor.Config{}, fmt.Errorf("config: %w", err)
 	}
 	cfg.Animations, cfg.Overview = c.Animations, c.Overview
+	cfg.Switcher = c.Switcher
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
 }

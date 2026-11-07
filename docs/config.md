@@ -901,6 +901,39 @@ a workspace thumbnail for `drag_preview.drag_switch.frames` shows that workspace
 over a window for as long closes the overview and focuses the window, with the
 pointer at the same place in it, so the drop lands there.
 
+## switcher
+
+```yaml
+switcher:
+  open_delay: 150
+binds:
+  - {chord: ALT + Tab, action: switcher next}
+  - {chord: ALT + SHIFT + Tab, action: switcher prev}
+  - {chord: ALT + grave, action: switcher next app}
+```
+
+The `switcher` action is Alt-Tab. Its first press selects the window used
+before the focused one, in most-recently-used order across every workspace
+and output (`app` keeps to the focused window's app ID); each further press
+steps on. Releasing the bind's modifiers focuses the selection, showing its
+workspace, raising it and bringing it back if it was minimized; Escape
+cancels. A strip of previews with the selected window's title and icon shows
+on the focused output only once the modifiers have been held for
+`open_delay` milliseconds (0 or more, 150 unless set), measured on the frame
+clock, so a quick tap flips to the previous window without drawing anything.
+A preview is redrawn only when its window commits new content, and a closed
+switcher costs nothing. Windows that `block_out_from` screencasts are masked
+in their previews when captured, as they are on screen.
+
+The order changes only when focus settles: a click, a new or closed window,
+an activation or IPC records it at once; a key bind's focus change at its
+key's release, so a held `focus left` records only the window it ends on; and
+a hover focus at the next key or button, if the window still has focus.
+Focus that moves while the switcher or the overview is open is not recorded.
+`focuslast`, `focusurgent` and `cycle` walk the same order
+([actions.md](actions.md)); the default config binds Alt-Tab, Alt-Shift-Tab
+and Alt-grave to the switcher.
+
 ## tabs
 
 | Key | Default |

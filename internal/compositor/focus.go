@@ -22,6 +22,7 @@ func (c *Compositor) focusWindow(w *window, by wm.FocusOrigin) error {
 }
 
 func (c *Compositor) focusMoved() {
+	c.noteFocus()
 	if c.focusBy != wm.FocusHover {
 		c.hoverHeld = true
 	}

@@ -105,6 +105,8 @@ the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 
 `swallowed_by` is the ID of the window that took this terminal's place in the layout when it was started from it (see `swallow` in config.md); it is left out while the terminal shows.
 
+`focus_timestamp` counts up each time focus settles on a window (see `switcher` in config.md): ordering windows by it, highest first, gives the most-recently-used order; 0 means the window has not had focus yet. It is a sequence number, not a time.
+
 A window in a scratchpad has `workspace` 0 and `scratchpad`, its name; other
 windows leave `scratchpad` out.
 `maximized` is true while the window fills the usable area (the `maximize`
@@ -302,6 +304,8 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `focus` | `window` (ID or `null`) | Keyboard focus moved to another window, or to none |
 | `submap` | `submap` (`""` for the default binds) | The bind submap changed |
 | `binds` | `binds` (as in the `binds` query) | A reload changed the binds |
+| `mru` | `windows` (IDs, most recently used first) | Focus settled on a window, or one in the order closed |
+| `switcher` | `open`, `selected` (ID or `null`), `title` | The switcher opened, moved its selection or closed; `title` is the selected window's, for a screen reader to announce |
 | `layout` | `layout` (`index`, `name`) | The keyboard layout group changed |
 | `locks` | `locks` (`caps`, `num`, `scroll`) | Caps, Num or Scroll Lock turned on or off |
 | `reducedmotion` | `reduced_motion` | A reload turned `animations.reduced_motion` on or off |

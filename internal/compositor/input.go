@@ -277,6 +277,7 @@ func (c *Compositor) inputKey(device string, e backend.Key) error {
 }
 
 func (c *Compositor) acceptKey(device string, e backend.Key) error {
+	c.settleFocus()
 	err := c.takeKey(device, e)
 	if e.Pressed {
 		return err
@@ -298,6 +299,12 @@ func (c *Compositor) takeKey(device string, e backend.Key) error {
 		c.held = append(c.held, e.Code)
 		return c.cancelPick()
 	}
+	if e.Pressed {
+		if taken, err := c.switcherKey(c.seat.Keysym(e.Code)); taken {
+			c.held = append(c.held, e.Code)
+			return err
+		}
+	}
 	if e.Pressed && c.overviewHolds() {
 		if taken, err := c.overviewKey(e.Code); taken || err != nil {
 			return err
@@ -311,6 +318,11 @@ func (c *Compositor) takeKey(device string, e backend.Key) error {
 	}
 	if e.Pressed {
 		if err := c.typed(e.Code); err != nil {
+			return err
+		}
+	}
+	if e.Pressed && c.keyEndsWalk(e.Code) {
+		if err := c.endWalk(); err != nil {
 			return err
 		}
 	}
@@ -337,6 +349,10 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 	}
 	if e.Pressed {
 		c.interruptTap()
+		c.settleFocus()
+		if err := c.endWalk(); err != nil {
+			return err
+		}
 	}
 	if c.pointerDrag() {
 		if e.Pressed {

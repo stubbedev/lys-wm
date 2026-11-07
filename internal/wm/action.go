@@ -1013,6 +1013,38 @@ var Actions = []ActionSpec{
 		Summary: "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once.",
 		parse:   parseDebug,
 	},
+	{
+		Name:    "focuslast",
+		Summary: "Focus the window focused before the focused one, showing its workspace; pressed again, it toggles between the two.",
+		parse:   bare(FocusLastAction{}),
+	},
+	{
+		Name:    "focusurgent",
+		Summary: "Focus the most recently used window that asks for attention, or the window focused before, as focuslast.",
+		parse:   bare(FocusUrgentAction{}),
+	},
+	{
+		Name: "cycle", Args: "<next|prev> [app|workspace|output]",
+		Summary: "Walk the windows in most-recently-used order, optionally only the focused app's, workspace's or output's, focusing each; the order changes only when the walk ends, at the release of the bind's modifiers or the next other input.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			step, scope, err := parseStepAndScope(spec, args, ScopeApp, ScopeWorkspace, ScopeOutput)
+			if err != nil {
+				return nil, err
+			}
+			return CycleAction{Step: step, Scope: scope}, nil
+		},
+	},
+	{
+		Name: "switcher", Args: "<next|prev> [app]",
+		Summary: "Alt-Tab: select the next or previous window in most-recently-used order, optionally of the focused app; the strip of previews shows after switcher.open_delay if the bind's modifiers are still held, releasing them focuses the selection and Escape cancels.",
+		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
+			step, scope, err := parseStepAndScope(spec, args, ScopeApp)
+			if err != nil {
+				return nil, err
+			}
+			return SwitcherAction{Step: step, Scope: scope}, nil
+		},
+	},
 }
 
 func optionalSwitch(spec ActionSpec, args []string) (Switch, error) {

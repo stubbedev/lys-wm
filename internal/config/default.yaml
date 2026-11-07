@@ -16,6 +16,9 @@ binds:
   - {chord: SUPER + SHIFT + E, action: exit}
   - {chord: SUPER + F, action: fullscreen}
   - {chord: SUPER + Tab, action: overview toggle}
+  - {chord: ALT + Tab, action: switcher next, description: Switch to the previous window}
+  - {chord: ALT + SHIFT + Tab, action: switcher prev, description: Switch windows backwards}
+  - {chord: ALT + grave, action: switcher next app, description: Switch between the windows of the focused app}
   - {chord: SUPER + V, action: togglefloating}
   - {chord: SUPER + T, action: makegroup tab ephemeral}
   - {chord: SUPER + S, action: makegroup v ephemeral}

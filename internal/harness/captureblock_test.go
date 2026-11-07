@@ -28,13 +28,16 @@ type blockRig struct {
 	sc   *cwsc.ZwlrScreencopyManagerV1
 }
 
-func startBlockRig(t *testing.T, from wm.BlockFrom, layer bool) *blockRig {
+func startBlockRig(t *testing.T, from wm.BlockFrom, layer bool, configure ...func(*compositor.Config)) *blockRig {
 	t.Helper()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Decor.BorderWidth = 0
 		cfg.WM.Gaps = wm.Gaps{}
 		cfg.Rules = []wm.Rule{titled("secret", wm.Decision{BlockOutFrom: from})}
 		cfg.LayerRules = []wm.LayerRule{{Namespace: regexp.MustCompile("^lys-wm.testclient$"), BlockOutFrom: from}}
+		for _, f := range configure {
+			f(cfg)
+		}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
 	if layer {
@@ -71,6 +74,11 @@ func (r *blockRig) session(oneshot bool) [3]byte {
 
 func (r *blockRig) screencopy(oneshot bool) [3]byte {
 	r.t.Helper()
+	return r.screencopyAt(oneshot, image.Pt(20, 50))
+}
+
+func (r *blockRig) screencopyAt(oneshot bool, at image.Point) [3]byte {
+	r.t.Helper()
 	f := &copyFrame{}
 	frame, err := r.sc.CaptureOutput(f, 0, r.c.Outputs[0])
 	if err != nil {
@@ -90,7 +98,7 @@ func (r *blockRig) screencopy(oneshot bool) [3]byte {
 	if f.failed {
 		r.t.Fatal("the screencopy failed")
 	}
-	return rgbAt(pix, int(f.stride), 20, 50)
+	return rgbAt(pix, int(f.stride), at.X, at.Y)
 }
 
 func TestBlockedSurfacesAreMaskedInScreencastsAndShownInDeclaredScreenshots(t *testing.T) {
@@ -205,4 +213,30 @@ func TestLysLibScreenshotsShowABlockedWindowAndScreencastsMaskIt(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestASwitcherPreviewOfABlockedWindowIsMaskedInScreencasts(t *testing.T) {
+	t.Parallel()
+	r := startBlockRig(t, wm.BlockScreencast, false, func(cfg *compositor.Config) {
+		cfg.Switcher.OpenDelay = 0
+		withBinds(t, bindSpec{chord: "ALT + Tab", action: "switcher next"})(cfg)
+	})
+	r.c.DispatchUntil("plain to map", r.c.Window("plain", testclient.Fill(0, 0xff, 0)).Mapped)
+	r.h.key(keyAlt, true)
+	r.h.tap(keyTab)
+	var preview image.Rectangle
+	r.h.Eventually("the secret window's preview drawn", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		for _, w := range comp.Snapshot().Windows {
+			if w.Title == "secret" {
+				preview, _ = comp.SwitcherPreview(w.ID)
+			}
+		}
+		return comp.SwitcherThumbRedraws() == 2 && comp.SwitcherFrames() > 1 && !preview.Empty()
+	})
+	at := preview.Min.Add(preview.Size().Div(2))
+	r.h.Eventually("the preview on screen", showing(at.X, at.Y, shown))
+	if got := r.screencopyAt(false, at); got != masked {
+		t.Errorf("a screencast shows the blocked window's preview as %v, want it masked", got)
+	}
+	r.h.key(keyAlt, false)
 }

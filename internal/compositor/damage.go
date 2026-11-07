@@ -40,6 +40,7 @@ type drawOp struct {
 	pending   int32
 	whole     image.Rectangle
 	overlay   bool
+	depicts   *surface.Surface
 	cutTex    render.Texture
 	cut       render.AlphaCut
 }
@@ -824,4 +825,11 @@ func (f *frame) keepVisible(s *surface.Surface, visible region.Region) {
 			f.ops = append(f.ops, op.piece(p))
 		}
 	}
+}
+
+func (op drawOp) shows() *surface.Surface {
+	if op.surface != nil {
+		return op.surface
+	}
+	return op.depicts
 }

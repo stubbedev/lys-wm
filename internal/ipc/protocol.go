@@ -249,30 +249,31 @@ type Scratchpad struct {
 }
 
 type Window struct {
-	ID            wm.WindowID       `json:"id"`
-	AppID         string            `json:"app_id"`
-	Title         string            `json:"title"`
-	PID           int32             `json:"pid"`
-	Workspace     wm.WorkspaceID    `json:"workspace"`
-	Scratchpad    wm.ScratchpadName `json:"scratchpad,omitempty"`
-	Output        string            `json:"output"`
-	Rect          Rect              `json:"rect"`
-	Floating      bool              `json:"floating"`
-	Fullscreen    bool              `json:"fullscreen"`
-	Maximized     bool              `json:"maximized"`
-	ClientFull    bool              `json:"client_fullscreen"`
-	Pinned        bool              `json:"pinned"`
-	Minimized     bool              `json:"minimized"`
-	Urgent        bool              `json:"urgent"`
-	Unresponsive  bool              `json:"unresponsive"`
-	Focused       bool              `json:"focused"`
-	InhibitsKeys  bool              `json:"inhibits_shortcuts"`
-	ContentType   wm.ContentType    `json:"content_type"`
-	ContentSource wm.ContentSource  `json:"content_source"`
-	Icon          *Icon             `json:"icon"`
-	Stack         *int              `json:"stack,omitempty"`
-	SwallowedBy   wm.WindowID       `json:"swallowed_by,omitempty"`
-	Group         *Group            `json:"group"`
+	ID             wm.WindowID       `json:"id"`
+	AppID          string            `json:"app_id"`
+	Title          string            `json:"title"`
+	PID            int32             `json:"pid"`
+	Workspace      wm.WorkspaceID    `json:"workspace"`
+	Scratchpad     wm.ScratchpadName `json:"scratchpad,omitempty"`
+	Output         string            `json:"output"`
+	Rect           Rect              `json:"rect"`
+	Floating       bool              `json:"floating"`
+	Fullscreen     bool              `json:"fullscreen"`
+	Maximized      bool              `json:"maximized"`
+	ClientFull     bool              `json:"client_fullscreen"`
+	Pinned         bool              `json:"pinned"`
+	Minimized      bool              `json:"minimized"`
+	Urgent         bool              `json:"urgent"`
+	Unresponsive   bool              `json:"unresponsive"`
+	Focused        bool              `json:"focused"`
+	InhibitsKeys   bool              `json:"inhibits_shortcuts"`
+	ContentType    wm.ContentType    `json:"content_type"`
+	ContentSource  wm.ContentSource  `json:"content_source"`
+	Icon           *Icon             `json:"icon"`
+	Stack          *int              `json:"stack,omitempty"`
+	SwallowedBy    wm.WindowID       `json:"swallowed_by,omitempty"`
+	FocusTimestamp uint64            `json:"focus_timestamp"`
+	Group          *Group            `json:"group"`
 }
 
 type Group struct {
@@ -366,6 +367,8 @@ type Snapshot struct {
 	Layers         []Layer
 	Devices        []Device
 	Binds          []Bind
+	MRU            []wm.WindowID
+	Switcher       *Switcher
 	Submap         string
 	Layout         Layout
 	Locks          Locks
@@ -461,4 +464,9 @@ func sameBinds(a, b []Bind) bool {
 		return x.Submap == y.Submap && x.Chord == y.Chord && x.Action == y.Action && x.Description == y.Description &&
 			x.LongPressMS == y.LongPressMS && x.CooldownMS == y.CooldownMS && slices.Equal(x.Flags, y.Flags)
 	})
+}
+
+type Switcher struct {
+	Selected wm.WindowID `json:"selected"`
+	Title    string      `json:"title"`
 }

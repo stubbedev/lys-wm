@@ -97,35 +97,38 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		}
 		contentType, contentSource := c.contentOf(w.top.Surface())
 		snap.Windows = append(snap.Windows, ipc.Window{
-			ID:            w.id,
-			AppID:         w.top.AppID(),
-			Title:         w.top.Title(),
-			PID:           w.top.pid(),
-			Workspace:     id,
-			Scratchpad:    ws.Scratch.Name,
-			Output:        ws.Output,
-			Rect:          ipc.RectOf(w.goal),
-			Floating:      s.Floats(w.id),
-			Fullscreen:    s.Fullscreen(w.id),
-			Maximized:     s.Maximized(w.id),
-			ClientFull:    s.Fullscreen(w.id) || s.FakeFullscreen(w.id),
-			Pinned:        s.Pinned(w.id),
-			Minimized:     s.Minimized(w.id),
-			Urgent:        w.urgent,
-			Unresponsive:  w.hung,
-			Focused:       hasFocus && w.id == focused,
-			InhibitsKeys:  c.inhibiting != nil && c.inhibiting.surface == w.top.Surface(),
-			ContentType:   contentType,
-			ContentSource: contentSource,
-			Icon:          ipcIcon(w.top.Icon()),
-			Stack:         stackOf(stack, w.id),
-			SwallowedBy:   swallowedBy(s, w.id),
-			Group:         ipcGroup(ws, w.id),
+			ID:             w.id,
+			AppID:          w.top.AppID(),
+			Title:          w.top.Title(),
+			PID:            w.top.pid(),
+			Workspace:      id,
+			Scratchpad:     ws.Scratch.Name,
+			Output:         ws.Output,
+			Rect:           ipc.RectOf(w.goal),
+			Floating:       s.Floats(w.id),
+			Fullscreen:     s.Fullscreen(w.id),
+			Maximized:      s.Maximized(w.id),
+			ClientFull:     s.Fullscreen(w.id) || s.FakeFullscreen(w.id),
+			Pinned:         s.Pinned(w.id),
+			Minimized:      s.Minimized(w.id),
+			Urgent:         w.urgent,
+			Unresponsive:   w.hung,
+			Focused:        hasFocus && w.id == focused,
+			InhibitsKeys:   c.inhibiting != nil && c.inhibiting.surface == w.top.Surface(),
+			ContentType:    contentType,
+			ContentSource:  contentSource,
+			Icon:           ipcIcon(w.top.Icon()),
+			Stack:          stackOf(stack, w.id),
+			SwallowedBy:    swallowedBy(s, w.id),
+			FocusTimestamp: c.mru.stamp(w.id),
+			Group:          ipcGroup(ws, w.id),
 		})
 	}
 	snap.Layers = c.ipcLayers()
 	snap.Devices = c.ipcDevices()
 	snap.Binds = c.ipcBinds
+	snap.MRU = slices.Clone(c.mru.order)
+	snap.Switcher = c.ipcSwitcher()
 	return snap
 }
 

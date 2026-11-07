@@ -430,7 +430,7 @@ func (c *Compositor) drawOverviewHover(pass *frame, o *output.Output, r image.Re
 }
 
 func (c *Compositor) overviewLabelWidth(text string, px int) int {
-	m := &c.overview.measured
+	m := &c.measuredLabel
 	if m.text != text || m.px != px {
 		*m = measuredLabel{text: text, px: px, w: int(math.Ceil(c.font.Shape(text, float64(px)).Advance()))}
 	}

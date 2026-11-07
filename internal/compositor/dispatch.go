@@ -25,6 +25,9 @@ func (c *Compositor) Dispatch(a wm.Action) error {
 func (c *Compositor) dispatch(a wm.Action, trigger binds.Trigger, by wm.FocusOrigin) error {
 	outer := c.swapOrigin(by)
 	defer c.swapOrigin(outer)
+	if err := c.endWalkUnless(a); err != nil {
+		return err
+	}
 	before := c.markFocus()
 	s, effects, err := wm.Dispatch(c.wm, a, c.settings)
 	if err != nil {
@@ -59,6 +62,14 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.withWindow(e.ID, c.minimize)
 	case wm.RestoreAction:
 		return c.withWindow(e.ID, c.restore)
+	case wm.FocusLastAction:
+		return c.focusLast(c.focusBy)
+	case wm.FocusUrgentAction:
+		return c.focusUrgent(c.focusBy)
+	case wm.CycleAction:
+		return c.cycle(e, c.focusBy)
+	case wm.SwitcherAction:
+		return c.switcherAction(e)
 	case wm.OverviewAction:
 		return c.overviewAction(e.Mode)
 	case wm.ExecAction:

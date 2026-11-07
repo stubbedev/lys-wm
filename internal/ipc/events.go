@@ -142,6 +142,14 @@ type (
 	BellEvent struct {
 		Window *wm.WindowID `json:"window"`
 	}
+	MRUEvent struct {
+		Windows []wm.WindowID `json:"windows"`
+	}
+	SwitcherEvent struct {
+		Open     bool         `json:"open"`
+		Selected *wm.WindowID `json:"selected"`
+		Title    string       `json:"title"`
+	}
 	BindsEvent struct {
 		Binds []Bind `json:"binds"`
 	}
@@ -184,6 +192,8 @@ func (LayerEvent) Name() string          { return "layer" }
 func (GroupEvent) Name() string          { return "group" }
 func (BellEvent) Name() string           { return "bell" }
 func (BindsEvent) Name() string          { return "binds" }
+func (MRUEvent) Name() string            { return "mru" }
+func (SwitcherEvent) Name() string       { return "switcher" }
 
 func Encode(e Event) ([]byte, error) {
 	return AppendEvent(nil, e)
@@ -325,6 +335,12 @@ func Diff(prev, next Snapshot) []Event {
 			out = append(out, ShowDesktopEvent{Output: o})
 		}
 	}
+	if !slices.Equal(prev.MRU, next.MRU) {
+		out = append(out, MRUEvent{Windows: nonNil(next.MRU)})
+	}
+	if !sameSwitcher(prev.Switcher, next.Switcher) {
+		out = append(out, switcherEvent(next.Switcher))
+	}
 	if !sameBinds(prev.Binds, next.Binds) {
 		out = append(out, BindsEvent{Binds: nonNil(next.Binds)})
 	}
@@ -383,4 +399,15 @@ func appendLayerEvents(out []Event, prev, next []Layer) []Event {
 
 func layerEvent(change LayerChange, l Layer) LayerEvent {
 	return LayerEvent{Change: change, ID: l.ID, Namespace: l.Namespace, Output: l.Output, Layer: l.Layer}
+}
+
+func sameSwitcher(a, b *Switcher) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func switcherEvent(s *Switcher) SwitcherEvent {
+	if s == nil {
+		return SwitcherEvent{}
+	}
+	return SwitcherEvent{Open: true, Selected: &s.Selected, Title: s.Title}
 }

@@ -50,7 +50,6 @@ type overview struct {
 	region   [1]image.Rectangle
 	targets  []overviewTarget
 	rects    []image.Rectangle
-	measured measuredLabel
 }
 
 type measuredLabel struct {
