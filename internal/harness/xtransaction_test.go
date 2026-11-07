@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"image"
-	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -168,7 +166,7 @@ func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
 		cfg.HoldBound = gtkHoldBound
 	}, xReport(t), desktop)
 	xc := xDial(t, h)
-	socket := filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":"))
+	socket := h.xSocket()
 	gtk := h.Run("env", "GDK_BACKEND=x11", "DISPLAY="+socket, "GTK_A11Y=none", "NO_AT_BRIDGE=1", "DBUS_SESSION_BUS_ADDRESS=disabled:", demo)
 	defer func() {
 		if t.Failed() {

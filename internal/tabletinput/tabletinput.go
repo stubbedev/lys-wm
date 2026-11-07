@@ -50,6 +50,7 @@ type ID struct {
 type Tablet interface {
 	backend.Device
 	Tablet() (ID, bool)
+	Group() uintptr
 }
 
 type Axis uint16
@@ -112,3 +113,64 @@ func (e Proximity) Timestamp() time.Duration { return e.Time }
 func (e Motion) Timestamp() time.Duration    { return e.Time }
 func (e Tip) Timestamp() time.Duration       { return e.Time }
 func (e Button) Timestamp() time.Duration    { return e.Time }
+
+type PadGroup struct {
+	Buttons []uint32
+	Rings   []uint32
+	Strips  []uint32
+	Dials   []uint32
+	Modes   uint32
+	Mode    uint32
+}
+
+type PadLayout struct {
+	Buttons uint32
+	Groups  []PadGroup
+}
+
+type Pad interface {
+	backend.Device
+	Pad() (PadLayout, bool)
+	Group() uintptr
+}
+
+type PadButton struct {
+	Time    time.Duration
+	Button  uint32
+	Pressed bool
+	Group   uint32
+	Mode    uint32
+}
+
+type PadRing struct {
+	Time    time.Duration
+	Ring    uint32
+	Degrees float64
+	Stopped bool
+	Finger  bool
+	Group   uint32
+	Mode    uint32
+}
+
+type PadStrip struct {
+	Time     time.Duration
+	Strip    uint32
+	Position float64
+	Stopped  bool
+	Finger   bool
+	Group    uint32
+	Mode     uint32
+}
+
+type PadDial struct {
+	Time  time.Duration
+	Dial  uint32
+	Delta int32
+	Group uint32
+	Mode  uint32
+}
+
+func (e PadButton) Timestamp() time.Duration { return e.Time }
+func (e PadRing) Timestamp() time.Duration   { return e.Time }
+func (e PadStrip) Timestamp() time.Duration  { return e.Time }
+func (e PadDial) Timestamp() time.Duration   { return e.Time }

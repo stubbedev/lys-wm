@@ -203,7 +203,7 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		return c.touchCancel()
 	case backend.TouchFrame, *backend.TouchFrame:
 		return c.seat.TouchFrame()
-	case *tabletinput.Proximity, *tabletinput.Motion, *tabletinput.Tip, *tabletinput.Button:
+	case *tabletinput.Proximity, *tabletinput.Motion, *tabletinput.Tip, *tabletinput.Button, *tabletinput.PadButton, *tabletinput.PadRing, *tabletinput.PadStrip, *tabletinput.PadDial:
 		return c.tabletInput(d, e)
 	case backend.Switch:
 		if e.Kind != backend.SwitchLid || e.On == c.lidClosed {

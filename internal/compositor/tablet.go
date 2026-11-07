@@ -20,18 +20,22 @@ const (
 var emulatedButtons = map[uint32]uint32{btnStylus: btnRight, btnStylus2: btnMiddle}
 
 func (c *Compositor) tabletAdded(d backend.Device) error {
-	t, ok := d.(tabletinput.Tablet)
-	if !ok {
-		return nil
+	var errs []error
+	if t, ok := d.(tabletinput.Tablet); ok {
+		if id, tablet := t.Tablet(); tablet {
+			errs = append(errs, c.seat.AddTablet(d, t.Group(), d.Name(), id))
+		}
 	}
-	if id, tablet := t.Tablet(); tablet {
-		return c.seat.AddTablet(d, d.Name(), id)
+	if p, ok := d.(tabletinput.Pad); ok {
+		if layout, pad := p.Pad(); pad {
+			errs = append(errs, c.seat.AddPad(d, p.Group(), layout))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (c *Compositor) tabletRemoved(d backend.Device) error {
-	return c.seat.RemoveTablet(d)
+	return errors.Join(c.seat.RemovePad(d), c.seat.RemoveTablet(d))
 }
 
 func (c *Compositor) tabletInput(d backend.Device, e backend.Event) error {
@@ -45,6 +49,14 @@ func (c *Compositor) tabletInput(d backend.Device, e backend.Event) error {
 		return c.tabletEvent(d, e.Time, e.Tool, e.Axes, nil)
 	case *tabletinput.Tip:
 		return c.tabletEvent(d, e.Time, e.Tool, e.Axes, func() error { return c.tabletTip(e.Time, e.Tool, e.Down) })
+	case *tabletinput.PadButton:
+		return c.seat.PadButton(d, e)
+	case *tabletinput.PadRing:
+		return c.seat.PadRing(d, e)
+	case *tabletinput.PadStrip:
+		return c.seat.PadStrip(d, e)
+	case *tabletinput.PadDial:
+		return c.seat.PadDial(d, e)
 	case *tabletinput.Button:
 		if err := c.seat.TabletTool(e.Tool); err != nil {
 			return err

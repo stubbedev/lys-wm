@@ -234,6 +234,7 @@ func (s *Seat) SurfaceDestroyed(target *surface.Surface) error {
 		s.gesture = gestureState{}
 	}
 	s.touch.points = slices.DeleteFunc(s.touch.points, func(p touchPoint) bool { return p.surface == target })
+	s.padsSurfaceDestroyed(target)
 	return errors.Join(err, s.tabletSurfaceDestroyed(target))
 }
 

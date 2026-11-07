@@ -11,6 +11,7 @@ with pkgs; [
   weston
   foot
   wl-clipboard
+  xinput
   dbus
   mesa-demos
   glslang

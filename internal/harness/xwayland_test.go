@@ -5,7 +5,6 @@ import (
 	"errors"
 	"image"
 	"net"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -25,8 +24,7 @@ import (
 
 func xConnect(t *testing.T, h *Harness) {
 	t.Helper()
-	path := filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":"))
-	conn, err := net.DialTimeout("unix", path, clientTimeout)
+	conn, err := net.DialTimeout("unix", h.xSocket(), clientTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +89,7 @@ type xclient struct {
 
 func xDial(t *testing.T, h *Harness) *xclient {
 	t.Helper()
-	path := filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":"))
-	conn, err := net.DialTimeout("unix", path, clientTimeout)
+	conn, err := net.DialTimeout("unix", h.xSocket(), clientTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,7 @@ type fakeTablet struct{}
 
 func (fakeTablet) Name() string                     { return "Wacom Intuos" }
 func (fakeTablet) Capabilities() backend.Capability { return 0 }
+func (fakeTablet) Group() uintptr                   { return 1 }
 func (fakeTablet) Tablet() (tabletinput.ID, bool) {
 	return tabletinput.ID{Vendor: 0x56a, Product: 0x374}, true
 }
@@ -42,8 +43,8 @@ func (l *tabletLog) ToolAdded(_ *ctab.ZwpTabletSeatV2, tool *ctab.ZwpTabletToolV
 	return toolEvents{l}, l.log.Note("tool_added")
 }
 
-func (*tabletLog) PadAdded(*ctab.ZwpTabletSeatV2, *ctab.ZwpTabletPadV2) (ctab.ZwpTabletPadV2Handler, error) {
-	return nil, errors.New("a pad was added")
+func (l *tabletLog) PadAdded(*ctab.ZwpTabletSeatV2, *ctab.ZwpTabletPadV2) (ctab.ZwpTabletPadV2Handler, error) {
+	return padEvents{l}, nil
 }
 
 type tabletEvents struct{ l *tabletLog }
@@ -117,7 +118,7 @@ func (e toolEvents) Frame(*ctab.ZwpTabletToolV2, uint32) error { return e.l.log.
 
 func tabletSeat(t *testing.T, p *party) *tabletLog {
 	t.Helper()
-	m, err := ctab.NewZwpTabletManagerV2(p.c.Display, 1)
+	m, err := ctab.NewZwpTabletManagerV2(p.c.Display, 2)
 	if err != nil {
 		t.Fatal(err)
 	}

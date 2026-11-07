@@ -424,7 +424,21 @@ func (h *Harness) Run(binary string, args ...string) *Client {
 	return h.RunOn(h.RuntimeDir, h.display.Name(), binary, args...)
 }
 
+func (h *Harness) xSocket() string {
+	return filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":"))
+}
+
+func (h *Harness) RunX(binary string, args ...string) *Client {
+	h.t.Helper()
+	return h.run(h.RuntimeDir, h.display.Name(), []string{"DISPLAY=" + h.xSocket()}, binary, args...)
+}
+
 func (h *Harness) RunOn(runtimeDir, display, binary string, args ...string) *Client {
+	h.t.Helper()
+	return h.run(runtimeDir, display, nil, binary, args...)
+}
+
+func (h *Harness) run(runtimeDir, display string, env []string, binary string, args ...string) *Client {
 	h.t.Helper()
 	path := testenv.Require(h.t, binary)
 	cmd := exec.CommandContext(context.Background(), path, args...)
@@ -432,7 +446,7 @@ func (h *Harness) RunOn(runtimeDir, display, binary string, args ...string) *Cli
 	if err != nil {
 		h.t.Fatalf("harness: %v", err)
 	}
-	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "WAYLAND_DISPLAY="+display, ipc.SocketEnv+"="+socket)
+	cmd.Env = append(append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "WAYLAND_DISPLAY="+display, ipc.SocketEnv+"="+socket), env...)
 	c := &Client{cmd: cmd, exited: make(chan error, 1)}
 	cmd.Stdout, cmd.Stderr = &c.output, &c.output
 	if err := cmd.Start(); err != nil {
@@ -441,6 +455,10 @@ func (h *Harness) RunOn(runtimeDir, display, binary string, args ...string) *Cli
 	go func() { c.exited <- cmd.Wait() }()
 	h.clients = append(h.clients, c)
 	return c
+}
+
+func (c *Client) Output() string {
+	return c.output.String()
 }
 
 func (c *Client) Wait(t *testing.T, timeout time.Duration) string {

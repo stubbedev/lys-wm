@@ -14,7 +14,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
-const tabletVersion = 1
+const tabletVersion = 2
 
 type tabletResource struct {
 	res  *tablet.ZwpTabletV2
@@ -28,6 +28,7 @@ type toolResource struct {
 
 type tabletDevice struct {
 	key       any
+	group     uintptr
 	name      string
 	id        tabletinput.ID
 	resources []tabletResource
@@ -48,6 +49,7 @@ type tabletState struct {
 	seats   []*tablet.ZwpTabletSeatV2
 	tablets []*tabletDevice
 	tools   []*tabletTool
+	pads    []*padDevice
 }
 
 var toolTypes = map[tabletinput.ToolType]tablet.ZwpTabletToolV2Type{
@@ -89,6 +91,9 @@ func (m tabletManager) GetTabletSeat(_ *tablet.ZwpTabletManagerV2, ts *tablet.Zw
 	}
 	for _, t := range s.tablet.tools {
 		errs = append(errs, s.announceTool(ts, t))
+	}
+	for _, p := range s.tablet.pads {
+		errs = append(errs, s.announcePad(ts, p))
 	}
 	return tabletSeat{}, errors.Join(errs...)
 }
@@ -135,14 +140,14 @@ func (s *Seat) announceTool(ts *tablet.ZwpTabletSeatV2, t *tabletTool) error {
 	return errors.Join(append(errs, res.SendDone())...)
 }
 
-func (s *Seat) AddTablet(key any, name string, id tabletinput.ID) error {
-	d := &tabletDevice{key: key, name: name, id: id}
+func (s *Seat) AddTablet(key any, group uintptr, name string, id tabletinput.ID) error {
+	d := &tabletDevice{key: key, group: group, name: name, id: id}
 	s.tablet.tablets = append(s.tablet.tablets, d)
 	var errs []error
 	for _, ts := range s.tablet.seats {
 		errs = append(errs, s.announceTablet(ts, d))
 	}
-	return errors.Join(errs...)
+	return errors.Join(append(errs, s.refocusPads(group))...)
 }
 
 func (s *Seat) RemoveTablet(key any) error {
@@ -152,7 +157,7 @@ func (s *Seat) RemoveTablet(key any) error {
 	}
 	d := s.tablet.tablets[i]
 	s.tablet.tablets = slices.Delete(s.tablet.tablets, i, i+1)
-	var errs []error
+	errs := []error{s.removePadsOf(d.group)}
 	for _, t := range s.tablet.tools {
 		if t.tablet == d {
 			errs = append(errs, s.TabletToolOut(t.tool))

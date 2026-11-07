@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,7 +61,7 @@ func BenchmarkStallDragPublish(b *testing.B) {
 func BenchmarkStallXRequest(b *testing.B) {
 	testenv.Require(b, xwayland.Path(os.Getenv))
 	h := start(b, setup{open: softBackend, configure: flat, xwayland: func(error) {}}, benchMode)
-	conn, err := net.DialTimeout("unix", filepath.Join(h.RuntimeDir, ".X11-unix", "X"+strings.TrimPrefix(h.xwayland.Display(), ":")), clientTimeout)
+	conn, err := net.DialTimeout("unix", h.xSocket(), clientTimeout)
 	if err != nil {
 		b.Fatal(err)
 	}

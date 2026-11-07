@@ -143,6 +143,7 @@ type libinputFuncs struct {
 	accelSpeed       func(dev uintptr, speed float64) int32
 	speedDefault     func(dev uintptr) float64
 	tablet           tabletFuncs
+	pad              padFuncs
 }
 
 type Opener interface {
@@ -159,6 +160,9 @@ type InputDevice struct {
 	ledUpdate    func(dev uintptr, leds int32)
 	tablet       bool
 	tabletID     tabletinput.ID
+	pad          bool
+	padLayout    tabletinput.PadLayout
+	group        uintptr
 }
 
 var _ backend.KeyboardLEDs = (*InputDevice)(nil)
@@ -214,6 +218,7 @@ type Libinput struct {
 	button  backend.PointerButton
 	axes    [2]backend.PointerAxis
 	tablet  tabletEvents
+	pad     padEvents
 	touch   struct {
 		down   backend.TouchDown
 		motion backend.TouchMotion
@@ -411,6 +416,9 @@ func (in *Libinput) bind(path string) error {
 		purego.RegisterLibFunc(s.fn, in.lib, s.name)
 	}
 	if err := in.bindTablet(path); err != nil {
+		return err
+	}
+	if err := in.bindPad(path); err != nil {
 		return err
 	}
 	return in.bindHot(path)
@@ -669,8 +677,12 @@ func (in *Libinput) event(ev uintptr) error {
 				d.caps |= flag
 			}
 		}
+		d.group = f.pad.deviceGroup(h)
 		if f.deviceHasCap(h, capTabletTool) != 0 {
 			d.tablet, d.tabletID = true, tabletinput.ID{Vendor: f.tablet.vendor(h), Product: f.tablet.product(h)}
+		}
+		if f.deviceHasCap(h, capTabletPad) != 0 {
+			d.pad, d.padLayout = true, in.padLayout(h)
 		}
 		in.devices[h] = d
 		if err := in.configure(d); err != nil {
@@ -790,6 +802,8 @@ func (in *Libinput) translate(out []backend.Event, d *InputDevice, ev uintptr, t
 		return append(out, backend.GestureEnd{Time: usec(f.gestureTime(g)), Gesture: gestures[typ], Cancelled: f.cancelled(g) != 0})
 	case evTabletToolAxis, evTabletToolProximity, evTabletToolTip, evTabletToolButton:
 		return in.translateTablet(out, ev, typ)
+	case evTabletPadButton, evTabletPadRing, evTabletPadStrip, evTabletPadDial:
+		return in.translatePad(out, ev, typ)
 	case evSwitchToggle:
 		s := f.switchEvent(ev)
 		kind, ok := switchKinds[f.switchKind(s)]
