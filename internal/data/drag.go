@@ -17,7 +17,7 @@ const iconRole = "wl_data_device-icon"
 type Drag struct {
 	m          *Manager
 	client     *server.Client
-	source     *dataSource
+	source     DragSource
 	origin     *surface.Surface
 	serial     uint32
 	icon       *surface.Surface
@@ -31,6 +31,15 @@ type Drag struct {
 	done       bool
 	external   bool
 	accepted   bool
+}
+
+type DragSource interface {
+	Source
+	Actions() Action
+	Target(mime *string) error
+	Action(a Action) error
+	DropPerformed() error
+	Finished() error
 }
 
 type DropTarget interface {
@@ -62,7 +71,10 @@ func (m *Manager) startDrag(dev *sw.WlDataDevice, s *dataSource, origin, icon *s
 			return err
 		}
 	}
-	d := &Drag{m: m, client: origin.Client(), source: s, origin: origin, serial: serial, icon: icon}
+	d := &Drag{m: m, client: origin.Client(), origin: origin, serial: serial, icon: icon}
+	if s != nil {
+		d.source = s
+	}
 	if icon != nil {
 		if err := icon.SetRole(dragIcon{d}); err != nil {
 			return dev.ProtocolError(sw.WlDataDeviceErrorRole, "%v", err)
@@ -76,6 +88,17 @@ func (m *Manager) startDrag(dev *sw.WlDataDevice, s *dataSource, origin, icon *s
 	}
 	m.drag = d
 	return m.listener.DragStarted(d)
+}
+
+func (m *Manager) StartForeignDrag(src DragSource) (*Drag, error) {
+	if old := m.drag; old != nil && !old.dropped {
+		if err := old.Cancel(); err != nil {
+			return nil, err
+		}
+	}
+	d := &Drag{m: m, client: src.Client(), source: src}
+	m.drag = d
+	return d, nil
 }
 
 func (d *Drag) Icon() (*surface.Surface, image.Point) {
@@ -117,12 +140,10 @@ func (d *Drag) Status(accepted bool, action Action) error {
 		}
 		errs = append(errs, d.target(mime))
 	}
-	if d.source.version() >= 3 {
-		if !accepted {
-			action = sw.WlDataDeviceManagerDndActionNone
-		}
-		errs = append(errs, d.source.resource.SendAction(action&d.sourceActions()))
+	if !accepted {
+		action = sw.WlDataDeviceManagerDndActionNone
 	}
+	errs = append(errs, d.source.Action(action&d.sourceActions()))
 	return errors.Join(errs...)
 }
 
@@ -134,7 +155,7 @@ func (d *Drag) Finished(ok bool) error {
 		return d.finish()
 	}
 	var err error
-	if d.source != nil && d.source.phase != sourceGone {
+	if d.source != nil {
 		err = d.source.Cancel()
 	}
 	d.release()
@@ -229,10 +250,10 @@ func (d *Drag) offerTo(dev *sw.WlDataDevice) (*dataOffer, error) {
 }
 
 func (d *Drag) sourceActions() Action {
-	if d.source == nil || !d.source.actionsSet {
+	if d.source == nil {
 		return sw.WlDataDeviceManagerDndActionCopy
 	}
-	return d.source.actions
+	return d.source.Actions()
 }
 
 func (d *Drag) Motion(target *surface.Surface, x, y float64, at time.Duration) error {
@@ -267,7 +288,7 @@ func (d *Drag) target(mime *string) error {
 	if d.source == nil {
 		return nil
 	}
-	return d.source.resource.SendTarget(mime)
+	return d.source.Target(mime)
 }
 
 func choose(available, preferred Action) Action {
@@ -294,8 +315,8 @@ func (d *Drag) negotiate() error {
 		}
 		o.chosen = chosen
 		errs = append(errs, o.resource.SendAction(chosen))
-		if d.source != nil && d.source.version() >= 3 {
-			errs = append(errs, d.source.resource.SendAction(chosen))
+		if d.source != nil {
+			errs = append(errs, d.source.Action(chosen))
 		}
 	}
 	return errors.Join(errs...)
@@ -336,9 +357,7 @@ func (d *Drag) Drop() error {
 	for _, dev := range d.liveDevices() {
 		errs = append(errs, dev.SendDrop())
 	}
-	if d.source.version() >= 3 {
-		errs = append(errs, d.source.resource.SendDndDropPerformed())
-	}
+	errs = append(errs, d.source.DropPerformed())
 	return errors.Join(append(errs, d.leave(), d.end())...)
 }
 
@@ -348,9 +367,7 @@ func (d *Drag) dropExternal() error {
 	}
 	d.dropped = true
 	var errs []error
-	if d.source.version() >= 3 {
-		errs = append(errs, d.source.resource.SendDndDropPerformed())
-	}
+	errs = append(errs, d.source.DropPerformed())
 	d.focus, d.external = nil, false
 	return errors.Join(append(errs, d.m.dropTarget.DragDrop(), d.end())...)
 }
@@ -384,7 +401,7 @@ func (d *Drag) Cancel() error {
 	if d.offer != nil {
 		d.offer.dead = true
 	}
-	if d.source != nil && d.source.phase != sourceGone {
+	if d.source != nil {
 		errs = append(errs, d.source.Cancel())
 	}
 	errs = append(errs, d.end())
@@ -397,8 +414,8 @@ func (d *Drag) finish() error {
 		return nil
 	}
 	var errs []error
-	if d.source != nil && d.source.phase != sourceGone && d.source.version() >= 3 {
-		errs = append(errs, d.source.resource.SendDndFinished())
+	if d.source != nil {
+		errs = append(errs, d.source.Finished())
 	}
 	d.release()
 	return errors.Join(errs...)

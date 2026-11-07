@@ -184,6 +184,9 @@ func (m *wm) selectionOf(atom xproto.Atom) *selection {
 }
 
 func (m *wm) selectionOwned(atom xproto.Atom, owner xproto.Window, at xproto.Timestamp) error {
+	if atom == m.dndSel.atom {
+		return m.xDragOwned(owner)
+	}
 	sel := m.selectionOf(atom)
 	if sel == nil || owner == m.sel {
 		return nil

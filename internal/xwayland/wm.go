@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/composite"
@@ -195,6 +196,7 @@ type xconn struct {
 	root   xproto.Window
 	check  xproto.Window
 	sel    xproto.Window
+	proxy  xproto.Window
 	post   func(func(*wm) error)
 	report func(error)
 }
@@ -240,6 +242,9 @@ func (c *xconn) own() error {
 	if c.sel, err = xproto.NewWindowId(x); err != nil {
 		return fmt.Errorf("allocate the selection window: %w", err)
 	}
+	if c.proxy, err = xproto.NewWindowId(x); err != nil {
+		return fmt.Errorf("allocate the drag proxy window: %w", err)
+	}
 	owner := uint32(xfixes.SelectionEventMaskSetSelectionOwner | xfixes.SelectionEventMaskSelectionWindowDestroy | xfixes.SelectionEventMaskSelectionClientClose)
 	id := binary.LittleEndian.AppendUint32(nil, uint32(c.check))
 	var support []byte
@@ -261,6 +266,9 @@ func (c *xconn) own() error {
 		xproto.CreateWindowChecked(x, 0, c.sel, c.root, -100, -100, 1, 1, 0, xproto.WindowClassInputOnly, screen.RootVisual, xproto.CwEventMask, []uint32{xproto.EventMaskPropertyChange}),
 		xfixes.SelectSelectionInputChecked(x, c.sel, c.atoms[atomClipboard], owner),
 		xfixes.SelectSelectionInputChecked(x, c.sel, c.atoms[atomPrimary], owner),
+		xfixes.SelectSelectionInputChecked(x, c.sel, c.atoms[atomXdndSelection], owner),
+		xproto.CreateWindowChecked(x, 0, c.proxy, c.root, 0, 0, proxySize, proxySize, 0, xproto.WindowClassInputOnly, screen.RootVisual, xproto.CwOverrideRedirect, []uint32{1}),
+		xproto.ChangePropertyChecked(x, xproto.PropModeReplace, c.proxy, c.atoms[atomXdndAware], xproto.AtomAtom, 32, 1, binary.LittleEndian.AppendUint32(nil, xdndVersion)),
 	}
 	errs := make([]error, 0, len(checks))
 	for _, ck := range checks {
@@ -404,6 +412,10 @@ func (c *xconn) mimes(value []byte) map[string]xproto.Atom {
 		c.report(fmt.Errorf("xwayland: the X selection's targets: %w", err))
 		return nil
 	}
+	return c.named(list)
+}
+
+func (c *xconn) named(list []xproto.Atom) map[string]xproto.Atom {
 	cookies := make([]xproto.GetAtomNameCookie, len(list))
 	for i, a := range list {
 		cookies[i] = xproto.GetAtomName(c.x, a)
@@ -456,6 +468,23 @@ func (c *xconn) message(e xproto.ClientMessageEvent) {
 		c.post(func(m *wm) error { return m.dndStatus(xproto.Window(d[0]), d[1]&1 != 0, xproto.Atom(d[4])) })
 	case c.atoms[atomXdndFinished]:
 		c.post(func(m *wm) error { return m.dndFinished(xproto.Window(d[0]), d[1]&1 != 0) })
+	case c.atoms[atomXdndEnter]:
+		if e.Window == c.proxy {
+			c.dndEnter(d)
+		}
+	case c.atoms[atomXdndPosition]:
+		if e.Window == c.proxy {
+			at := time.Duration(d[3]) * time.Millisecond
+			c.post(func(m *wm) error { return m.dndInPosition(xproto.Window(d[0]), at, xproto.Atom(d[4])) })
+		}
+	case c.atoms[atomXdndLeave]:
+		if e.Window == c.proxy {
+			c.post(func(m *wm) error { return m.dndInLeave(xproto.Window(d[0])) })
+		}
+	case c.atoms[atomXdndDrop]:
+		if e.Window == c.proxy {
+			c.post(func(m *wm) error { return m.dndInDrop(xproto.Window(d[0])) })
+		}
 	}
 }
 

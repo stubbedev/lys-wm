@@ -102,6 +102,7 @@
       vm-lid = import ./lid.nix {inherit pkgs module;};
       vm-splash-handover = import ./splash-handover.nix {inherit pkgs module;};
       vm-xwayland = import ./xwayland.nix {inherit pkgs module;};
+      vm-xdnd = import ./xdnd.nix {inherit pkgs module;};
       vm-xwayland-apps = xwaylandApp "idea";
       vm-gpu-tests = import ./gpu-tests.nix {
         inherit pkgs;

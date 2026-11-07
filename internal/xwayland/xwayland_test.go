@@ -275,6 +275,11 @@ func (quietListener) XWindowSynced(*Window) error               { return nil }
 func (quietListener) CurrentSelection(data.Kind) data.Source    { return nil }
 func (quietListener) SetSelection(data.Kind, data.Source) error { return nil }
 func (quietListener) WorkArea() image.Rectangle                 { return image.Rectangle{} }
+func (quietListener) ForeignDrag(data.DragSource) (*data.Drag, error) {
+	return nil, errors.New("this listener takes no drags")
+}
+func (quietListener) XDragOver(func(*surface.Surface, bool) error) error { return nil }
+func (quietListener) XDragTarget() (*surface.Surface, float64, float64)  { return nil, 0, 0 }
 
 func TestAnXwaylandThatCannotStartIsTriedAgainNextTime(t *testing.T) {
 	dir := testenv.SocketDir(t)

@@ -768,7 +768,22 @@ target and action. A drop the X window did not accept, or one on a window
 without `XdndAware`, cancels the drag; an accepted one sends `XdndDrop`, serves
 the conversions from the Wayland source as a selection is served, and finishes
 the source on `XdndFinished`, or cancels it when that does not come within the
-transfer timeout. An X drag does not reach Wayland windows yet.
+transfer timeout.
+
+An X drag reaches Wayland windows through a drag proxy: an input-only,
+`XdndAware` window over the whole root. While an X client owns `XdndSelection`,
+the compositor reports the surface under the pointer on every grabbed motion,
+and the window manager maps the proxy on top whenever that surface is not an
+X one, so the X source finds it and sends its Xdnd messages there. The
+window manager turns them into a Wayland drag whose source is the X
+selection: `XdndEnter` starts it with the X types as mime types, each
+`XdndPosition` moves it to the surface under the pointer and is answered with
+the Wayland target's accept and action, `XdndLeave` cancels it, and
+`XdndDrop` drops it; the Wayland target reads the data by converting
+`XdndSelection`, and its finish, or the drop's refusal, is sent back as
+`XdndFinished`. The pointer stays with Xwayland during the drag, so the X
+source keeps its grab. `nix build .#checks.x86_64-linux.vm-xdnd` drags files
+between dragon-drop running on Wayland and on X, both ways.
 
 ## IPC
 

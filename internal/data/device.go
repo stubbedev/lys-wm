@@ -59,6 +59,38 @@ func (s *dataSource) Offer(_ *sw.WlDataSource, mime string) error {
 	return nil
 }
 
+func (s *dataSource) Actions() Action {
+	if !s.actionsSet {
+		return sw.WlDataDeviceManagerDndActionCopy
+	}
+	return s.actions
+}
+
+func (s *dataSource) Target(mime *string) error {
+	return s.resource.SendTarget(mime)
+}
+
+func (s *dataSource) Action(a Action) error {
+	if s.version() < 3 {
+		return nil
+	}
+	return s.resource.SendAction(a)
+}
+
+func (s *dataSource) DropPerformed() error {
+	if s.version() < 3 {
+		return nil
+	}
+	return s.resource.SendDndDropPerformed()
+}
+
+func (s *dataSource) Finished() error {
+	if s.phase == sourceGone || s.version() < 3 {
+		return nil
+	}
+	return s.resource.SendDndFinished()
+}
+
 func (s *dataSource) SetActions(obj *sw.WlDataSource, actions Action) error {
 	switch {
 	case actions&^allActions != 0:

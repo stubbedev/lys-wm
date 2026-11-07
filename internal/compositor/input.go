@@ -290,7 +290,11 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 			return err
 		}
 	}
-	return c.seat.PointerButton(e.Time, e.Button, e.Pressed)
+	err := c.seat.PointerButton(e.Time, e.Button, e.Pressed)
+	if !e.Pressed && c.xdragOver != nil && !c.seat.PointerGrabbed() {
+		err = errors.Join(err, c.xdragOver(nil, false))
+	}
+	return err
 }
 
 func (c *Compositor) inputAxis(e backend.PointerAxis) error {
@@ -412,7 +416,12 @@ func (c *Compositor) pointerMoved(at time.Duration) error {
 	if f := c.seat.PointerFocus(); f != nil && c.seat.PointerGrabbed() {
 		if org, ok := c.originOf(f); ok {
 			local := org.local(c.cursor)
-			return errors.Join(c.seat.PointerMotion(at, local.X, local.Y), c.cursorMoved())
+			var over error
+			if c.xdragOver != nil {
+				s, _, _ := c.surfaceAt(c.cursor)
+				over = c.xdragOver(s, true)
+			}
+			return errors.Join(over, c.seat.PointerMotion(at, local.X, local.Y), c.cursorMoved())
 		}
 	}
 	s, local, w := c.pointerTarget()

@@ -267,6 +267,7 @@ type Compositor struct {
 	unmanaged       []*xwayland.Window
 	selectionWatch  func(data.Kind, data.Source) error
 	workAreaWatch   func(image.Rectangle)
+	xdragOver       func(*surface.Surface, bool) error
 	workArea        image.Rectangle
 	xwaylandClients func(*server.Client) bool
 	blanked         map[*output.Output]bool

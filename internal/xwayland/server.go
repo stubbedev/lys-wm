@@ -349,7 +349,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 			return nil
 		}
 		m := &wm{
-			x: c.x, root: c.root, sel: c.sel, atoms: c.atoms, windows: map[xproto.Window]*Window{}, shell: s.shell,
+			x: c.x, root: c.root, sel: c.sel, proxy: c.proxy, atoms: c.atoms, windows: map[xproto.Window]*Window{}, shell: s.shell,
 			listener: s.opts.Listener, loop: s.loop, client: p.client, outgoing: map[outKey]*outgoing{},
 			post: func(f func() error) { _ = s.loop.Post(f) }, report: s.report, transfer: s.opts.TransferTimeout,
 		}

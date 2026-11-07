@@ -140,3 +140,21 @@ func (c *Compositor) drawDragIcon(pass *frame, o *output.Output, shown []*surfac
 func (c *Compositor) SetDropTarget(t data.DropTarget) {
 	c.data.SetDropTarget(t)
 }
+
+func (c *Compositor) ForeignDrag(src data.DragSource) (*data.Drag, error) {
+	return c.data.StartForeignDrag(src)
+}
+
+func (c *Compositor) XDragOver(over func(*surface.Surface, bool) error) error {
+	c.xdragOver = over
+	if over == nil {
+		return nil
+	}
+	s, _, _ := c.surfaceAt(c.cursor)
+	return over(s, c.seat.PointerGrabbed())
+}
+
+func (c *Compositor) XDragTarget() (*surface.Surface, float64, float64) {
+	s, local, _ := c.surfaceAt(c.cursor)
+	return s, local.X, local.Y
+}

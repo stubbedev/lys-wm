@@ -28,6 +28,9 @@ type Listener interface {
 	XWindowSynced(w *Window) error
 	CurrentSelection(k data.Kind) data.Source
 	SetSelection(k data.Kind, src data.Source) error
+	ForeignDrag(src data.DragSource) (*data.Drag, error)
+	XDragOver(over func(*surface.Surface, bool) error) error
+	XDragTarget() (*surface.Surface, float64, float64)
 	WorkArea() image.Rectangle
 }
 
@@ -128,6 +131,10 @@ type wm struct {
 	dndSel     *selection
 	dnd        *dndOut
 	dndStall   *loop.Timer
+	proxy      xproto.Window
+	proxyShown bool
+	xDragging  bool
+	in         *dndIn
 	incoming   []*incoming
 	outgoing   map[outKey]*outgoing
 	reading    int
