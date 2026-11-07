@@ -81,7 +81,7 @@ jobs:
       matrix:
         checks:
           - .#checks.x86_64-linux.vm .#checks.x86_64-linux.vm-two-gpus .#checks.x86_64-linux.vm-display-only .#checks.x86_64-linux.vm-configured-gpu
-          - .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests
+          - .#checks.x86_64-linux.vm-cursor .#checks.x86_64-linux.vm-xwayland .#checks.x86_64-linux.vm-gpu-tests .#checks.x86_64-linux.vm-rtkit
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -91,7 +91,7 @@ jobs:
       - uses: stubbedev/lys-ci/.github/actions/nix-setup@a8e349536974213f8abf2fc082e72e0731262fbb
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: NixOS VMs with one GPU, two GPUs, a configured primary, a display-only card, the cursor plane and zero-scaled X windows
+      - name: NixOS VMs with one GPU, two GPUs, a configured primary, a display-only card, the cursor plane, zero-scaled X windows and a session that gets its priority from rtkit
         run: nix build -L ${{ matrix.checks }}
 
   clients:

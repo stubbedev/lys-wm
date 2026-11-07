@@ -73,6 +73,24 @@
           machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'output Virtual-1 stays SDR'")
         '';
       };
+      vm-rtkit = vm {
+        name = "lys-wm-rtkit";
+        devices = ["virtio-gpu-pci"];
+        outputs = ["Virtual-1"];
+        machineConfig = {lib, ...}: {
+          security.pam.loginLimits = lib.mkForce [];
+          security.rtkit.enable = true;
+        };
+        extraTest = _: ''
+          [compositor] = machine.succeed("pgrep -x lys-wm").split()
+          machine.succeed(f"grep -E '^Max realtime priority +0 +0 ' /proc/{compositor}/limits")
+          machine.succeed(f"grep -E '^Max nice priority +0 +0 ' /proc/{compositor}/limits")
+          machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'the compositor thread runs at SCHED_RR through rtkit'")
+          machine.succeed(f"grep -E '^Max realtime timeout +[0-9]+ +[0-9]+ ' /proc/{compositor}/limits")
+          threads = machine.succeed(f"ps -L -o cls=,rtprio= -p {compositor}").split("\n")
+          assert ["RR", "1"] in [t.split() for t in threads], f"no thread of lys-wm runs at SCHED_RR 1: {threads}"
+        '';
+      };
       vm-screencast = screencast "wlr";
       vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
