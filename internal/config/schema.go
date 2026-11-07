@@ -28,6 +28,7 @@ const (
 	rulesFormat     = "lys-wm-xkb-rules"
 	drmDeviceFormat = "lys-wm-drm-device"
 	regexFormat     = "regex"
+	actionFormat    = "lys-wm-action"
 )
 
 type schemaNode struct {
@@ -46,10 +47,12 @@ type schemaNode struct {
 	Items                *schemaNode            `json:"items,omitempty"`
 	Properties           map[string]*schemaNode `json:"properties,omitempty"`
 	AdditionalProperties any                    `json:"additionalProperties,omitempty"`
+	Actions              []schemaAction         `json:"x-lys-wm-actions,omitempty"`
 }
 
 type annotation struct {
 	format             string
+	actions            bool
 	enum               []string
 	minimum, maximum   *float64
 	exclusiveMinimum   *float64
@@ -91,6 +94,22 @@ func builtInPalette() map[string]string {
 }
 
 var bindFlags = annotation{enum: []string{"locked", "repeating"}}
+
+var actionAnn = annotation{format: actionFormat, actions: true}
+
+type schemaAction struct {
+	Name    string `json:"name"`
+	Args    string `json:"args,omitempty"`
+	Summary string `json:"summary"`
+}
+
+func schemaActions() []schemaAction {
+	out := make([]schemaAction, len(wm.Actions))
+	for i, a := range wm.Actions {
+		out[i] = schemaAction{Name: a.Name, Args: a.Args, Summary: a.Summary}
+	}
+	return out
+}
 
 func hexColor(c render.Color) string {
 	if c.A == 0xff {
@@ -208,6 +227,11 @@ func annotations() map[string]annotation {
 		"rules[].content":                  {enum: slices.Sorted(maps.Keys(contentTypes))},
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
+		"binds[].action":                   actionAnn,
+		"submaps.*[].action":               actionAnn,
+		"gestures.swipe[].action":          actionAnn,
+		"gestures.pinch[].action":          actionAnn,
+		"gestures.hold[].action":           actionAnn,
 	}
 	for _, state := range []string{"active", "inactive", "urgent"} {
 		out["tabs."+state+".background"] = colorAnn(nil)
@@ -265,6 +289,9 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 	}
 	if note, ok := notes[path]; ok {
 		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default, n.MinItems, n.MaxItems = note.format, note.enum, note.minimum, note.maximum, note.exclusiveMinimum, note.def, note.minItems, note.maxItems
+		if note.actions {
+			n.Actions = schemaActions()
+		}
 	}
 	return n
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 func nested(path string, value any) map[string]any {
@@ -175,7 +176,7 @@ var formatValues = map[string]struct{ accepted, refused []string }{
 func TestEveryPublishedFormatIsWhatTheParserAccepts(t *testing.T) {
 	for _, path := range slices.Sorted(maps.Keys(annotations())) {
 		format := annotations()[path].format
-		if format == "" || format == colorFormat {
+		if format == "" || format == colorFormat || format == actionFormat {
 			continue
 		}
 		values, ok := formatValues[format]
@@ -404,5 +405,31 @@ func TestTheSchemaCoversEveryKeyTheParserKnows(t *testing.T) {
 	}
 	if !strings.HasSuffix(root["$id"].(string), "schema/lys-wm-config.schema.json") {
 		t.Fatalf("$id = %v", root["$id"])
+	}
+}
+
+func TestTheActionFormatListsEveryActionTheParserKnows(t *testing.T) {
+	var root map[string]any
+	if err := json.Unmarshal(Schema(), &root); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"binds[].action", "submaps.*[].action", "gestures.swipe[].action", "gestures.pinch[].action", "gestures.hold[].action"} {
+		node := schemaAt(t, root, path)
+		listed, _ := node["x-lys-wm-actions"].([]any)
+		if node["format"] != actionFormat || len(listed) != len(wm.Actions) {
+			t.Fatalf("%s: format %v with %d actions, want %s with %d", path, node["format"], len(listed), actionFormat, len(wm.Actions))
+		}
+	}
+	for _, a := range schemaActions() {
+		if a.Args != "" {
+			continue
+		}
+		bind := fmt.Sprintf("binds:\n  - {chord: SUPER + Q, action: %s}\n", a.Name)
+		if _, err := Parse("t.yaml", []byte(bind)); err != nil && !strings.Contains(err.Error(), "mouse binds only") {
+			t.Errorf("%s takes no arguments but a bind with it was refused: %v", a.Name, err)
+		}
+	}
+	if _, err := Parse("t.yaml", []byte("binds:\n  - {chord: SUPER + Q, action: frobnicate}\n")); err == nil {
+		t.Error("an action the list does not hold was accepted")
 	}
 }
