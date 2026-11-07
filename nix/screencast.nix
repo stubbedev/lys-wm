@@ -115,6 +115,7 @@ in
         max_gap_ms = 2000;
         background = "${background}";
         select_sources = "${selectSources}";
+        page_source = "${./screencast.html}";
         inherit launchers portal seconds;
       };
     in ''

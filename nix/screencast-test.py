@@ -200,7 +200,40 @@ def media_class(obj):
     return ((obj.get("info") or {}).get("props") or {}).get("media.class", "")
 
 
+XDPW_STARTED = re.compile(r"dbus: start: returning node (\d+)$")
+XDPW_NEGOTIATED = "pipewire: Format negotiated:"
+PAGE_STALL_S = int(re.search(r"const stallMs = (\d+);", open(params["page_source"]).read()).group(1)) / 1000
+FRAMES_NEED_S = 1
+
+
+def xdpw_negotiation(journal):
+    node, started, negotiated = None, None, None
+    for line in journal.splitlines():
+        stamp, _, message = line.partition(" ")
+        found = XDPW_STARTED.search(message)
+        if found:
+            node, started, negotiated = int(found.group(1)), float(stamp), None
+        elif node is not None and negotiated is None and XDPW_NEGOTIATED in message:
+            negotiated = float(stamp)
+    return node, started, negotiated
+
+
+def xdpw_stalled_side():
+    node, started, negotiated = xdpw_negotiation(machine.succeed("journalctl -b --no-pager -o short-unix -t xdg-desktop-portal-wlr"))
+    if node is None:
+        return "the portal never started a stream"
+    if negotiated is None:
+        return f"PipeWire never gave the portal's stream {node} a format, so the portal had asked lys-wm for no frame"
+    waited = negotiated - started
+    left = PAGE_STALL_S - waited
+    if left < FRAMES_NEED_S:
+        return f"PipeWire gave the portal's stream {node} its format only {waited:.1f} s after it started, leaving {left:.1f} s of the page's {PAGE_STALL_S:.0f} s stall limit; the portal asks lys-wm for no frame before it has a format"
+    return f"PipeWire gave the portal's stream {node} its format {waited:.1f} s after it started; no frame followed in the {left:.1f} s left, so lys-wm did not answer the portal's copy"
+
+
 def stalled_side():
+    if params["portal"] == "wlr":
+        return xdpw_stalled_side()
     status, out = machine.execute(as_alice("pw-dump"))
     if status != 0:
         return f"pw-dump failed: {out.strip()}"

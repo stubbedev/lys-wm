@@ -42,10 +42,7 @@ function stalled(video, track, frames) {
   if (frames > 0) {
     return `stalled after ${frames} frames: the stream ran, then lys-wm or PipeWire stopped delivering (${state})`;
   }
-  if (video.readyState < HTMLMediaElement.HAVE_METADATA && !width) {
-    return `stalled after 0 frames: the portal started the stream, but PipeWire never negotiated a format with it (${state})`;
-  }
-  return `stalled after 0 frames: the stream negotiated, but no frame arrived; lys-wm never answered a copy (${state})`;
+  return `stalled after 0 frames (${state})`;
 }
 
 function watch(video, track) {
