@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -32,7 +33,7 @@ type KeyboardGrab interface {
 
 func (s *Seat) Grab(g KeyboardGrab) error {
 	s.keyboard.grab = g
-	return errors.Join(g.Keymap(s.cfg.Keymap.FD(), s.cfg.Keymap.Size()), g.RepeatInfo(s.cfg.RepeatRate, s.cfg.RepeatDelay), g.Modifiers(s.display.NextSerial(), s.state.Modifiers()))
+	return errors.Join(g.Keymap(s.keymap.FD(), s.keymap.Size()), g.RepeatInfo(s.cfg.RepeatRate, s.cfg.RepeatDelay), g.Modifiers(s.display.NextSerial(), s.state.Modifiers()))
 }
 
 func (s *Seat) Ungrab(g KeyboardGrab) error {
@@ -87,6 +88,9 @@ func (s *Seat) sendModifiers(kb *sw.WlKeyboard) error {
 }
 
 func (s *Seat) enterKeyboard(kb *sw.WlKeyboard) error {
+	if _, err := s.syncKeymap(kb, nil); err != nil {
+		return err
+	}
 	if err := kb.SendEnter(s.display.NextSerial(), s.keyboard.focus.Resource(), s.keysArray()); err != nil {
 		return err
 	}
@@ -239,7 +243,8 @@ func (s *Seat) sendKey(v *VirtualKeyboard, code uint32, pressed, modsChanged boo
 }
 
 func (s *Seat) sendKeyboardConfig(kb *sw.WlKeyboard) error {
-	if err := kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, s.cfg.Keymap.FD(), s.cfg.Keymap.Size()); err != nil {
+	s.keymaps[kb] = sentKeymap{km: s.keymap}
+	if err := kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, s.keymap.FD(), s.keymap.Size()); err != nil {
 		return err
 	}
 	if kb.Base().Version() < 4 {
@@ -249,33 +254,77 @@ func (s *Seat) sendKeyboardConfig(kb *sw.WlKeyboard) error {
 }
 
 type Pending struct {
-	cfg   Config
-	state *xkb.State
+	cfg    Config
+	states map[*xkb.Keymap]*xkb.State
+}
+
+func (c Config) keymapOf(device string) *xkb.Keymap {
+	if km, ok := c.Devices[device]; ok {
+		return km
+	}
+	return c.Keymap
 }
 
 func Prepare(cfg Config) (Pending, error) {
 	if cfg.Keymap == nil {
 		return Pending{}, errors.New("seat: no keymap")
 	}
-	state := cfg.Keymap.NewState()
-	if cfg.NumLock {
-		if err := state.LockNumLock(); err != nil {
-			return Pending{}, fmt.Errorf("seat: turn Num Lock on: %w", err)
+	states := make(map[*xkb.Keymap]*xkb.State, 1+len(cfg.Devices))
+	for _, km := range append([]*xkb.Keymap{cfg.Keymap}, slices.Collect(maps.Values(cfg.Devices))...) {
+		if km == nil {
+			return Pending{}, errors.New("seat: a device without a keymap")
 		}
+		if _, ok := states[km]; ok {
+			continue
+		}
+		state := km.NewState()
+		if cfg.NumLock {
+			if err := state.LockNumLock(); err != nil {
+				return Pending{}, fmt.Errorf("seat: turn Num Lock on: %w", err)
+			}
+		}
+		states[km] = state
 	}
-	return Pending{cfg: cfg, state: state}, nil
+	return Pending{cfg: cfg, states: states}, nil
+}
+
+func (s *Seat) adopt(p Pending) {
+	s.cfg, s.states = p.cfg, p.states
+	s.keymap = s.cfg.keymapOf(s.device)
+	s.state = s.states[s.keymap]
+}
+
+// UseKeyboard makes device's keymap the one keys are read with and the one
+// whoever holds the keyboard is told about, before a key from that device.
+func (s *Seat) UseKeyboard(device string) error {
+	s.device = device
+	km := s.cfg.keymapOf(device)
+	if km == s.keymap {
+		return nil
+	}
+	s.keymap, s.state = km, s.states[km]
+	s.listener.KeyboardStateChanged()
+	g := s.keyboard.grab
+	if g == nil {
+		return nil
+	}
+	return errors.Join(g.Keymap(km.FD(), km.Size()), g.Modifiers(s.display.NextSerial(), s.state.Modifiers()))
+}
+
+func (s *Seat) Keymap() *xkb.Keymap {
+	return s.keymap
 }
 
 func (s *Seat) Reconfigure(p Pending) error {
+	s.adopt(p)
 	for _, code := range s.keyboard.pressed {
-		p.state.Key(code, true)
+		s.state.Key(code, true)
 	}
-	s.state, s.cfg = p.state, p.cfg
 	s.listener.KeyboardStateChanged()
 	clear(s.keymaps)
 	var errs []error
 	if g := s.keyboard.grab; g != nil {
-		errs = append(errs, g.Keymap(s.cfg.Keymap.FD(), s.cfg.Keymap.Size()), g.RepeatInfo(s.cfg.RepeatRate, s.cfg.RepeatDelay))
+		errs = append(errs, g.Keymap(s.keymap.FD(), s.keymap.Size()), g.RepeatInfo(s.cfg.RepeatRate, s.cfg.RepeatDelay))
 	}
 	for _, r := range s.clients {
 		focused := s.receiver() != nil && s.receiver().Client() == r.client

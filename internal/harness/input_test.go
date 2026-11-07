@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	"github.com/stubbedev/lys-wm/internal/testclient"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -284,4 +285,81 @@ func TestNumLockIsOnAfterStartAndAfterReload(t *testing.T) {
 	on("after Num Lock was pressed", false)
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Reconfigure(cfg) })
 	on("after reload", true)
+}
+
+func TestEachKeyboardTypesItsOwnLayoutAndAKeymapIsSentOnlyOnChange(t *testing.T) {
+	t.Parallel()
+	const keyBracketLeft, bracketLeft, aring = 26, 0x5b, 0xe5
+	set, err := testenv.XKBCompiler(t).CompileSet(xkb.Names{Layout: "us"}, map[string]xkb.Names{
+		"danish board": {Layout: "dk"},
+		"ansi board":   {Layout: "us"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = set.Close() })
+	if set.Devices["ansi board"] != set.Seat || set.Devices["danish board"].Size() == set.Seat.Size() {
+		t.Fatal("the us boards do not share one keymap, or the two keymaps cannot be told apart by size")
+	}
+	h := StartWith(t, func(c *compositor.Config) {
+		c.Seat.Keymap, c.Seat.Devices = set.Seat, set.Devices
+	}, small)
+	boards := map[string]*headless.Keyboard{}
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		boards["laptop"] = b.Keyboard()
+		for _, name := range []string{"danish board", "ansi board"} {
+			k, err := b.PlugKeyboard(name)
+			if err != nil {
+				return err
+			}
+			boards[name] = k
+		}
+		return nil
+	})
+	cl := testclient.Connect(t, h.Socket())
+	_, in := cl.Seat()
+	w := cl.Window("win", quadrants)
+	cl.DispatchUntil("the window to map", w.Mapped)
+	cl.DispatchUntil("the keyboard to enter", func() bool {
+		return slices.ContainsFunc(in.Log, func(l string) bool { return strings.HasPrefix(l, "kb_enter ") })
+	})
+	sent := in.Keymaps
+	typed := 0
+	for i, step := range []struct {
+		board  string
+		keymap *xkb.Keymap
+		keysym uint32
+		sends  int
+	}{
+		{"laptop", set.Seat, bracketLeft, 0},
+		{"danish board", set.Devices["danish board"], aring, 1},
+		{"danish board", set.Devices["danish board"], aring, 0},
+		{"ansi board", set.Seat, bracketLeft, 1},
+		{"laptop", set.Seat, bracketLeft, 0},
+		{"danish board", set.Devices["danish board"], aring, 1},
+	} {
+		var keysym uint32
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			err := boards[step.board].Key(keyBracketLeft, true)
+			keysym = c.Seat().Keysym(keyBracketLeft)
+			return errors.Join(err, boards[step.board].Key(keyBracketLeft, false))
+		})
+		typed += 2
+		cl.DispatchUntil(fmt.Sprintf("step %d: the key from %s", i, step.board), func() bool {
+			n := 0
+			for _, l := range in.Log {
+				if strings.HasPrefix(l, fmt.Sprintf("key %d ", keyBracketLeft)) {
+					n++
+				}
+			}
+			return n == typed
+		})
+		if keysym != step.keysym {
+			t.Fatalf("step %d: %s typed keysym %#x, want %#x", i, step.board, keysym, step.keysym)
+		}
+		if got := in.Keymaps - sent; got != step.sends || in.KeymapSize != step.keymap.Size() {
+			t.Fatalf("step %d: %s sent %d keymaps (now %d bytes), want %d of %d bytes", i, step.board, got, in.KeymapSize, step.sends, step.keymap.Size())
+		}
+		sent = in.Keymaps
+	}
 }

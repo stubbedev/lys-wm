@@ -335,6 +335,11 @@
                 "name": "zoom",
                 "args": "<in|out|reset|set> [factor]",
                 "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+              },
+              {
+                "name": "debug",
+                "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
               }
             ]
           },
@@ -965,6 +970,11 @@
                     "name": "zoom",
                     "args": "<in|out|reset|set> [factor]",
                     "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                  },
+                  {
+                    "name": "debug",
+                    "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                    "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                   }
                 ]
               },
@@ -1221,6 +1231,11 @@
                     "name": "zoom",
                     "args": "<in|out|reset|set> [factor]",
                     "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                  },
+                  {
+                    "name": "debug",
+                    "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                    "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                   }
                 ]
               },
@@ -1477,6 +1492,11 @@
                     "name": "zoom",
                     "args": "<in|out|reset|set> [factor]",
                     "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                  },
+                  {
+                    "name": "debug",
+                    "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                    "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                   }
                 ]
               },
@@ -1758,6 +1778,11 @@
                       "name": "zoom",
                       "args": "<in|out|reset|set> [factor]",
                       "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    },
+                    {
+                      "name": "debug",
+                      "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                      "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                     }
                   ]
                 },
@@ -2012,6 +2037,11 @@
                       "name": "zoom",
                       "args": "<in|out|reset|set> [factor]",
                       "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    },
+                    {
+                      "name": "debug",
+                      "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                      "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                     }
                   ]
                 },
@@ -2275,6 +2305,11 @@
                       "name": "zoom",
                       "args": "<in|out|reset|set> [factor]",
                       "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    },
+                    {
+                      "name": "debug",
+                      "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                      "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                     }
                   ]
                 },
@@ -2529,6 +2564,11 @@
                       "name": "zoom",
                       "args": "<in|out|reset|set> [factor]",
                       "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    },
+                    {
+                      "name": "debug",
+                      "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                      "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                     }
                   ]
                 },
@@ -2602,6 +2642,32 @@
               },
               "drag_lock": {
                 "type": "boolean"
+              },
+              "keyboard": {
+                "type": "object",
+                "properties": {
+                  "layout": {
+                    "type": "string",
+                    "format": "lys-wm-xkb-layout"
+                  },
+                  "model": {
+                    "type": "string",
+                    "format": "lys-wm-xkb-model"
+                  },
+                  "options": {
+                    "type": "string",
+                    "format": "lys-wm-xkb-options"
+                  },
+                  "rules": {
+                    "type": "string",
+                    "format": "lys-wm-xkb-rules"
+                  },
+                  "variant": {
+                    "type": "string",
+                    "format": "lys-wm-xkb-variant"
+                  }
+                },
+                "additionalProperties": false
               },
               "left_handed": {
                 "type": "boolean"
@@ -3275,6 +3341,11 @@
                                 "name": "zoom",
                                 "args": "<in|out|reset|set> [factor]",
                                 "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              },
+                              {
+                                "name": "debug",
+                                "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                                "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                               }
                             ]
                           },
@@ -3529,6 +3600,11 @@
                                 "name": "zoom",
                                 "args": "<in|out|reset|set> [factor]",
                                 "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              },
+                              {
+                                "name": "debug",
+                                "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                                "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                               }
                             ]
                           },
@@ -3783,6 +3859,11 @@
                                 "name": "zoom",
                                 "args": "<in|out|reset|set> [factor]",
                                 "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              },
+                              {
+                                "name": "debug",
+                                "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                                "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                               }
                             ]
                           },
@@ -4037,6 +4118,11 @@
                                 "name": "zoom",
                                 "args": "<in|out|reset|set> [factor]",
                                 "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              },
+                              {
+                                "name": "debug",
+                                "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                                "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                               }
                             ]
                           },
@@ -4715,6 +4801,11 @@
                   "name": "zoom",
                   "args": "<in|out|reset|set> [factor]",
                   "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                },
+                {
+                  "name": "debug",
+                  "args": "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+                  "summary": "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once."
                 }
               ]
             },

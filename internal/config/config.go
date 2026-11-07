@@ -273,19 +273,24 @@ type rawNamedDevice struct {
 	rawDevice   `yaml:",inline"`
 	Calibration *At[[]float64] `yaml:"calibration"`
 	Region      *At[[]float64] `yaml:"region"`
+	Keyboard    *rawXkb        `yaml:"keyboard"`
+}
+
+type rawXkb struct {
+	Rules   At[string] `yaml:"rules"`
+	Model   At[string] `yaml:"model"`
+	Layout  At[string] `yaml:"layout"`
+	Variant At[string] `yaml:"variant"`
+	Options At[string] `yaml:"options"`
 }
 
 type rawKeyboard struct {
-	Rules       At[string] `yaml:"rules"`
-	Model       At[string] `yaml:"model"`
-	Layout      At[string] `yaml:"layout"`
-	Variant     At[string] `yaml:"variant"`
-	Options     At[string] `yaml:"options"`
-	RepeatRate  *At[int]   `yaml:"repeat_rate"`
-	RepeatDelay *At[int]   `yaml:"repeat_delay"`
-	StickyKeys  bool       `yaml:"sticky_keys"`
-	SlowKeys    *At[int]   `yaml:"slow_keys"`
-	NumLock     bool       `yaml:"numlock"`
+	rawXkb      `yaml:",inline"`
+	RepeatRate  *At[int] `yaml:"repeat_rate"`
+	RepeatDelay *At[int] `yaml:"repeat_delay"`
+	StickyKeys  bool     `yaml:"sticky_keys"`
+	SlowKeys    *At[int] `yaml:"slow_keys"`
+	NumLock     bool     `yaml:"numlock"`
 }
 
 type rawBorders struct {
@@ -639,6 +644,7 @@ type Config struct {
 	File            string
 	Warnings        []error
 	Keyboard        xkb.Names
+	DeviceKeyboards map[string]xkb.Names
 	RepeatRate      int32
 	RepeatDelay     int32
 	StickyKeys      bool
@@ -741,14 +747,14 @@ func (p *parser) xkbName(a At[string], key string) {
 	}
 }
 
-func (p *parser) keyboard(r rawKeyboard) xkb.Names {
-	p.xkbName(r.Rules, "input.keyboard.rules")
-	p.xkbName(r.Model, "input.keyboard.model")
-	layouts := p.xkbList(r.Layout, "input.keyboard.layout", false)
-	variants := p.xkbList(r.Variant, "input.keyboard.variant", true)
-	p.xkbList(r.Options, "input.keyboard.options", false)
+func (p *parser) keyboard(r rawXkb, key string) xkb.Names {
+	p.xkbName(r.Rules, key+".rules")
+	p.xkbName(r.Model, key+".model")
+	layouts := p.xkbList(r.Layout, key+".layout", false)
+	variants := p.xkbList(r.Variant, key+".variant", true)
+	p.xkbList(r.Options, key+".options", false)
 	if len(layouts) > 0 && len(variants) > len(layouts) {
-		p.fail(r.Variant.Line, "input.keyboard.variant", "%q names %d variants for %d layouts", r.Variant.V, len(variants), len(layouts))
+		p.fail(r.Variant.Line, key+".variant", "%q names %d variants for %d layouts", r.Variant.V, len(variants), len(layouts))
 	}
 	return xkb.Names{Rules: r.Rules.V, Model: r.Model.V, Layout: r.Layout.V, Variant: r.Variant.V, Options: r.Options.V}
 }
@@ -1406,6 +1412,21 @@ func (p *parser) namedDevice(r rawNamedDevice, key string) session.NamedDeviceCo
 	return c
 }
 
+func (p *parser) deviceKeyboards(devices map[string]rawNamedDevice) map[string]xkb.Names {
+	var out map[string]xkb.Names
+	for _, name := range slices.Sorted(maps.Keys(devices)) {
+		r := devices[name].Keyboard
+		if r == nil {
+			continue
+		}
+		if out == nil {
+			out = map[string]xkb.Names{}
+		}
+		out[name] = p.keyboard(*r, fmt.Sprintf("input.devices.%q.keyboard", name))
+	}
+	return out
+}
+
 func (p *parser) input(r rawInput) session.InputConfig {
 	c := session.InputConfig{Pointer: p.device(r.Pointer, "input.pointer"), Touchpad: p.device(r.Touchpad, "input.touchpad")}
 	if len(r.Devices) > 0 {
@@ -1707,7 +1728,8 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	cfg := Config{
 		layered:         l,
 		File:            file,
-		Keyboard:        p.keyboard(raw.Input.Keyboard),
+		Keyboard:        p.keyboard(raw.Input.Keyboard.rawXkb, "input.keyboard"),
+		DeviceKeyboards: p.deviceKeyboards(raw.Input.Devices),
 		RepeatRate:      p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
 		RepeatDelay:     p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
 		StickyKeys:      raw.Input.Keyboard.StickyKeys,
@@ -1849,7 +1871,8 @@ func (c Config) resolveBinds(r binds.Resolver) ([]binds.Bind, error) {
 	return out, errors.Join(errs...)
 }
 
-func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor.Config, error) {
+func (c Config) Compositor(keymaps xkb.Keymaps, font *gtext.Typeface) (compositor.Config, error) {
+	keymap := keymaps.Seat
 	b, err := c.resolveBinds(keymap)
 	if err != nil {
 		return compositor.Config{}, err
@@ -1857,7 +1880,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg := compositor.DefaultConfig(keymap, font)
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.Seat.StickyKeys, cfg.Seat.SlowKeys = c.StickyKeys, c.SlowKeys
-	cfg.Seat.NumLock = c.NumLock
+	cfg.Seat.NumLock, cfg.Seat.Devices = c.NumLock, keymaps.Devices
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.ColorManagement = c.ColorManagement
 	cfg.ClientHotkeys = c.ClientHotkeys

@@ -162,9 +162,9 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	}
 	switch e := e.(type) {
 	case backend.Key:
-		return c.inputKey(e)
+		return c.inputKey(d.Name(), e)
 	case *backend.Key:
-		return c.inputKey(*e)
+		return c.inputKey(d.Name(), *e)
 	case *backend.PointerMotion:
 		if c.capturing != nil {
 			c.capturing.pointer(ipc.CaptureMotionEvent{DX: e.DX, DY: e.DY})
@@ -239,14 +239,17 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	return nil
 }
 
-func (c *Compositor) inputKey(e backend.Key) error {
+func (c *Compositor) inputKey(device string, e backend.Key) error {
 	if c.seatConfig.SlowKeys > 0 {
-		return c.slowKey(e)
+		return c.slowKey(device, e)
 	}
-	return c.acceptKey(e)
+	return c.acceptKey(device, e)
 }
 
-func (c *Compositor) acceptKey(e backend.Key) error {
+func (c *Compositor) acceptKey(device string, e backend.Key) error {
+	if err := c.seat.UseKeyboard(device); err != nil {
+		return err
+	}
 	if c.capturing != nil {
 		return c.captureKey(e)
 	}

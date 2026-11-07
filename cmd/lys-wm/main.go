@@ -304,7 +304,7 @@ func (s source) read() ([]config.Layer, error) {
 
 type loaded struct {
 	cfg       compositor.Config
-	keymap    *xkb.Keymap
+	keymaps   xkb.Keymaps
 	env       [][2]string
 	autostart []string
 	xwayland  bool
@@ -330,15 +330,15 @@ func (s source) load(accent render.Color) (loaded, error) {
 	if names == (xkb.Names{}) {
 		names = xkb.NamesFromEnv(s.getenv)
 	}
-	keymap, err := s.keymaps.Compile(names)
+	keymaps, err := s.keymaps.CompileSet(names, file.DeviceKeyboards)
 	if err != nil {
 		return loaded{}, err
 	}
-	cfg, err := file.Compositor(keymap, font)
+	cfg, err := file.Compositor(keymaps, font)
 	if err != nil {
-		return loaded{}, errors.Join(err, keymap.Close())
+		return loaded{}, errors.Join(err, keymaps.Close())
 	}
-	return loaded{cfg: cfg, keymap: keymap, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}, warnings: file.Warnings}, nil
+	return loaded{cfg: cfg, keymaps: keymaps, env: file.Env, autostart: file.Autostart, xwayland: file.Xwayland, zero: file.ZeroScaling, native: nativeOptions{input: file.Input, gpu: file.GPU, lidSuspend: file.LidSuspend}, warnings: file.Warnings}, nil
 }
 
 func printHandoverInfo(path, runtime string, getenv func(string) string, out io.Writer) error {
@@ -354,7 +354,7 @@ func printHandoverInfo(path, runtime string, getenv func(string) string, out io.
 		for _, w := range l.warnings {
 			info.Warnings = append(info.Warnings, w.Error())
 		}
-		if err := l.keymap.Close(); err != nil {
+		if err := l.keymaps.Close(); err != nil {
 			return err
 		}
 	}
@@ -370,7 +370,7 @@ func checkConfigFile(path, runtime string, getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	return errors.Join(errors.Join(l.warnings...), l.keymap.Close())
+	return errors.Join(errors.Join(l.warnings...), l.keymaps.Close())
 }
 
 type effectiveLayer struct {
@@ -425,7 +425,7 @@ type reloader struct {
 	cursor         compositor.CursorConfig
 	comp           *compositor.Compositor
 	exit           func() error
-	keymap         *xkb.Keymap
+	keymaps        xkb.Keymaps
 	configureInput func(session.InputConfig) error
 }
 
@@ -458,12 +458,12 @@ func (s *reloader) apply(next loaded, err error) error {
 	}
 	next.cfg.Cursor = s.cursor
 	if err := s.comp.Reconfigure(next.cfg); err != nil {
-		err = errors.Join(err, next.keymap.Close())
+		err = errors.Join(err, next.keymaps.Close())
 		s.comp.ShowConfigProblems(compositor.ConfigProblems{Rejected: true, Messages: errorLines(err)})
 		return err
 	}
-	old := s.keymap
-	s.keymap = next.keymap
+	old := s.keymaps
+	s.keymaps = next.keymaps
 	err = errors.Join(old.Close(), s.configureInput(next.native.input))
 	s.comp.ShowConfigProblems(compositor.ConfigProblems{Messages: errorLines(errors.Join(errors.Join(next.warnings...), err))})
 	return err
@@ -619,8 +619,8 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	s.keymap = first.keymap
-	defer leave(func() error { return s.keymap.Close() })
+	s.keymaps = first.keymaps
+	defer leave(func() error { return s.keymaps.Close() })
 	if s.cursor, err = cursorConfig(withEnv(first.env, os.Getenv)); err != nil {
 		return err
 	}

@@ -36,6 +36,7 @@ type Config struct {
 	StickyKeys  bool
 	SlowKeys    time.Duration
 	NumLock     bool
+	Devices     map[string]*xkb.Keymap
 }
 
 type clientResources struct {
@@ -64,6 +65,9 @@ type Seat struct {
 	listener Listener
 	cfg      Config
 	state    *xkb.State
+	states   map[*xkb.Keymap]*xkb.State
+	keymap   *xkb.Keymap
+	device   string
 	devices  map[sw.WlSeatCapability]int
 	caps     sw.WlSeatCapability
 	everCaps sw.WlSeatCapability
@@ -81,7 +85,8 @@ func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Seat{display: d, listener: listener, cfg: p.cfg, state: p.state, devices: map[sw.WlSeatCapability]int{}, keymaps: map[*sw.WlKeyboard]sentKeymap{}}
+	s := &Seat{display: d, listener: listener, devices: map[sw.WlSeatCapability]int{}, keymaps: map[*sw.WlKeyboard]sentKeymap{}}
+	s.adopt(p)
 	if _, err := d.AddGlobal(sw.WlSeatInterface, seatVersion, s.bind); err != nil {
 		return nil, err
 	}

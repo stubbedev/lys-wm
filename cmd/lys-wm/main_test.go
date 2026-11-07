@@ -128,7 +128,7 @@ func TestLoadingTheConfig(t *testing.T) {
 	if len(first.cfg.Binds) == 0 || len(first.env) == 0 {
 		t.Errorf("the built-in config gave %d binds, env %v", len(first.cfg.Binds), first.env)
 	}
-	if err := first.keymap.Close(); err != nil {
+	if err := first.keymaps.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := testSource(t, missing, true).load(compositor.DefaultAccent); !errors.Is(err, fs.ErrNotExist) {
@@ -519,7 +519,7 @@ func TestAReadOnlyLinkedConfigLoadsWithItsOverrides(t *testing.T) {
 	if l.cfg.WM.Gaps.Inner != 8 || l.cfg.Decor.BorderWidth != 5 {
 		t.Fatalf("gaps %d, borders %d; want the override's 8 and the linked file's 5", l.cfg.WM.Gaps.Inner, l.cfg.Decor.BorderWidth)
 	}
-	if err := l.keymap.Close(); err != nil {
+	if err := l.keymaps.Close(); err != nil {
 		t.Fatal(err)
 	}
 }

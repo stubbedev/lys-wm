@@ -24,6 +24,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/session"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
+	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
 func TestAFallbackOutputRuleIsKeptApart(t *testing.T) {
@@ -359,7 +360,7 @@ func TestTheBuiltInConfigBuildsACompositorConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	cfg, err := file.Compositor(xkb.Keymaps{Seat: testenv.Keymap(t)}, testenv.Font(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +377,7 @@ func TestTheBuiltInConfigCanLeaveTheSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	cfg, err := file.Compositor(xkb.Keymaps{Seat: testenv.Keymap(t)}, testenv.Font(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +657,7 @@ outputs:
 	if file.Outputs.Fallback.HotCorners != nil {
 		t.Errorf("an output without hot_corners overrides them: %+v", file.Outputs.Fallback.HotCorners)
 	}
-	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	cfg, err := file.Compositor(xkb.Keymaps{Seat: testenv.Keymap(t)}, testenv.Font(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,7 +867,7 @@ func compositorOf(t *testing.T, text string) compositor.Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	cfg, err := file.Compositor(xkb.Keymaps{Seat: testenv.Keymap(t)}, testenv.Font(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1340,5 +1341,18 @@ func TestSwallowTakesTerminalAndExceptionPatterns(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("swallow:\n  terminals: (foot\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: swallow.terminals") {
 		t.Fatalf("a bad pattern: %v", err)
+	}
+}
+
+func TestADeviceKeyboardParsesIntoItsOwnNames(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("input:\n  keyboard:\n    layout: us\n  devices:\n    \"Keychron K2\":\n      keyboard: {layout: dk, options: \"caps:escape\"}\n    \"Mouse\":\n      left_handed: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]xkb.Names{"Keychron K2": {Layout: "dk", Options: "caps:escape"}}; !reflect.DeepEqual(cfg.DeviceKeyboards, want) {
+		t.Fatalf("device keyboards %+v", cfg.DeviceKeyboards)
+	}
+	if _, err := Parse("t.yaml", []byte("input:\n  devices:\n    x:\n      keyboard: {layout: \"us, dk\"}\n")); err == nil || !strings.Contains(err.Error(), `t.yaml:4: input.devices."x".keyboard.layout:`) {
+		t.Fatalf("a bad device layout: %v", err)
 	}
 }

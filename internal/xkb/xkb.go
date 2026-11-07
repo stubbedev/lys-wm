@@ -5,6 +5,7 @@ package xkb
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -311,4 +312,53 @@ func (k *ClientKeymap) Keysym(evdev uint32, m Modifiers) uint32 {
 func (k *ClientKeymap) BareEscape(evdev uint32, m Modifiers) bool {
 	k.state.UpdateMask(lxkb.ModMask(m.Depressed), lxkb.ModMask(m.Latched), lxkb.ModMask(m.Locked), 0, 0, m.Group)
 	return bareEscape(k.state, evdev)
+}
+
+// Keymaps is the seat's keymap and the keymaps devices of their own use;
+// devices naming the same keymap share one compiled Keymap, so switching
+// between them sends clients nothing.
+type Keymaps struct {
+	Seat    *Keymap
+	Devices map[string]*Keymap
+}
+
+// CompileSet compiles the seat's names and each device's, once per distinct
+// set of names.
+func (c *Compiler) CompileSet(seat Names, devices map[string]Names) (Keymaps, error) {
+	seatKeymap, err := c.Compile(seat)
+	if err != nil {
+		return Keymaps{}, err
+	}
+	set := Keymaps{Seat: seatKeymap}
+	compiled := map[Names]*Keymap{seat: seatKeymap}
+	for _, device := range slices.Sorted(maps.Keys(devices)) {
+		names := devices[device]
+		km, ok := compiled[names]
+		if !ok {
+			if km, err = c.Compile(names); err != nil {
+				return Keymaps{}, errors.Join(fmt.Errorf("xkb: the keymap of input device %q: %w", device, err), set.Close())
+			}
+			compiled[names] = km
+		}
+		if set.Devices == nil {
+			set.Devices = make(map[string]*Keymap, len(devices))
+		}
+		set.Devices[device] = km
+	}
+	return set, nil
+}
+
+// Close closes every distinct keymap in the set.
+func (k Keymaps) Close() error {
+	closed := map[*Keymap]bool{k.Seat: true}
+	errs := []error{k.Seat.Close()}
+	for _, device := range slices.Sorted(maps.Keys(k.Devices)) {
+		km := k.Devices[device]
+		if closed[km] {
+			continue
+		}
+		closed[km] = true
+		errs = append(errs, km.Close())
+	}
+	return errors.Join(errs...)
 }

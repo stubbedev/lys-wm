@@ -39,6 +39,7 @@ type Backend struct {
 	pointer       *Pointer
 	touch         *Touch
 	switches      *Switches
+	plugged       []backend.Device
 	cursorSize    image.Point
 	overlayPlanes int
 	overlayTarget gpu.ScanoutTarget
@@ -145,7 +146,7 @@ func (b *Backend) Renderer() render.Renderer {
 }
 
 func (b *Backend) devices() []backend.Device {
-	return []backend.Device{b.keyboard, b.pointer, b.touch, b.switches}
+	return append([]backend.Device{b.keyboard, b.pointer, b.touch, b.switches}, b.plugged...)
 }
 
 func (b *Backend) Close() error {
@@ -921,6 +922,15 @@ func (k *Keyboard) LEDs() xkb.Locks {
 
 func (b *Backend) Keyboard() *Keyboard {
 	return b.keyboard
+}
+
+func (b *Backend) PlugKeyboard(name string) (*Keyboard, error) {
+	if b.handler == nil {
+		return nil, errors.New("headless: a keyboard plugged in before Start")
+	}
+	k := &Keyboard{device: device{b, name, backend.Keyboard}}
+	b.plugged = append(b.plugged, k)
+	return k, b.handler.DeviceAdded(k)
 }
 
 func (k *Keyboard) Key(code uint32, pressed bool) error {

@@ -10,19 +10,20 @@ import (
 type slowKeys struct {
 	timer   *loop.Timer
 	pending backend.Key
+	device  string
 	held    bool
 }
 
-func (c *Compositor) slowKey(e backend.Key) error {
+func (c *Compositor) slowKey(device string, e backend.Key) error {
 	s := &c.slow
 	if !e.Pressed {
 		if s.held && s.pending.Code == e.Code {
 			s.held = false
 			return s.timer.Disarm()
 		}
-		return c.acceptKey(e)
+		return c.acceptKey(device, e)
 	}
-	s.pending, s.held = e, true
+	s.pending, s.device, s.held = e, device, true
 	return s.timer.Arm(c.seatConfig.SlowKeys)
 }
 
@@ -35,7 +36,7 @@ func (c *Compositor) slowKeyHeld() error {
 	s.held = false
 	e := s.pending
 	e.Time += c.seatConfig.SlowKeys
-	return c.acceptKey(e)
+	return c.acceptKey(s.device, e)
 }
 
 func (c *Compositor) setSlowKeys(d time.Duration) error {

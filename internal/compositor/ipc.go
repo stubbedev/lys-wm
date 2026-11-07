@@ -243,7 +243,7 @@ func (c *Compositor) Icon(id wm.WindowID, size int) (*image.RGBA, int, error) {
 func (c *Compositor) keyboardLayout() ipc.Layout {
 	group := c.seat.Layout()
 	l := ipc.Layout{Index: group}
-	if names := c.seatConfig.Keymap.Layouts(); int(group) < len(names) {
+	if names := c.seat.Keymap().Layouts(); int(group) < len(names) {
 		l.Name = names[group]
 	}
 	return l

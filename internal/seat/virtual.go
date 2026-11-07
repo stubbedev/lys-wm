@@ -22,13 +22,14 @@ type VirtualKeyboard struct {
 }
 
 type sentKeymap struct {
+	km      *xkb.Keymap
 	v       *VirtualKeyboard
 	version uint64
 }
 
-func (v *VirtualKeyboard) sent() sentKeymap {
+func (s *Seat) sentFor(v *VirtualKeyboard) sentKeymap {
 	if v == nil {
-		return sentKeymap{}
+		return sentKeymap{km: s.keymap}
 	}
 	return sentKeymap{v: v, version: v.version}
 }
@@ -61,15 +62,27 @@ func (v *VirtualKeyboard) Close() error {
 	return nil
 }
 
-func (s *Seat) useKeymap(kb *sw.WlKeyboard, v *VirtualKeyboard) error {
-	if s.keymaps[kb] == v.sent() {
-		return nil
+func (s *Seat) syncKeymap(kb *sw.WlKeyboard, v *VirtualKeyboard) (bool, error) {
+	want := s.sentFor(v)
+	if s.keymaps[kb] == want {
+		return false, nil
 	}
-	s.keymaps[kb] = v.sent()
+	s.keymaps[kb] = want
 	if v == nil {
-		return errors.Join(kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, s.cfg.Keymap.FD(), s.cfg.Keymap.Size()), s.sendModifiers(kb))
+		return true, kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, s.keymap.FD(), s.keymap.Size())
 	}
-	return errors.Join(kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, v.fd, v.size), v.sendModifiers(s, kb))
+	return true, kb.SendKeymap(sw.WlKeyboardKeymapFormatXkbV1, v.fd, v.size)
+}
+
+func (s *Seat) useKeymap(kb *sw.WlKeyboard, v *VirtualKeyboard) error {
+	sent, err := s.syncKeymap(kb, v)
+	switch {
+	case !sent || err != nil:
+		return err
+	case v == nil:
+		return s.sendModifiers(kb)
+	}
+	return v.sendModifiers(s, kb)
 }
 
 func (v *VirtualKeyboard) sendModifiers(s *Seat, kb *sw.WlKeyboard) error {

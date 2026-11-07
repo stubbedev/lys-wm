@@ -309,6 +309,7 @@ Under `input.devices` a device also takes:
 | --- | --- |
 | `calibration` | Six numbers, the touchscreen's calibration matrix as libinput applies it to normalized coordinates: `[a, b, c, d, e, f]` maps (x, y) to (a·x + b·y + c, d·x + e·y + f) |
 | `region` | `[x, y, width, height]`, fractions of the tablet: only that part of its surface is used, stretched over the whole of its output |
+| `keyboard` | `rules`, `model`, `layout`, `variant` and `options` for this keyboard alone, as under `input.keyboard`. They replace the seat's names as a whole: a key left out takes the XKB default, not `input.keyboard`'s. Keys from this keyboard are read with its keymap, and the focused client is sent a new keymap when the next key comes from a keyboard with a different one; keyboards naming the same keymap share it, so switching between them sends nothing |
 
 An unset key keeps libinput's default for the device, and a reload that drops a
 key restores that default. A device that lacks a setting from `input.pointer`

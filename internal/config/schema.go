@@ -218,11 +218,6 @@ func annotations() map[string]annotation {
 		"gpu":                              formatAnn(drmDeviceFormat),
 		"tabs.font":                        formatAnn(fontFileFormat),
 		"tabs.icon_theme":                  formatAnn(iconThemeFormat),
-		"input.keyboard.layout":            formatAnn(layoutFormat),
-		"input.keyboard.variant":           formatAnn(variantFormat),
-		"input.keyboard.options":           formatAnn(optionsFormat),
-		"input.keyboard.model":             formatAnn(modelFormat),
-		"input.keyboard.rules":             formatAnn(rulesFormat),
 		"decoration.blur.mica.tint":        colorAnn(nil),
 		"rules[].blur_look.tint":           colorAnn(nil),
 		"rules[].app_id":                   formatAnn(regexFormat),
@@ -247,6 +242,11 @@ func annotations() map[string]annotation {
 	for k := range compositor.CornerCount {
 		out["hot_corners."+k.String()+".action"] = actionAnn
 		out["outputs[].hot_corners."+k.String()+".action"] = actionAnn
+	}
+	for _, key := range []string{"input.keyboard", "input.devices.*.keyboard"} {
+		for field, format := range map[string]string{"layout": layoutFormat, "variant": variantFormat, "options": optionsFormat, "model": modelFormat, "rules": rulesFormat} {
+			out[key+"."+field] = formatAnn(format)
+		}
 	}
 	for _, state := range []string{"active", "inactive", "urgent"} {
 		out["tabs."+state+".background"] = colorAnn(nil)
