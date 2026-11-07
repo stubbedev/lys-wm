@@ -49,3 +49,61 @@ func TestASecondaryHoldsItsRenderStackOnlyWhileItDrivesAnOutput(t *testing.T) {
 		t.Fatal("the frame on the reopened stack did not commit")
 	}
 }
+
+func bootRenderCapable(t *testing.T, refuseLinear bool) (*rig, *blitWorld, *int) {
+	t.Helper()
+	world := &blitWorld{memory: map[int]*soft.Buffer{}}
+	primary := fakeStack(world, "primary", true)
+	opened := 0
+	r := boot(t, func(dev *fakeDevice) allocator {
+		if refuseLinear {
+			dev.refuseFrames = func(fb uint64) bool {
+				h := dev.scanouts[uint32(fb)]
+				return h >= primeHandles && !world.scanout[int(h-primeHandles)]
+			}
+		}
+		stack := func() *blitAllocator {
+			local := fakeStack(world, "local", true)
+			local.dev = dev
+			return &blitAllocator{primary: primary, local: local}
+		}
+		lazy, err := newLazyBlit(stack(), func() (*blitAllocator, error) {
+			opened++
+			return stack(), nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &linearFirst{dev: dev, primary: primary, own: lazy, ownHow: "a GPU blit"}
+	})
+	return r, world, &opened
+}
+
+func TestARenderCapableSecondaryScansOutThePrimarysLinearBufferWithoutOpeningItsStack(t *testing.T) {
+	r, world, opened := bootRenderCapable(t, false)
+	o := r.b.Outputs()[0]
+	fb := r.drawRed(o)
+	h := r.dev.scanouts[uint32(fb)]
+	if *opened != 0 || h < primeHandles || world.scanout[int(h-primeHandles)] || o.layout.route != primaryBuffer {
+		t.Fatalf("framebuffer %d is handle %d after %d stacks opened, want the primary's linear buffer and no stack", fb, h, *opened)
+	}
+	if len(r.reports) != 0 {
+		t.Fatalf("reports %v", r.reports)
+	}
+}
+
+func TestARenderCapableSecondaryThatRefusesTheLinearBufferBlits(t *testing.T) {
+	r, world, opened := bootRenderCapable(t, true)
+	o := r.b.Outputs()[0]
+	fb := r.drawRed(o)
+	h := r.dev.scanouts[uint32(fb)]
+	if *opened != 1 || !world.scanout[int(h-primeHandles)] || o.layout.route != ownBuffer {
+		t.Fatalf("framebuffer %d is handle %d after %d stacks opened, want a blit into the card's own buffer", fb, h, *opened)
+	}
+	if pix := world.memory[int(h-primeHandles)].Pix; pix[2] != 0xff {
+		t.Fatalf("the blitted buffer starts with %v, not the red the primary drew", pix[:4])
+	}
+	if len(r.reports) != 1 {
+		t.Fatalf("reports %v, want the fallback named once", r.reports)
+	}
+}

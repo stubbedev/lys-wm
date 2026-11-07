@@ -18,15 +18,16 @@ import (
 )
 
 type blitWorld struct {
-	memory map[int]*soft.Buffer
-	log    []string
+	memory  map[int]*soft.Buffer
+	scanout map[int]bool
+	log     []string
 }
 
 type fakeGBM struct {
 	world *blitWorld
 }
 
-func (g fakeGBM) Allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, _ gpu.Usage) (*gpu.Buffer, error) {
+func (g fakeGBM) Allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, usage gpu.Usage) (*gpu.Buffer, error) {
 	fd, err := unix.MemfdCreate("blit", unix.MFD_CLOEXEC)
 	if err != nil {
 		return nil, err
@@ -36,6 +37,12 @@ func (g fakeGBM) Allocate(size image.Point, format fourcc.Format, modifiers []fo
 		modifier = modifiers[0]
 	}
 	g.world.memory[fd] = soft.NewBuffer(size.X, size.Y)
+	if usage&gpu.UseScanout != 0 {
+		if g.world.scanout == nil {
+			g.world.scanout = map[int]bool{}
+		}
+		g.world.scanout[fd] = true
+	}
 	d := gpu.DMABUF{Size: size, Format: format, Modifier: modifier, Planes: []gpu.Plane{{FD: fd, Stride: uint32(size.X * 4)}}}
 	return gpu.NewBuffer(d, func() {}), nil
 }
@@ -179,7 +186,7 @@ func TestASecondaryStaysOnTheFirstStackItsCardRuns(t *testing.T) {
 		wantBlit  bool
 		want      []string
 	}{
-		{"Vulkan on both", primary, []namedStack{vulkanStack, glesStack}, true, true, []string{"a GPU blit with Vulkan on card1"}},
+		{"Vulkan on both", primary, []namedStack{vulkanStack, glesStack}, true, true, []string{"the primary GPU's linear buffers, or, where card1 refuses them, a GPU blit with Vulkan on card1"}},
 		{"a card without Vulkan renders with GLES", primary, []namedStack{noVulkan, glesStack}, true, true, []string{"a GPU blit with GLES on card1"}},
 		{"a card that renders with nothing takes the CPU copy", primary, []namedStack{noVulkan, noGLES}, true, false, []string{"a CPU copy", "no Vulkan driver", "no EGL vendor"}},
 		{"a card without a render node takes the CPU copy", primary, []namedStack{vulkanStack}, false, false, []string{"a CPU copy", "no render node"}},
@@ -188,6 +195,9 @@ func TestASecondaryStaysOnTheFirstStackItsCardRuns(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			alloc, how := secondaryAllocator(dev, c.primary, c.stacks, c.canRender)
+			if first, ok := alloc.(*linearFirst); ok {
+				alloc = first.own
+			}
 			if _, blit := alloc.(*lazyBlit); blit != c.wantBlit {
 				t.Errorf("%T for %q", alloc, how)
 			}

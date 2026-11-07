@@ -242,16 +242,18 @@ func openLocal(dev *kdrm.Device, stacks []namedStack) (*gbmAllocator, namedStack
 
 func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
 	cpu := &copyAllocator{dev: dev, primary: primary.Renderer()}
-	name := filepath.Base(dev.Path())
 	p, ok := primary.alloc.(*gbmAllocator)
-	if !canRender && ok {
-		return linearFirstOr(dev, p, cpu, cpu.named("a CPU copy, since "+name+" has no render node"))
-	}
-	if !canRender {
-		return cpu, cpu.named("a CPU copy, since " + name + " has no render node")
-	}
 	if !ok {
 		return cpu, cpu.named(fmt.Sprintf("a CPU copy, since the primary renders with %T, which shares no buffers", primary.alloc))
+	}
+	own, how := ownBuffers(dev, p, cpu, stacks, canRender)
+	return linearFirstOr(dev, p, own, how)
+}
+
+func ownBuffers(dev *kdrm.Device, p *gbmAllocator, cpu *copyAllocator, stacks []namedStack, canRender bool) (allocator, string) {
+	name := filepath.Base(dev.Path())
+	if !canRender {
+		return cpu, cpu.named("a CPU copy, since " + name + " has no render node")
 	}
 	local, stack, err := openLocal(dev, stacks)
 	if err != nil {
