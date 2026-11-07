@@ -91,6 +91,7 @@ const (
 	atomXdndActionCopy
 	atomXdndActionMove
 	atomXdndActionAsk
+	atomMotifWMHints
 	atomCount
 )
 
@@ -160,6 +161,7 @@ var atomNames = [atomCount]string{
 	atomXdndActionCopy:              "XdndActionCopy",
 	atomXdndActionMove:              "XdndActionMove",
 	atomXdndActionAsk:               "XdndActionAsk",
+	atomMotifWMHints:                "_MOTIF_WM_HINTS",
 }
 
 func (a atom) String() string {
@@ -173,7 +175,7 @@ var supported = []atom{
 }
 
 var watched = []atom{
-	atomWMClass, atomWMName, atomNetWMName, atomWMHints, atomWMNormalHints, atomWMTransientFor, atomNetWMWindowType, atomNetWMState, atomWMProtocols, atomNetWMPID, atomNetWMSyncRequestCounter,
+	atomWMClass, atomWMName, atomNetWMName, atomWMHints, atomWMNormalHints, atomWMTransientFor, atomNetWMWindowType, atomNetWMState, atomWMProtocols, atomNetWMPID, atomNetWMSyncRequestCounter, atomMotifWMHints,
 }
 
 func intern(x *xgb.Conn, names []string) ([]xproto.Atom, error) {
@@ -590,6 +592,13 @@ func parseProps(values rawProps) (props, error) {
 		}
 		errs = append(errs, err)
 	}
+	if v, ok := values[atomMotifWMHints]; ok {
+		hints, err := cardinals(v, atomMotifWMHints, 3)
+		if err == nil && hints[0]&motifDecorations != 0 && hints[2] == 0 {
+			p.undecorated = true
+		}
+		errs = append(errs, err)
+	}
 	if v, ok := values[atomNetWMPID]; ok {
 		pid, err := cardinals(v, atomNetWMPID, 1)
 		if err == nil {
@@ -609,3 +618,5 @@ func parseProps(values rawProps) (props, error) {
 	}
 	return p, errors.Join(errs...)
 }
+
+const motifDecorations = 1 << 1

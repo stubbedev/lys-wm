@@ -8,6 +8,7 @@ import (
 	sxd "github.com/stubbedev/lys-wm/internal/protocol/server/xdgdecoration"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
@@ -76,18 +77,32 @@ func (d decoration) UnsetMode(*sxd.ZxdgToplevelDecorationV1) error {
 	return d.configure()
 }
 
-func bindKDEDecoration(c *server.Client, id wire.ObjectID, version uint32) error {
-	res, err := skd.NewOrgKdeKwinServerDecorationManager(c, id, version, kdeDecorationManager{})
+func (sh *Shell) bindKDEDecoration(c *server.Client, id wire.ObjectID, version uint32) error {
+	res, err := skd.NewOrgKdeKwinServerDecorationManager(c, id, version, kdeDecorationManager{sh})
 	if err != nil {
 		return err
 	}
 	return res.SendDefaultMode(uint32(skd.OrgKdeKwinServerDecorationManagerModeServer))
 }
 
-type kdeDecorationManager struct{}
+type kdeDecorationManager struct{ sh *Shell }
 
-func (kdeDecorationManager) Create(_ *skd.OrgKdeKwinServerDecorationManager, res *skd.OrgKdeKwinServerDecoration, _ *sw.WlSurface) (skd.OrgKdeKwinServerDecorationHandler, error) {
+func (m kdeDecorationManager) Create(_ *skd.OrgKdeKwinServerDecorationManager, res *skd.OrgKdeKwinServerDecoration, wl *sw.WlSurface) (skd.OrgKdeKwinServerDecorationHandler, error) {
+	s, err := surface.From(wl)
+	if err != nil {
+		return nil, err
+	}
+	m.sh.kdeDecor[s] = struct{}{}
+	server.OnDestroy(res, func() error {
+		delete(m.sh.kdeDecor, s)
+		return nil
+	})
 	return kdeDecoration{}, res.SendMode(uint32(skd.OrgKdeKwinServerDecorationModeServer))
+}
+
+func (t *Toplevel) ServerDecorated() bool {
+	_, kde := t.xs.base.shell.kdeDecor[t.xs.surface]
+	return t.decoration != nil || kde
 }
 
 type kdeDecoration struct{}

@@ -105,10 +105,11 @@ type Shell struct {
 	exports     map[string]*export
 	toplevels   []*Toplevel
 	iconSerial  uint64
+	kdeDecor    map[*surface.Surface]struct{}
 }
 
 func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
-	sh := &Shell{display: d, loop: l, listener: listener, subRoles: map[*surface.Surface]string{}, pingTimeout: PingTimeout, exports: map[string]*export{}}
+	sh := &Shell{display: d, loop: l, listener: listener, subRoles: map[*surface.Surface]string{}, pingTimeout: PingTimeout, exports: map[string]*export{}, kdeDecor: map[*surface.Surface]struct{}{}}
 	if _, err := d.AddGlobal(sxdg.XdgWmBaseInterface, wmBaseVersion, sh.bind); err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func New(d *server.Display, l *loop.Loop, listener Listener) (*Shell, error) {
 		{sxdd.XdgWmDialogV1Interface, dialogVersion, sh.bindDialog},
 		{sxti.XdgToplevelIconManagerV1Interface, iconVersion, sh.bindIcons},
 		{sxtt.XdgToplevelTagManagerV1Interface, tagVersion, bindTags},
-		{skd.OrgKdeKwinServerDecorationManagerInterface, kdeDecorationVersion, bindKDEDecoration},
+		{skd.OrgKdeKwinServerDecorationManagerInterface, kdeDecorationVersion, sh.bindKDEDecoration},
 	} {
 		if _, err := d.AddGlobal(g.iface, g.version, g.bind); err != nil {
 			return nil, err

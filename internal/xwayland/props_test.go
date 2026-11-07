@@ -59,3 +59,22 @@ func TestParseSizeHints(t *testing.T) {
 		t.Fatal("a short WM_NORMAL_HINTS was accepted")
 	}
 }
+
+func TestMotifHintsTurnDecorationsOff(t *testing.T) {
+	for name, tc := range map[string]struct {
+		hints       []byte
+		undecorated bool
+	}{
+		"decorations off":         {words(motifDecorations, 0, 0, 0, 0), true},
+		"decorations on":          {words(motifDecorations, 0, 1, 0, 0), false},
+		"decorations not flagged": {words(0, 0, 0, 0, 0), false},
+	} {
+		p, err := parseProps(rawProps{atomMotifWMHints: tc.hints})
+		if err != nil || p.undecorated != tc.undecorated {
+			t.Errorf("%s: undecorated %t, %v", name, p.undecorated, err)
+		}
+	}
+	if _, err := parseProps(rawProps{atomMotifWMHints: words(motifDecorations, 0)}); err == nil {
+		t.Error("two words of _MOTIF_WM_HINTS were accepted")
+	}
+}

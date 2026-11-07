@@ -117,15 +117,16 @@ type State struct {
 }
 
 type props struct {
-	class     Class
-	title     string
-	hints     Hints
-	size      SizeHints
-	transient xproto.Window
-	types     []xproto.Atom
-	states    []xproto.Atom
-	protocols []xproto.Atom
-	pid       uint32
+	class       Class
+	title       string
+	hints       Hints
+	size        SizeHints
+	transient   xproto.Window
+	types       []xproto.Atom
+	states      []xproto.Atom
+	protocols   []xproto.Atom
+	pid         uint32
+	undecorated bool
 
 	syncCounter xsync.Counter
 }
@@ -252,6 +253,10 @@ func (w *Window) PrefersFloating() bool {
 
 func (w *Window) SizeHints() SizeHints {
 	return w.props.size
+}
+
+func (w *Window) Undecorated() bool {
+	return w.props.undecorated
 }
 
 func (w *Window) Modal() bool {
