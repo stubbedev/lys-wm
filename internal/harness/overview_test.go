@@ -217,6 +217,8 @@ func TestTheOverviewTakesInputAndGivesItBack(t *testing.T) {
 		t.Fatalf("a client heard the overview's input: %q", r.in.Log[r.seen:])
 	}
 	r.h.tap(keyEsc)
+	h.expectOverview(true)
+	r.h.tap(keyEsc)
 	h.expectOverview(false)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
 }
@@ -310,19 +312,19 @@ func TestTabWalksTheWindowsAndWraps(t *testing.T) {
 	focusedAfter(t, h, 2)
 }
 
-func TestNumberKeysShowAWorkspaceAndTheShownOneCloses(t *testing.T) {
+func TestAltNumberKeysShowAWorkspaceAndTheShownOneCloses(t *testing.T) {
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
-	h.tap(key3)
+	h.withAlt(key3)
 	h.expectOverview(true)
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		if got := c.Snapshot().Outputs[0].Workspace; got != 3 {
-			t.Errorf("3 shows workspace %d", got)
+			t.Errorf("Alt + 3 shows workspace %d", got)
 		}
 		return nil
 	})
-	h.tap(key3)
+	h.withAlt(key3)
 	h.expectOverview(false)
 }
 
@@ -372,11 +374,9 @@ func TestModifiedAndOtherKeysDoNothingInTheOverview(t *testing.T) {
 	h := Start(t, overviewMode)
 	c, red, blue := colouredPair(t, h)
 	h.dispatch("overview show")
-	h.tap(keyQ)
-	h.key(keyShift, true)
-	h.tap(keyDelete)
-	h.tap(key3)
-	h.key(keyShift, false)
+	h.key(keyCtrl, true)
+	h.tap(keyQ, keyDelete, key3)
+	h.key(keyCtrl, false)
 	if err := c.Display.Roundtrip(); err != nil {
 		t.Fatal(err)
 	}
@@ -2011,4 +2011,13 @@ func focusedIs(title string) func(*headless.Backend, *compositor.Compositor) boo
 		}
 		return false
 	}
+}
+
+const keyLeftAlt = 56
+
+func (h *Harness) withAlt(keys ...uint32) {
+	h.t.Helper()
+	h.key(keyLeftAlt, true)
+	h.tap(keys...)
+	h.key(keyLeftAlt, false)
 }

@@ -262,3 +262,45 @@ func BenchmarkPlanOverview30Windows(b *testing.B) {
 		PlanOverview(overviewScreen, 3, windows, nil)
 	}
 }
+
+func TestOverviewGroupsStackWithTheirWindowsUnderTheirLabels(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	const label = 28
+	for range 50 {
+		groups := make([][]image.Rectangle, 1+rng.IntN(4))
+		total := 0
+		for i := range groups {
+			groups[i] = randomWindows(rng, 1+rng.IntN(6))
+			total += len(groups[i])
+		}
+		plan := PlanOverviewGroups(overviewScreen, 3, groups, label, nil)
+		if len(plan.Groups) != len(groups) || len(plan.Windows) != total {
+			t.Fatalf("%d groups of %d windows planned %d bands and %d windows", len(groups), total, len(plan.Groups), len(plan.Windows))
+		}
+		at := 0
+		for i, band := range plan.Groups {
+			if i > 0 && band.Min.Y < plan.Groups[i-1].Max.Y {
+				t.Fatalf("band %d %v starts above the end of band %d %v", i, band, i-1, plan.Groups[i-1])
+			}
+			under := band
+			under.Min.Y += label
+			for _, r := range plan.Windows[at : at+len(groups[i])] {
+				if r.Empty() || !r.In(under) {
+					t.Fatalf("a window of group %d at %v is not in %v below its label", i, r, under)
+				}
+			}
+			at += len(groups[i])
+		}
+	}
+}
+
+func TestOneUnlabelledGroupIsThePlainOverview(t *testing.T) {
+	windows := randomWindows(rand.New(rand.NewPCG(5, 6)), 7)
+	plain := PlanOverview(overviewScreen, 2, windows, nil)
+	grouped := PlanOverviewGroups(overviewScreen, 2, [][]image.Rectangle{windows}, 0, nil)
+	for i := range windows {
+		if plain.Windows[i] != grouped.Windows[i] {
+			t.Fatalf("window %d: %v plain, %v grouped", i, plain.Windows[i], grouped.Windows[i])
+		}
+	}
+}

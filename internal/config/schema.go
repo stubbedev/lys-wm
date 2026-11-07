@@ -100,6 +100,8 @@ var bindFlags = annotation{enum: binds.FlagNames()}
 
 var actionAnn = annotation{format: actionFormat, actions: true}
 
+var overviewScopes = annotation{enum: wm.OverviewScopeNames()}
+
 type schemaAction struct {
 	Name    string `json:"name"`
 	Args    string `json:"args,omitempty"`
@@ -256,6 +258,7 @@ func annotations() map[string]annotation {
 		"gestures.hold[].action":           actionAnn,
 		"gestures.touch[].action":          actionAnn,
 		"gestures.edge_width":              atLeastAnn(1, compositor.DefaultEdgeWidth),
+		"gestures.swipe[].scope":           overviewScopes,
 	}
 	for k := range compositor.CornerCount {
 		out["hot_corners."+k.String()+".action"] = actionAnn

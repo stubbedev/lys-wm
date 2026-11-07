@@ -3,6 +3,7 @@ package wm
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,28 @@ var overviewModes = []string{OverviewToggle: "toggle", OverviewShow: "show", Ove
 
 func (m OverviewMode) String() string {
 	return enumName(overviewModes, m, "OverviewMode")
+}
+
+type OverviewScope uint8
+
+const (
+	OverviewWorkspace OverviewScope = iota
+	OverviewOutput
+	OverviewApp
+)
+
+var overviewScopes = []string{OverviewWorkspace: "workspace", OverviewOutput: "output", OverviewApp: "app"}
+
+func (s OverviewScope) String() string {
+	return enumName(overviewScopes, s, "OverviewScope")
+}
+
+func ParseOverviewScope(s string) (OverviewScope, bool) {
+	return parseEnum[OverviewScope](overviewScopes, s)
+}
+
+func OverviewScopeNames() []string {
+	return slices.Clone(overviewScopes)
 }
 
 func (CloseWindowAction) isEffect()         {}
@@ -181,7 +204,10 @@ type (
 		Factor float64
 	}
 
-	OverviewAction struct{ Mode OverviewMode }
+	OverviewAction struct {
+		Mode  OverviewMode
+		Scope OverviewScope
+	}
 )
 
 func optionalWindow(name string, id WindowID) string {
@@ -191,7 +217,12 @@ func optionalWindow(name string, id WindowID) string {
 	return name + " " + strconv.FormatUint(uint64(id), 10)
 }
 
-func (a OverviewAction) String() string { return "overview " + a.Mode.String() }
+func (a OverviewAction) String() string {
+	if a.Scope == OverviewWorkspace {
+		return "overview " + a.Mode.String()
+	}
+	return "overview " + a.Mode.String() + " " + a.Scope.String()
+}
 
 func (a OverviewAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
@@ -740,21 +771,9 @@ var Actions = []ActionSpec{
 		parse:   optionallyWindowed(func(id WindowID) Action { return RestoreAction{ID: id} }),
 	},
 	{
-		Name: "overview", Args: "[toggle|show|hide]",
-		Summary: "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle.",
-		parse: func(spec ActionSpec, args []string, _ string) (Action, error) {
-			if len(args) > 1 {
-				return nil, badArgs(spec, "takes toggle, show or hide, or nothing")
-			}
-			if len(args) == 0 {
-				return OverviewAction{Mode: OverviewToggle}, nil
-			}
-			mode, ok := parseEnum[OverviewMode](overviewModes, args[0])
-			if !ok {
-				return nil, badArgs(spec, "%q is not toggle, show or hide", args[0])
-			}
-			return OverviewAction{Mode: mode}, nil
-		},
+		Name: "overview", Args: "[toggle|show|hide] [workspace|output|app]",
+		Summary: "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle.",
+		parse:   parseOverview,
 	},
 	{
 		Name: "closewindow", Args: "<id>",
@@ -1125,4 +1144,29 @@ func Reference() string {
 		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", spec.Name, args, spec.Summary)
 	}
 	return b.String()
+}
+
+func parseOverview(spec ActionSpec, args []string, _ string) (Action, error) {
+	a := OverviewAction{Mode: OverviewToggle}
+	if len(args) > 2 {
+		return nil, badArgs(spec, "takes a mode (toggle, show or hide) and a scope (workspace, output or app), each optional")
+	}
+	rest := args
+	if len(rest) > 0 {
+		if mode, ok := parseEnum[OverviewMode](overviewModes, rest[0]); ok {
+			a.Mode, rest = mode, rest[1:]
+		}
+	}
+	switch len(rest) {
+	case 0:
+		return a, nil
+	case 1:
+		scope, ok := ParseOverviewScope(rest[0])
+		if !ok {
+			return nil, badArgs(spec, "%q is not toggle, show, hide, workspace, output or app", rest[0])
+		}
+		a.Scope = scope
+		return a, nil
+	}
+	return nil, badArgs(spec, "%q is not toggle, show or hide", args[0])
 }

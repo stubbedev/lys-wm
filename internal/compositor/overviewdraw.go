@@ -1,6 +1,7 @@
 package compositor
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"math"
@@ -26,6 +27,7 @@ const (
 	overviewGlassTint   = 0.55
 	overviewRimStrength = 0.12
 	overviewHoverInk    = 0.1
+	overviewMeasured    = 64
 )
 
 var overviewGlass wm.Look
@@ -59,6 +61,9 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 		v.leaving = nil
 	}
 	c.drawOverviewPane(pass, o, v, p, in)
+	if err := c.drawOverviewText(pass, o, v, p, in); err != nil {
+		return shown, err
+	}
 	shown = c.drawOverviewEntries(pass, o, v, p, shown)
 	c.drawOverviewStrip(pass, o, v, p, in)
 	c.drawClosing(pass, o, windowLevel)
@@ -134,7 +139,7 @@ func (c *Compositor) drawOverviewEntries(pass *frame, o *output.Output, v *overv
 
 func (c *Compositor) drawOverviewEntry(pass *frame, o *output.Output, e overviewEntry, p float64, v view, shown []*surface.Surface) []*surface.Surface {
 	w := e.w
-	alpha := w.fade.At(c.frameTime) * v.alpha
+	alpha := w.fade.At(c.frameTime) * v.alpha * e.item.fade.At(c.frameTime)
 	if !e.front {
 		alpha *= min(max(p, 0), 1)
 	}
@@ -190,11 +195,15 @@ func stripSlide(o *output.Output, r image.Rectangle, p float64) image.Rectangle 
 	return anim.LerpRect(r.Sub(image.Pt(0, r.Max.Y-o.Logical().Min.Y)), r, p)
 }
 
+func overviewPane(o *output.Output, v *overviewView, p float64) image.Rectangle {
+	return stripSlide(o, v.spaces[0].rect.Union(v.plus).Inset(-overviewTrayPad), p)
+}
+
 func (c *Compositor) drawOverviewPane(pass *frame, o *output.Output, v *overviewView, p float64, in float32) {
 	if in <= 0 || v.plus.Empty() || len(v.spaces) == 0 {
 		return
 	}
-	pane := stripSlide(o, v.spaces[0].rect.Union(v.plus).Inset(-overviewTrayPad), p)
+	pane := overviewPane(o, v, p)
 	c.drawOverviewGlass(pass, o, deviceRect(o, pane), deviceLength(o, overviewRadius+overviewTrayPad), in)
 }
 
@@ -430,11 +439,19 @@ func (c *Compositor) drawOverviewHover(pass *frame, o *output.Output, r image.Re
 }
 
 func (c *Compositor) overviewLabelWidth(text string, px int) int {
-	m := &c.measuredLabel
-	if m.text != text || m.px != px {
-		*m = measuredLabel{text: text, px: px, w: int(math.Ceil(c.font.Shape(text, float64(px)).Advance()))}
+	k := measureKey{text: text, px: px}
+	if w, ok := c.measuredLabel[k]; ok {
+		return w
 	}
-	return m.w
+	if len(c.measuredLabel) >= overviewMeasured {
+		clear(c.measuredLabel)
+	}
+	if c.measuredLabel == nil {
+		c.measuredLabel = make(map[measureKey]int, overviewMeasured)
+	}
+	w := int(math.Ceil(c.font.Shape(text, float64(px)).Advance()))
+	c.measuredLabel[k] = w
+	return w
 }
 
 func (c *Compositor) drawOverviewLabel(pass *frame, o *output.Output, text string, icon *shell.Icon, y int, under image.Rectangle, in float32) error {
@@ -459,4 +476,20 @@ func (c *Compositor) drawOverviewLabel(pass *frame, o *output.Output, text strin
 	size := tex.Size()
 	pass.ops = append(pass.ops, drawOp{tex: tex, src: render.FRect{W: float64(size.X), H: float64(size.Y)}, dst: dst, alpha: in, mask: render.Mask{Keep: render.RoundRect{Rect: dst, Radius: float32(h) / 2}}})
 	return nil
+}
+
+func (c *Compositor) drawOverviewText(pass *frame, o *output.Output, v *overviewView, p float64, in float32) error {
+	if in <= 0 {
+		return nil
+	}
+	var errs error
+	for _, g := range v.groups {
+		dev := deviceRect(o, g.rect)
+		errs = errors.Join(errs, c.drawOverviewLabel(pass, o, g.label, nil, dev.Min.Y, dev, in))
+	}
+	if q := c.overview.query; q != "" && len(v.spaces) > 0 {
+		dev := deviceRect(o, overviewPane(o, v, p))
+		errs = errors.Join(errs, c.drawOverviewLabel(pass, o, q, nil, dev.Max.Y-o.Scale().ToDevice(overviewLabelHeight+overviewTrayPad/2), dev, in))
+	}
+	return errs
 }

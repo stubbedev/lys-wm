@@ -391,7 +391,7 @@ type Compositor struct {
 	overview           *overview
 	overviewStyle      OverviewStyle
 	switcherStyle      SwitcherStyle
-	measuredLabel      measuredLabel
+	measuredLabel      map[measureKey]int
 	switcher           *switcher
 	switcherFrames     uint64
 	switcherRedraws    uint64

@@ -770,6 +770,7 @@ gestures:
 | `modifiers` | Keys to hold, as in a chord: `SUPER + CTRL`. A gesture with modifiers is taken only while exactly those are held, ahead of one without, which matches whatever is held. Optional |
 | `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
 | `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `overview`, swipes only, takes `up`, `down` or `vertical`; `view`, swipes only, takes `horizontal`; `move` and `resize`, swipes only, take `any`; `zoom`, pinches only, takes `both` |
+| `scope` | With `drive: overview`: the [scope](#overview) it opens, `workspace` (the default), `output` or `app`, so four fingers down can open `app` |
 | `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
 
 Two entries for the same finger count that could match the same movement are an
@@ -805,6 +806,7 @@ halfway, and a spring carries that velocity to rest: the `overview` curve when i
 a spring, otherwise the built-in `spring`. With animations off it jumps. Three fingers
 on an overview still settling grab it where it is. While it is open, a swipe bound
 to `workspaces` does nothing.
+The overview opens on the bind's `scope`; one already open keeps its own.
 
 `drive: view` scrolls the strip of a [scrolling workspace](#layout-and-scroll) under
 the pointer with the fingers, one `distance` for the width of its output, on
@@ -901,6 +903,18 @@ each keeps its shape and its place relative to the others, under a strip of live
 thumbnails of the output's workspaces and a `+` tile. `SUPER + Tab` opens it in the
 built-in config, and three fingers up scrub it open, [down closed](#gestures).
 
+It opens on one of three scopes, `overview [toggle|show|hide] [workspace|output|app]`:
+
+| Scope | Shows |
+| --- | --- |
+| `workspace` | The default: the windows of the workspace each output shows |
+| `output` | Every window of every workspace on each output in one grid, grouped by workspace, each group under a label with its workspace's name. A window dropped on another group moves to that workspace |
+| `app` | The windows sharing the focused window's `app_id`, on every workspace and output, all on the focused output; the rest of that output's workspace stays in place, dimmed underneath |
+
+An open overview given another scope changes to it; `toggle` with the scope it already shows closes it. A swipe with `drive: overview` takes a `scope` too (see [gestures](#gestures)).
+
+Typing filters it: printable keys build a query, matched case-insensitively against each window's title and `app_id` and shown on the strip's pane. Windows that do not match fade out where they are, and the rest lay out again on the `overview` curve. Thumbnails do not redraw for it. `BackSpace` edits the query, and `Escape` clears it before it closes the overview.
+
 | Key | Default |
 | --- | --- |
 | `blur` | `true` on a GPU, `false` on a [slower renderer](#the-default-look): the layers below the windows blur over the mica chain (`decoration.blur.mica`'s size and passes), which redraws only when they change. Independent of `decoration.blur.enabled` |
@@ -931,12 +945,14 @@ it closes. Binds with modifiers still run.
 | Click a window | Focuses it, or restores it from the minimized row, and closes |
 | Click a thumbnail | Shows that workspace and stays open; on the workspace already shown, closes |
 | Click `+` | Shows a new workspace, the lowest number free, and stays open |
-| Click anywhere else, `Escape` | Closes |
+| Click anywhere else, `Escape` | Closes; `Escape` first clears a filter query |
 | Drag a window onto a thumbnail, `+`, or another output | Moves it there with its dialogs; dropped anywhere else it springs back. Minimized windows do not drag |
-| Arrow keys, then `Return`, `Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Virtual keyboards work the same, through their own keymap |
+| Arrow keys, then `Return`, `Alt + Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Virtual keyboards work the same, through their own keymap |
+| `Down` with nothing below the ringed window, `Up` with no window above it | `Down` switches to the `app` scope for the ringed window's app; `Up` there goes back to the scope it came from |
+| Printable keys, `BackSpace` | Build and edit the filter query |
 | `Tab`, `Shift + Tab` | Move the ring to the next or previous window, wrapping |
-| `1` to `9`, `0` | Shows that workspace on the focused output and stays open; `0` is workspace 10, and the workspace already shown closes the overview |
-| `Delete`, `x` | Closes the ringed window and moves the ring to the next one |
+| `Alt + 1` to `Alt + 9`, `Alt + 0` | Shows that workspace on the focused output and stays open; `0` is workspace 10, and the workspace already shown closes the overview |
+| `Delete`, `Alt + x` | Closes the ringed window and moves the ring to the next one |
 | `Shift + Left`, `Shift + Right` | Move the ringed window and its dialogs to the workspace numbered one below or above, and stay open |
 | Touch | As the pointer, with the first finger |
 

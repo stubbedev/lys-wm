@@ -362,3 +362,7 @@ func (k Keymaps) Close() error {
 	}
 	return errors.Join(errs...)
 }
+
+func KeysymRune(keysym uint32) rune {
+	return lxkb.KeysymToUTF32(lxkb.Keysym(keysym))
+}

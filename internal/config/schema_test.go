@@ -46,6 +46,7 @@ var requires = map[string]map[string]any{
 	"rules[].on_activate":      {"rules[].app_id": "foot"},
 	"rules[].content":          {"rules[].app_id": "foot"},
 	"outputs[].vrr":            {"outputs[].match": "DP-1"},
+	"gestures.swipe[].scope":   {"gestures.swipe[].fingers": 4, "gestures.swipe[].direction": "down", "gestures.swipe[].drive": "overview"},
 	"outputs[].hdr":            {"outputs[].match": "DP-1"},
 	"outputs[].transform":      {"outputs[].match": "DP-1"},
 	"tabs.active.background":   {"tabs.active.text": "text"},

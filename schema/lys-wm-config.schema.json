@@ -178,8 +178,8 @@
               },
               {
                 "name": "overview",
-                "args": "[toggle|show|hide]",
-                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                "args": "[toggle|show|hide] [workspace|output|app]",
+                "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
               },
               {
                 "name": "closewindow",
@@ -942,8 +942,8 @@
                   },
                   {
                     "name": "overview",
-                    "args": "[toggle|show|hide]",
-                    "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    "args": "[toggle|show|hide] [workspace|output|app]",
+                    "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                   },
                   {
                     "name": "closewindow",
@@ -1163,6 +1163,9 @@
                 "type": "integer"
               },
               "modifiers": {
+                "type": "string"
+              },
+              "scope": {
                 "type": "string"
               }
             },
@@ -1249,8 +1252,8 @@
                   },
                   {
                     "name": "overview",
-                    "args": "[toggle|show|hide]",
-                    "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    "args": "[toggle|show|hide] [workspace|output|app]",
+                    "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                   },
                   {
                     "name": "closewindow",
@@ -1470,6 +1473,9 @@
                 "type": "integer"
               },
               "modifiers": {
+                "type": "string"
+              },
+              "scope": {
                 "type": "string"
               }
             },
@@ -1556,8 +1562,8 @@
                   },
                   {
                     "name": "overview",
-                    "args": "[toggle|show|hide]",
-                    "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    "args": "[toggle|show|hide] [workspace|output|app]",
+                    "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                   },
                   {
                     "name": "closewindow",
@@ -1778,6 +1784,14 @@
               },
               "modifiers": {
                 "type": "string"
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "workspace",
+                  "output",
+                  "app"
+                ]
               }
             },
             "additionalProperties": false
@@ -1863,8 +1877,8 @@
                   },
                   {
                     "name": "overview",
-                    "args": "[toggle|show|hide]",
-                    "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    "args": "[toggle|show|hide] [workspace|output|app]",
+                    "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                   },
                   {
                     "name": "closewindow",
@@ -2195,8 +2209,8 @@
                     },
                     {
                       "name": "overview",
-                      "args": "[toggle|show|hide]",
-                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                      "args": "[toggle|show|hide] [workspace|output|app]",
+                      "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                     },
                     {
                       "name": "closewindow",
@@ -2500,8 +2514,8 @@
                     },
                     {
                       "name": "overview",
-                      "args": "[toggle|show|hide]",
-                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                      "args": "[toggle|show|hide] [workspace|output|app]",
+                      "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                     },
                     {
                       "name": "closewindow",
@@ -2814,8 +2828,8 @@
                     },
                     {
                       "name": "overview",
-                      "args": "[toggle|show|hide]",
-                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                      "args": "[toggle|show|hide] [workspace|output|app]",
+                      "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                     },
                     {
                       "name": "closewindow",
@@ -3119,8 +3133,8 @@
                     },
                     {
                       "name": "overview",
-                      "args": "[toggle|show|hide]",
-                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                      "args": "[toggle|show|hide] [workspace|output|app]",
+                      "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                     },
                     {
                       "name": "closewindow",
@@ -3953,8 +3967,8 @@
                               },
                               {
                                 "name": "overview",
-                                "args": "[toggle|show|hide]",
-                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                                "args": "[toggle|show|hide] [workspace|output|app]",
+                                "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                               },
                               {
                                 "name": "closewindow",
@@ -4258,8 +4272,8 @@
                               },
                               {
                                 "name": "overview",
-                                "args": "[toggle|show|hide]",
-                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                                "args": "[toggle|show|hide] [workspace|output|app]",
+                                "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                               },
                               {
                                 "name": "closewindow",
@@ -4563,8 +4577,8 @@
                               },
                               {
                                 "name": "overview",
-                                "args": "[toggle|show|hide]",
-                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                                "args": "[toggle|show|hide] [workspace|output|app]",
+                                "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                               },
                               {
                                 "name": "closewindow",
@@ -4868,8 +4882,8 @@
                               },
                               {
                                 "name": "overview",
-                                "args": "[toggle|show|hide]",
-                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                                "args": "[toggle|show|hide] [workspace|output|app]",
+                                "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                               },
                               {
                                 "name": "closewindow",
@@ -5643,8 +5657,8 @@
                 },
                 {
                   "name": "overview",
-                  "args": "[toggle|show|hide]",
-                  "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                  "args": "[toggle|show|hide] [workspace|output|app]",
+                  "summary": "Open or close the overview on every output, under a strip of each output's workspaces: the windows of the workspace shown (workspace, the default), every window of the output grouped by workspace (output), or the focused window's app across every workspace and output, on the focused output (app). Without a mode, toggle."
                 },
                 {
                   "name": "closewindow",

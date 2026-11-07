@@ -69,6 +69,7 @@ type GestureBind struct {
 	Modifiers ModifierSet
 	Mods      uint32
 	Edge      Edge
+	Scope     wm.OverviewScope
 }
 
 func ResolveGestures(all []GestureBind, r Resolver) ([]GestureBind, error) {

@@ -612,6 +612,7 @@ type rawGesture struct {
 	Direction *At[string] `yaml:"direction"`
 	Action    *At[string] `yaml:"action"`
 	Drive     *At[string] `yaml:"drive"`
+	Scope     *At[string] `yaml:"scope"`
 }
 
 type rawMatch struct {
@@ -1633,6 +1634,17 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, a
 		}
 	}
 	p.gestureTarget(&b, r.Action, r.Drive, at.Line, key)
+	if r.Scope != nil {
+		scope, ok := wm.ParseOverviewScope(r.Scope.V)
+		switch {
+		case b.Drive != binds.DriveOverview:
+			p.fail(r.Scope.Line, key+".scope", "only drive: overview takes a scope")
+		case !ok:
+			p.fail(r.Scope.Line, key+".scope", "%q is not one of %s", r.Scope.V, strings.Join(wm.OverviewScopeNames(), ", "))
+		default:
+			b.Scope = scope
+		}
+	}
 	return b, len(p.errs) == failures
 }
 

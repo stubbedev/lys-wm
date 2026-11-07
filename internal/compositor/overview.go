@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
@@ -51,12 +52,15 @@ type overview struct {
 	region   [1]image.Rectangle
 	targets  []overviewTarget
 	rects    []image.Rectangle
+	scope    wm.OverviewScope
+	back     wm.OverviewScope
+	app      string
+	query    string
 }
 
-type measuredLabel struct {
+type measureKey struct {
 	text string
 	px   int
-	w    int
 }
 
 type overviewCarried struct {
@@ -73,6 +77,7 @@ type overviewView struct {
 	leaving   []overviewEntry
 	left      wm.WorkspaceID
 	spaces    []*overviewThumb
+	groups    []overviewGroup
 	filter    []render.TextureTarget
 	plus      image.Rectangle
 }
@@ -90,6 +95,11 @@ type overviewItem struct {
 	bounds    image.Rectangle
 	goal      image.Rectangle
 	slot      anim.RectMotion
+	fade      anim.Tween[float64]
+	group     wm.WorkspaceID
+	away      bool
+	out       bool
+	dimmed    bool
 }
 
 type thumbMember struct {
@@ -124,12 +134,41 @@ func (c *Compositor) overviewHolds() bool {
 	return c.overview != nil && c.overview.open
 }
 
-func (c *Compositor) overviewAction(mode wm.OverviewMode) error {
+func (c *Compositor) overviewAction(mode wm.OverviewMode, scope wm.OverviewScope) error {
 	switch {
-	case mode == wm.OverviewShow, mode == wm.OverviewToggle && !c.overviewHolds():
-		return c.openOverview()
+	case mode == wm.OverviewHide:
+		return c.closeOverview()
+	case !c.overviewHolds():
+		return c.openOverview(scope)
+	case mode == wm.OverviewShow || c.overview.scope != scope:
+		return c.setOverviewScope(scope, c.focusedApp())
 	}
 	return c.closeOverview()
+}
+
+func (c *Compositor) focusedApp() string {
+	id, ok := c.wm.Focused()
+	if !ok {
+		return ""
+	}
+	if w := c.windowByID(id); w != nil {
+		return w.top.AppID()
+	}
+	return ""
+}
+
+func (c *Compositor) setOverviewScope(scope wm.OverviewScope, app string) error {
+	ov := c.overview
+	if scope == wm.OverviewApp && ov.scope != wm.OverviewApp {
+		ov.back = ov.scope
+	}
+	ov.scope, ov.app = scope, app
+	return errors.Join(c.syncOverview(c.clock()), c.scheduleAll())
+}
+
+func (c *Compositor) setOverviewQuery(q string) error {
+	c.overview.query = q
+	return errors.Join(c.syncOverview(c.clock()), c.scheduleAll())
 }
 
 func (c *Compositor) takeOverviewInput() error {
@@ -155,12 +194,12 @@ func (c *Compositor) canOpenOverview() bool {
 	return !c.shell.Locked()
 }
 
-func (c *Compositor) openOverview() error {
+func (c *Compositor) openOverview(scope wm.OverviewScope) error {
 	if c.overviewHolds() || !c.canOpenOverview() {
 		return nil
 	}
 	now := c.clock()
-	c.ensureOverview()
+	c.ensureOverview(scope)
 	c.overview.progress.Set(1, now, c.animations.Curve(anim.Overview))
 	return c.enterOverview(now)
 }
@@ -193,9 +232,12 @@ func (c *Compositor) prepareFirstFrame() error {
 	return errors.Join(errs...)
 }
 
-func (c *Compositor) ensureOverview() {
+func (c *Compositor) ensureOverview(scope wm.OverviewScope) {
 	if c.overview == nil {
 		c.overview = &overview{progress: anim.NewProgress(0), views: map[*output.Output]*overviewView{}}
+	}
+	if ov := c.overview; !ov.open {
+		ov.scope, ov.back, ov.app, ov.query = scope, scope, c.focusedApp(), ""
 	}
 	if id, ok := c.wm.Focused(); ok && c.overview.selected == nil {
 		if w := c.windowByID(id); w != nil {
@@ -257,7 +299,7 @@ func (c *Compositor) driveOverview(b binds.GestureBind, at time.Duration) (drive
 	if b.Direction == binds.SwipeVertical {
 		d.sign = -1
 	}
-	c.ensureOverview()
+	c.ensureOverview(b.Scope)
 	d.ov = c.overview
 	d.ov.progress.Grab(now)
 	d.ov.progress.Track(d.ov.progress.At(now), at)
@@ -442,7 +484,8 @@ func (c *Compositor) syncOverview(now time.Duration) error {
 func (c *Compositor) overviewTargetLive(t overviewTarget) bool {
 	switch t := t.(type) {
 	case overviewWindow:
-		return c.live(t.w) && c.overviewItemOf(t.w) != nil
+		it := c.overviewItemOf(t.w)
+		return c.live(t.w) && it != nil && !it.out
 	case overviewSpace:
 		v := c.overview.views[t.t.o]
 		return v != nil && slices.Contains(v.spaces, t.t)
@@ -491,17 +534,18 @@ func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.D
 		}
 		v.workspace = active
 	}
-	placements := c.wm.WorkspacePlacements(active, c.spacing())
+	shown := onWorkspace(c.wm.WorkspacePlacements(active, c.spacing()), active)
+	places := c.overviewPlacements(ov, name, active, shown)
 	old := v.items
-	v.items = make([]*overviewItem, 0, len(placements))
-	v.order = v.order[:0]
-	var hidden, front []overviewEntry
-	for _, p := range placements {
+	v.items = make([]*overviewItem, 0, len(places))
+	entries := make([]overviewEntry, 0, len(places))
+	for _, p := range places {
 		w := c.windowByID(p.ID)
 		if w == nil {
 			continue
 		}
-		root := c.overviewRoot(w, active)
+		root := c.overviewRoot(w, p.Workspace)
+		matches := c.overviewMatches(ov, w)
 		it := findItem(v.items, root, p.Minimized)
 		if it == nil {
 			if it = findItem(old, root, p.Minimized); it == nil {
@@ -510,43 +554,179 @@ func (c *Compositor) syncOverviewView(ov *overview, o *output.Output, now time.D
 				}
 			}
 			if it == nil {
-				it = &overviewItem{root: root, minimized: p.Minimized}
+				it = &overviewItem{root: root, minimized: p.Minimized, fade: anim.NewTween(1.0, anim.Lerp)}
 			}
 			it.members, it.bounds = it.members[:0], p.Rect
+			it.group, it.away, it.out = p.Workspace, p.Workspace != active, !matches
+			it.dimmed = ov.scope == wm.OverviewApp && !it.away && !c.overviewOfApp(ov, w)
 			v.items = append(v.items, it)
 		}
 		it.members = append(it.members, w)
 		it.bounds = it.bounds.Union(p.Rect)
-		e := overviewEntry{w: w, item: it, front: p.Visible}
-		if p.Visible {
-			front = append(front, e)
-		} else {
-			hidden = append(hidden, e)
+		it.out = it.out && !matches
+		entries = append(entries, overviewEntry{w: w, item: it, front: p.Visible && !it.away})
+	}
+	v.order = v.order[:0]
+	for _, layer := range [...]func(e overviewEntry) bool{
+		func(e overviewEntry) bool { return e.item.out },
+		func(e overviewEntry) bool { return !e.item.out && !e.front },
+		func(e overviewEntry) bool { return !e.item.out && e.front },
+	} {
+		for _, e := range entries {
+			if layer(e) {
+				v.order = append(v.order, e)
+			}
 		}
 	}
-	v.order = append(append(v.order, hidden...), front...)
 	spaces := workspacesOn(c.wm, name, len(v.spaces)+1)
-	windows, minimized := make([]image.Rectangle, 0, len(v.items)), []image.Rectangle(nil)
-	for _, it := range v.items {
-		if it.minimized {
-			minimized = append(minimized, it.bounds)
-		} else {
-			windows = append(windows, it.bounds)
-		}
+	plan, groups := c.planOverviewView(ov, o, v, spaces)
+	at := make([]int, len(groups))
+	offsets := make([]int, len(groups))
+	for i := 1; i < len(groups); i++ {
+		offsets[i] = offsets[i-1] + groups[i-1].size
 	}
-	plan := wm.PlanOverview(o.Logical(), len(spaces), windows, minimized)
-	nw, nm := 0, 0
+	nm := 0
 	for _, it := range v.items {
-		var goal image.Rectangle
-		if it.minimized {
+		goal, alpha := it.goal, 1.0
+		switch {
+		case it.out && it.dimmed:
+			goal, alpha = it.bounds, overviewDimmed
+		case it.out:
+			alpha = 0
+			if goal.Empty() {
+				goal = it.bounds
+			}
+		case it.minimized:
 			goal, nm = plan.Minimized[nm], nm+1
-		} else {
-			goal, nw = plan.Windows[nw], nw+1
+		default:
+			g := groupIndex(groups, ov.scope, it.group)
+			goal = plan.Windows[offsets[g]+at[g]]
+			at[g]++
 		}
 		c.moveOverviewItem(ov, it, goal, now)
+		if it.fade.Target() != alpha {
+			it.fade.Set(alpha, now, c.animations.Curve(anim.Overview))
+		}
+	}
+	v.groups = v.groups[:0]
+	if ov.scope == wm.OverviewOutput {
+		for i, g := range groups {
+			v.groups = append(v.groups, overviewGroup{id: g.id, rect: plan.Groups[i], label: workspaceLabel(g.id)})
+		}
 	}
 	v.plus = plan.Plus
-	return c.syncThumbs(v, o, spaces, plan.Strip, placements)
+	return c.syncThumbs(v, o, spaces, plan.Strip, shown)
+}
+
+const overviewDimmed = 0.3
+
+type overviewGroup struct {
+	id    wm.WorkspaceID
+	rect  image.Rectangle
+	label string
+}
+
+type groupPlan struct {
+	id    wm.WorkspaceID
+	size  int
+	rects []image.Rectangle
+}
+
+func workspaceLabel(id wm.WorkspaceID) string {
+	return "Workspace " + strconv.Itoa(int(id))
+}
+
+func groupIndex(groups []groupPlan, scope wm.OverviewScope, id wm.WorkspaceID) int {
+	if scope != wm.OverviewOutput {
+		return 0
+	}
+	return slices.IndexFunc(groups, func(g groupPlan) bool { return g.id == id })
+}
+
+func (c *Compositor) planOverviewView(ov *overview, o *output.Output, v *overviewView, spaces []wm.WorkspaceID) (wm.OverviewPlan, []groupPlan) {
+	var groups []groupPlan
+	var minimized []image.Rectangle
+	if ov.scope != wm.OverviewOutput {
+		groups = []groupPlan{{}}
+	} else {
+		for _, it := range v.items {
+			if !it.out && !it.minimized && groupIndex(groups, ov.scope, it.group) < 0 {
+				groups = append(groups, groupPlan{id: it.group})
+			}
+		}
+		slices.SortStableFunc(groups, func(a, b groupPlan) int { return spaceOrder(spaces, a.id) - spaceOrder(spaces, b.id) })
+	}
+	for _, it := range v.items {
+		switch {
+		case it.out:
+		case it.minimized:
+			minimized = append(minimized, it.bounds)
+		default:
+			g := &groups[groupIndex(groups, ov.scope, it.group)]
+			g.rects, g.size = append(g.rects, it.bounds), g.size+1
+		}
+	}
+	rects := make([][]image.Rectangle, len(groups))
+	for i, g := range groups {
+		rects[i] = g.rects
+	}
+	label := 0
+	if ov.scope == wm.OverviewOutput {
+		label = overviewLabelHeight + overviewLabelGap
+	}
+	return wm.PlanOverviewGroups(o.Logical(), len(spaces), rects, label, minimized), groups
+}
+
+func (c *Compositor) overviewPlacements(ov *overview, name string, active wm.WorkspaceID, shown []wm.Placement) []wm.Placement {
+	switch ov.scope {
+	case wm.OverviewOutput:
+		var places []wm.Placement
+		for _, id := range workspacesOn(c.wm, name, 0) {
+			if id == active {
+				places = append(places, shown...)
+				continue
+			}
+			places = append(places, onWorkspace(c.wm.WorkspacePlacements(id, c.spacing()), id)...)
+		}
+		return places
+	case wm.OverviewApp:
+		if name != c.wm.FocusedOutput() {
+			return nil
+		}
+		places := slices.Clone(shown)
+		for _, ws := range c.wm.Workspaces() {
+			if ws.ID < 1 || ws.ID == active {
+				continue
+			}
+			for _, p := range onWorkspace(c.wm.WorkspacePlacements(ws.ID, c.spacing()), ws.ID) {
+				if w := c.windowByID(p.ID); w != nil && c.overviewOfApp(ov, w) {
+					places = append(places, p)
+				}
+			}
+		}
+		return places
+	}
+	return shown
+}
+
+func (c *Compositor) overviewOfApp(ov *overview, w *window) bool {
+	return ov.app != "" && w.top.AppID() == ov.app
+}
+
+func (c *Compositor) overviewMatches(ov *overview, w *window) bool {
+	if ov.scope == wm.OverviewApp && !c.overviewOfApp(ov, w) {
+		return false
+	}
+	return ov.query == "" || containsFold(w.top.Title(), ov.query) || containsFold(w.top.AppID(), ov.query)
+}
+
+func containsFold(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if strings.EqualFold(s[i:i+len(sub)], sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func workspacesOn(s wm.State, name string, room int) []wm.WorkspaceID {
@@ -588,7 +768,7 @@ func (c *Compositor) syncThumbs(v *overviewView, o *output.Output, spaces []wm.W
 			t = old[at]
 			old = slices.Delete(slices.Clone(old), at, at+1)
 		} else {
-			t = &overviewThumb{o: o, id: id, label: "Workspace " + strconv.Itoa(int(id)), dirty: true}
+			t = &overviewThumb{o: o, id: id, label: workspaceLabel(id), dirty: true}
 		}
 		t.rect = strip[i]
 		var members []thumbMember
@@ -671,7 +851,7 @@ func (c *Compositor) overviewAnimating(o *output.Output, now time.Duration) bool
 	if !ok {
 		return false
 	}
-	return slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) }) ||
+	return slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) || !it.fade.Done(now) }) ||
 		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty })
 }
 
@@ -692,7 +872,10 @@ func (it *overviewItem) home(now time.Duration) image.Rectangle {
 
 func (it *overviewItem) frame(o *output.Output, p float64, now time.Duration) image.Rectangle {
 	slot := it.slot.At(now)
-	if it.minimized {
+	switch {
+	case it.away:
+		return slot
+	case it.minimized:
 		return anim.LerpRect(slot.Add(image.Pt(0, o.Logical().Max.Y-slot.Min.Y)), slot, p)
 	}
 	return anim.LerpRect(it.home(now), slot, p)
@@ -700,7 +883,7 @@ func (it *overviewItem) frame(o *output.Output, p float64, now time.Duration) im
 
 func (e overviewEntry) rect(o *output.Output, p float64, now time.Duration) image.Rectangle {
 	f := e.item.frame(o, p, now)
-	if e.item.minimized {
+	if e.item.minimized || e.item.away {
 		return placedIn(e.w.tile, e.item.bounds, f)
 	}
 	return placedIn(e.w.motion.At(now), e.item.home(now), f)
@@ -739,6 +922,23 @@ func (c *Compositor) overviewKeyboardTarget() *surface.Surface {
 
 func (c *Compositor) OverviewThumbRedraws() uint64 {
 	return c.tallied.thumbs
+}
+
+func (c *Compositor) OverviewListed(o *output.Output) []wm.WindowID {
+	if c.overview == nil {
+		return nil
+	}
+	v, ok := c.overview.views[o]
+	if !ok {
+		return nil
+	}
+	var out []wm.WindowID
+	for _, it := range v.items {
+		if !it.out {
+			out = append(out, it.root.id)
+		}
+	}
+	return out
 }
 
 func (c *Compositor) OverviewSlots(o *output.Output) []image.Rectangle {
@@ -835,4 +1035,18 @@ func (c *Compositor) OverviewThumbsStale() bool {
 		}
 	}
 	return false
+}
+
+func spaceOrder(spaces []wm.WorkspaceID, id wm.WorkspaceID) int {
+	if i := slices.Index(spaces, id); i >= 0 {
+		return i
+	}
+	return len(spaces)
+}
+
+func onWorkspace(places []wm.Placement, id wm.WorkspaceID) []wm.Placement {
+	for i := range places {
+		places[i].Workspace = id
+	}
+	return places
 }

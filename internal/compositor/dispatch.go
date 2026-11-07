@@ -71,7 +71,7 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 	case wm.SwitcherAction:
 		return c.switcherAction(e)
 	case wm.OverviewAction:
-		return c.overviewAction(e.Mode)
+		return c.overviewAction(e.Mode, e.Scope)
 	case wm.ExecAction:
 		return c.spawn(e.Command, c.shownTarget())
 	case wm.SetPropAction:

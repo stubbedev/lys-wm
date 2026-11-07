@@ -10,6 +10,7 @@ type OverviewPlan struct {
 	Plus      image.Rectangle
 	Windows   []image.Rectangle
 	Minimized []image.Rectangle
+	Groups    []image.Rectangle
 }
 
 const (
@@ -20,6 +21,10 @@ const (
 )
 
 func PlanOverview(full image.Rectangle, spaces int, windows, minimized []image.Rectangle) OverviewPlan {
+	return PlanOverviewGroups(full, spaces, [][]image.Rectangle{windows}, 0, minimized)
+}
+
+func PlanOverviewGroups(full image.Rectangle, spaces int, groups [][]image.Rectangle, label int, minimized []image.Rectangle) OverviewPlan {
 	margin := max(full.Dy()/overviewMarginShare, overviewMinMargin)
 	inner := full.Inset(margin)
 	stripHeight := min(full.Dy()/overviewStripShare, inner.Dy())
@@ -32,8 +37,44 @@ func PlanOverview(full image.Rectangle, spaces int, windows, minimized []image.R
 		plan.Minimized = packRows(row, minimized, margin, 1)
 		area.Max.Y = row.Min.Y - margin
 	}
-	plan.Windows = packWindows(area, windows, margin)
+	plan.Groups = bands(area, groups, margin)
+	for i, g := range groups {
+		band := plan.Groups[i]
+		band.Min.Y = min(band.Min.Y+label, band.Max.Y)
+		plan.Windows = append(plan.Windows, packWindows(band, g, margin)...)
+	}
 	return plan
+}
+
+func bands(area image.Rectangle, groups [][]image.Rectangle, gap int) []image.Rectangle {
+	out := make([]image.Rectangle, len(groups))
+	if len(groups) == 0 {
+		return out
+	}
+	weights, sum := make([]int, len(groups)), 0
+	for i, g := range groups {
+		weights[i] = rowsFor(len(g))
+		sum += weights[i]
+	}
+	total := max(area.Dy()-gap*(len(groups)-1), 0)
+	y := area.Min.Y
+	for i, w := range weights {
+		h := total * w / sum
+		if i == len(groups)-1 {
+			h = area.Max.Y - y
+		}
+		out[i] = image.Rect(area.Min.X, y, area.Max.X, y+max(h, 0))
+		y += h + gap
+	}
+	return out
+}
+
+func rowsFor(n int) int {
+	rows := 1
+	for rows*rows < n {
+		rows++
+	}
+	return rows
 }
 
 func planStrip(row image.Rectangle, spaces int, screen image.Point, gap int) ([]image.Rectangle, image.Rectangle) {

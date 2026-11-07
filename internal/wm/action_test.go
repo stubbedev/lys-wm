@@ -21,6 +21,8 @@ var everyAction = []Action{
 	OverviewAction{Mode: OverviewToggle},
 	OverviewAction{Mode: OverviewShow},
 	OverviewAction{Mode: OverviewHide},
+	OverviewAction{Mode: OverviewShow, Scope: OverviewApp},
+	OverviewAction{Mode: OverviewToggle, Scope: OverviewOutput},
 	FocusAction{Dir: Left},
 	FocusAction{Dir: Down},
 	MoveAction{Dir: Right},

@@ -595,6 +595,21 @@ func TestAPinchDrivesZoomWithItsModifiers(t *testing.T) {
 	}
 }
 
+func TestAnOverviewSwipeTakesAScope(t *testing.T) {
+	g := gestureConfig(t, "gestures:\n  swipe:\n    - {fingers: 4, direction: down, drive: overview, scope: app}\n")
+	if len(g.Binds) != 1 || g.Binds[0].Scope != wm.OverviewApp {
+		t.Fatalf("binds %+v", g.Binds)
+	}
+	for text, want := range map[string]string{
+		"gestures:\n  swipe:\n    - {fingers: 4, direction: down, drive: overview, scope: window}\n":      "gestures.swipe[0].scope",
+		"gestures:\n  swipe:\n    - {fingers: 4, direction: horizontal, drive: workspaces, scope: app}\n": "only drive: overview takes a scope",
+	} {
+		if _, err := Parse("gestures.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", text, err, want)
+		}
+	}
+}
+
 func TestAnEmptySwipeListTurnsTheDefaultOff(t *testing.T) {
 	if g := gestureConfig(t, "gestures:\n  swipe: []\n"); len(g.Binds) != 0 {
 		t.Fatalf("binds %+v", g.Binds)
