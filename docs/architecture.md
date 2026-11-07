@@ -863,6 +863,7 @@ for that desktop:
 | Interface | Backends, in order |
 | --- | --- |
 | ScreenCast, Screenshot | lys-shell, then xdg-desktop-portal-wlr |
+| InputCapture | lys-shell's `lys-shell-lys-wm.portal`, over the `capture` IPC ([`docs/ipc.md`](ipc.md#input-capture)) |
 | everything else | lys-shell, then xdg-desktop-portal-gtk |
 
 lys-shell's portal is the shell the session runs anyway. It implements every
@@ -872,7 +873,9 @@ ext-foreign-toplevel identifier and outputs by connector name, and drives
 RemoteDesktop through the virtual keyboard and pointer protocols (#52).
 xdg-desktop-portal-wlr speaks wlr-screencopy, so screen sharing still works
 without lys-shell. GlobalShortcuts needs `hyprland-global-shortcuts-v1` in the
-compositor (#89).
+compositor (#89). InputCapture needs lys-wm's `capture` IPC, so lys-shell declares it in
+`lys-shell-lys-wm.portal`, a second portal file that only this config routes
+to: on any other desktop the frontend never exports it.
 
 lys-wm reads one setting back from the portal: `org.freedesktop.appearance
 accent-color`, the `accent` palette colour the focus border and active tab

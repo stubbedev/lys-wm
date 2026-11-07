@@ -86,10 +86,7 @@ func TestPackagesRecommendEveryPortalBackendTheConfigNames(t *testing.T) {
 		t.Fatal("lys-wm-portals.conf names no backends")
 	}
 	for backend := range seen {
-		pkg := "xdg-desktop-portal-" + backend
-		if backend == "lys-shell" {
-			pkg = backend
-		}
+		pkg := portalPackage(backend)
 		assertRecommended(t, pkg)
 	}
 }
@@ -112,4 +109,11 @@ func TestPackagesRecommendWhatTheBuiltInBindsRun(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("the built-in config runs nothing")
 	}
+}
+
+func portalPackage(backend string) string {
+	if backend == "lys-shell" || strings.HasPrefix(backend, "lys-shell-") {
+		return "lys-shell"
+	}
+	return "xdg-desktop-portal-" + backend
 }
