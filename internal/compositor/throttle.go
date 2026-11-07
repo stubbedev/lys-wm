@@ -111,7 +111,7 @@ func (c *Compositor) hiddenFrame() error {
 	for s := range c.hidden.waiting {
 		delete(c.hidden.waiting, s)
 		if !c.drawnAnywhere(s) {
-			errs = errors.Join(errs, s.FrameDone(ms))
+			errs = errors.Join(errs, s.FrameDoneUndrawn(ms))
 		}
 	}
 	return errors.Join(errs, c.fifo.Expired())

@@ -452,6 +452,7 @@ func TestFrameCallbacksWaitForTheCompositor(t *testing.T) {
 		t.Fatal("frame callback fired before the compositor drew a frame")
 	}
 	e.on(func() {
+		find(t, e.rec.commits, s).s.Latch()
 		if err := find(t, e.rec.commits, s).s.FrameDone(1234); err != nil {
 			t.Error(err)
 		}
@@ -462,6 +463,66 @@ func TestFrameCallbacksWaitForTheCompositor(t *testing.T) {
 	}
 	if r, ok := e.client.Get(cb.Base().ID()); ok && r != nil {
 		t.Fatal("the callback id was not deleted after done")
+	}
+}
+
+func TestAFrameCallbackCommittedAfterAFrameWasDrawnWaitsForTheNext(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	drawn, later := &frameDone{}, &frameDone{}
+	_, err := s.Frame(drawn)
+	must(t, err, s.Commit())
+	e.roundtrip()
+	surface := find(t, e.rec.commits, s).s
+	e.on(surface.Latch)
+	_, err = s.Frame(later)
+	must(t, err, s.Commit())
+	e.roundtrip()
+	done := func(ms uint32) {
+		e.on(func() {
+			if err := surface.FrameDone(ms); err != nil {
+				t.Error(err)
+			}
+		})
+		e.roundtrip()
+	}
+	done(1)
+	if !slices.Equal(drawn.done, []uint32{1}) || len(later.done) != 0 {
+		t.Fatalf("after the first frame: drawn %v, later %v; want only the drawn commit's callback", drawn.done, later.done)
+	}
+	e.on(surface.Latch)
+	done(2)
+	if !slices.Equal(later.done, []uint32{2}) {
+		t.Fatalf("after the second frame: later %v, want [2]", later.done)
+	}
+}
+
+func TestAnUndrawnSurfaceGetsEveryFrameCallback(t *testing.T) {
+	e := setup(t, 6)
+	s := e.surface()
+	drawn, later := &frameDone{}, &frameDone{}
+	_, err := s.Frame(drawn)
+	must(t, err, s.Commit())
+	e.roundtrip()
+	surface := find(t, e.rec.commits, s).s
+	e.on(surface.Latch)
+	_, err = s.Frame(later)
+	must(t, err, s.Commit())
+	e.roundtrip()
+	e.on(func() {
+		if !surface.WantsFrame() {
+			t.Error("a surface with callbacks waiting does not want a frame")
+		}
+		if err := surface.FrameDoneUndrawn(3); err != nil {
+			t.Error(err)
+		}
+		if surface.WantsFrame() {
+			t.Error("a surface whose callbacks all fired still wants a frame")
+		}
+	})
+	e.roundtrip()
+	if !slices.Equal(drawn.done, []uint32{3}) || !slices.Equal(later.done, []uint32{3}) {
+		t.Fatalf("drawn %v, later %v, want both [3]", drawn.done, later.done)
 	}
 }
 

@@ -206,7 +206,7 @@ func (m *member) unthrottle() error {
 	if m.unshown == nil {
 		return nil
 	}
-	return m.surface.FrameDone(wire.Millis(backend.Now()))
+	return m.surface.FrameDoneUndrawn(wire.Millis(backend.Now()))
 }
 
 func (c *Compositor) landIfComplete() error {

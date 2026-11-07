@@ -215,7 +215,8 @@ type Surface struct {
 	cache            *Update
 	queue            []*Update
 	current          state
-	latched          []*spt.WpPresentationFeedback
+	latchedFeedbacks []*spt.WpPresentationFeedback
+	latchedFrames    []*sw.WlCallback
 	spare            []*Update
 	damage           region.Set
 	bufferDamage     region.Set
@@ -562,12 +563,20 @@ func (s *Surface) SetPreferredScale(scale120 uint32) error {
 }
 
 func (s *Surface) WantsFrame() bool {
-	return len(s.current.frames) > 0
+	return len(s.latchedFrames) > 0 || len(s.current.frames) > 0
 }
 
 func (s *Surface) FrameDone(msec uint32) error {
-	frames := s.current.frames
-	s.current.frames = frames[:0]
+	return sendDone(&s.latchedFrames, msec)
+}
+
+func (s *Surface) FrameDoneUndrawn(msec uint32) error {
+	return errors.Join(sendDone(&s.latchedFrames, msec), sendDone(&s.current.frames, msec))
+}
+
+func sendDone(callbacks *[]*sw.WlCallback, msec uint32) error {
+	frames := *callbacks
+	*callbacks = frames[:0]
 	defer clear(frames)
 	for _, cb := range frames {
 		if err := cb.SendDone(msec); err != nil {
@@ -776,8 +785,12 @@ func (s *Surface) destroy() error {
 		st.frames, st.feedbacks = nil, nil
 	}
 	s.cache, s.queue = nil, nil
-	feedbacks = append(feedbacks, s.latched...)
-	s.latched = nil
+	for _, cb := range s.latchedFrames {
+		errs = append(errs, s.client.Remove(cb.Base().ID()))
+	}
+	s.latchedFrames = nil
+	feedbacks = append(feedbacks, s.latchedFeedbacks...)
+	s.latchedFeedbacks = nil
 	errs = append(errs, discard(feedbacks))
 	if s.sub != nil {
 		s.sub.detach()
