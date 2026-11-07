@@ -42,6 +42,9 @@
           card = "card1";
           outputs = ["Virtual-1"];
         };
+        extraTest = _: ''
+          machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'Virtual-2 in .* scans out no linear buffer of the primary GPU, so its frames take a CPU copy'")
+        '';
       };
       vm-configured-gpu = vm {
         name = "lys-wm-configured-gpu";
