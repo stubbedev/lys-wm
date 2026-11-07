@@ -175,9 +175,9 @@ def answer(label, ran, done, confirm):
         machine.sleep(1)
 
 
-def capture(name, source, cursor, label):
+def capture(name, source, cursor, label, shows=""):
     ran = choose(label)
-    machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}"))
+    machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}{' --shows ' + shows if shows else ''}"))
     try:
         answer(label, ran, lambda: machine.execute(f"test -s /tmp/{name}.status")[0] == 0, None)
         machine.wait_until_succeeds(f"test -s /tmp/{name}.status", timeout=300)
@@ -191,6 +191,38 @@ def capture(name, source, cursor, label):
 
 def check_cursor(hidden, embedded, rect, px, py):
     print(machine.succeed(as_alice(f"{params['screencast']} cursor /tmp/{hidden} /tmp/{embedded} {rect['x']} {rect['y']} {rect['width']} {rect['height']} {px} {py}")))
+
+
+VIRTUAL_MODE = {"width": 1024, "height": 768, "refresh_mhz": 30000}
+VIRTUAL_PIXELS = f"{VIRTUAL_MODE['width']}x{VIRTUAL_MODE['height']}"
+
+
+def outputs():
+    return {o["name"]: o for o in json.loads(machine.succeed(as_alice("lys-wmctl outputs")))}
+
+
+def window_output(window_id):
+    return next(w["output"] for w in windows() if w["id"] == window_id)
+
+
+def capture_virtual(window_id):
+    name = json.loads(machine.succeed(as_alice(f"lys-wmctl output create {VIRTUAL_PIXELS}@30")))["name"]
+    listed = outputs()
+    assert name in listed and listed[name]["mode"] == VIRTUAL_MODE, f"lys-wm lists {listed} after making {name}"
+    real = listed[OUTPUT]["rect"]
+    info = machine.succeed(as_alice(f"WAYLAND_DISPLAY={display} wayland-info"))
+    for want in [f"name: {name}", f"logical_x: {real['x'] + real['width']}, logical_y: 0", f"logical_width: {VIRTUAL_MODE['width']}, logical_height: {VIRTUAL_MODE['height']}"]:
+        assert want in info, f"wayland-info does not show {want!r} for {name}:\n{info}"
+    machine.succeed(as_alice(f"lys-wmctl dispatch focuswindow {window_id}"))
+    machine.succeed(as_alice(f"lys-wmctl dispatch movetoworkspace {listed[name]['workspace']}"))
+    machine.wait_until_succeeds(as_alice("lys-wmctl windows") + f" | jq -e 'any(.[]; .id == {window_id} and .output == \"{name}\")'", timeout=30)
+    capture("virtual", "monitor", "hidden", f"Monitor: {name}", shows="anything")
+    log = machine.succeed("cat /tmp/virtual.log")
+    assert f", {VIRTUAL_PIXELS}," in log, f"the stream of {name} is not {VIRTUAL_PIXELS}: {log}"
+    print(machine.execute("journalctl -b --no-pager -t xdg-desktop-portal-wlr | grep -i -m5 dmabuf")[1])
+    machine.succeed(as_alice(f"lys-wmctl output remove {name}"))
+    assert list(outputs()) == [OUTPUT], f"outputs after removing {name}: {list(outputs())}"
+    assert window_output(window_id) == OUTPUT, f"the window stayed on {window_output(window_id)} after {name} went"
 
 
 CAST_SOURCE_CLASS = re.compile(r"^(Video/Source|Stream/Output/Video)$")
@@ -313,6 +345,9 @@ check_cursor("monitor-hidden", "monitor-embedded", around, *POINTER_REST)
 capture("window-hidden", "window", "hidden", WINDOW)
 capture("window-embedded", "window", "embedded", WINDOW)
 check_cursor("window-hidden", "window-embedded", {**around, "x": around["x"] - rect["x"], "y": around["y"] - rect["y"]}, POINTER_REST[0] - rect["x"], POINTER_REST[1] - rect["y"])
+
+if params["portal"] == "wlr":
+    capture_virtual(animation["id"])
 
 machine.succeed(as_alice(f"mkdir -p /tmp/firefox && cp {params['firefox_prefs']} /tmp/firefox/user.js"))
 for app, confirms in [("firefox", False), ("chromium", True), ("electron", False)]:

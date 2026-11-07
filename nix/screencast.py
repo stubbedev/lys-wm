@@ -124,9 +124,10 @@ def capture(args):
         sys.exit(f"screencast: the desktop went from {settling:.3f} to {background:.3f} of the frames after {FRAMES_WHILE_THE_PICKER_CLOSES} discarded: the picker is still closing")
     if distinct < 2:
         sys.exit("screencast: the stream shows no live content")
-    if args.source == "monitor" and not 0.1 <= background < 1:
+    shows = args.shows or {"monitor": "desktop", "window": "window"}[args.source]
+    if shows == "desktop" and not 0.1 <= background < 1:
         sys.exit("screencast: the last frame does not show the desktop and its windows")
-    if args.source == "window" and background > 0.01:
+    if shows == "window" and background > 0.01:
         sys.exit("screencast: the last frame shows the desktop, not just the window")
 
 
@@ -182,6 +183,7 @@ def main():
     cap.add_argument("cursor", choices=CURSOR_MODES)
     cap.add_argument("frames", type=int)
     cap.add_argument("path")
+    cap.add_argument("--shows", choices=["desktop", "window", "anything"])
     cap.set_defaults(run=capture)
     cur = commands.add_parser("cursor")
     cur.add_argument("hidden")

@@ -103,7 +103,7 @@ in
       imports = [chosen.machineConfig];
       services.pipewire.enable = true;
       virtualisation.memorySize = pkgs.lib.mkForce 4096;
-      environment.systemPackages = [python frames];
+      environment.systemPackages = [python frames pkgs.wayland-utils];
     };
     extraTest = run: let
       params = builtins.toJSON {
