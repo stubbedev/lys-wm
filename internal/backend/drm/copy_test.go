@@ -3,6 +3,7 @@ package drm
 import (
 	"errors"
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -100,5 +101,71 @@ func TestADisplayOnlyCardRefusedOnceForTheModeTakesTheLinearBufferAgainOnTheNext
 	}
 	if o.layout.route != primaryBuffer || len(r.reports) != 1 {
 		t.Fatalf("route %d, reports %v", o.layout.route, r.reports)
+	}
+}
+
+func TestDamagedRowsMergeIntoTheSpansACopyMoves(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		stale  []rows
+		damage render.Region
+		want   []rows
+	}{
+		{"no damage is the whole frame", []rows{{2, 3}}, nil, []rows{{0, 10}}},
+		{"apart", nil, render.Region{image.Rect(0, 6, 4, 8), image.Rect(0, 1, 4, 2)}, []rows{{1, 2}, {6, 8}}},
+		{"overlapping and touching merge", []rows{{1, 3}}, render.Region{image.Rect(0, 2, 1, 5), image.Rect(3, 5, 4, 6)}, []rows{{1, 6}}},
+		{"clipped to the frame", nil, render.Region{image.Rect(0, -3, 4, 2), image.Rect(0, 9, 4, 20), image.Rect(0, 12, 4, 14)}, []rows{{0, 2}, {9, 10}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := addRows(c.stale, c.damage, 10); !slices.Equal(got, c.want) {
+				t.Fatalf("rows %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestAnOffLoopCopyMovesOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *testing.T) {
+	primary := &asyncPrimary{Renderer: soft.New(), waiting: make(chan struct{})}
+	close(primary.waiting)
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	o := r.b.Outputs()[0]
+	size := modeOf(o.mode).Size
+	pitch := size.X * 4
+	present := func(damage render.Region) []byte {
+		t.Helper()
+		f, err := o.BeginFrame()
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := f.Renderer.Begin(f.Target, render.Region{{Max: size}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.FillRect(image.Rectangle{Max: size}, render.Color{R: 0xff, A: 0xff}, render.Mask{})
+		n := len(r.dev.commits)
+		if err := errors.Join(p.End(), o.Present(damage)); err != nil {
+			t.Fatal(err)
+		}
+		r.committedSince("the copied frame", o, n)
+		fb := r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}]
+		r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
+		r.until("the flip", func() bool { return !o.flipping })
+		return r.dev.pix[r.dev.scanouts[uint32(fb)]]
+	}
+	first := present(nil)
+	present(nil)
+	clear(first)
+	again := present(render.Region{image.Rect(0, 5, 1, 7)})
+	if &again[0] != &first[0] {
+		t.Fatal("the third frame did not reuse the first frame's buffer")
+	}
+	for y := range size.Y {
+		want := byte(0)
+		if y >= 5 && y < 7 {
+			want = 0xff
+		}
+		if got := again[y*pitch+2]; got != want {
+			t.Fatalf("row %d holds red %#x, want %#x", y, got, want)
+		}
 	}
 }

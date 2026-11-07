@@ -80,6 +80,7 @@ type scanout struct {
 	client       *clientFB
 	fb           uint32
 	fence        func() (int, error)
+	painted      func(damage render.Region)
 	prepare      func() error
 	prepareLater func(done func(error) error) error
 	syncRead     bool
@@ -1643,6 +1644,9 @@ func (o *Output) Present(damage render.Region) error {
 	}
 	o.drawing = nil
 	s.started = o.frameStart
+	if s.painted != nil {
+		s.painted(damage)
+	}
 	if o.b.paused {
 		return nil
 	}

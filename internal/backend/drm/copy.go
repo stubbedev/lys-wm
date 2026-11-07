@@ -1,10 +1,12 @@
 package drm
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"image"
 	"path/filepath"
+	"slices"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -122,7 +124,7 @@ func (a *copyAllocator) allocate(size image.Point, l layout) (*scanout, error) {
 	release := func() error { return errors.Join(a.dev.DestroyDumb(dumb), target.Destroy()) }
 	if t, ok := target.(render.AsyncReadTarget); ok && isAsync {
 		c := &offLoopCopy{loop: a.loop, target: t, dumb: dumb, release: release}
-		return &scanout{target: target, fb: fb, fence: noFence, prepareLater: c.start, release: c.releaseWhenIdle}, nil
+		return &scanout{target: target, fb: fb, fence: noFence, painted: c.painted, prepareLater: c.start, release: c.releaseWhenIdle}, nil
 	}
 	return &scanout{
 		target:   target,
@@ -138,6 +140,7 @@ type offLoopCopy struct {
 	loop     *loop.Loop
 	target   render.AsyncReadTarget
 	dumb     kdrm.Dumb
+	stale    []rows
 	release  func() error
 	copying  bool
 	released bool
@@ -181,13 +184,18 @@ func (c *offLoopCopy) start(done func(error) error) error {
 			if err != nil {
 				return c.finished(done, errors.Join(err, pending.Release()))
 			}
+			spans := c.stale
 			go func() {
-				size := c.target.Size()
-				row, pitch := size.X*4, int(c.dumb.Pitch)
-				for y := range size.Y {
-					copy(c.dumb.Pix[y*pitch:y*pitch+row], pix[y*stride:])
+				row, pitch := c.target.Size().X*4, int(c.dumb.Pitch)
+				for _, s := range spans {
+					for y := s.from; y < s.to; y++ {
+						copy(c.dumb.Pix[y*pitch:y*pitch+row], pix[y*stride:])
+					}
 				}
-				c.post(func() error { return c.finished(done, pending.Release()) })
+				c.post(func() error {
+					c.stale = c.stale[:0]
+					return c.finished(done, pending.Release())
+				})
 			}()
 			return nil
 		})
@@ -293,4 +301,33 @@ func linearFirstOr(dev *kdrm.Device, primary *gbmAllocator, own allocator, ownHo
 		return own, fmt.Sprintf("%s; %v", ownHow, err)
 	}
 	return &linearFirst{dev: dev, primary: primary, own: own, ownHow: ownHow}, "the primary GPU's linear buffers, or, where " + filepath.Base(dev.Path()) + " refuses them, " + ownHow
+}
+
+type rows struct {
+	from, to int
+}
+
+func addRows(spans []rows, damage render.Region, height int) []rows {
+	if len(damage) == 0 {
+		return append(spans[:0], rows{0, height})
+	}
+	for _, r := range damage {
+		if from, to := max(r.Min.Y, 0), min(r.Max.Y, height); from < to {
+			spans = append(spans, rows{from, to})
+		}
+	}
+	slices.SortFunc(spans, func(a, b rows) int { return cmp.Compare(a.from, b.from) })
+	merged := spans[:0]
+	for _, s := range spans {
+		if n := len(merged); n > 0 && s.from <= merged[n-1].to {
+			merged[n-1].to = max(merged[n-1].to, s.to)
+			continue
+		}
+		merged = append(merged, s)
+	}
+	return merged
+}
+
+func (c *offLoopCopy) painted(damage render.Region) {
+	c.stale = addRows(c.stale, damage, c.target.Size().Y)
 }
