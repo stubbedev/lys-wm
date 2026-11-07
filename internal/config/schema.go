@@ -37,7 +37,7 @@ type schemaNode struct {
 	ID                   string                 `json:"$id,omitempty"`
 	Type                 string                 `json:"type,omitempty"`
 	Format               string                 `json:"format,omitempty"`
-	Enum                 []string               `json:"enum,omitempty"`
+	Enum                 []any                  `json:"enum,omitempty"`
 	Minimum              *float64               `json:"minimum,omitempty"`
 	ExclusiveMinimum     *float64               `json:"exclusiveMinimum,omitempty"`
 	Maximum              *float64               `json:"maximum,omitempty"`
@@ -55,6 +55,7 @@ type annotation struct {
 	format             string
 	actions            bool
 	enum               []string
+	booleans           bool
 	minimum, maximum   *float64
 	exclusiveMinimum   *float64
 	minItems, maxItems *int
@@ -222,6 +223,7 @@ func annotations() map[string]annotation {
 		"rules[].title":                    formatAnn(regexFormat),
 		"rules[].tag":                      formatAnn(regexFormat),
 		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
+		"outputs[].hdr":                    {enum: slices.Sorted(maps.Keys(hdrPolicies)), booleans: true},
 		"focus.on_activate":                {enum: slices.Sorted(maps.Keys(focusActivations)), def: "focus"},
 		"fullscreen.new_window":            {enum: slices.Sorted(maps.Keys(coverPolicies)), def: "behind"},
 		"rules[].on_activate":              {enum: slices.Sorted(maps.Keys(activations))},
@@ -291,7 +293,10 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 		panic(fmt.Sprintf("config: %s has a %s, which the schema does not describe", path, t))
 	}
 	if note, ok := notes[path]; ok {
-		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default, n.MinItems, n.MaxItems = note.format, note.enum, note.minimum, note.maximum, note.exclusiveMinimum, note.def, note.minItems, note.maxItems
+		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default, n.MinItems, n.MaxItems = note.format, enumValues(note), note.minimum, note.maximum, note.exclusiveMinimum, note.def, note.minItems, note.maxItems
+		if note.booleans {
+			n.Type = ""
+		}
 		if note.actions {
 			n.Actions = schemaActions()
 		}
@@ -324,4 +329,18 @@ func Schema() []byte {
 		panic(fmt.Sprintf("config: encode the schema: %v", err))
 	}
 	return out.Bytes()
+}
+
+func enumValues(note annotation) []any {
+	if note.enum == nil {
+		return nil
+	}
+	values := make([]any, len(note.enum))
+	for i, v := range note.enum {
+		values[i] = v
+		if b, err := strconv.ParseBool(v); err == nil && note.booleans {
+			values[i] = b
+		}
+	}
+	return values
 }

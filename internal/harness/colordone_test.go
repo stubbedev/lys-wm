@@ -34,7 +34,7 @@ func TestAnOutputsImageDescriptionChangeIsFollowedByOneDone(t *testing.T) {
 	var cfg compositor.Config
 	h := StartWith(t, func(c *compositor.Config) {
 		c.ColorManagement = true
-		c.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true, SDRBrightness: 203}}
+		c.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn, SDRBrightness: 203}}
 		cfg = *c
 	}, small)
 	c, m, _ := colorManager(t, h)
@@ -57,7 +57,7 @@ func TestAnOutputsImageDescriptionChangeIsFollowedByOneDone(t *testing.T) {
 		c.Sync()
 		return log.events
 	}
-	if got := change("a brighter SDR white", compositor.OutputRule{HDR: true, SDRBrightness: 300}); !slices.Equal(got, []string{"image_description_changed", "done"}) {
+	if got := change("a brighter SDR white", compositor.OutputRule{HDR: compositor.HDROn, SDRBrightness: 300}); !slices.Equal(got, []string{"image_description_changed", "done"}) {
 		t.Fatalf("a colour-only change sent %v, want image_description_changed and one done", got)
 	}
 	got := change("the output leaving HDR", compositor.OutputRule{})

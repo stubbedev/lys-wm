@@ -13,7 +13,7 @@ import (
 )
 
 func hdrRule(cfg *compositor.Config) {
-	cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+	cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 }
 
 type cursorCounts struct {

@@ -216,7 +216,7 @@ func outputInfo(t *testing.T, c *testclient.Client, m *ccm.WpColorManagerV1) *in
 }
 
 func hdrConfig(rule compositor.OutputRule) func(*compositor.Config) {
-	rule.HDR = true
+	rule.HDR = compositor.HDROn
 	return func(cfg *compositor.Config) { cfg.Outputs = compositor.OutputRules{Fallback: rule} }
 }
 
@@ -491,7 +491,7 @@ func TestASurfaceHearsWhatItsOutputPrefers(t *testing.T) {
 	if !slices.Contains(info.tfNamed, ccm.WpColorManagerV1TransferFunctionGamma22) {
 		t.Fatalf("a window on an SDR output prefers %+v", info)
 	}
-	cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+	cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(cfg) })
 	c.DispatchUntil("preferred_changed", func() bool { return len(ev.ids) > 0 })
 	if ev.ids[0] == sdrID {
@@ -530,7 +530,7 @@ func showingAbout(x, y int, want [3]byte) func(*headless.Backend, *compositor.Co
 }
 
 func fullWindowConfig(rule compositor.OutputRule) func(*compositor.Config) {
-	rule.HDR = true
+	rule.HDR = compositor.HDROn
 	return func(cfg *compositor.Config) {
 		cfg.Outputs = compositor.OutputRules{Fallback: rule}
 		cfg.WM.Gaps = wm.Gaps{}
@@ -651,7 +651,7 @@ func TestADisplayWithoutHDRStaysSDRAndSaysSo(t *testing.T) {
 	var r reports
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Report = r.report
-		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 	}, small)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		b.RefuseHDR()
@@ -680,7 +680,7 @@ func TestARendererWithoutAWorkingSpaceStaysSDRAndSaysSo(t *testing.T) {
 	}
 	h := start(t, setup{open: open, traced: true, configure: func(cfg *compositor.Config) {
 		cfg.Report = r.report
-		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 		cfg.WM.Gaps = wm.Gaps{}
 	}}, small)
 	c := testclient.Connect(t, h.Socket())
@@ -812,7 +812,7 @@ func TestReloadTurnsHDROnAndOff(t *testing.T) {
 		w := c.Window("sdr", testclient.Fill(0xff, 0xff, 0xff))
 		c.DispatchUntil("the window to map", w.Mapped)
 		h.Eventually("SDR white", showing(30, 30, grey(0xff)))
-		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 		h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(cfg) })
 		h.Eventually("white on the PQ signal", showingAbout(30, 30, grey(pqByte(203))))
 		cfg.Outputs = compositor.OutputRules{}
@@ -858,7 +858,7 @@ func TestAScreenShaderStaysOffOnAnHDROutputAndSaysSo(t *testing.T) {
 	}
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Report = r.report
-		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true, Shader: path}}
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn, Shader: path}}
 		cfg.WM.Gaps = wm.Gaps{}
 	}, small)
 	c := testclient.Connect(t, h.Socket())

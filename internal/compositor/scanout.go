@@ -44,6 +44,7 @@ func (c *Compositor) showFrameHints(o *output.Output, sc *scene, bounds image.Re
 	if ft, ok := o.Backend().(backend.FrameTearing); ok {
 		ft.TearFrame(alone && c.tears(op.surface))
 	}
+	c.showHDR(o, op.surface, alone)
 	if ff, ok := o.Backend().(backend.FrameFilling); ok {
 		ff.FillFrame(alone)
 	}

@@ -84,6 +84,7 @@ type Config struct {
 	HoldBound       time.Duration
 	HiddenFrame     time.Duration
 	PowerSaverRate  int
+	HDRHold         time.Duration
 	HoldOpening     bool
 	Animations      anim.Table
 	BlurLayers      []string
@@ -150,6 +151,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		HoldBound:      DefaultHoldBound,
 		HiddenFrame:    DefaultHiddenFrame,
 		PowerSaverRate: DefaultPowerSaverRate,
+		HDRHold:        DefaultHDRHold,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
 		Overview:       DefaultOverviewStyle(),
@@ -304,6 +306,8 @@ type Compositor struct {
 	scannedFree        []*scannedOut
 	overlays           map[*output.Output]overlaysShown
 	candidates         map[*surface.Surface]*candidacy
+	hdrSwitches        map[backend.Output]*hdrSwitch
+	hdrHold            time.Duration
 	overlayWork        overlayWork
 	lookPath           func(string) (string, error)
 	execs              loop.Serial
@@ -437,6 +441,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
 	c.powerSaverRate = cfg.PowerSaverRate
+	c.hdrHold = cfg.HDRHold
 	c.capFrameRates()
 	c.holdOpening = cfg.HoldOpening
 	c.overviewStyle = cfg.Overview
@@ -466,6 +471,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},
+		hdrSwitches:    map[backend.Output]*hdrSwitch{},
 		dropped:        map[*output.Output]int{},
 		inherited:      map[*output.Output]*loop.Timer{},
 		loop:           l,

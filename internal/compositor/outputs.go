@@ -24,7 +24,7 @@ type OutputRule struct {
 	VRR           VRRPolicy
 	Disabled      bool
 	Shader        string
-	HDR           bool
+	HDR           HDRPolicy
 	SDRBrightness float64
 	HDRPeak       float64
 }
@@ -163,7 +163,7 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (changed, r
 		next.Mode, next.Depth, next.HDR = m, rule.Depth, backend.HDRMetadata{}
 	}
 	var color *colorspace.Output
-	if next.Enabled() && rule.HDR {
+	if next.Enabled() && c.signalsHDR(b, rule) {
 		co, meta, err := c.hdrAsked(b, rule)
 		if err != nil {
 			c.report(fmt.Errorf("compositor: output %s stays SDR: %w", b.Name(), err))
@@ -318,6 +318,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	}
 	delete(c.overlays, o)
 	c.dropCandidates(o)
+	errs = append(errs, c.dropHDRSwitch(o.Backend()))
 	delete(c.blanked, o)
 	errs = append(errs, c.fill(o, nil, nil), c.dropCaptures(o), c.closeLayers(o), o.Remove())
 	delete(c.usable, o)

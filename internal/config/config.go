@@ -183,7 +183,7 @@ type rawOutput struct {
 	BitDepth      *At[int]     `yaml:"bitdepth"`
 	VRR           *At[string]  `yaml:"vrr"`
 	Disabled      bool         `yaml:"disabled"`
-	HDR           bool         `yaml:"hdr"`
+	HDR           *At[string]  `yaml:"hdr"`
 	SDRBrightness *At[float64] `yaml:"sdr_brightness"`
 	HDRPeak       *At[float64] `yaml:"hdr_peak"`
 	Shader        *At[string]  `yaml:"shader"`
@@ -1085,7 +1085,9 @@ func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
 	if r.Shader != nil {
 		rule.Shader = p.shaderPath(*r.Shader, key+".shader")
 	}
-	rule.HDR = r.HDR
+	if v := choice(p, r.HDR, key+".hdr", hdrPolicies); v != nil {
+		rule.HDR = *v
+	}
 	if v := p.between(r.SDRBrightness, key+".sdr_brightness", minLuminance, maxLuminance, false); v != nil {
 		rule.SDRBrightness = *v
 	}
@@ -1120,6 +1122,7 @@ var (
 	scrollMethods    = map[string]session.ScrollMethod{"none": session.ScrollNone, "two_finger": session.ScrollTwoFinger, "edge": session.ScrollEdge, "on_button_down": session.ScrollOnButtonDown}
 	accelProfiles    = map[string]session.AccelProfile{"flat": session.AccelFlat, "adaptive": session.AccelAdaptive}
 	vrrPolicies      = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
+	hdrPolicies      = map[string]compositor.HDRPolicy{"false": compositor.HDROff, "true": compositor.HDROn, "fullscreen": compositor.HDRFullscreen}
 	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
 	focusActivations = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent}
 	contentTypes     = byName(wm.ContentGame)

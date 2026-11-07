@@ -373,3 +373,17 @@ func (ps *Plans) Of(src *Description, t *Target) *lgpu.ColorTransform {
 	ps.plans[k] = p
 	return p
 }
+
+func (d *Description) HDRContent() bool {
+	if d == nil {
+		return false
+	}
+	return d.TF.Name == PQ || d.TF.Name == HLG || !SRGB.holds(d.Primaries.R) || !SRGB.holds(d.Primaries.G) || !SRGB.holds(d.Primaries.B)
+}
+
+func (p Primaries) holds(c XY) bool {
+	side := func(a, b XY) float64 { return (b.X-a.X)*(c.Y-a.Y) - (b.Y-a.Y)*(c.X-a.X) }
+	const slack = 1e-3
+	s1, s2, s3 := side(p.R, p.G), side(p.G, p.B), side(p.B, p.R)
+	return s1 >= -slack && s2 >= -slack && s3 >= -slack || s1 <= slack && s2 <= slack && s3 <= slack
+}

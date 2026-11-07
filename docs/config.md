@@ -187,7 +187,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
 | `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
 | `vrr` | Variable refresh rate (adaptive sync, FreeSync, G-Sync Compatible): `off` (the default), `on` for always, or `fullscreen`: only while one surface alone fills the output and is a game or a video, as it says through `wp_content_type_v1` or a rule's `content` key says for it. A frame then reaches the screen when it is ready instead of at the next fixed vblank. An output without it (no `vrr_capable` connector, or a CRTC without `VRR_ENABLED`) keeps a fixed refresh and says so in the log |
-| `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes. Default `false` |
+| `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes; `fullscreen` only while one surface alone fills the output and its image description is HDR (a PQ or HLG transfer function, or primaries wider than sRGB), switching back to SDR a second after that stops. Default `false` |
 | `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
 | `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
 | `disabled` | `true` turns the output off |
@@ -224,7 +224,7 @@ as gamma ramps act on code values; and a colour matrix applies in linear light.
 Screenshots and screen sharing get SDR on every output: HDR content tone-mapped,
 and SDR content with its own pixels, except what blurs over HDR light.
 
-Clients see `wp_color_manager_v1` when any output has `hdr: true`, or with
+Clients see `wp_color_manager_v1` when any output has `hdr: true` or `hdr: fullscreen`, or with
 `color_management: true` at the top of the file, which also gives SDR outputs
 tone mapping for HDR clients. Without either nothing is offered and nothing is
 converted.

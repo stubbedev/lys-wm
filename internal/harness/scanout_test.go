@@ -112,7 +112,7 @@ func TestAnHDROutputScansOutOnlyWhatMatchesItsSignal(t *testing.T) {
 
 func testAnHDROutputScansOutOnlyWhatMatchesItsSignal(t *testing.T, start gpuStarter) {
 	s := fullscreenScanout(t, start, func(cfg *compositor.Config) {
-		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+		cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 	})
 	before := scanouts(s.h)
 	b := s.c.DMABUF(image.Pt(160, 100), testclient.Fill(0, 0xff, 0))

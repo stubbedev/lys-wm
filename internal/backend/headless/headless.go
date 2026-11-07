@@ -305,6 +305,7 @@ type Output struct {
 	tearFrame      bool
 	filled         bool
 	frameCap       int
+	hdrCommits     uint64
 	scannedAt      backend.Placement
 	overlayNext    overlayLayers
 	overlayQueued  overlayLayers
@@ -460,6 +461,9 @@ func (o *Output) Commit(s backend.OutputState) error {
 	}
 	if !s.Lit() || s.Mode != o.state.Mode {
 		o.inherited = false
+	}
+	if s.HDR != o.state.HDR {
+		o.hdrCommits++
 	}
 	var err error
 	if !s.Lit() {
@@ -720,6 +724,10 @@ func (o *Output) FillFrame(filled bool) {
 
 func (o *Output) FillsFrame() bool {
 	return o.filled
+}
+
+func (o *Output) HDRCommits() uint64 {
+	return o.hdrCommits
 }
 
 func (o *Output) CapFrameRate(hz int) {

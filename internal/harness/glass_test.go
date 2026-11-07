@@ -376,7 +376,7 @@ func TestGlassDrawsOnAnHDROutput(t *testing.T) {
 		h := glassOn(t, start, quadrants, func(cfg *compositor.Config) {
 			cfg.Decor.Blur.Look = look
 			cfg.Decor.Rounding = 6
-			cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: true}}
+			cfg.Outputs = compositor.OutputRules{Fallback: compositor.OutputRule{HDR: compositor.HDROn}}
 		})
 		movePointer(h, 5, 95)
 		settle(t, h)

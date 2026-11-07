@@ -303,9 +303,9 @@ func (c *Compositor) PreferredDescription(s *surface.Surface) *colorspace.Descri
 func (c *Compositor) syncColorManagement() error {
 	wanted := c.colorManagement
 	if !wanted {
-		wanted = c.outputRules.Fallback.HDR
+		wanted = c.outputRules.Fallback.HDR != HDROff
 		for _, r := range c.outputRules.Named {
-			wanted = wanted || r.HDR
+			wanted = wanted || r.HDR != HDROff
 		}
 	}
 	if !wanted && c.colorManager == nil {

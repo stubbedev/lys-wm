@@ -1468,7 +1468,11 @@
             "type": "boolean"
           },
           "hdr": {
-            "type": "boolean"
+            "enum": [
+              false,
+              "fullscreen",
+              true
+            ]
           },
           "hdr_peak": {
             "type": "number"

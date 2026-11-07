@@ -428,14 +428,17 @@ func TestHDRKeysReachTheOutputRules(t *testing.T) {
 	if !cfg.ColorManagement {
 		t.Error("color_management was dropped")
 	}
-	if r := cfg.Outputs.Named[0]; !r.HDR || r.SDRBrightness != 250 || r.HDRPeak != 600 {
+	if r := cfg.Outputs.Named[0]; r.HDR != compositor.HDROn || r.SDRBrightness != 250 || r.HDRPeak != 600 {
 		t.Errorf("rule %+v", r)
+	}
+	if fs, err := Parse("t.yaml", []byte("outputs:\n  - match: DP-1\n    hdr: fullscreen\n")); err != nil || fs.Outputs.Named[0].HDR != compositor.HDRFullscreen {
+		t.Errorf("hdr: fullscreen gave %v, %v", fs.Outputs.Named, err)
 	}
 	plain, err := Parse("t.yaml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plain.ColorManagement || plain.Outputs.Fallback.HDR {
+	if plain.ColorManagement || plain.Outputs.Fallback.HDR != compositor.HDROff {
 		t.Errorf("colour is on by default: %+v", plain)
 	}
 	for _, bad := range []string{"sdr_brightness: 0", "sdr_brightness: 20000", "hdr_peak: -1"} {
