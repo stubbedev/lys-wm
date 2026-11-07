@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,6 +43,7 @@ type Harness struct {
 	xwayland   *xwayland.Server
 	xlog       *syncBuffer
 	done       chan error
+	loopG      atomic.Uint64
 	clients    []*Client
 }
 
@@ -246,6 +248,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 		}
 	}
 	go func() {
+		h.loopG.Store(goroutineID())
 		unpin := gpu.PinThread()
 		err := h.loop.Run()
 		h.done <- errors.Join(err, unpin())
@@ -311,6 +314,9 @@ func (h *Harness) Ended() error {
 
 func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error) {
 	h.t.Helper()
+	if goroutineID() == h.loopG.Load() {
+		panic("harness: Do called on the compositor loop, from inside a Do or Eventually function; it would wait on the loop it runs on forever")
+	}
 	result := make(chan error, 1)
 	if err := h.loop.Post(func() error {
 		result <- f(h.backend, h.compositor)
@@ -318,11 +324,15 @@ func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error
 	}); err != nil {
 		h.t.Fatalf("harness: post to the compositor loop: %v", err)
 	}
+	hang := time.NewTimer(testenv.HangLimit)
+	defer hang.Stop()
 	select {
 	case err := <-result:
 		if err != nil {
 			h.t.Fatal(err)
 		}
+	case <-hang.C:
+		h.t.Fatalf("harness: the compositor loop did not finish a Do within %v", testenv.HangLimit)
 	case err := <-h.done:
 		h.done <- err
 		h.t.Fatalf("harness: compositor loop ended: %v", err)
@@ -543,4 +553,17 @@ func (h *Harness) auditIPC() {
 		last, said = next, false
 		return nil
 	})
+}
+
+func goroutineID() uint64 {
+	var buf [32]byte
+	n := runtime.Stack(buf[:], false)
+	var id uint64
+	for _, b := range bytes.TrimPrefix(buf[:n], []byte("goroutine ")) {
+		if b < '0' || b > '9' {
+			break
+		}
+		id = id*10 + uint64(b-'0')
+	}
+	return id
 }
