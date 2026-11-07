@@ -175,6 +175,53 @@ func TestAGenieHeadsForTheTaskbarRectangle(t *testing.T) {
 	bar.ExpectProtocolError(uint32(cwft.ZwlrForeignToplevelHandleV1ErrorInvalidRectangle))
 }
 
+func TestAGenieRestoresOutOfTheTaskbarRectangle(t *testing.T) {
+	t.Parallel()
+	now := time.Hour
+	at := func(h *Harness, d time.Duration) {
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			now = d
+			return nil
+		})
+	}
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Animations = genieTable(t, time.Second)
+		cfg.Clock = func() time.Duration { return now }
+	}, small)
+	dock := testclient.Connect(t, h.Socket())
+	green := [3]byte{0, 0xff, 0}
+	panel := dock.Layer(testclient.LayerSpec{Layer: cwlr.ZwlrLayerShellV1LayerBottom, Anchor: cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorBottom, Size: image.Pt(10, 0)}, testclient.Fill(green[0], green[1], green[2]))
+	dock.DispatchUntil("the panel to map", panel.Mapped)
+	mgr, err := cwft.NewZwlrForeignToplevelManagerV1(dock.Display, 3, &wlrWatcher{toplevels: map[*cwft.ZwlrForeignToplevelHandleV1]*wlrToplevel{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wlr := mgr.Handler().(*wlrWatcher)
+	dock.Bind(mgr)
+	c := testclient.Connect(t, h.Socket())
+	gray := [3]byte{0x60, 0x60, 0x60}
+	w := c.Window("from the panel", testclient.Fill(gray[0], gray[1], gray[2]))
+	c.DispatchUntil("the window to map", w.Mapped)
+	dock.DispatchUntil("the toplevel", func() bool { return len(wlr.order) == 1 })
+	h.Eventually("the window", showing(100, 50, gray))
+	if err := errors.Join(wlr.order[0].SetRectangle(panel.Surface, 0, 80, 10, 10), dock.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	dock.Sync()
+	h.dispatch("minimize")
+	at(h, time.Hour+time.Second)
+	h.Eventually("the window gone into the panel", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		return showing(5, 85, green)(b, comp) && !showing(100, 50, gray)(b, comp)
+	})
+	h.dispatch("restore")
+	at(h, time.Hour+time.Second+time.Millisecond)
+	h.Eventually("the window starting out of the rectangle the panel named, above the panel", func(b *headless.Backend, comp *compositor.Compositor) bool {
+		return showing(5, 85, gray)(b, comp) && !showing(100, 50, gray)(b, comp) && showing(5, 20, green)(b, comp)
+	})
+	at(h, time.Hour+2*time.Second)
+	h.Eventually("the window back where it was", showing(100, 50, gray))
+}
+
 func TestAGenieCollapsesTowardTheNearestEdgeAndComesBack(t *testing.T) {
 	t.Parallel()
 	onEachConfiguredRenderer(t, testAGenieCollapsesTowardTheNearestEdgeAndComesBack)
