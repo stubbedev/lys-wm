@@ -22,7 +22,14 @@ struct capture {
 	long long last_ms;
 	long long first_ms;
 	long long gap_ms;
+	int cursor_metas;
+	int cursor_bitmaps;
+	int32_t cursor_x;
+	int32_t cursor_y;
+	uint32_t bitmap_width;
 };
+
+#define CURSOR_META_SIZE(w, h) ((int)(sizeof(struct spa_meta_cursor) + sizeof(struct spa_meta_bitmap) + (w) * (h) * 4))
 
 static long long now_ms(void) {
 	struct timespec t;
@@ -52,12 +59,16 @@ static void on_param_changed(void *data, uint32_t id, const struct spa_pod *para
 	}
 	uint8_t buffer[1024];
 	struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
-	const struct spa_pod *params[1];
+	const struct spa_pod *params[2];
 	params[0] = spa_pod_builder_add_object(&b,
 		SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
 		SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(4, 2, 16),
 		SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int((1 << SPA_DATA_MemPtr) | (1 << SPA_DATA_MemFd)));
-	pw_stream_update_params(c->stream, params, 1);
+	params[1] = spa_pod_builder_add_object(&b,
+		SPA_TYPE_OBJECT_ParamMeta, SPA_PARAM_Meta,
+		SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Cursor),
+		SPA_PARAM_META_size, SPA_POD_CHOICE_RANGE_Int(CURSOR_META_SIZE(64, 64), CURSOR_META_SIZE(1, 1), CURSOR_META_SIZE(256, 256)));
+	pw_stream_update_params(c->stream, params, 2);
 	printf("%u %u\n", c->format.size.width, c->format.size.height);
 	fflush(stdout);
 }
@@ -71,6 +82,19 @@ static void on_process(void *data) {
 	struct spa_buffer *buf = b->buffer;
 	struct spa_meta_header *h = spa_buffer_find_meta_data(buf, SPA_META_Header, sizeof(*h));
 	struct spa_data *d = &buf->datas[0];
+	struct spa_meta_cursor *cursor = spa_buffer_find_meta_data(buf, SPA_META_Cursor, sizeof(*cursor));
+	if (cursor != NULL && spa_meta_cursor_is_valid(cursor)) {
+		c->cursor_metas++;
+		c->cursor_x = cursor->position.x;
+		c->cursor_y = cursor->position.y;
+		if (cursor->bitmap_offset >= sizeof(*cursor)) {
+			struct spa_meta_bitmap *bitmap = SPA_PTROFF(cursor, cursor->bitmap_offset, struct spa_meta_bitmap);
+			if (bitmap->size.width > 0 && bitmap->size.height > 0) {
+				c->cursor_bitmaps++;
+				c->bitmap_width = bitmap->size.width;
+			}
+		}
+	}
 	uint32_t width = c->format.size.width, height = c->format.size.height;
 	int corrupted = h != NULL && (h->flags & SPA_META_HEADER_FLAG_CORRUPTED);
 	if (!corrupted && d->data != NULL && d->chunk->size > 0) {
@@ -169,6 +193,7 @@ int main(int argc, char *argv[]) {
 		perror("pw-frames: close the output");
 		return 1;
 	}
+	printf("cursor %d %d %d %d %u\n", c.cursor_metas, c.cursor_bitmaps, c.cursor_x, c.cursor_y, c.bitmap_width);
 	printf("first %lld gap %lld\n", c.first_ms, c.gap_ms);
 	return c.status;
 }

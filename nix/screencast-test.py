@@ -175,9 +175,10 @@ def answer(label, ran, done, confirm):
         machine.sleep(1)
 
 
-def capture(name, source, cursor, label, shows=""):
+def capture(name, source, cursor, label, shows="", pointer=None):
     ran = choose(label)
-    machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}{' --shows ' + shows if shows else ''}"))
+    extra = (f" --shows {shows}" if shows else "") + (f" --pointer {pointer[0]} {pointer[1]}" if pointer else "")
+    machine.succeed(as_alice(f"{params['background']} {name} {params['screencast']} capture {source} {cursor} 10 /tmp/{name}{extra}"))
     try:
         answer(label, ran, lambda: machine.execute(f"test -s /tmp/{name}.status")[0] == 0, None)
         machine.wait_until_succeeds(f"test -s /tmp/{name}.status", timeout=300)
@@ -191,6 +192,10 @@ def capture(name, source, cursor, label, shows=""):
 
 def check_cursor(hidden, embedded, rect, px, py):
     print(machine.succeed(as_alice(f"{params['screencast']} cursor /tmp/{hidden} /tmp/{embedded} {rect['x']} {rect['y']} {rect['width']} {rect['height']} {px} {py}")))
+
+
+def check_unpainted(hidden, other, rect):
+    print(machine.succeed(as_alice(f"{params['screencast']} unpainted /tmp/{hidden} /tmp/{other} {rect['x']} {rect['y']} {rect['width']} {rect['height']}")))
 
 
 VIRTUAL_MODE = {"width": 1024, "height": 768, "refresh_mhz": 30000}
@@ -342,6 +347,9 @@ around = {"x": POINTER_REST[0] - CURSOR_BOX, "y": POINTER_REST[1] - CURSOR_BOX, 
 capture("monitor-hidden", "monitor", "hidden", MONITOR)
 capture("monitor-embedded", "monitor", "embedded", MONITOR)
 check_cursor("monitor-hidden", "monitor-embedded", around, *POINTER_REST)
+if params["portal"] != "wlr":
+    capture("monitor-metadata", "monitor", "metadata", MONITOR, pointer=POINTER_REST)
+    check_unpainted("monitor-hidden", "monitor-metadata", around)
 capture("window-hidden", "window", "hidden", WINDOW)
 capture("window-embedded", "window", "embedded", WINDOW)
 check_cursor("window-hidden", "window-embedded", {**around, "x": around["x"] - rect["x"], "y": around["y"] - rect["y"]}, POINTER_REST[0] - rect["x"], POINTER_REST[1] - rect["y"])

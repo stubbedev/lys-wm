@@ -7,7 +7,7 @@ import dbus.mainloop.glib
 from gi.repository import GLib
 
 SOURCES = {"monitor": 1, "window": 2}
-CURSOR_MODES = {"hidden": 1, "embedded": 2}
+CURSOR_MODES = {"hidden": 1, "embedded": 2, "metadata": 4}
 BACKGROUND = bytes([0x2E, 0x1E, 0x1E])
 CURSOR_REACH = 64
 FRAMES_WHILE_THE_PICKER_CLOSES = 30
@@ -104,6 +104,10 @@ def capture(args):
     sizes = lines[0].split()
     if len(sizes) != 2:
         sys.exit(f"screencast: pw-frames reported no size in {result.stdout!r}")
+    cursor_line = lines[-2].split() if len(lines) >= 2 else []
+    if len(cursor_line) != 6 or cursor_line[0] != "cursor":
+        sys.exit(f"screencast: pw-frames reported no cursor metas in {result.stdout!r}")
+    metas, bitmaps, cursor_x, cursor_y, bitmap_width = (int(v) for v in cursor_line[1:])
     timing = lines[-1].split()
     if len(timing) != 4 or timing[0] != "first" or timing[2] != "gap":
         sys.exit(f"screencast: pw-frames reported no timing in {result.stdout!r}")
@@ -116,6 +120,14 @@ def capture(args):
     settling = background_share(frames[0], width, height)
     print(f"screencast: {args.source} stream node {node}, {width}x{height}, cursor {args.cursor}", flush=True)
     print(f"screencast: {distinct} distinct frames of {len(frames)}; {background:.3f} of the last is the desktop background, {settling:.3f} of the first; first frame after {first_ms} ms, longest gap {gap_ms} ms", flush=True)
+    print(f"screencast: {metas} cursor metas, {bitmaps} bitmaps of width {bitmap_width}, the pointer last at {cursor_x},{cursor_y}", flush=True)
+    if args.cursor != "metadata" and metas != 0:
+        sys.exit(f"screencast: a {args.cursor} cursor stream carried {metas} cursor metas")
+    if args.cursor == "metadata":
+        if metas == 0 or bitmaps == 0 or bitmap_width == 0:
+            sys.exit("screencast: a metadata cursor stream carried no cursor meta with a bitmap")
+        if args.pointer and (abs(cursor_x - args.pointer[0]) > 1 or abs(cursor_y - args.pointer[1]) > 1):
+            sys.exit(f"screencast: the cursor meta puts the pointer at {cursor_x},{cursor_y}, not {args.pointer[0]},{args.pointer[1]}")
     if first_ms > FIRST_FRAME_MS:
         sys.exit(f"screencast: the first frame took {first_ms} ms")
     if gap_ms > MAX_GAP_MS:
@@ -151,6 +163,20 @@ def cursor(args):
         sys.exit("screencast: the embedded cursor is not where the pointer is")
 
 
+def unpainted(args):
+    width, height, hidden = read_frames(args.hidden)
+    other_width, other_height, other = read_frames(args.other)
+    if (other_width, other_height) != (width, height):
+        sys.exit(f"screencast: the hidden stream is {width}x{height}, the other {other_width}x{other_height}")
+    a, b = hidden[-1], other[-1]
+    x0, y0 = max(args.x, 0), max(args.y, 0)
+    x1, y1 = min(args.x + args.width, width), min(args.y + args.height, height)
+    changed = sum(1 for y in range(y0, y1) for x in range(x0, x1) if a[(y * width + x) * 4:(y * width + x) * 4 + 3] != b[(y * width + x) * 4:(y * width + x) * 4 + 3])
+    if changed:
+        sys.exit(f"screencast: {changed} pixels around the pointer differ from the hidden stream: the cursor is painted")
+    print(f"screencast: no cursor painted in {x1 - x0}x{y1 - y0}+{x0}+{y0}", flush=True)
+
+
 def read_ppm(data):
     fields = data.split(maxsplit=4)
     if len(fields) != 5 or fields[0] != b"P6" or fields[3] != b"255":
@@ -184,6 +210,7 @@ def main():
     cap.add_argument("frames", type=int)
     cap.add_argument("path")
     cap.add_argument("--shows", choices=["desktop", "window", "anything"])
+    cap.add_argument("--pointer", type=int, nargs=2)
     cap.set_defaults(run=capture)
     cur = commands.add_parser("cursor")
     cur.add_argument("hidden")
@@ -191,6 +218,12 @@ def main():
     for name in ("x", "y", "width", "height", "px", "py"):
         cur.add_argument(name, type=int)
     cur.set_defaults(run=cursor)
+    unp = commands.add_parser("unpainted")
+    unp.add_argument("hidden")
+    unp.add_argument("other")
+    for name in ("x", "y", "width", "height"):
+        unp.add_argument(name, type=int)
+    unp.set_defaults(run=unpainted)
     loc = commands.add_parser("locate")
     loc.add_argument("color")
     loc.set_defaults(run=locate)
