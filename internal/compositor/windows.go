@@ -390,7 +390,7 @@ func (c *Compositor) ruled(t toplevel) (wm.Decision, bool) {
 		s.InitialAppID, s.InitialTitle = w.initialAppID, w.initialTitle
 	}
 	d := wm.Decide(c.rules, s)
-	return d, d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile)
+	return d, d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile) || c.draggedToplevel(t)
 }
 
 func fixedSize(minimum, maximum image.Point) bool {
@@ -625,6 +625,9 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	if err := c.update(s, nil); err != nil {
 		return err
 	}
+	if err := c.followDrag(); err != nil {
+		return err
+	}
 	return c.endPeek(w.output)
 }
 
@@ -642,6 +645,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	c.stack = slices.DeleteFunc(c.stack, func(x *window) bool { return x == w })
 	closeErr = errors.Join(closeErr, c.castGone(w, nil))
+	c.dropToplevelDrag(t)
 	focused := c.active == w
 	if focused {
 		c.active = nil

@@ -408,6 +408,12 @@ xdg_toplevel.unset_maximized = latest
 xdg_toplevel.set_fullscreen = latest
 xdg_toplevel.unset_fullscreen = latest
 xdg_toplevel.set_minimized = dropped
+xdg_toplevel_drag_manager_v1 = journal retire=
+xdg_toplevel_drag_manager_v1.destroy = destructor
+xdg_toplevel_drag_manager_v1.get_xdg_toplevel_drag = dropped
+xdg_toplevel_drag_v1 = inert retire=
+xdg_toplevel_drag_v1.destroy = destructor
+xdg_toplevel_drag_v1.attach = dropped
 xdg_toplevel_icon_manager_v1 = journal retire=
 xdg_toplevel_icon_manager_v1.destroy = destructor
 xdg_toplevel_icon_manager_v1.create_icon = create

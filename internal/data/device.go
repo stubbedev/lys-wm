@@ -48,6 +48,26 @@ type dataSource struct {
 	resource   *sw.WlDataSource
 	actions    Action
 	actionsSet bool
+	dragOnly   func() error
+}
+
+var ErrSourceUsed = errors.New("data: the source was already used")
+
+func ReserveForDrag(res *sw.WlDataSource, refuse func() error) error {
+	s, err := sourceOf(res)
+	if err != nil {
+		return err
+	}
+	if !s.fresh() || s.dragOnly != nil {
+		return ErrSourceUsed
+	}
+	s.dragOnly = refuse
+	return nil
+}
+
+func (d *Drag) Carries(res *sw.WlDataSource) bool {
+	s, ok := d.source.(*dataSource)
+	return ok && s.resource == res
 }
 
 func (s *dataSource) version() uint32 {
@@ -142,6 +162,8 @@ func (d dataDevice) SetSelection(obj *sw.WlDataDevice, res *sw.WlDataSource, _ u
 	}
 	switch {
 	case s == nil:
+	case s.dragOnly != nil:
+		return s.dragOnly()
 	case s.actionsSet:
 		return res.ProtocolError(sw.WlDataSourceErrorInvalidSource, "a drag-and-drop source cannot be the selection")
 	case s.phase == sourceDragged:

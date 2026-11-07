@@ -683,7 +683,7 @@ func (c *Compositor) outputAt(p point) *output.Output {
 }
 
 func (c *Compositor) hitWindow(w *window, p point) (*surface.Surface, point) {
-	if !w.visible || !w.clip.Empty() && !p.pixel().In(w.clip) {
+	if !w.visible || !w.clip.Empty() && !p.pixel().In(w.clip) || c.drag != nil && w == c.dragCarried() {
 		return nil, point{}
 	}
 	if s, local := hitPopups(c.popups(w), p); s != nil {

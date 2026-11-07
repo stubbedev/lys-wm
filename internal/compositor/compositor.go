@@ -281,6 +281,7 @@ type Compositor struct {
 	virtualOutputs     []virtualOutput
 	virtualConfig      []VirtualOutput
 	mirrors            []*mirror
+	toplevelDrags      []*toplevelDrag
 	cast               castTarget
 	castSize           image.Point
 	powerSaver         bool
@@ -691,7 +692,7 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := c.addImageCapture(display, offer); err != nil {
 		return err
 	}
-	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display), c.addCaptureHint(display), c.addDynamicCapture(display), c.syncHotkeys()); err != nil {
+	if err := errors.Join(c.addPointerConstraints(display), c.addPointerWarp(display), c.addShortcutsInhibit(display), c.addGlobalShortcuts(display), c.addEscape(display), c.addCaptureHint(display), c.addDynamicCapture(display), c.addToplevelDrag(display), c.syncHotkeys()); err != nil {
 		return err
 	}
 	if c.data, err = data.New(display, c); err != nil {
