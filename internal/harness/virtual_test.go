@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/vinput"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -239,4 +240,24 @@ func TestVirtualTouchRefusesBadPoints(t *testing.T) {
 			c.ExpectProtocolError(uint32(tc.code))
 		})
 	}
+}
+
+func TestVinputTouchscreenDrivesTheSeat(t *testing.T) {
+	t.Parallel()
+	r := startInput(t)
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	if ok, err := vinput.TouchAvailable(r.h.Socket()); !ok || err != nil {
+		t.Fatalf("TouchAvailable = %v, %v; lys-wm serves lys_virtual_touch_manager_v1", ok, err)
+	}
+	d, err := vinput.Dial(r.h.Socket(), vinput.Options{Touch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := errors.Join(d.TouchDown(0, 80, 50, 160, 100), d.TouchMotion(0, 120, 75, 160, 100), d.TouchUp(0)); err != nil {
+		t.Fatal(err)
+	}
+	const point = 1 << 30
+	r.expect(fmt.Sprint("down ", point, " win 80,50"), "touch_frame", fmt.Sprint("touch_motion ", point, " 120,75"), "touch_frame",
+		fmt.Sprint("up ", point), "touch_frame")
 }
