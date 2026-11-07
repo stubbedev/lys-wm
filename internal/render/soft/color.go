@@ -28,6 +28,10 @@ func (t *workingTarget) Read([]byte, int) error {
 	return errors.New("soft: a working target's pixels are not read back")
 }
 
+func (t *workingTarget) ReadRows([]byte, int, render.Rows) error {
+	return t.Read(nil, 0)
+}
+
 func (t *workingTarget) Destroy() error {
 	t.pix, t.tex.pix, t.tex.float = nil, nil, nil
 	return nil

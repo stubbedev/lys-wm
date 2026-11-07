@@ -107,14 +107,14 @@ func TestADisplayOnlyCardRefusedOnceForTheModeTakesTheLinearBufferAgainOnTheNext
 func TestDamagedRowsMergeIntoTheSpansACopyMoves(t *testing.T) {
 	for _, c := range []struct {
 		name   string
-		stale  []rows
+		stale  []render.Rows
 		damage render.Region
-		want   []rows
+		want   []render.Rows
 	}{
-		{"no damage is the whole frame", []rows{{2, 3}}, nil, []rows{{0, 10}}},
-		{"apart", nil, render.Region{image.Rect(0, 6, 4, 8), image.Rect(0, 1, 4, 2)}, []rows{{1, 2}, {6, 8}}},
-		{"overlapping and touching merge", []rows{{1, 3}}, render.Region{image.Rect(0, 2, 1, 5), image.Rect(3, 5, 4, 6)}, []rows{{1, 6}}},
-		{"clipped to the frame", nil, render.Region{image.Rect(0, -3, 4, 2), image.Rect(0, 9, 4, 20), image.Rect(0, 12, 4, 14)}, []rows{{0, 2}, {9, 10}}},
+		{"no damage is the whole frame", []render.Rows{{From: 2, To: 3}}, nil, []render.Rows{{From: 0, To: 10}}},
+		{"apart", nil, render.Region{image.Rect(0, 6, 4, 8), image.Rect(0, 1, 4, 2)}, []render.Rows{{From: 1, To: 2}, {From: 6, To: 8}}},
+		{"overlapping and touching merge", []render.Rows{{From: 1, To: 3}}, render.Region{image.Rect(0, 2, 1, 5), image.Rect(3, 5, 4, 6)}, []render.Rows{{From: 1, To: 6}}},
+		{"clipped to the frame", nil, render.Region{image.Rect(0, -3, 4, 2), image.Rect(0, 9, 4, 20), image.Rect(0, 12, 4, 14)}, []render.Rows{{From: 0, To: 2}, {From: 9, To: 10}}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := addRows(c.stale, c.damage, 10); !slices.Equal(got, c.want) {
@@ -165,6 +165,90 @@ func TestAnOffLoopCopyMovesOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *test
 			want = 0xff
 		}
 		if got := again[y*pitch+2]; got != want {
+			t.Fatalf("row %d holds red %#x, want %#x", y, got, want)
+		}
+	}
+}
+
+type countingPrimary struct {
+	*soft.Renderer
+	readBack int
+}
+
+func (p *countingPrimary) NewTarget(size image.Point) (render.ReadTarget, error) {
+	t, err := p.Renderer.NewTarget(size)
+	if err != nil {
+		return nil, err
+	}
+	return &countingTarget{ReadTarget: t, p: p}, nil
+}
+
+func (p *countingPrimary) Begin(target render.Target, damage render.Region) (render.Pass, error) {
+	if t, ok := target.(*countingTarget); ok {
+		target = t.ReadTarget
+	}
+	return p.Renderer.Begin(target, damage)
+}
+
+type countingTarget struct {
+	render.ReadTarget
+	p *countingPrimary
+}
+
+func (t *countingTarget) Read(pix []byte, stride int) error {
+	return t.ReadRows(pix, stride, render.AllRows(t.Size()))
+}
+
+func (t *countingTarget) ReadRows(pix []byte, stride int, rows render.Rows) error {
+	t.p.readBack += (rows.To - rows.From) * t.Size().X * 4
+	return t.ReadTarget.ReadRows(pix, stride, rows)
+}
+
+func TestASynchronousCopyReadsBackOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *testing.T) {
+	primary := &countingPrimary{Renderer: soft.New()}
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	o := r.b.Outputs()[0]
+	size := modeOf(o.mode).Size
+	row := size.X * 4
+	present := func(damage render.Region) []byte {
+		t.Helper()
+		f, err := o.BeginFrame()
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := f.Renderer.Begin(f.Target, render.Region{{Max: size}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.FillRect(image.Rectangle{Max: size}, render.Color{R: 0xff, A: 0xff}, render.Mask{})
+		if err := errors.Join(p.End(), o.Present(damage)); err != nil {
+			t.Fatal(err)
+		}
+		fb := r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}]
+		r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
+		r.until("the flip", func() bool { return !o.flipping })
+		return r.dev.pix[r.dev.scanouts[uint32(fb)]]
+	}
+	first := present(nil)
+	present(nil)
+	if primary.readBack != 2*size.Y*row {
+		t.Fatalf("%d bytes read back for two whole frames, want %d", primary.readBack, 2*size.Y*row)
+	}
+	clear(first)
+	before := primary.readBack
+	again := present(render.Region{image.Rect(0, 5, 1, 7), image.Rect(3, 6, 9, 9)})
+	if &again[0] != &first[0] {
+		t.Fatal("the third frame did not reuse the first frame's buffer")
+	}
+	if read := primary.readBack - before; read != 4*row {
+		t.Fatalf("%d bytes read back for rows 5 to 9, want %d", read, 4*row)
+	}
+	for y := range size.Y {
+		want := byte(0)
+		if y >= 5 && y < 9 {
+			want = 0xff
+		}
+		if got := again[y*row+2]; got != want {
 			t.Fatalf("row %d holds red %#x, want %#x", y, got, want)
 		}
 	}

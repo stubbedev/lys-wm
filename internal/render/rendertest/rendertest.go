@@ -1247,3 +1247,27 @@ func KawaseOverwrites(t *testing.T, r render.Renderer) {
 	}
 	Compare(t, want, dst, KawaseTolerance)
 }
+
+func ReadRowsWritesOnlyThoseRows(t *testing.T, r render.Renderer, target render.ReadTarget) {
+	t.Helper()
+	PaintMarked(t, r, target)
+	full := bytes.Repeat([]byte{0xaa}, MarkedStride*3)
+	if err := target.Read(full, MarkedStride); err != nil {
+		t.Fatal(err)
+	}
+	got := bytes.Repeat([]byte{0xaa}, MarkedStride*3)
+	if err := target.ReadRows(got, MarkedStride, render.Rows{From: 1, To: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if untouched := got[:MarkedStride]; !bytes.Equal(untouched, bytes.Repeat([]byte{0xaa}, MarkedStride)) {
+		t.Errorf("row 0 was written by a read of rows 1 to 3: %v", untouched)
+	}
+	if !bytes.Equal(got[MarkedStride:], full[MarkedStride:]) {
+		t.Errorf("rows 1 to 3 read %v alone, %v in the whole frame", got[MarkedStride:], full[MarkedStride:])
+	}
+	for _, rows := range []render.Rows{{From: 2, To: 2}, {From: -1, To: 1}, {From: 1, To: 4}} {
+		if err := target.ReadRows(got, MarkedStride, rows); err == nil {
+			t.Errorf("rows %d to %d of a 5x3 target were read", rows.From, rows.To)
+		}
+	}
+}

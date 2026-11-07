@@ -33,10 +33,14 @@ func (b *Buffer) Size() image.Point {
 }
 
 func (b *Buffer) Read(pix []byte, stride int) error {
-	if err := render.CheckPixels(b.Size(), stride, len(pix)); err != nil {
+	return b.ReadRows(pix, stride, render.AllRows(b.Size()))
+}
+
+func (b *Buffer) ReadRows(pix []byte, stride int, rows render.Rows) error {
+	if err := render.CheckRows(b.Size(), stride, len(pix), rows); err != nil {
 		return err
 	}
-	for y := range b.H {
+	for y := rows.From; y < rows.To; y++ {
 		copy(pix[y*stride:y*stride+b.W*4], b.Pix[y*b.Stride:])
 	}
 	return nil

@@ -123,24 +123,42 @@ func (a *copyAllocator) allocate(size image.Point, l layout) (*scanout, error) {
 	}
 	release := func() error { return errors.Join(a.dev.DestroyDumb(dumb), target.Destroy()) }
 	if t, ok := target.(render.AsyncReadTarget); ok && isAsync {
-		c := &offLoopCopy{loop: a.loop, target: t, dumb: dumb, release: release}
-		return &scanout{target: target, fb: fb, fence: noFence, painted: c.painted, prepareLater: c.start, release: c.releaseWhenIdle}, nil
+		c := &offLoopCopy{loop: a.loop, target: t, dumb: dumb, stale: staleRows{height: size.Y}, release: release}
+		return &scanout{target: target, fb: fb, fence: noFence, painted: c.stale.add, prepareLater: c.start, release: c.releaseWhenIdle}, nil
 	}
+	c := &syncCopy{target: target, dumb: dumb, stale: staleRows{height: size.Y}}
 	return &scanout{
 		target:   target,
 		fb:       fb,
 		fence:    noFence,
 		syncRead: true,
-		prepare:  func() error { return target.Read(dumb.Pix, int(dumb.Pitch)) },
+		painted:  c.stale.add,
+		prepare:  c.copy,
 		release:  release,
 	}, nil
+}
+
+type syncCopy struct {
+	target render.ReadTarget
+	dumb   kdrm.Dumb
+	stale  staleRows
+}
+
+func (c *syncCopy) copy() error {
+	for _, rows := range c.stale.spans {
+		if err := c.target.ReadRows(c.dumb.Pix, int(c.dumb.Pitch), rows); err != nil {
+			return err
+		}
+	}
+	c.stale.reset()
+	return nil
 }
 
 type offLoopCopy struct {
 	loop     *loop.Loop
 	target   render.AsyncReadTarget
 	dumb     kdrm.Dumb
-	stale    []rows
+	stale    staleRows
 	release  func() error
 	copying  bool
 	released bool
@@ -184,16 +202,16 @@ func (c *offLoopCopy) start(done func(error) error) error {
 			if err != nil {
 				return c.finished(done, errors.Join(err, pending.Release()))
 			}
-			spans := c.stale
+			spans := c.stale.spans
 			go func() {
 				row, pitch := c.target.Size().X*4, int(c.dumb.Pitch)
 				for _, s := range spans {
-					for y := s.from; y < s.to; y++ {
+					for y := s.From; y < s.To; y++ {
 						copy(c.dumb.Pix[y*pitch:y*pitch+row], pix[y*stride:])
 					}
 				}
 				c.post(func() error {
-					c.stale = c.stale[:0]
+					c.stale.reset()
 					return c.finished(done, pending.Release())
 				})
 			}()
@@ -303,31 +321,36 @@ func linearFirstOr(dev *kdrm.Device, primary *gbmAllocator, own allocator, ownHo
 	return &linearFirst{dev: dev, primary: primary, own: own, ownHow: ownHow}, "the primary GPU's linear buffers, or, where " + filepath.Base(dev.Path()) + " refuses them, " + ownHow
 }
 
-type rows struct {
-	from, to int
+type staleRows struct {
+	spans  []render.Rows
+	height int
 }
 
-func addRows(spans []rows, damage render.Region, height int) []rows {
+func (s *staleRows) add(damage render.Region) {
+	s.spans = addRows(s.spans, damage, s.height)
+}
+
+func (s *staleRows) reset() {
+	s.spans = s.spans[:0]
+}
+
+func addRows(spans []render.Rows, damage render.Region, height int) []render.Rows {
 	if len(damage) == 0 {
-		return append(spans[:0], rows{0, height})
+		return append(spans[:0], render.Rows{From: 0, To: height})
 	}
 	for _, r := range damage {
 		if from, to := max(r.Min.Y, 0), min(r.Max.Y, height); from < to {
-			spans = append(spans, rows{from, to})
+			spans = append(spans, render.Rows{From: from, To: to})
 		}
 	}
-	slices.SortFunc(spans, func(a, b rows) int { return cmp.Compare(a.from, b.from) })
+	slices.SortFunc(spans, func(a, b render.Rows) int { return cmp.Compare(a.From, b.From) })
 	merged := spans[:0]
 	for _, s := range spans {
-		if n := len(merged); n > 0 && s.from <= merged[n-1].to {
-			merged[n-1].to = max(merged[n-1].to, s.to)
+		if n := len(merged); n > 0 && s.From <= merged[n-1].To {
+			merged[n-1].To = max(merged[n-1].To, s.To)
 			continue
 		}
 		merged = append(merged, s)
 	}
 	return merged
-}
-
-func (c *offLoopCopy) painted(damage render.Region) {
-	c.stale = addRows(c.stale, damage, c.target.Size().Y)
 }

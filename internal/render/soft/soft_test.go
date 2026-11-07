@@ -496,3 +496,7 @@ func TestTargetsCountAndPassesSubmitNothing(t *testing.T) {
 func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
 	rendertest.KawaseOverwrites(t, soft.New())
 }
+
+func TestReadRowsWritesOnlyThoseRows(t *testing.T) {
+	rendertest.ReadRowsWritesOnlyThoseRows(t, soft.New(), soft.NewBuffer(5, 3))
+}

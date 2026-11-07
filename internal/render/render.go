@@ -295,6 +295,24 @@ func CheckPixels(size image.Point, stride, n int) error {
 	return nil
 }
 
+type Rows struct {
+	From, To int
+}
+
+func AllRows(size image.Point) Rows {
+	return Rows{0, size.Y}
+}
+
+func CheckRows(size image.Point, stride, n int, rows Rows) error {
+	if err := CheckPixels(size, stride, n); err != nil {
+		return err
+	}
+	if rows.From < 0 || rows.To > size.Y || rows.From >= rows.To {
+		return fmt.Errorf("render: rows %d to %d of a %v target", rows.From, rows.To, size)
+	}
+	return nil
+}
+
 type Target interface {
 	Size() image.Point
 }
@@ -302,6 +320,7 @@ type Target interface {
 type ReadTarget interface {
 	Target
 	Read(pix []byte, stride int) error
+	ReadRows(pix []byte, stride int, rows Rows) error
 	Destroy() error
 }
 

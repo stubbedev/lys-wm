@@ -122,6 +122,11 @@ func TestReadKeepsTheStridePadding(t *testing.T) {
 	rendertest.ReadKeepsTheStridePadding(t, g, framebuffer(t, g, image.Pt(5, 3)))
 }
 
+func TestReadRowsWritesOnlyThoseRows(t *testing.T) {
+	g := renderer(t)
+	rendertest.ReadRowsWritesOnlyThoseRows(t, g, framebuffer(t, g, image.Pt(5, 3)))
+}
+
 func TestAnAsyncReadSeesTheFrameItWasStartedAfter(t *testing.T) {
 	rendertest.AsyncReadSeesItsFrame(t, renderer(t))
 }

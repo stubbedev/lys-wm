@@ -765,10 +765,14 @@ func (f *Framebuffer) Size() image.Point {
 }
 
 func (f *Framebuffer) Read(pix []byte, stride int) error {
+	return f.ReadRows(pix, stride, render.AllRows(f.size))
+}
+
+func (f *Framebuffer) ReadRows(pix []byte, stride int, rows render.Rows) error {
 	if f.float {
 		return errors.New("gles: a working target's pixels are not read back")
 	}
-	if err := render.CheckPixels(f.size, stride, len(pix)); err != nil {
+	if err := render.CheckRows(f.size, stride, len(pix), rows); err != nil {
 		return err
 	}
 	if err := f.r.enter(); err != nil {
@@ -776,8 +780,8 @@ func (f *Framebuffer) Read(pix []byte, stride int) error {
 	}
 	gl := f.r.gl
 	gl.BindFramebuffer(gpu.Framebuffer, f.fbo)
-	gl.PixelStorei(gpu.PackRowLengthNV, int32(stride/4))                    //nolint:gosec // bounded by CheckPixels
-	gl.ReadPixels(0, 0, int32(f.size.X), int32(f.size.Y), gpu.BGRAExt, pix) //nolint:gosec // framebuffer sizes fit GLsizei
+	gl.PixelStorei(gpu.PackRowLengthNV, int32(stride/4))                                                               //nolint:gosec // bounded by CheckPixels
+	gl.ReadPixels(0, int32(rows.From), int32(f.size.X), int32(rows.To-rows.From), gpu.BGRAExt, pix[rows.From*stride:]) //nolint:gosec // framebuffer sizes fit GLsizei
 	f.r.flushed()
 	gl.PixelStorei(gpu.PackRowLengthNV, 0)
 	gl.BindFramebuffer(gpu.Framebuffer, 0)

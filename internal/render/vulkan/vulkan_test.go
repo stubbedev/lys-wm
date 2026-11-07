@@ -62,6 +62,11 @@ func TestReadKeepsTheStridePadding(t *testing.T) {
 	rendertest.ReadKeepsTheStridePadding(t, r, target(t, r, image.Pt(5, 3)))
 }
 
+func TestReadRowsWritesOnlyThoseRows(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.ReadRowsWritesOnlyThoseRows(t, r, target(t, r, image.Pt(5, 3)))
+}
+
 func TestMisuseFailsPrecisely(t *testing.T) {
 	r := testenv.Vulkan(t)
 	other := testenv.Vulkan(t)

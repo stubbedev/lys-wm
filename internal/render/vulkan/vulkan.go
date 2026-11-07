@@ -193,16 +193,20 @@ func (t *Target) Size() image.Point {
 }
 
 func (t *Target) Read(pix []byte, stride int) error {
+	return t.ReadRows(pix, stride, render.AllRows(t.Size()))
+}
+
+func (t *Target) ReadRows(pix []byte, stride int, rows render.Rows) error {
 	size := t.Size()
-	if err := render.CheckPixels(size, stride, len(pix)); err != nil {
+	if err := render.CheckRows(size, stride, len(pix), rows); err != nil {
 		return err
 	}
-	img, err := t.t.ReadPixels()
+	img, err := t.t.ReadRect(image.Rect(0, rows.From, size.X, rows.To))
 	if err != nil {
 		return err
 	}
-	for y := range size.Y {
-		src, dst := img.Pix[y*img.Stride:], pix[y*stride:]
+	for y := rows.From; y < rows.To; y++ {
+		src, dst := img.Pix[(y-rows.From)*img.Stride:], pix[y*stride:]
 		for x := range size.X {
 			s, d := src[x*4:x*4+4], dst[x*4:x*4+4]
 			d[0], d[1], d[2], d[3] = s[2], s[1], s[0], s[3]
