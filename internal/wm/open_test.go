@@ -46,3 +46,17 @@ func TestOpeningPlacesAWindowWhereItsRulesSay(t *testing.T) {
 		t.Fatalf("group tab: %+v", w.Tree.root)
 	}
 }
+
+func TestATiledWindowOpeningOverAFocusedFloatingOneTakesFocus(t *testing.T) {
+	must := ok(t)
+	s := must(State{}.AddOutput("A", left, left))
+	s = must(s.MapFloating(1, left.Inset(400)))
+	s = must(s.MapWindow(2, Autotile{}))
+	if f, _ := s.Focused(); f != 2 {
+		t.Fatalf("focus stayed on %d, want the window that opened", f)
+	}
+	s = must(s.Open(3, Opening{NoFocus: true}))
+	if f, _ := s.Focused(); f != 2 {
+		t.Fatalf("a window opening without focus took it: %d", f)
+	}
+}

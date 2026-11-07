@@ -86,6 +86,7 @@ func (s State) Open(id WindowID, o Opening) (State, error) {
 		if w.Tree, err = tree.Place(id, area, at); err != nil {
 			return State{}, err
 		}
+		w.floatFocus = false
 	}
 	w.record()
 	if o.NoFocus && hadFocus {
