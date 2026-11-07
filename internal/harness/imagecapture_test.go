@@ -885,3 +885,68 @@ func testADMABUFCaptureRepaintsOnlyWhatChanged(t *testing.T, start gpuStarter) {
 		}
 	}
 }
+
+// A cursor image of a new size changes a cursor capture session's
+// constraints, and a frame waiting in a buffer of the old size fails with
+// buffer_constraints rather than landing the new image cropped to it; a
+// buffer of the new size then takes the new image.
+func TestANewCursorSizeFailsTheFrameWaitingInTheOldSize(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	_, in := c.Seat()
+	w := c.Window("pointed", testclient.Fill(0x40, 0x40, 0x40))
+	c.DispatchUntil("the window to map", w.Mapped)
+	c.DispatchUntil("the pointer to enter", func() bool { return in.Serial != 0 })
+	quiesce(t, h, c, w)
+	setCursor := func(side int) {
+		t.Helper()
+		s := c.Surface()
+		size := image.Pt(side, side)
+		if err := errors.Join(in.Pointer.SetCursor(in.Serial, s, int32(side/2), int32(side/2)), s.Attach(c.Buffer(size, 1, testclient.Fill(0xff, 0, 0)), 0, 0), s.Damage(0, 0, int32(side), int32(side)), s.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setCursor(16)
+	settle(t, h)
+	r := newCaptureRig(t, h, c)
+	src, err := r.outputs.CreateSource(c.Outputs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := r.mgr.CreatePointerCursorSession(&cursorWatch{}, src, in.Pointer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := &captureView{}
+	session, err := k.GetCaptureSession(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.DispatchUntil("the cursor image constraints", func() bool { return view.done })
+	if view.size != image.Pt(16, 16) {
+		t.Fatalf("a 16x16 cursor image constrains %v", view.size)
+	}
+	r.first(session, view.size)
+	f, frame, _ := grab(t, c, session, view.size)
+	settle(t, h)
+	if err := c.Display.Roundtrip(); err != nil || f.ready || f.failed {
+		t.Fatalf("a frame of the still cursor finished: %+v (%v)", *f, err)
+	}
+	setCursor(24)
+	c.DispatchUntil("the waiting frame's verdict", func() bool { return f.ready || f.failed })
+	if !f.failed || f.reason != ceic.ExtImageCopyCaptureFrameV1FailureReasonBufferConstraints {
+		t.Fatalf("a frame in the old size after the cursor grew: %+v", *f)
+	}
+	if !view.done || view.size != image.Pt(24, 24) {
+		t.Fatalf("the grown cursor constrains %+v", *view)
+	}
+	if err := frame.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	g, _, pix := grab(t, c, session, view.size)
+	c.DispatchUntil("a frame of the grown cursor", func() bool { return g.ready || g.failed })
+	if g.failed || rgbAt(pix, 24*4, 20, 20) != [3]byte{0, 0, 0xff} {
+		t.Fatalf("the grown cursor's frame %+v shows %v", *g, rgbAt(pix, 24*4, 20, 20))
+	}
+}

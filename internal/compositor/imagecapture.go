@@ -339,7 +339,14 @@ func (s *captureSession) sync() error {
 	}
 	s.size, s.captured = area.Size(), false
 	s.damage.Reset()
-	return s.constraints()
+	err := s.constraints()
+	if f := s.frame; f != nil && f.state == frameCapturing {
+		if f.pending != nil {
+			s.c.cancelCapture(f.pending)
+		}
+		err = errors.Join(err, f.fail(seic.ExtImageCopyCaptureFrameV1FailureReasonBufferConstraints))
+	}
+	return err
 }
 
 func (s *captureSession) noteDamage(o *output.Output, frame *region.Set, cursorOnly bool) {
