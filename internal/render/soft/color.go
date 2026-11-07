@@ -178,7 +178,7 @@ func (p *pass) drawFloat(tex *texture, dst image.Rectangle, alpha float32, m ren
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			row := p.rows[y-dst.Min.Y]
 			for x := clip.Min.X; x < clip.Max.X; x++ {
-				k := alpha * coverage(m, x, y)
+				k := alpha * p.coverage(m, x, y)
 				if k <= 0 {
 					continue
 				}
@@ -201,7 +201,7 @@ func (p *pass) glassFloat(tex *texture, src render.FRect, dst image.Rectangle, a
 		clip := dst.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			for x := clip.Min.X; x < clip.Max.X; x++ {
-				k := alpha * coverage(m, x, y)
+				k := alpha * p.coverage(m, x, y)
 				if k <= 0 {
 					continue
 				}

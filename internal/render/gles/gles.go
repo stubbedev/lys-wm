@@ -120,6 +120,7 @@ type program struct {
 	smoothing          uniform
 	time, resolution   uniform
 	adjust, bend       uniform
+	cutAxes, cutBase   uniform
 	cp                 [lgpu.ColorUniforms]int32
 	transform          render.ColorTransform
 	transformed        bool
@@ -149,6 +150,8 @@ func (r *Renderer) newProgram(id uint32) program {
 		smoothing:  at("smoothing"),
 		adjust:     at("adjust"),
 		bend:       at("bend"),
+		cutAxes:    at("cutAxes"),
+		cutBase:    at("cutBase"),
 		time:       at("time"),
 		resolution: at("resolution"),
 	}
@@ -173,6 +176,7 @@ type Renderer struct {
 	rgbx         program
 	external     program
 	colored      coloredPrograms
+	cuts         map[cutVariant]*program
 	modifiers    map[fourcc.Format][]gpu.ModifierSupport
 	vbo          uint32
 	pass         pass
@@ -242,6 +246,7 @@ func (r *Renderer) Recover() error {
 	for _, p := range r.programs() {
 		*p.prog = program{}
 	}
+	clear(r.cuts)
 	r.vbo, r.unpack, r.ringCap, r.ringAt = 0, 0, 0, 0
 	var errs []error
 	for t := range r.textures {
@@ -299,6 +304,7 @@ func New(d *gpu.Display) (*Renderer, error) {
 	r := &Renderer{
 		d: d, gl: d.GL(), modifiers: map[fourcc.Format][]gpu.ModifierSupport{},
 		textures: map[*texture]struct{}{}, framebuffers: map[*Framebuffer]struct{}{}, shaders: map[*screenShader]struct{}{},
+		cuts: map[cutVariant]*program{},
 	}
 	r.pass.owner = r
 	if err := r.enter(); err != nil {
@@ -399,6 +405,10 @@ func (r *Renderer) Close() error {
 			p.prog.id = 0
 		}
 	}
+	for _, p := range r.cuts {
+		r.gl.DeleteProgram(p.id)
+	}
+	clear(r.cuts)
 	r.gl.DeleteBuffers(1, &r.unpack)
 	r.gl.DeleteBuffers(1, &r.vbo)
 	err := errors.Join(r.gl.Check("gles: close"), r.d.Release())
@@ -959,6 +969,9 @@ type pass struct {
 	prog     *program
 	color    *render.ColorTransform
 	corner   int32
+	cut      *texture
+	cutU     lgpu.CutUniforms
+	cutBound uint32
 }
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
@@ -985,7 +998,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, err
 	}
 	p := &r.pass
-	p.active, p.fb, p.err, p.prog, p.color, p.corner = true, fb, nil, nil, nil, -1
+	p.active, p.fb, p.err, p.prog, p.color, p.corner, p.cut, p.cutBound = true, fb, nil, nil, nil, -1, nil, 0
 	p.blending = true
 	damage.ClipInto(&p.damage, image.Rectangle{Max: fb.size})
 	gl := r.gl
@@ -1144,9 +1157,15 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		return
 	}
 	prog := &p.owner.solid
+	if p.cut != nil {
+		if prog = p.cutProgram(cutSolid); prog == nil {
+			return
+		}
+	}
 	p.use(prog)
-	p.setBlending(c.A != 0xff || m != (render.Mask{}))
+	p.setBlending(c.A != 0xff || m != (render.Mask{}) || p.cut != nil)
 	p.setMask(prog, m)
+	p.bindCut(prog)
 	prog.color.set4(p.owner.gl, p.fillColor(c))
 	p.draw(r)
 }
@@ -1306,14 +1325,26 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	case tex.opaque:
 		prog = p.textureProgram(&p.owner.rgbx, shader{prog: &p.owner.colored.rgbx, fragment: rgbxColorShader, lazy: true})
 	}
+	if p.cut != nil {
+		switch {
+		case tex.target == gpu.TextureExternalOES:
+			p.fail(errors.New("gles: a cut DrawTexture of an external texture"))
+			return
+		case tex.opaque:
+			prog = p.cutProgram(cutRGBX)
+		default:
+			prog = p.cutProgram(cutRGBA)
+		}
+	}
 	if prog == nil {
 		return
 	}
 	gl := p.owner.gl
 	p.use(prog)
-	p.setBlending(!tex.opaque || alpha != 1 || m != (render.Mask{}))
+	p.setBlending(!tex.opaque || alpha != 1 || m != (render.Mask{}) || p.cut != nil)
 	p.setTransform(prog)
 	p.setMask(prog, m)
+	p.bindCut(prog)
 	prog.alpha.set1(gl, alpha)
 	gl.BindTexture(tex.target, tex.id)
 	filter := int32(gpu.Linear)
@@ -1406,10 +1437,16 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 		}
 	}
 	prog := s.prog
+	if p.cut != nil {
+		if prog = p.cutProgram(cutGlass); prog == nil {
+			return
+		}
+	}
 	gl := p.owner.gl
 	p.use(prog)
 	p.setTransform(prog)
 	p.setMask(prog, g.Mask(m, dst))
+	p.bindCut(prog)
 	prog.alpha.set1(gl, alpha)
 	var invBezel, amount float32
 	if g.Refracts() {

@@ -790,6 +790,19 @@ func (p *pass) SetColor(t *render.ColorTransform) {
 	p.p.SetColor(t)
 }
 
+func (p *pass) SetCut(t render.Texture, c render.AlphaCut) {
+	tex, ok := t.(*texture)
+	if !ok || tex.r != p.r {
+		p.fail(fmt.Errorf("vulkan: a cut over a texture of another renderer (%T)", t))
+		return
+	}
+	p.p.SetCut(tex.t, c)
+}
+
+func (p *pass) ClearCut() {
+	p.p.ClearCut()
+}
+
 func (p *pass) Clear(c render.Color) {
 	p.r.counts.Clears++
 	p.p.Clear(rgba(c))
@@ -845,7 +858,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		p.fail(err)
 		return
 	}
-	p.p.DrawTexture(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, lgpu.Transform(transform), alpha, m)
+	p.p.DrawTexture(tex.t, src, dst, lgpu.Transform(transform), alpha, m)
 }
 
 type screenShader struct {
@@ -922,7 +935,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 		p.fail(err)
 		return
 	}
-	p.p.DrawGlass(tex.t, lgpu.FRect{X: src.X, Y: src.Y, W: src.W, H: src.H}, dst, alpha, m, g)
+	p.p.DrawGlass(tex.t, src, dst, alpha, m, g)
 }
 
 func (p *pass) fail(err error) {

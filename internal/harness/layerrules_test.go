@@ -1,10 +1,13 @@
 package harness
 
 import (
+	"errors"
 	"image"
 	"regexp"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-lib/fourcc"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -88,4 +91,68 @@ func TestABlurAlphaThresholdLeavesTransparentTexelsSharp(t *testing.T) {
 		h.Eventually("the translucent half blurred", frostedAt(120, 15))
 		h.Eventually("the transparent half sharp", sharpAt(40, 15))
 	})
+}
+
+func TestABlurAlphaThresholdShapesADMABUFBar(t *testing.T) {
+	t.Parallel()
+	onEachDMABUFRenderer(t, func(t *testing.T, start gpuStarter) {
+		threshold := float32(0.2)
+		cut := dmabufBarFramePasses(t, start, &threshold)
+		plain := dmabufBarFramePasses(t, start, nil)
+		if cut != plain || cut == 0 {
+			t.Errorf("a frame of the dmabuf bar takes %d passes with a threshold and %d without", cut, plain)
+		}
+	})
+}
+
+func dmabufBarFramePasses(t *testing.T, start gpuStarter, threshold *float32) uint64 {
+	t.Helper()
+	on := true
+	h := start(t, func(cfg *compositor.Config) {
+		cfg.Decor.Blur = compositor.Blur{Size: 3, Passes: 2}
+		cfg.LayerRules = []wm.LayerRule{layerRule("bar", wm.LayerProps{Blur: &on, BlurAlpha: threshold})}
+	}, small)
+	c := testclient.Connect(t, h.Socket())
+	bg := c.Window("background", fineChecker)
+	c.DispatchUntil("the background to map", bg.Mapped)
+	bg.Stop()
+	size := image.Pt(160, 30)
+	bar := c.Layer(testclient.LayerSpec{Layer: cwlr.ZwlrLayerShellV1LayerTop, Anchor: cwlr.ZwlrLayerSurfaceV1AnchorTop | cwlr.ZwlrLayerSurfaceV1AnchorLeft | cwlr.ZwlrLayerSurfaceV1AnchorRight, Size: image.Pt(0, size.Y), Namespace: "bar"}, testclient.Fill(0, 0, 0))
+	bar.Translucent = true
+	c.DispatchUntil("the bar to map", bar.Mapped)
+	bar.Stop()
+	buf := c.DMABUFIn(fourcc.ARGB8888, size, func(pix []byte, stride int, size image.Point, _ int) {
+		for y := range size.Y {
+			row := pix[y*stride:]
+			clear(row[:size.X*4])
+			for x := size.X / 2; x < size.X; x++ {
+				row[x*4+3] = 0x40
+			}
+		}
+	})
+	commit := func() {
+		t.Helper()
+		if err := errors.Join(bar.Surface.Attach(buf.WL, 0, 0), bar.Surface.DamageBuffer(0, 0, int32(size.X), int32(size.Y)), bar.Surface.Commit(), c.Display.Roundtrip()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commit()
+	h.Eventually("the translucent half of the dmabuf blurred", frostedAt(120, 15))
+	if threshold != nil {
+		h.Eventually("the transparent half of the dmabuf sharp", sharpAt(40, 15))
+	} else {
+		h.Eventually("the transparent half of the dmabuf blurred", frostedAt(40, 15))
+	}
+	settle(t, h)
+	commit()
+	var passes uint64
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+		before := b.Renderer().Counts().Passes
+		if err := comp.Frame(b.Outputs()[0]); err != nil {
+			return err
+		}
+		passes = b.Renderer().Counts().Passes - before
+		return nil
+	})
+	return passes
 }

@@ -240,7 +240,6 @@ func (c *Compositor) upload(s *surface.Surface, b *shm.Buffer) error {
 		if seat.IsCursorSurface(s) {
 			c.keepCursorPixels(s, b.Format(), b.Size(), data, stride)
 		}
-		defer c.noteAlphaShape(s, b.Format(), b.Size(), data, stride)
 		if reusable {
 			t.size = b.Size()
 			c.textures[s] = t
@@ -309,7 +308,6 @@ func (c *Compositor) keepCursorPixels(s *surface.Surface, format render.Format, 
 }
 
 func (c *Compositor) dropTexture(s *surface.Surface) error {
-	delete(c.alphaShapes, s)
 	t, ok := c.textures[s]
 	if !ok {
 		return nil

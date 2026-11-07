@@ -941,7 +941,7 @@ surface:
 | Key | Value |
 | --- | --- |
 | `blur` | `true`: blur behind the surface and its popups with `decoration.blur` |
-| `blur_alpha_threshold` | 0 to 1: blur only under texels whose alpha is above it, so a bar's transparent rounded corners show no blurred rectangle. It reads alpha from shared-memory buffers; a surface drawing into dmabufs gets no blur and a notice |
+| `blur_alpha_threshold` | 0 to 1: blur only under texels whose alpha is above it, so a bar's transparent rounded corners show no blurred rectangle. It reads alpha from the surface's texture on the GPU, so shared-memory and dmabuf buffers alike are shaped |
 | `animation` | `false`: map and unmap without animating; or `{in: <style>, out: <style>}` with `layers_in` and `layers_out` styles |
 | `shadow` | `true`: a shadow as `decoration.shadow` draws for windows |
 | `rounding` | Corner radius in pixels for the surface, its blur and its shadow |

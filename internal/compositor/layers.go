@@ -17,20 +17,19 @@ import (
 )
 
 type layer struct {
-	id        uint64
-	surface   *shell.LayerSurface
-	output    *output.Output
-	box       image.Rectangle
-	placed    bool
-	appeared  bool
-	motion    anim.Tween[image.Rectangle]
-	fade      anim.Tween[float64]
-	snapshot  render.TextureTarget
-	frost     *frost
-	props     wm.LayerProps
-	ruled     bool
-	ruledGen  uint64
-	shapeless bool
+	id       uint64
+	surface  *shell.LayerSurface
+	output   *output.Output
+	box      image.Rectangle
+	placed   bool
+	appeared bool
+	motion   anim.Tween[image.Rectangle]
+	fade     anim.Tween[float64]
+	snapshot render.TextureTarget
+	frost    *frost
+	props    wm.LayerProps
+	ruled    bool
+	ruledGen uint64
 }
 
 func (e *layer) bounds() image.Rectangle {
@@ -227,8 +226,12 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 				opacity = *props.Opacity
 			}
 			if c.blursLayer(e) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), opacity) {
-				if shape := c.layerBlurShape(o, e, under); len(shape) > 0 {
-					c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: shape, extent: under, mask: mask, alpha: c.alphaOf(e.surface.Surface()) * opacity, look: look})
+				if tex, cut, blurs := c.layerCut(o, e); blurs {
+					below := len(pass.ops)
+					c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alphaOf(e.surface.Surface()) * opacity, look: look})
+					if tex != nil {
+						pass.cut(below, tex, cut)
+					}
 				}
 			}
 			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, mask, opacity, look)

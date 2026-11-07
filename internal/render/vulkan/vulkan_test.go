@@ -271,3 +271,13 @@ func TestAKawaseLevelOverwritesItsTargetWithoutAClear(t *testing.T) {
 func TestALostDeviceIsReplacedAndEveryObjectRemade(t *testing.T) {
 	rendertest.SurvivesALostDevice(t, testenv.Vulkan(t))
 }
+
+func TestAlphaCuts(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.AlphaCuts(t, r, target(t, r, rendertest.CutTargetSize()))
+}
+
+func TestAlphaCutOverDMABUFOnHardware(t *testing.T) {
+	r, node := hardware(t)
+	rendertest.AlphaCutOverDMABUF(t, r, node, target(t, r, rendertest.CutTargetSize()))
+}

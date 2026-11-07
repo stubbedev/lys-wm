@@ -24,6 +24,7 @@ type (
 	Goo            = lgpu.Goo
 	Glass          = lgpu.Glass
 	ColorTransform = lgpu.ColorTransform
+	AlphaCut       = lgpu.AlphaCut
 )
 
 type Transform uint8
@@ -222,9 +223,7 @@ func (c Color) Premultiplied() bool {
 	return c.R <= c.A && c.G <= c.A && c.B <= c.A
 }
 
-type FRect struct {
-	X, Y, W, H float64
-}
+type FRect = lgpu.FRect
 
 func CheckDraw(texture image.Point, src FRect, transform Transform, alpha float32, m Mask) error {
 	if err := m.Check(); err != nil {
@@ -439,6 +438,8 @@ func CheckGradient(g Gradient, m Mask) error {
 
 type Pass interface {
 	SetColor(t *ColorTransform)
+	SetCut(t Texture, c AlphaCut)
+	ClearCut()
 	Clear(c Color)
 	FillRect(r image.Rectangle, c Color, m Mask)
 	FillGradient(r image.Rectangle, g Gradient, m Mask)
@@ -453,6 +454,8 @@ type Pass interface {
 type LostPass struct{}
 
 func (LostPass) SetColor(*ColorTransform)                                              {}
+func (LostPass) SetCut(Texture, AlphaCut)                                              {}
+func (LostPass) ClearCut()                                                             {}
 func (LostPass) Clear(Color)                                                           {}
 func (LostPass) FillRect(image.Rectangle, Color, Mask)                                 {}
 func (LostPass) FillGradient(image.Rectangle, Gradient, Mask)                          {}

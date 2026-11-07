@@ -225,7 +225,7 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 		return nil, errors.New("soft: Begin while a pass is active")
 	}
 	p := &r.pass
-	p.active, p.buf, p.work, p.color, p.err = true, buf, work, nil, nil
+	p.active, p.buf, p.work, p.color, p.cut, p.err = true, buf, work, nil, nil, nil
 	if isWork {
 		damage.ClipInto(&p.damage, work.bounds())
 		return p, nil
@@ -240,6 +240,8 @@ type pass struct {
 	buf    *Buffer
 	work   *workingTarget
 	color  *render.ColorTransform
+	cut    *texture
+	cutU   lgpu.CutUniforms
 	damage region.Set
 	err    error
 	cols   []int
@@ -308,6 +310,34 @@ func coverage(m render.Mask, x, y int) float32 {
 	return m.Coverage(float32(x)+0.5, float32(y)+0.5)
 }
 
+func (p *pass) coverage(m render.Mask, x, y int) float32 {
+	k := coverage(m, x, y)
+	if p.cut == nil || k == 0 {
+		return k
+	}
+	s, t, on := p.cutU.UV(float32(x)+0.5, float32(y)+0.5)
+	if !on {
+		return 0
+	}
+	size := p.cut.size
+	tx, ty := min(int(s*float32(size.X)), size.X-1), min(int(t*float32(size.Y)), size.Y-1)
+	if !p.cutU.Keeps(float32(p.cut.pix[ty*p.cut.stride+tx*4+3]) / 0xff) {
+		return 0
+	}
+	return k
+}
+
+func (p *pass) masked(m render.Mask) bool {
+	return m != (render.Mask{}) || p.cut != nil
+}
+
+func (p *pass) solidSpan(m render.Mask, y int) (from, to int) {
+	if p.cut != nil {
+		return 0, 0
+	}
+	return solidSpan(m, y)
+}
+
 func solidSpan(m render.Mask, y int) (from, to int) {
 	k := m.Keep
 	if k.Rect.Empty() || !m.Cut.Rect.Empty() || !m.Merge.Empty() || m.Falloff != (render.Falloff{}) {
@@ -341,19 +371,19 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 		return
 	}
 	if p.floatPath(nil) {
-		p.fillFloat(r, c, func(x, y int) float32 { return coverage(m, x, y) })
+		p.fillFloat(r, c, func(x, y int) float32 { return p.coverage(m, x, y) })
 		return
 	}
-	masked := m != (render.Mask{})
+	masked := p.masked(m)
 	for _, d := range p.damage.Rects() {
 		clip := r.Intersect(d)
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			row := p.buf.Pix[y*p.buf.Stride:]
-			from, to := solidSpan(m, y)
+			from, to := p.solidSpan(m, y)
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				k := uint32(0xff)
 				if masked && (x < from || x >= to) {
-					k = toByte(coverage(m, x, y))
+					k = toByte(p.coverage(m, x, y))
 				}
 				switch k {
 				case 0:
@@ -634,7 +664,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	if full == 0 {
 		return
 	}
-	masked := m != (render.Mask{})
+	masked := p.masked(m)
 	horizontal, vertical := transform.Axes()
 	p.cols = sampleMap(p.cols[:0], dst.Dx(), horizontal, src, tex.size)
 	p.rows = sampleMap(p.rows[:0], dst.Dy(), vertical, src, tex.size)
@@ -652,7 +682,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 				drawRow(out, tex.pix[row*tex.stride:], p.cols, clip.Min.X, clip.Max.X, dst.Min.X)
 				continue
 			}
-			from, to := solidSpan(m, y)
+			from, to := p.solidSpan(m, y)
 			for x := clip.Min.X; x < clip.Max.X; x++ {
 				col := p.cols[x-dst.Min.X]
 				sx, sy := col, row
@@ -662,7 +692,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 				px := tex.pix[sy*tex.stride+sx*4:]
 				a := full
 				if masked && (x < from || x >= to) {
-					a = toByte(alpha * coverage(m, x, y))
+					a = toByte(alpha * p.coverage(m, x, y))
 				}
 				switch a {
 				case 0:
@@ -731,7 +761,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 		for y := clip.Min.Y; y < clip.Max.Y; y++ {
 			row := p.buf.Pix[y*p.buf.Stride:]
 			for x := clip.Min.X; x < clip.Max.X; x++ {
-				a := toByte(alpha * coverage(m, x, y))
+				a := toByte(alpha * p.coverage(m, x, y))
 				if a == 0 {
 					continue
 				}
@@ -775,4 +805,34 @@ func sampleMap(out []int, n int, a render.Axis, src render.FRect, size image.Poi
 		out = append(out, min(max(s, 0), limit-1))
 	}
 	return out
+}
+
+func (p *pass) SetCut(t render.Texture, c render.AlphaCut) {
+	tex, ok := t.(*texture)
+	switch {
+	case !p.active:
+		p.fail(errors.New("soft: SetCut outside a pass"))
+		return
+	case !ok || tex.owner != p.owner:
+		p.fail(fmt.Errorf("soft: a cut over a texture %T of another renderer", t))
+		return
+	case !tex.alive():
+		p.fail(errors.New("soft: a cut over a texture used after Destroy"))
+		return
+	case tex.owned(p):
+		p.fail(errors.New("soft: a cut over the pass's own target"))
+		return
+	case tex.float != nil:
+		p.fail(errors.New("soft: a cut over a working target's texture"))
+		return
+	}
+	if err := c.Check(tex.size); err != nil {
+		p.fail(err)
+		return
+	}
+	p.cut, p.cutU = tex, c.Uniforms(tex.size, tex.format.Opaque())
+}
+
+func (p *pass) ClearCut() {
+	p.cut = nil
 }

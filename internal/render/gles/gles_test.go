@@ -445,3 +445,13 @@ func TestARobustContextAsksForAResetOncePerCheck(t *testing.T) {
 		t.Fatalf("a check on a pinned thread allocated %v times", n)
 	}
 }
+
+func TestAlphaCuts(t *testing.T) {
+	g := renderer(t)
+	rendertest.AlphaCuts(t, g, framebuffer(t, g, rendertest.CutTargetSize()))
+}
+
+func TestAlphaCutOverDMABUFOnHardware(t *testing.T) {
+	g, node := hardware(t)
+	rendertest.AlphaCutOverDMABUF(t, g, node, framebuffer(t, g, rendertest.CutTargetSize()))
+}

@@ -355,7 +355,6 @@ type Compositor struct {
 	workspaceRules     []WorkspaceRule
 	shownEmpty         map[wm.WorkspaceID]bool
 	maskedOps          []drawOp
-	alphaShapes        map[*surface.Surface]bufferShape
 	blockedScratch     []image.Rectangle
 	exceptScratch      []image.Rectangle
 	overview           *overview
@@ -479,7 +478,6 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		scratchSlideOf: map[*output.Output]*workspaceSwitch{},
 		peeks:          map[*output.Output]*peek{},
 		shownEmpty:     map[wm.WorkspaceID]bool{},
-		alphaShapes:    map[*surface.Surface]bufferShape{},
 		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},

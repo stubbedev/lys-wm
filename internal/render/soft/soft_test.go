@@ -504,3 +504,8 @@ func TestReadRowsWritesOnlyThoseRows(t *testing.T) {
 func TestTheFakeDeviceLosesItsTexturesAndRecovers(t *testing.T) {
 	rendertest.SurvivesALostDevice(t, soft.New())
 }
+
+func TestAlphaCuts(t *testing.T) {
+	size := rendertest.CutTargetSize()
+	rendertest.AlphaCuts(t, soft.New(), soft.NewBuffer(size.X, size.Y))
+}

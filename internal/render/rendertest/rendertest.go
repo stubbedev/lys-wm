@@ -1367,3 +1367,132 @@ func SurvivesALostDevice(t *testing.T, r render.Renderer) {
 		t.Fatal(err)
 	}
 }
+
+var cutAlphas = [4]uint8{0, 0x30, 0x80, 0xff}
+
+func CutTargetSize() image.Point { return image.Pt(4, 8) }
+
+func AlphaCuts(t *testing.T, r render.Renderer, target render.ReadTarget) {
+	t.Helper()
+	pix := make([]byte, 16)
+	for i, a := range cutAlphas {
+		pix[i*4+3] = a
+	}
+	shape, err := r.NewTexture(render.ARGB8888, image.Pt(4, 1), 16, pix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { check(t, shape.Destroy) })
+	cutRows(t, r, target, shape)
+}
+
+func AlphaCutOverDMABUF(t *testing.T, g GPU, node string, target render.ReadTarget) {
+	t.Helper()
+	fd, err := unix.Open(node, unix.O_RDWR|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check(t, func() error { return unix.Close(fd) })
+	lib, err := gpu.LoadGBM(gpu.PathsFromEnv(os.Getenv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, err := lib.Open(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dev.Close()
+	modifiers, err := g.RenderableModifiers(fourcc.ARGB8888)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo, err := dev.Allocate(image.Pt(4, 1), fourcc.ARGB8888, modifiers, gpu.UseRendering)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check(t, bo.Close)
+	client, err := g.ImportTarget(bo.DMABUF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check(t, client.Destroy)
+	Paint(t, g, client, render.Region{image.Rect(0, 0, 4, 1)}, func(p render.Pass) {
+		p.Clear(render.Color{})
+		for x, a := range cutAlphas {
+			p.FillRect(image.Rect(x, 0, x+1, 1), render.Color{A: a}, render.Mask{})
+		}
+	})
+	if err := g.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	shape, err := g.ImportTexture(bo.DMABUF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check(t, shape.Destroy)
+	cutRows(t, g, target, shape)
+}
+
+func cutRows(t *testing.T, r render.Renderer, target render.ReadTarget, shape render.Texture) {
+	t.Helper()
+	green, err := r.NewTexture(render.ARGB8888, image.Pt(1, 1), 4, []byte{0, 0xff, 0, 0xff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { check(t, green.Destroy) })
+	opaque, err := r.NewTexture(render.XRGB8888, image.Pt(4, 1), 16, make([]byte, 16))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { check(t, opaque.Destroy) })
+	red := render.Color{R: 0xff, A: 0xff}
+	identity := render.ColorTransform{Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1}, Scale: 1}
+	glass := render.Glass{Saturation: 1, Brightness: 1, Contrast: 1}
+	row := func(y int) image.Rectangle { return image.Rect(0, y, 4, y+1) }
+	cut := func(y int, tr render.Transform, threshold float32) render.AlphaCut {
+		return render.AlphaCut{Src: render.FRect{W: 4, H: 1}, Dst: row(y), Transform: lgpu.Transform(tr), Threshold: threshold}
+	}
+	Paint(t, r, target, render.Region{{Max: CutTargetSize()}}, func(p render.Pass) {
+		p.Clear(render.Color{})
+		p.SetCut(shape, cut(0, render.Normal, 0.25))
+		p.FillRect(row(0), red, render.Mask{})
+		p.SetCut(shape, cut(1, render.Rotate180, 0.25))
+		p.FillRect(row(1), red, render.Mask{})
+		p.SetCut(shape, cut(2, render.Normal, 0.1))
+		p.DrawTexture(green, render.FRect{W: 1, H: 1}, row(2), render.Normal, 1, render.Mask{})
+		p.SetCut(shape, cut(3, render.Normal, 0.6))
+		p.DrawGlass(green, render.FRect{W: 1, H: 1}, row(3), 1, render.Mask{}, glass)
+		p.SetColor(&identity)
+		p.SetCut(shape, cut(4, render.Normal, 0.25))
+		p.DrawTexture(green, render.FRect{W: 1, H: 1}, row(4), render.Normal, 1, render.Mask{})
+		p.SetCut(shape, cut(5, render.Normal, 0.6))
+		p.DrawGlass(green, render.FRect{W: 1, H: 1}, row(5), 1, render.Mask{}, glass)
+		p.SetColor(nil)
+		p.SetCut(opaque, cut(6, render.Normal, 0.9))
+		p.FillRect(row(6), red, render.Mask{})
+		p.ClearCut()
+		p.FillRect(row(7), red, render.Mask{})
+	})
+	r0, g, n := [4]byte{0, 0, 0xff, 0xff}, [4]byte{0, 0xff, 0, 0xff}, [4]byte{}
+	want := [8][4][4]byte{
+		{n, n, r0, r0},
+		{r0, r0, n, n},
+		{n, g, g, g},
+		{n, n, n, g},
+		{n, n, g, g},
+		{n, n, n, g},
+		{r0, r0, r0, r0},
+		{r0, r0, r0, r0},
+	}
+	got := make([]byte, 4*8*4)
+	if err := target.Read(got, 16); err != nil {
+		t.Fatal(err)
+	}
+	for y, cols := range want {
+		for x, w := range cols {
+			if px := [4]byte(got[y*16+x*4:]); !near(px, w) {
+				t.Errorf("row %d, pixel %d: %v, want %v", y, x, px, w)
+			}
+		}
+	}
+}

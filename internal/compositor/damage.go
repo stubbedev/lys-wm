@@ -40,6 +40,8 @@ type drawOp struct {
 	pending   int32
 	whole     image.Rectangle
 	overlay   bool
+	cutTex    render.Texture
+	cut       render.AlphaCut
 }
 
 const (
@@ -156,6 +158,11 @@ func mapGradient(g render.Gradient, at func([2]float32) [2]float32) render.Gradi
 		g.From, g.To = at(g.From), at(g.To)
 	}
 	return g
+}
+
+func shiftCut(c render.AlphaCut, d image.Point) render.AlphaCut {
+	c.Dst = c.Dst.Sub(d)
+	return c
 }
 
 func shiftMask(m render.Mask, d image.Point) render.Mask {
@@ -315,6 +322,16 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 		op := &f.ops[from+i]
 		op.dst, op.whole, op.mask.Keep.Rect, op.mask.Cut.Rect, op.mask.Merge = rect(op.dst), rect(op.whole), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect), rect(op.mask.Merge)
 		op.gradient = mapGradient(op.gradient, point)
+		if op.cutTex != nil {
+			op.cut.Dst = rect(op.cut.Dst)
+		}
+	}
+}
+
+func (f *frame) cut(from int, tex render.Texture, c render.AlphaCut) {
+	for i := range f.ops[from:] {
+		op := &f.ops[from+i]
+		op.cutTex, op.cut, op.opaque = tex, c, false
 	}
 }
 
@@ -414,6 +431,8 @@ func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut, ski
 	var transform *render.ColorTransform
 	var last *colorspace.Description
 	settled := false
+	var cutTex render.Texture
+	var cut render.AlphaCut
 	active := to.to != nil || to.working != nil
 	for i := range ops {
 		op := &ops[i]
@@ -428,6 +447,14 @@ func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut, ski
 					transform = t
 				}
 			}
+		}
+		if c := shiftCut(op.cut, origin); op.cutTex != cutTex || op.cutTex != nil && c != cut {
+			if op.cutTex == nil {
+				p.ClearCut()
+			} else {
+				p.SetCut(op.cutTex, c)
+			}
+			cutTex, cut = op.cutTex, c
 		}
 		m := shiftMask(op.mask, origin)
 		if g := op.goo; !g.A.Rect.Empty() {
@@ -456,6 +483,9 @@ func replayOps(ops []drawOp, p render.Pass, origin image.Point, to colorOut, ski
 	}
 	if transform != nil {
 		p.SetColor(nil)
+	}
+	if cutTex != nil {
+		p.ClearCut()
 	}
 }
 

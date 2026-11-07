@@ -14,6 +14,7 @@ const (
 	Texture2D                     = 0x0DE1
 	TextureExternalOES            = 0x8D65
 	Texture0                      = 0x84C0
+	Texture1                      = 0x84C1
 	TextureMinFilter              = 0x2801
 	TextureMagFilter              = 0x2800
 	TextureWrapS                  = 0x2802
