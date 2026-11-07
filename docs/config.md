@@ -292,8 +292,21 @@ input:
 | `click_method` | `button_areas`, `clickfinger` or `none` |
 | `scroll_method` | `two_finger`, `edge`, `on_button_down` or `none` |
 | `accel_profile` | `adaptive` or `flat` |
+| `accel_points` | A custom acceleration curve, `{step, points}`: pointer speeds at device speeds 0, `step`, 2 × `step`, … (in device units per millisecond), as libinput's custom profile takes them. `step` is above 0 and up to 10000, `points` holds 2 to 64 speeds from 0 to 10000. It selects the custom profile, so it cannot stand next to `accel_profile` |
 | `accel_speed` | -1 to 1 |
 | `scroll_factor` | Multiplies scroll distances; above 0, up to 100. Default 1 |
+| `left_handed` | Swap the left and right buttons (on a tablet, turn it around) |
+| `scroll_button` | The button `on_button_down` scrolls with: `left`, `right`, `middle`, `side`, `extra`, `forward`, `back`, `task` or an evdev button code such as `275` |
+| `scroll_button_lock` | A click on `scroll_button` turns scrolling on until the next click, instead of scrolling only while it is held |
+| `tap_button_map` | Which buttons one-, two- and three-finger taps press: `lrm` (left, right, middle) or `lmr` |
+| `disabled_on_external_mouse` | Turn the touchpad off while another pointing device is plugged in |
+
+Under `input.devices` a device also takes:
+
+| Key | Value |
+| --- | --- |
+| `calibration` | Six numbers, the touchscreen's calibration matrix as libinput applies it to normalized coordinates: `[a, b, c, d, e, f]` maps (x, y) to (a·x + b·y + c, d·x + e·y + f) |
+| `region` | `[x, y, width, height]`, fractions of the tablet: only that part of its surface is used, stretched over the whole of its output |
 
 An unset key keeps libinput's default for the device, and a reload that drops a
 key restores that default. A device that lacks a setting from `input.pointer`

@@ -31,37 +31,38 @@ func LibinputPath(getenv func(string) string) string {
 }
 
 const (
-	evDeviceAdded       = 1
-	evDeviceRemoved     = 2
-	evKeyboardKey       = 300
-	evPointerMotion     = 400
-	evPointerAbsolute   = 401
-	evPointerButton     = 402
-	evScrollWheel       = 404
-	evScrollFinger      = 405
-	evScrollContinuous  = 406
-	evTouchDown         = 500
-	evTouchUp           = 501
-	evTouchMotion       = 502
-	evTouchCancel       = 503
-	evTouchFrame        = 504
-	evSwipeBegin        = 800
-	evSwipeUpdate       = 801
-	evSwipeEnd          = 802
-	evPinchBegin        = 803
-	evPinchUpdate       = 804
-	evPinchEnd          = 805
-	evHoldBegin         = 806
-	evHoldEnd           = 807
-	evSwitchToggle      = 900
-	capKeyboard         = 0
-	capPointer          = 1
-	capTouch            = 2
-	axisVertical        = 0
-	axisHorizontal      = 1
-	switchLid           = 1
-	switchTabletMode    = 2
-	configStatusSuccess = 0
+	evDeviceAdded           = 1
+	evDeviceRemoved         = 2
+	evKeyboardKey           = 300
+	evPointerMotion         = 400
+	evPointerAbsolute       = 401
+	evPointerButton         = 402
+	evScrollWheel           = 404
+	evScrollFinger          = 405
+	evScrollContinuous      = 406
+	evTouchDown             = 500
+	evTouchUp               = 501
+	evTouchMotion           = 502
+	evTouchCancel           = 503
+	evTouchFrame            = 504
+	evSwipeBegin            = 800
+	evSwipeUpdate           = 801
+	evSwipeEnd              = 802
+	evPinchBegin            = 803
+	evPinchUpdate           = 804
+	evPinchEnd              = 805
+	evHoldBegin             = 806
+	evHoldEnd               = 807
+	evSwitchToggle          = 900
+	capKeyboard             = 0
+	capPointer              = 1
+	capTouch                = 2
+	axisVertical            = 0
+	axisHorizontal          = 1
+	switchLid               = 1
+	switchTabletMode        = 2
+	configStatusSuccess     = 0
+	configStatusUnsupported = 1
 )
 
 var switchKinds = map[int32]backend.SwitchKind{switchLid: backend.SwitchLid, switchTabletMode: backend.SwitchTabletMode}
@@ -117,31 +118,7 @@ type libinputFuncs struct {
 	switchTime       func(sev uintptr) uint64
 	switchKind       func(sev uintptr) int32
 	switchState      func(sev uintptr) int32
-	tapFingers       func(dev uintptr) int32
-	tap              func(dev uintptr, enable int32) int32
-	tapDefault       func(dev uintptr) int32
-	dragLock         func(dev uintptr, enable int32) int32
-	dragDefault      func(dev uintptr) int32
-	hasNatural       func(dev uintptr) int32
-	natural          func(dev uintptr, enable int32) int32
-	naturalDefault   func(dev uintptr) int32
-	hasDWT           func(dev uintptr) int32
-	dwt              func(dev uintptr, enable int32) int32
-	dwtDefault       func(dev uintptr) int32
-	hasMiddle        func(dev uintptr) int32
-	middle           func(dev uintptr, enable int32) int32
-	middleDefault    func(dev uintptr) int32
-	clickMethods     func(dev uintptr) ClickMethod
-	clickMethod      func(dev uintptr, method ClickMethod) int32
-	clickDefault     func(dev uintptr) ClickMethod
-	scrollMethods    func(dev uintptr) ScrollMethod
-	scrollMethod     func(dev uintptr, method ScrollMethod) int32
-	scrollDefault    func(dev uintptr) ScrollMethod
-	hasAccel         func(dev uintptr) int32
-	accelProfile     func(dev uintptr, profile AccelProfile) int32
-	profileDefault   func(dev uintptr) AccelProfile
-	accelSpeed       func(dev uintptr, speed float64) int32
-	speedDefault     func(dev uintptr) float64
+	config           configFuncs
 	tablet           tabletFuncs
 	pad              padFuncs
 }
@@ -330,7 +307,7 @@ func hotCall[R uintptr | int32 | uint64](f *libinputFuncs, sym uintptr) func(uin
 
 func (in *Libinput) bind(path string) error {
 	f := &in.fn
-	for _, s := range []libSymbol{
+	syms := []libSymbol{
 		{&f.createContext, "libinput_path_create_context"},
 		{&f.unref, "libinput_unref"},
 		{&f.addDevice, "libinput_path_add_device"},
@@ -384,44 +361,26 @@ func (in *Libinput) bind(path string) error {
 		{&f.switchTime, "libinput_event_switch_get_time_usec"},
 		{&f.switchKind, "libinput_event_switch_get_switch"},
 		{&f.switchState, "libinput_event_switch_get_switch_state"},
-		{&f.tapFingers, "libinput_device_config_tap_get_finger_count"},
-		{&f.tap, "libinput_device_config_tap_set_enabled"},
-		{&f.tapDefault, "libinput_device_config_tap_get_default_enabled"},
-		{&f.dragLock, "libinput_device_config_tap_set_drag_lock_enabled"},
-		{&f.dragDefault, "libinput_device_config_tap_get_default_drag_lock_enabled"},
-		{&f.hasNatural, "libinput_device_config_scroll_has_natural_scroll"},
-		{&f.natural, "libinput_device_config_scroll_set_natural_scroll_enabled"},
-		{&f.naturalDefault, "libinput_device_config_scroll_get_default_natural_scroll_enabled"},
-		{&f.hasDWT, "libinput_device_config_dwt_is_available"},
-		{&f.dwt, "libinput_device_config_dwt_set_enabled"},
-		{&f.dwtDefault, "libinput_device_config_dwt_get_default_enabled"},
-		{&f.hasMiddle, "libinput_device_config_middle_emulation_is_available"},
-		{&f.middle, "libinput_device_config_middle_emulation_set_enabled"},
-		{&f.middleDefault, "libinput_device_config_middle_emulation_get_default_enabled"},
-		{&f.clickMethods, "libinput_device_config_click_get_methods"},
-		{&f.clickMethod, "libinput_device_config_click_set_method"},
-		{&f.clickDefault, "libinput_device_config_click_get_default_method"},
-		{&f.scrollMethods, "libinput_device_config_scroll_get_methods"},
-		{&f.scrollMethod, "libinput_device_config_scroll_set_method"},
-		{&f.scrollDefault, "libinput_device_config_scroll_get_default_method"},
-		{&f.hasAccel, "libinput_device_config_accel_is_available"},
-		{&f.accelProfile, "libinput_device_config_accel_set_profile"},
-		{&f.profileDefault, "libinput_device_config_accel_get_default_profile"},
-		{&f.accelSpeed, "libinput_device_config_accel_set_speed"},
-		{&f.speedDefault, "libinput_device_config_accel_get_default_speed"},
-	} {
+	}
+	if err := in.register(path, syms); err != nil {
+		return err
+	}
+	for _, bind := range []func(string) error{in.bindConfig, in.bindTablet, in.bindPad, in.bindHot} {
+		if err := bind(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (in *Libinput) register(path string, syms []libSymbol) error {
+	for _, s := range syms {
 		if _, err := purego.Dlsym(in.lib, s.name); err != nil {
 			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
 		}
 		purego.RegisterLibFunc(s.fn, in.lib, s.name)
 	}
-	if err := in.bindTablet(path); err != nil {
-		return err
-	}
-	if err := in.bindPad(path); err != nil {
-		return err
-	}
-	return in.bindHot(path)
+	return nil
 }
 
 func (in *Libinput) bindHot(path string) error {
@@ -671,7 +630,7 @@ func (in *Libinput) event(ev uintptr) error {
 	typ := f.eventType(ev)
 	switch typ {
 	case evDeviceAdded:
-		d := &InputDevice{name: f.deviceName(h), h: f.deviceRef(h), touchpad: f.tapFingers(h) > 0, scrollFactor: 1, ledUpdate: f.ledUpdate}
+		d := &InputDevice{name: f.deviceName(h), h: f.deviceRef(h), touchpad: f.config.tapFingers(h) > 0, scrollFactor: 1, ledUpdate: f.ledUpdate}
 		for c, flag := range map[int32]backend.Capability{capKeyboard: backend.Keyboard, capPointer: backend.Pointer, capTouch: backend.Touch} {
 			if f.deviceHasCap(h, c) != 0 {
 				d.caps |= flag

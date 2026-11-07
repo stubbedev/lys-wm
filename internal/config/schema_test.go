@@ -251,10 +251,16 @@ func TestEveryPublishedBoundIsWhatTheParserEnforces(t *testing.T) {
 	}
 }
 
+var itemFillers = map[string]any{"input.devices.*.calibration": 1.0, "input.devices.*.region": 0.25}
+
 func TestEveryPublishedItemCountIsWhatTheParserEnforces(t *testing.T) {
-	colours := func(n int) []string { return slices.Repeat([]string{"#112233"}, n) }
 	for _, path := range slices.Sorted(maps.Keys(annotations())) {
 		note := annotations()[path]
+		filler, ok := itemFillers[path]
+		if !ok {
+			filler = "#112233"
+		}
+		colours := func(n int) []any { return slices.Repeat([]any{filler}, n) }
 		if note.minItems != nil {
 			if _, err := parses(t, path, colours(*note.minItems)); err != nil {
 				t.Errorf("%s: the fewest, %d, are refused: %v", path, *note.minItems, err)

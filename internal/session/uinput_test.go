@@ -237,7 +237,7 @@ func TestLibinputAppliesAndReappliesPointerSettings(t *testing.T) {
 	if a := click(); a.Value120 != -120 || a.Value >= 0 {
 		t.Fatalf("a wheel click up after reloading to the defaults: %+v", a)
 	}
-	err := in.Reconfigure(InputConfig{Devices: map[string]DeviceConfig{virtualMouse: {Tap: new(true)}}})
+	err := in.Reconfigure(InputConfig{Devices: map[string]NamedDeviceConfig{virtualMouse: {DeviceConfig: DeviceConfig{Tap: new(true)}}}})
 	if err == nil || !strings.Contains(err.Error(), `"`+virtualMouse+`" has no tap setting`) {
 		t.Fatalf("tapping on a mouse: %v", err)
 	}

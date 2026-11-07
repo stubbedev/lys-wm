@@ -225,7 +225,7 @@ func TestUnknownKeysWarnAndTheRestOfTheFileApplies(t *testing.T) {
 		"animations:\n  events:\n    border: {curve: linear}\n":               "t.yaml:3: animations.events.border: unknown event",
 		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, borderangle, windows_minimize, zoom, snap, fade_snap, overview, scratchpad)",
 		"borders:\n  active: {colors: [red, blue], angel: 4}\n":               "t.yaml:2: borders.active.angel: unknown key",
-		"input:\n  touchpad:\n    tapping: true\n":                            "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
+		"input:\n  touchpad:\n    tapping: true\n":                            "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_points, accel_profile, accel_speed,",
 		"input:\n  devices:\n    mouse:\n      speed: 1\n":                    "t.yaml:4: input.devices.mouse.speed: unknown key",
 		"decoration:\n  blur:\n    glint: 1\n":                                "t.yaml:3: decoration.blur.glint: unknown key",
 		"from_a_newer_lys_wm: {a: 1}\n":                                       "t.yaml:1: from_a_newer_lys_wm: unknown key (known: ",
@@ -1190,6 +1190,62 @@ func TestWorkspaceRules(t *testing.T) {
 	} {
 		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: %v, want %s", text, err, want)
+		}
+	}
+}
+
+func TestDeviceSettingsParseIntoTypedValues(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte(`input:
+  pointer:
+    left_handed: true
+    scroll_method: on_button_down
+    scroll_button: side
+    scroll_button_lock: true
+    accel_points: {step: 0.5, points: [0, 1, 2.5]}
+  touchpad:
+    tap_button_map: lmr
+    disabled_on_external_mouse: true
+  devices:
+    "Trackball":
+      scroll_button: 275
+    "Wacom Intuos Pro M Pen":
+      region: [0.25, 0, 0.5, 0.5]
+    "ELAN touchscreen":
+      calibration: [0, 1, 0, -1, 0, 1]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom, err := session.AccelCustom(0.5, []float64{0, 1, 2.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, tp, d := cfg.Input.Pointer, cfg.Input.Touchpad, cfg.Input.Devices
+	if !*p.LeftHanded || *p.ScrollButton != 0x113 || !*p.ScrollButtonLock || p.AccelProfile.String() != custom.String() {
+		t.Errorf("pointer %+v", p)
+	}
+	if *tp.TapButtonMap != session.TapLMR || !*tp.DisabledOnExternalMouse {
+		t.Errorf("touchpad %+v", tp)
+	}
+	if *d["Trackball"].ScrollButton != 275 {
+		t.Errorf("a button by code: %v", *d["Trackball"].ScrollButton)
+	}
+	if a := d["Wacom Intuos Pro M Pen"].Area; a == nil || *a != (session.Area{X1: 0.25, X2: 0.75, Y2: 0.5}) {
+		t.Errorf("region %v", a)
+	}
+	if c := d["ELAN touchscreen"].Calibration; c == nil || *c != (session.Calibration{0, 1, 0, -1, 0, 1}) {
+		t.Errorf("calibration %v", c)
+	}
+	for text, want := range map[string]string{
+		"input:\n  pointer:\n    scroll_button: thumb\n":                                             "t.yaml:3: input.pointer.scroll_button:",
+		"input:\n  pointer:\n    scroll_button: 0\n":                                                 "t.yaml:3: input.pointer.scroll_button:",
+		"input:\n  pointer:\n    accel_profile: flat\n    accel_points: {step: 1, points: [0, 1]}\n": "t.yaml:3: input.pointer.accel_profile: accel_points already selects",
+		"input:\n  pointer:\n    accel_points: {step: 1, points: [1]}\n":                             "t.yaml:3: input.pointer.accel_points: 1 points",
+		"input:\n  devices:\n    x:\n      region: [0.5, 0, 0.75, 1]\n":                              "t.yaml:4: input.devices.\"x\".region:",
+		"input:\n  devices:\n    x:\n      calibration: [1, 0, 0]\n":                                 "t.yaml:4: input.devices.\"x\".calibration: 3 numbers, not 6",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", text, err, want)
 		}
 	}
 }

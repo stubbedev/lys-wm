@@ -130,11 +130,12 @@ func short(v float32) float64 {
 
 func device(prefix string) map[string]annotation {
 	return map[string]annotation{
-		prefix + ".click_method":  {enum: slices.Sorted(maps.Keys(clickMethods))},
-		prefix + ".scroll_method": {enum: slices.Sorted(maps.Keys(scrollMethods))},
-		prefix + ".accel_profile": {enum: slices.Sorted(maps.Keys(accelProfiles))},
-		prefix + ".accel_speed":   at(-1, 1, nil),
-		prefix + ".scroll_factor": above(0, 100, nil),
+		prefix + ".click_method":   {enum: slices.Sorted(maps.Keys(clickMethods))},
+		prefix + ".scroll_method":  {enum: slices.Sorted(maps.Keys(scrollMethods))},
+		prefix + ".accel_profile":  {enum: slices.Sorted(maps.Keys(accelProfiles))},
+		prefix + ".tap_button_map": {enum: slices.Sorted(maps.Keys(tapButtonMaps))},
+		prefix + ".accel_speed":    at(-1, 1, nil),
+		prefix + ".scroll_factor":  above(0, 100, nil),
 	}
 }
 
@@ -249,6 +250,10 @@ func annotations() map[string]annotation {
 		device("input.pointer"),
 		device("input.touchpad"),
 		device("input.devices.*"),
+		{
+			"input.devices.*.calibration": {minItems: new(6), maxItems: new(6)},
+			"input.devices.*.region":      {minItems: new(4), maxItems: new(4)},
+		},
 		lookAnnotations("decoration.blur", saturation),
 	} {
 		maps.Copy(out, group)
@@ -259,6 +264,7 @@ func annotations() map[string]annotation {
 var (
 	sidesType  = reflect.TypeFor[sides]()
 	borderType = reflect.TypeFor[rawBorder]()
+	buttonType = reflect.TypeFor[buttonName]()
 )
 
 func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schemaNode {
@@ -272,6 +278,8 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 	switch {
 	case t == sidesType:
 		n.OneOf = []*schemaNode{{Type: "integer"}, {Type: "array", Items: &schemaNode{Type: "integer"}}}
+	case t == buttonType:
+		n.OneOf = []*schemaNode{{Type: "string", Enum: enumValues(annotation{enum: slices.Sorted(maps.Keys(buttons))})}, {Type: "integer", Minimum: new(1.0)}}
 	case t == borderType:
 		object := objectSchema(t, path, notes)
 		n.OneOf = []*schemaNode{{Type: "string", Format: colorFormat}, object}

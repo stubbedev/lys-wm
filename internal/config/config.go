@@ -227,23 +227,42 @@ type rawOutput struct {
 }
 
 type rawInput struct {
-	Keyboard rawKeyboard          `yaml:"keyboard"`
-	Pointer  rawDevice            `yaml:"pointer"`
-	Touchpad rawDevice            `yaml:"touchpad"`
-	Devices  map[string]rawDevice `yaml:"devices"`
+	Keyboard rawKeyboard               `yaml:"keyboard"`
+	Pointer  rawDevice                 `yaml:"pointer"`
+	Touchpad rawDevice                 `yaml:"touchpad"`
+	Devices  map[string]rawNamedDevice `yaml:"devices"`
 }
 
 type rawDevice struct {
-	Tap                *bool        `yaml:"tap"`
-	DragLock           *bool        `yaml:"drag_lock"`
-	NaturalScroll      *bool        `yaml:"natural_scroll"`
-	DisableWhileTyping *bool        `yaml:"disable_while_typing"`
-	MiddleEmulation    *bool        `yaml:"middle_emulation"`
-	ClickMethod        *At[string]  `yaml:"click_method"`
-	ScrollMethod       *At[string]  `yaml:"scroll_method"`
-	AccelProfile       *At[string]  `yaml:"accel_profile"`
-	AccelSpeed         *At[float64] `yaml:"accel_speed"`
-	ScrollFactor       *At[float64] `yaml:"scroll_factor"`
+	Tap                     *bool               `yaml:"tap"`
+	DragLock                *bool               `yaml:"drag_lock"`
+	NaturalScroll           *bool               `yaml:"natural_scroll"`
+	DisableWhileTyping      *bool               `yaml:"disable_while_typing"`
+	MiddleEmulation         *bool               `yaml:"middle_emulation"`
+	ClickMethod             *At[string]         `yaml:"click_method"`
+	ScrollMethod            *At[string]         `yaml:"scroll_method"`
+	AccelProfile            *At[string]         `yaml:"accel_profile"`
+	AccelSpeed              *At[float64]        `yaml:"accel_speed"`
+	ScrollFactor            *At[float64]        `yaml:"scroll_factor"`
+	LeftHanded              *bool               `yaml:"left_handed"`
+	ScrollButton            *At[buttonName]     `yaml:"scroll_button"`
+	ScrollButtonLock        *bool               `yaml:"scroll_button_lock"`
+	TapButtonMap            *At[string]         `yaml:"tap_button_map"`
+	AccelPoints             *At[rawAccelPoints] `yaml:"accel_points"`
+	DisabledOnExternalMouse *bool               `yaml:"disabled_on_external_mouse"`
+}
+
+type buttonName string
+
+type rawAccelPoints struct {
+	Step   float64   `yaml:"step"`
+	Points []float64 `yaml:"points"`
+}
+
+type rawNamedDevice struct {
+	rawDevice   `yaml:",inline"`
+	Calibration *At[[]float64] `yaml:"calibration"`
+	Region      *At[[]float64] `yaml:"region"`
 }
 
 type rawKeyboard struct {
@@ -1182,6 +1201,7 @@ var (
 	clickMethods     = map[string]session.ClickMethod{"none": session.ClickNone, "button_areas": session.ClickButtonAreas, "clickfinger": session.ClickFinger}
 	scrollMethods    = map[string]session.ScrollMethod{"none": session.ScrollNone, "two_finger": session.ScrollTwoFinger, "edge": session.ScrollEdge, "on_button_down": session.ScrollOnButtonDown}
 	accelProfiles    = map[string]session.AccelProfile{"flat": session.AccelFlat, "adaptive": session.AccelAdaptive}
+	tapButtonMaps    = map[string]session.TapButtonMap{"lrm": session.TapLRM, "lmr": session.TapLMR}
 	vrrPolicies      = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
 	hdrPolicies      = map[string]compositor.HDRPolicy{"false": compositor.HDROff, "true": compositor.HDROn, "fullscreen": compositor.HDRFullscreen}
 	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
@@ -1228,25 +1248,97 @@ func (p *parser) between(a *At[float64], key string, lo, hi float64, open bool) 
 	return &a.V
 }
 
+var buttons = map[string]uint32{
+	"left": 0x110, "right": 0x111, "middle": 0x112, "side": 0x113,
+	"extra": 0x114, "forward": 0x115, "back": 0x116, "task": 0x117,
+}
+
+func (p *parser) button(a *At[buttonName], key string) *uint32 {
+	if a == nil {
+		return nil
+	}
+	if code, ok := buttons[string(a.V)]; ok {
+		return &code
+	}
+	code, err := strconv.ParseUint(string(a.V), 10, 16)
+	if err != nil || code == 0 {
+		p.fail(a.Line, key, "%q is not a button code above 0 or one of %s", a.V, strings.Join(slices.Sorted(maps.Keys(buttons)), ", "))
+		return nil
+	}
+	v := uint32(code)
+	return &v
+}
+
+func (p *parser) accel(r rawDevice, key string) *session.AccelProfile {
+	if r.AccelPoints == nil {
+		return choice(p, r.AccelProfile, key+".accel_profile", accelProfiles)
+	}
+	if r.AccelProfile != nil {
+		p.fail(r.AccelProfile.Line, key+".accel_profile", "accel_points already selects the custom profile")
+		return nil
+	}
+	profile, err := session.AccelCustom(r.AccelPoints.V.Step, r.AccelPoints.V.Points)
+	if err != nil {
+		p.fail(r.AccelPoints.Line, key+".accel_points", "%v", err)
+		return nil
+	}
+	return &profile
+}
+
 func (p *parser) device(r rawDevice, key string) session.DeviceConfig {
 	return session.DeviceConfig{
 		Tap: r.Tap, DragLock: r.DragLock, NaturalScroll: r.NaturalScroll,
 		DisableWhileTyping: r.DisableWhileTyping, MiddleEmulation: r.MiddleEmulation,
+		LeftHanded: r.LeftHanded, ScrollButtonLock: r.ScrollButtonLock, DisabledOnExternalMouse: r.DisabledOnExternalMouse,
 		ClickMethod:  choice(p, r.ClickMethod, key+".click_method", clickMethods),
 		ScrollMethod: choice(p, r.ScrollMethod, key+".scroll_method", scrollMethods),
-		AccelProfile: choice(p, r.AccelProfile, key+".accel_profile", accelProfiles),
+		ScrollButton: p.button(r.ScrollButton, key+".scroll_button"),
+		TapButtonMap: choice(p, r.TapButtonMap, key+".tap_button_map", tapButtonMaps),
+		AccelProfile: p.accel(r, key),
 		AccelSpeed:   p.between(r.AccelSpeed, key+".accel_speed", -1, 1, false),
 		ScrollFactor: p.between(r.ScrollFactor, key+".scroll_factor", 0, 100, true),
 	}
 }
 
+func (p *parser) floats(a *At[[]float64], key string, n int) []float64 {
+	if a == nil {
+		return nil
+	}
+	if len(a.V) != n {
+		p.fail(a.Line, key, "%d numbers, not %d", len(a.V), n)
+		return nil
+	}
+	return a.V
+}
+
+func (p *parser) namedDevice(r rawNamedDevice, key string) session.NamedDeviceConfig {
+	c := session.NamedDeviceConfig{DeviceConfig: p.device(r.rawDevice, key)}
+	if m := p.floats(r.Calibration, key+".calibration", 6); m != nil {
+		cal, err := session.NewCalibration([6]float64(m))
+		if err != nil {
+			p.fail(r.Calibration.Line, key+".calibration", "%v", err)
+		} else {
+			c.Calibration = &cal
+		}
+	}
+	if v := p.floats(r.Region, key+".region", 4); v != nil {
+		area, err := session.NewArea(v[0], v[1], v[2], v[3])
+		if err != nil {
+			p.fail(r.Region.Line, key+".region", "%v", err)
+		} else {
+			c.Area = &area
+		}
+	}
+	return c
+}
+
 func (p *parser) input(r rawInput) session.InputConfig {
 	c := session.InputConfig{Pointer: p.device(r.Pointer, "input.pointer"), Touchpad: p.device(r.Touchpad, "input.touchpad")}
 	if len(r.Devices) > 0 {
-		c.Devices = make(map[string]session.DeviceConfig, len(r.Devices))
+		c.Devices = make(map[string]session.NamedDeviceConfig, len(r.Devices))
 	}
 	for _, name := range slices.Sorted(maps.Keys(r.Devices)) {
-		c.Devices[name] = p.device(r.Devices[name], fmt.Sprintf("input.devices.%q", name))
+		c.Devices[name] = p.namedDevice(r.Devices[name], fmt.Sprintf("input.devices.%q", name))
 	}
 	return c
 }

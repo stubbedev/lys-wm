@@ -1,10 +1,7 @@
 package session
 
 import (
-	"fmt"
 	"math"
-
-	"github.com/ebitengine/purego"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
@@ -89,13 +86,7 @@ func (in *Libinput) bindPad(path string) error {
 		{&f.hasDial, "libinput_tablet_pad_mode_group_has_dial"},
 		{&f.deviceGroup, "libinput_device_get_device_group"},
 	}
-	for _, s := range syms {
-		if _, err := purego.Dlsym(in.lib, s.name); err != nil {
-			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
-		}
-		purego.RegisterLibFunc(s.fn, in.lib, s.name)
-	}
-	return nil
+	return in.register(path, syms)
 }
 
 func count(n int32) uint32 {

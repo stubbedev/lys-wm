@@ -1,10 +1,6 @@
 package session
 
 import (
-	"fmt"
-
-	"github.com/ebitengine/purego"
-
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
 )
@@ -123,13 +119,7 @@ func (in *Libinput) bindTablet(path string) error {
 	for i, c := range toolCapabilities {
 		syms = append(syms, libSymbol{&f.toolHas[i], "libinput_tablet_tool_has_" + c.name})
 	}
-	for _, s := range syms {
-		if _, err := purego.Dlsym(in.lib, s.name); err != nil {
-			return fmt.Errorf("session: %s lacks %s: %w", path, s.name, err)
-		}
-		purego.RegisterLibFunc(s.fn, in.lib, s.name)
-	}
-	return nil
+	return in.register(path, syms)
 }
 
 func (in *Libinput) tabletTool(h uintptr) *tabletinput.Tool {
