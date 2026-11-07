@@ -19,8 +19,11 @@ the error and status 1 when not, a key lys-wm does not know included. `lys-wm --
 built-in config. `lys-wm --config-schema` prints a JSON schema of every key, the
 same as the committed
 [`schema/lys-wm-config.schema.json`](https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json),
-with the choices, bounds and defaults of the scalar keys, which tests hold to
-what the parser does. Defaults are the GPU renderers'. These flags are the
+with the choices, bounds and defaults of the scalar keys, the defaults of
+`gaps.outer`, the borders and the built-in palette, and how many colours a
+gradient takes, which tests hold to what the parser does. The focus border
+defaults to `accent`, so it follows the desktop accent until set.
+Defaults are the GPU renderers'. These flags are the
 contract other programs use, lys-settings among them, instead of the parser's
 Go package.
 

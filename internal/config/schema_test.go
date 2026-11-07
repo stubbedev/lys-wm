@@ -10,6 +10,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/render"
 )
 
 func nested(path string, value any) map[string]any {
@@ -80,6 +83,13 @@ func schemaAt(t *testing.T, root map[string]any, path string) map[string]any {
 	t.Helper()
 	node := root
 	descend := func(key, field string) {
+		if branches, ok := node["oneOf"].([]any); ok && field == "properties" {
+			for _, b := range branches {
+				if m, ok := b.(map[string]any); ok && m["properties"] != nil {
+					node = m
+				}
+			}
+		}
 		next, ok := node[field].(map[string]any)
 		if !ok {
 			t.Fatalf("%s: %q has no %s", path, key, field)
@@ -237,6 +247,29 @@ func TestEveryPublishedBoundIsWhatTheParserEnforces(t *testing.T) {
 	}
 }
 
+func TestEveryPublishedItemCountIsWhatTheParserEnforces(t *testing.T) {
+	colours := func(n int) []string { return slices.Repeat([]string{"#112233"}, n) }
+	for _, path := range slices.Sorted(maps.Keys(annotations())) {
+		note := annotations()[path]
+		if note.minItems != nil {
+			if _, err := parses(t, path, colours(*note.minItems)); err != nil {
+				t.Errorf("%s: the fewest, %d, are refused: %v", path, *note.minItems, err)
+			}
+			if _, err := parses(t, path, colours(*note.minItems-1)); err == nil {
+				t.Errorf("%s: fewer than %d were accepted", path, *note.minItems)
+			}
+		}
+		if note.maxItems != nil {
+			if _, err := parses(t, path, colours(*note.maxItems)); err != nil {
+				t.Errorf("%s: the most, %d, are refused: %v", path, *note.maxItems, err)
+			}
+			if _, err := parses(t, path, colours(*note.maxItems+1)); err == nil {
+				t.Errorf("%s: more than %d were accepted", path, *note.maxItems)
+			}
+		}
+	}
+}
+
 func TestEveryPublishedColourFieldTakesAColourAndRefusesAnythingElse(t *testing.T) {
 	for _, path := range slices.Sorted(maps.Keys(annotations())) {
 		if annotations()[path].format != colorFormat {
@@ -302,31 +335,36 @@ func TestSettingTheShadowColourAloneAlsoMovesTheInactiveOne(t *testing.T) {
 }
 
 func TestEveryPublishedDefaultIsWhatTheConfigGetsWithoutTheKey(t *testing.T) {
-	empty, err := Parse("schema.yaml", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := comparable(empty)
-	for _, path := range slices.Sorted(maps.Keys(annotations())) {
-		def := annotations()[path].def
-		if def == nil {
-			continue
+	for _, accent := range []render.Color{compositor.DefaultAccent, {R: 0x12, G: 0x34, B: 0x56, A: 0xff}} {
+		parse := func(data []byte) (Config, error) {
+			return ParseLayers(accent, Layer{Source: SourceConfig, File: "schema.yaml", Data: data})
 		}
-		paths := []string{path}
-		if other, ok := writtenTogether[path]; ok {
-			paths = append(paths, other)
-		}
-		data, err := json.Marshal(withDefaults(paths...))
+		empty, err := parse(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := Parse("schema.yaml", data)
-		if err != nil {
-			t.Errorf("%s: the default %v is refused: %v", path, def, err)
-			continue
-		}
-		if got := comparable(cfg); got != want {
-			t.Errorf("%s: writing the published default %v changes the config", path, def)
+		want := comparable(empty)
+		for _, path := range slices.Sorted(maps.Keys(annotations())) {
+			def := annotations()[path].def
+			if def == nil {
+				continue
+			}
+			paths := []string{path}
+			if other, ok := writtenTogether[path]; ok {
+				paths = append(paths, other)
+			}
+			data, err := json.Marshal(withDefaults(paths...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := parse(data)
+			if err != nil {
+				t.Errorf("%s: the default %v is refused: %v", path, def, err)
+				continue
+			}
+			if got := comparable(cfg); got != want {
+				t.Errorf("%s: under the accent %v, writing the published default %v changes the config", path, accent, def)
+			}
 		}
 	}
 }

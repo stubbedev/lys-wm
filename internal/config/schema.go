@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/seat"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 const (
@@ -38,6 +39,8 @@ type schemaNode struct {
 	Minimum              *float64               `json:"minimum,omitempty"`
 	ExclusiveMinimum     *float64               `json:"exclusiveMinimum,omitempty"`
 	Maximum              *float64               `json:"maximum,omitempty"`
+	MinItems             *int                   `json:"minItems,omitempty"`
+	MaxItems             *int                   `json:"maxItems,omitempty"`
 	Default              any                    `json:"default,omitempty"`
 	OneOf                []*schemaNode          `json:"oneOf,omitempty"`
 	Items                *schemaNode            `json:"items,omitempty"`
@@ -46,11 +49,12 @@ type schemaNode struct {
 }
 
 type annotation struct {
-	format           string
-	enum             []string
-	minimum, maximum *float64
-	exclusiveMinimum *float64
-	def              any
+	format             string
+	enum               []string
+	minimum, maximum   *float64
+	exclusiveMinimum   *float64
+	minItems, maxItems *int
+	def                any
 }
 
 func at(lo, hi float64, def any) annotation {
@@ -68,6 +72,23 @@ func atLeastAnn(lo float64, def any) annotation {
 func colorAnn(def any) annotation { return annotation{format: colorFormat, def: def} }
 
 func formatAnn(format string) annotation { return annotation{format: format} }
+
+var borderColors = annotation{minItems: new(1), maxItems: new(compositor.MaxBorderColors)}
+
+func sidesValue(in wm.Insets) any {
+	if in.Top == in.Right && in.Top == in.Bottom && in.Top == in.Left {
+		return in.Top
+	}
+	return []int{in.Top, in.Right, in.Bottom, in.Left}
+}
+
+func builtInPalette() map[string]string {
+	out := make(map[string]string, len(mocha))
+	for name, c := range mocha {
+		out[name] = hexColor(c)
+	}
+	return out
+}
 
 var bindFlags = annotation{enum: []string{"locked", "repeating"}}
 
@@ -115,6 +136,12 @@ func annotations() map[string]annotation {
 		"input.keyboard.repeat_delay":      at(0, math.MaxInt32, seat.DefaultRepeatDelay),
 		"borders.width":                    atLeastAnn(0, d.BorderWidth),
 		"gaps.inner":                       atLeastAnn(0, s.Gaps.Inner),
+		"gaps.outer":                       {def: sidesValue(s.Gaps.Outer)},
+		"borders.active":                   {def: accentName},
+		"borders.inactive":                 {def: hexColor(d.InactiveBorder.Colors()[0])},
+		"borders.active.colors":            borderColors,
+		"borders.inactive.colors":          borderColors,
+		"palette":                          {def: builtInPalette()},
 		"decoration.rounding":              atLeastAnn(0, d.Rounding),
 		"decoration.active_opacity":        at(0, 1, short(d.Opacity.Active)),
 		"decoration.inactive_opacity":      at(0, 1, short(d.Opacity.Inactive)),
@@ -229,7 +256,7 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 		panic(fmt.Sprintf("config: %s has a %s, which the schema does not describe", path, t))
 	}
 	if note, ok := notes[path]; ok {
-		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default = note.format, note.enum, note.minimum, note.maximum, note.exclusiveMinimum, note.def
+		n.Format, n.Enum, n.Minimum, n.Maximum, n.ExclusiveMinimum, n.Default, n.MinItems, n.MaxItems = note.format, note.enum, note.minimum, note.maximum, note.exclusiveMinimum, note.def, note.minItems, note.maxItems
 	}
 	return n
 }
