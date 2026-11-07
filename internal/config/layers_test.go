@@ -136,3 +136,45 @@ func TestOneLayerParsesAsParseDoes(t *testing.T) {
 		t.Fatalf("%v, %v", one, layered)
 	}
 }
+
+func TestAListItemErrorNamesTheFileAndLineOfItsItem(t *testing.T) {
+	const pad = "gaps:\n  inner: 1\n"
+	cases := []struct {
+		name, item, want string
+	}{
+		{"bind without chord", "binds:\n  - action: kill\n", ":4: binds[0].chord: is missing"},
+		{"bind without action", "binds:\n  - chord: SUPER + Q\n", ":4: binds[0].action: is missing"},
+		{"bind with a bad action", "binds:\n  - chord: SUPER + Q\n    action: frobnicate\n", ":5: binds[0].action: "},
+		{"submap bind without action", "submaps:\n  resize:\n    - chord: SUPER + Q\n", ":5: submaps.resize[0].action: is missing"},
+		{"submap bind with a bad flag", "submaps:\n  resize:\n    - chord: SUPER + Q\n      action: kill\n      flags: [sticky]\n", ":7: submaps.resize[0].flags: unknown flag"},
+		{"swipe without fingers", "gestures:\n  swipe:\n    - direction: left\n      action: kill\n", ":5: gestures.swipe[0].fingers: is missing"},
+		{"swipe without direction", "gestures:\n  swipe:\n    - fingers: 3\n      action: kill\n", ":5: gestures.swipe[0].direction: is missing"},
+		{"swipe with a bad direction", "gestures:\n  swipe:\n    - fingers: 3\n      direction: sideways\n      action: kill\n", ":6: gestures.swipe[0].direction: "},
+		{"pinch without action or drive", "gestures:\n  pinch:\n    - fingers: 2\n      direction: in\n", ":5: gestures.pinch[0]: takes exactly one of action and drive"},
+		{"pinch with too few fingers", "gestures:\n  pinch:\n    - fingers: 1\n      direction: in\n      action: kill\n", ":5: gestures.pinch[0].fingers: 1 is not a pinch"},
+		{"hold without fingers", "gestures:\n  hold:\n    - action: kill\n", ":5: gestures.hold[0].fingers: is missing"},
+		{"hold with a direction", "gestures:\n  hold:\n    - fingers: 1\n      direction: up\n      action: kill\n", ":6: gestures.hold[0].direction: a hold has no direction"},
+		{"output without match", "outputs:\n  - scale: 2\n", ":4: outputs[0].match: is missing"},
+		{"output with a bad bitdepth", "outputs:\n  - match: DP-1\n    bitdepth: 7\n", ":5: outputs[0].bitdepth: 7 is not 8 or 10"},
+		{"rule without a match", "rules:\n  - float: true\n", ":4: rules[0]: matches every window"},
+		{"rule with a bad size", "rules:\n  - app_id: foot\n    size: big\n", ":5: rules[0].size: \"big\" is not"},
+	}
+	for _, c := range cases {
+		for _, file := range []string{"config.yaml", RuntimeFile} {
+			config, runtime := pad, pad
+			if file == RuntimeFile {
+				runtime += c.item
+			} else {
+				config += c.item
+			}
+			_, err := ParseLayers(compositor.DefaultAccent,
+				Layer{Source: SourceBuiltIn, File: "built-in config", Data: Default},
+				Layer{Source: SourceConfig, File: "config.yaml", Data: []byte(config)},
+				Layer{Source: SourceRuntime, File: RuntimeFile, Data: []byte(runtime)},
+			)
+			if err == nil || !strings.Contains(err.Error(), file+c.want) {
+				t.Errorf("%s in %s: %v; want %s%s", c.name, file, err, file, c.want)
+			}
+		}
+	}
+}

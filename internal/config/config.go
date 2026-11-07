@@ -114,32 +114,32 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 }
 
 type rawConfig struct {
-	ColorManagement bool                  `yaml:"color_management"`
-	ClientHotkeys   bool                  `yaml:"client_hotkeys"`
-	HiddenFrameRate *At[int]              `yaml:"hidden_frame_rate"`
-	HoldOpening     bool                  `yaml:"hold_opening"`
-	Outputs         []At[rawOutput]       `yaml:"outputs"`
-	Input           rawInput              `yaml:"input"`
-	Palette         map[string]At[string] `yaml:"palette"`
-	Borders         rawBorders            `yaml:"borders"`
-	Gaps            rawGaps               `yaml:"gaps"`
-	Decoration      rawDecoration         `yaml:"decoration"`
-	DragPreview     rawDragPreview        `yaml:"drag_preview"`
-	Animations      rawAnimations         `yaml:"animations"`
-	Tabs            rawTabs               `yaml:"tabs"`
-	Overview        rawOverview           `yaml:"overview"`
-	Autotile        rawAutotile           `yaml:"autotile"`
-	Binds           []rawBind             `yaml:"binds"`
-	Submaps         map[string][]rawBind  `yaml:"submaps"`
-	Rules           []At[rawRule]         `yaml:"rules"`
-	Env             map[string]At[string] `yaml:"env"`
-	Autostart       []At[string]          `yaml:"autostart"`
-	Xwayland        rawXwayland           `yaml:"xwayland"`
-	GPU             *At[string]           `yaml:"gpu"`
-	Tearing         bool                  `yaml:"tearing"`
-	LidSuspend      *bool                 `yaml:"lid_suspend"`
-	Gestures        rawGestures           `yaml:"gestures"`
-	Focus           rawFocus              `yaml:"focus"`
+	ColorManagement bool                     `yaml:"color_management"`
+	ClientHotkeys   bool                     `yaml:"client_hotkeys"`
+	HiddenFrameRate *At[int]                 `yaml:"hidden_frame_rate"`
+	HoldOpening     bool                     `yaml:"hold_opening"`
+	Outputs         []At[rawOutput]          `yaml:"outputs"`
+	Input           rawInput                 `yaml:"input"`
+	Palette         map[string]At[string]    `yaml:"palette"`
+	Borders         rawBorders               `yaml:"borders"`
+	Gaps            rawGaps                  `yaml:"gaps"`
+	Decoration      rawDecoration            `yaml:"decoration"`
+	DragPreview     rawDragPreview           `yaml:"drag_preview"`
+	Animations      rawAnimations            `yaml:"animations"`
+	Tabs            rawTabs                  `yaml:"tabs"`
+	Overview        rawOverview              `yaml:"overview"`
+	Autotile        rawAutotile              `yaml:"autotile"`
+	Binds           []At[rawBind]            `yaml:"binds"`
+	Submaps         map[string][]At[rawBind] `yaml:"submaps"`
+	Rules           []At[rawRule]            `yaml:"rules"`
+	Env             map[string]At[string]    `yaml:"env"`
+	Autostart       []At[string]             `yaml:"autostart"`
+	Xwayland        rawXwayland              `yaml:"xwayland"`
+	GPU             *At[string]              `yaml:"gpu"`
+	Tearing         bool                     `yaml:"tearing"`
+	LidSuspend      *bool                    `yaml:"lid_suspend"`
+	Gestures        rawGestures              `yaml:"gestures"`
+	Focus           rawFocus                 `yaml:"focus"`
 }
 
 type rawFocus struct {
@@ -152,7 +152,7 @@ type rawXwayland struct {
 }
 
 type rawOutput struct {
-	Match         At[string]   `yaml:"match"`
+	Match         *At[string]  `yaml:"match"`
 	Mode          *At[string]  `yaml:"mode"`
 	Position      *At[string]  `yaml:"position"`
 	Scale         *At[float64] `yaml:"scale"`
@@ -358,20 +358,20 @@ type rawAutotile struct {
 }
 
 type rawBind struct {
-	Chord  At[string]   `yaml:"chord"`
-	Action At[string]   `yaml:"action"`
+	Chord  *At[string]  `yaml:"chord"`
+	Action *At[string]  `yaml:"action"`
 	Flags  []At[string] `yaml:"flags"`
 }
 
 type rawGestures struct {
-	Swipe    []rawGesture `yaml:"swipe"`
-	Pinch    []rawGesture `yaml:"pinch"`
-	Hold     []rawGesture `yaml:"hold"`
-	Distance *At[float64] `yaml:"distance"`
+	Swipe    []At[rawGesture] `yaml:"swipe"`
+	Pinch    []At[rawGesture] `yaml:"pinch"`
+	Hold     []At[rawGesture] `yaml:"hold"`
+	Distance *At[float64]     `yaml:"distance"`
 }
 
 type rawGesture struct {
-	Fingers   At[int]     `yaml:"fingers"`
+	Fingers   *At[int]    `yaml:"fingers"`
 	Modifiers *At[string] `yaml:"modifiers"`
 	Direction *At[string] `yaml:"direction"`
 	Action    *At[string] `yaml:"action"`
@@ -923,9 +923,14 @@ const (
 	maxLuminance   = 10000
 )
 
-func (p *parser) output(i int, r rawOutput) compositor.OutputRule {
+func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
+	r := at.V
 	key := fmt.Sprintf("outputs[%d]", i)
 	rule := compositor.OutputRule{Disabled: r.Disabled}
+	if r.Match == nil {
+		p.fail(at.Line, key+".match", "is missing; give a connector name, desc:<description> or %q", outputFallback)
+		return rule
+	}
 	switch desc, isDesc := strings.CutPrefix(r.Match.V, "desc:"); {
 	case r.Match.V == "":
 		p.fail(r.Match.Line, key+".match", "needs a connector name, desc:<description> or %q", outputFallback)
@@ -1065,14 +1070,24 @@ func (p *parser) tabColors(r *rawTabColors, key string, fallback compositor.TabC
 	return compositor.TabColors{Background: p.color(r.Background, key+".background", fallback.Background), Text: p.color(r.Text, key+".text", fallback.Text)}
 }
 
-func (p *parser) bind(submap string, i int, r rawBind, submaps map[string][]rawBind) Bind {
+func (p *parser) bind(submap string, i int, at At[rawBind], submaps map[string][]At[rawBind]) Bind {
+	r := at.V
 	key := fmt.Sprintf("binds[%d]", i)
 	if submap != "" {
 		key = fmt.Sprintf("submaps.%s[%d]", submap, i)
 	}
-	b := Bind{Submap: submap, Chord: r.Chord.V, Line: r.Chord.Line}
-	if r.Chord.V == "" {
+	b := Bind{Submap: submap, Line: at.Line}
+	switch {
+	case r.Chord == nil:
+		p.fail(at.Line, key+".chord", "is missing")
+	case r.Chord.V == "":
 		p.fail(r.Chord.Line, key+".chord", "is empty")
+	default:
+		b.Chord, b.Line = r.Chord.V, r.Chord.Line
+	}
+	if r.Action == nil {
+		p.fail(at.Line, key+".action", "is missing")
+		return b
 	}
 	a, err := wm.ParseAction(r.Action.V)
 	if err != nil {
@@ -1106,14 +1121,19 @@ var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "ou
 
 var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview}
 
-func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r rawGesture, directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
+func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, at At[rawGesture], directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
+	r := at.V
 	key := fmt.Sprintf("gestures.%s[%d]", name, i)
 	failures := len(p.errs)
 	b := binds.GestureBind{Kind: kind}
-	if r.Fingers.V < minFingers {
+	switch {
+	case r.Fingers == nil:
+		p.fail(at.Line, key+".fingers", "is missing; a %s takes at least %d fingers", name, minFingers)
+	case r.Fingers.V < minFingers:
 		p.fail(r.Fingers.Line, key+".fingers", "%d is not a %s; it takes at least %d fingers", r.Fingers.V, name, minFingers)
+	default:
+		b.Fingers = uint32(r.Fingers.V) //nolint:gosec // at least minFingers, and finger counts are small
 	}
-	b.Fingers = uint32(max(r.Fingers.V, 0)) //nolint:gosec // clamped above zero; finger counts are small
 	if r.Modifiers != nil {
 		set, err := binds.ParseModifiers(r.Modifiers.V)
 		if err != nil {
@@ -1125,7 +1145,7 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r
 	case directions == nil && r.Direction != nil:
 		p.fail(r.Direction.Line, key+".direction", "a %s has no direction", name)
 	case directions != nil && r.Direction == nil:
-		p.fail(r.Fingers.Line, key+".direction", "is missing")
+		p.fail(at.Line, key+".direction", "is missing")
 	case directions != nil:
 		if d := choice(p, r.Direction, key+".direction", directions); d != nil {
 			b.Direction = *d
@@ -1133,7 +1153,7 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, r
 	}
 	switch {
 	case (r.Action == nil) == (r.Drive == nil):
-		p.fail(r.Fingers.Line, key, "takes exactly one of action and drive")
+		p.fail(at.Line, key, "takes exactly one of action and drive")
 	case r.Drive != nil:
 		if d := choice(p, r.Drive, key+".drive", gestureDrives); d != nil {
 			b.Drive = *d
@@ -1186,7 +1206,7 @@ func (p *parser) gestures(r rawGestures, input rawInput, workspaces anim.Style) 
 		kind       backend.Gesture
 		name       string
 		minFingers int
-		raw        []rawGesture
+		raw        []At[rawGesture]
 		directions map[string]binds.GestureDirection
 	}{
 		{backend.Swipe, "swipe", 3, r.Swipe, swipeDirections},
@@ -1200,7 +1220,7 @@ func (p *parser) gestures(r rawGestures, input rawInput, workspaces anim.Style) 
 				continue
 			}
 			if slices.ContainsFunc(g.Binds, b.Overlaps) {
-				p.fail(raw.Fingers.Line, fmt.Sprintf("gestures.%s[%d]", k.name, i), "overlaps an earlier %d-finger %s", b.Fingers, k.name)
+				p.fail(raw.Line, fmt.Sprintf("gestures.%s[%d]", k.name, i), "overlaps an earlier %d-finger %s", b.Fingers, k.name)
 				continue
 			}
 			g.Binds = append(g.Binds, b)
@@ -1389,8 +1409,8 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	fallback := false
 	for i, o := range raw.Outputs {
-		rule := p.output(i, o.V)
-		if o.V.Match.V != outputFallback {
+		rule := p.output(i, o)
+		if o.V.Match == nil || o.V.Match.V != outputFallback {
 			cfg.Outputs.Named = append(cfg.Outputs.Named, rule)
 			continue
 		}
