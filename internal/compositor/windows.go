@@ -58,23 +58,35 @@ type window struct {
 	minimized     bool
 	icon          iconHint
 	genie         *genie
+	initialAppID  string
+	initialTitle  string
 	stated        wm.Decision
 }
 
 type decided struct {
-	appID, title string
-	tag          string
-	rules        uint64
-	d            wm.Decision
-	look         wm.Look
-	mica         bool
+	subject wm.Subject
+	rules   uint64
+	d       wm.Decision
+	look    wm.Look
+	mica    bool
+}
+
+func (c *Compositor) subject(w *window) wm.Subject {
+	s := subjectOf(w.top, w.layer == wm.LayerFloating)
+	s.InitialAppID, s.InitialTitle = w.initialAppID, w.initialTitle
+	return s
+}
+
+func subjectOf(t toplevel, floating bool) wm.Subject {
+	_, x := t.(xToplevel)
+	return wm.Subject{AppID: t.AppID(), Title: t.Title(), Tag: t.Tag(), InitialAppID: t.AppID(), InitialTitle: t.Title(), XWayland: x, Floating: floating}
 }
 
 func (c *Compositor) decision(w *window) *wm.Decision {
-	appID, title, tag := w.top.AppID(), w.top.Title(), w.top.Tag()
+	subject := c.subject(w)
 	k := &w.decided
-	if k.rules != c.rulesGen || k.appID != appID || k.title != title || k.tag != tag {
-		*k = decided{appID: appID, title: title, tag: tag, rules: c.rulesGen, d: wm.DecideTagged(c.rules, appID, title, tag)}
+	if k.rules != c.rulesGen || k.subject != subject {
+		*k = decided{subject: subject, rules: c.rulesGen, d: wm.Decide(c.rules, subject)}
 		k.look, k.mica = k.d.Look.Over(c.decor.Blur.Look), micaOf(&k.d, c.decor.Blur.Mica.Enabled)
 	}
 	return &k.d
@@ -363,10 +375,14 @@ func (c *Compositor) settle(w *window, goal want) error {
 	return w.top.apply(goal)
 }
 
-func (c *Compositor) floats(t toplevel) (bool, image.Point) {
-	d := wm.DecideTagged(c.rules, t.AppID(), t.Title(), t.Tag())
+func (c *Compositor) ruled(t toplevel) (wm.Decision, bool) {
 	wants := t.parent() != nil || t.prefersFloating() || fixedSize(t.sizeLimits())
-	return d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile), d.Size
+	s := subjectOf(t, wants)
+	if w := c.windowOf(t); w != nil {
+		s.InitialAppID, s.InitialTitle = w.initialAppID, w.initialTitle
+	}
+	d := wm.Decide(c.rules, s)
+	return d, d.Mode == wm.RuleFloat || (wants && d.Mode != wm.RuleTile)
 }
 
 func fixedSize(minimum, maximum image.Point) bool {
@@ -375,9 +391,6 @@ func fixedSize(minimum, maximum image.Point) bool {
 
 func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	t := xdgToplevel{st}
-	if float, size := c.floats(t); float && t.wantsMode() == wm.ModeNormal {
-		return t.apply(want{rect: image.Rectangle{Max: floatSize(t, size)}, activated: true})
-	}
 	s, err := c.mapped(t, c.nextWindow)
 	if err != nil {
 		return err
@@ -391,31 +404,84 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
-	var s wm.State
-	var err error
-	if float, size := c.floats(t); float {
-		s, err = c.wm.MapFloating(id, c.floatRect(t, size))
-	} else {
-		s, err = c.wm.MapWindow(id, c.settings.Autotile)
+	d, float := c.ruled(t)
+	o := wm.Opening{
+		Float:    float,
+		Cover:    c.settings.NewOverCover,
+		Autotile: c.settings.Autotile,
+		Mode:     openingMode(t.wantsMode(), d),
+		Group:    d.Group,
+		Pin:      d.Pin != nil && *d.Pin,
+		NoFocus:  d.Focus != nil && !*d.Focus,
 	}
-	if err != nil {
-		return s, err
+	if i := c.launchToken(t); i >= 0 {
+		tok := c.tokens[i]
+		o.Workspace, o.Scratchpad, o.Silent = tok.workspace, tok.scratchpad, true
+		o.Scratch = c.settings.Scratchpads[tok.scratchpad]
 	}
-	if s, err = c.launched(s, t, id); err != nil {
-		return s, err
+	if d.Output != nil {
+		if out := c.outputMatching(*d.Output); out != nil {
+			o.Output, o.Workspace, o.Scratchpad = out.Backend().Name(), 0, ""
+		}
 	}
-	if s, err = s.Opened(id, c.settings.NewOverCover); err != nil {
-		return s, err
+	if d.Workspace != nil {
+		o.Workspace, o.Scratchpad, o.Silent = d.Workspace.ID, "", d.Workspace.Silent
 	}
-	if mode := t.wantsMode(); mode != wm.ModeNormal {
-		return s.SetMode(id, mode, true)
+	if float {
+		o.Rect = c.floatRect(t, d, c.openingArea(t, o))
 	}
-	return s, nil
+	return c.wm.Open(id, o)
 }
 
-func (c *Compositor) floatRect(t toplevel, size image.Point) image.Rectangle {
-	size = floatSize(t, size).Add(image.Pt(2*c.decor.BorderWidth, 2*c.decor.BorderWidth))
-	return wm.Centered(c.floatArea(t), size)
+func openingMode(wants wm.WindowMode, d wm.Decision) wm.WindowMode {
+	switch {
+	case d.Fullscreen != nil && *d.Fullscreen:
+		return wm.ModeFullscreen
+	case d.Maximized != nil && *d.Maximized:
+		return wm.ModeMaximized
+	case wants == wm.ModeFullscreen && (d.Fullscreen != nil || d.Suppress.Has(wm.SuppressFullscreen)):
+		return wm.ModeNormal
+	case wants == wm.ModeMaximized && (d.Maximized != nil || d.Suppress.Has(wm.SuppressMaximize)):
+		return wm.ModeNormal
+	}
+	return wants
+}
+
+func (c *Compositor) outputMatching(m wm.OutputMatch) *output.Output {
+	for _, o := range c.outputs {
+		if m.Matches(o.Backend().Name(), o.Backend().Description()) {
+			return o
+		}
+	}
+	return nil
+}
+
+func (c *Compositor) openingArea(t toplevel, o wm.Opening) image.Rectangle {
+	name := o.Output
+	if o.Workspace != 0 {
+		if ws, ok := c.wm.Workspace(o.Workspace); ok {
+			name = ws.Output
+		}
+	}
+	for _, out := range c.outputs {
+		if out.Backend().Name() == name {
+			return c.usable[out].Add(out.Position())
+		}
+	}
+	return c.floatArea(t)
+}
+
+func (c *Compositor) floatRect(t toplevel, d wm.Decision, area image.Rectangle) image.Rectangle {
+	size := floatSize(t, d.Size.In(area.Size())).Add(image.Pt(2*c.decor.BorderWidth, 2*c.decor.BorderWidth))
+	switch d.Position.Kind {
+	case wm.PositionCursor:
+		at := c.cursor.pixel().Sub(size.Div(2))
+		return clampInto(image.Rectangle{Min: at, Max: at.Add(size)}, area)
+	case wm.PositionAt:
+		at := area.Min.Add(image.Pt(d.Position.X.Of(area.Dx()), d.Position.Y.Of(area.Dy())))
+		return image.Rectangle{Min: at, Max: at.Add(size)}
+	}
+	return wm.Centered(area, size)
 }
 
 func (c *Compositor) floatArea(t toplevel) image.Rectangle {
@@ -477,13 +543,13 @@ func (c *Compositor) redecide(t toplevel) error {
 	if err := c.restate(w); err != nil || c.wm.Minimized(w.id) || c.wm.Floats(w.id) != w.floated {
 		return err
 	}
-	float, size := c.floats(t)
+	d, float := c.ruled(t)
 	if float == w.floated {
 		return nil
 	}
 	w.floated = float
 	if float {
-		return c.update(c.wm.Float(w.id, c.floatRect(t, size)))
+		return c.update(c.wm.Float(w.id, c.floatRect(t, d, c.floatArea(t))))
 	}
 	return c.update(c.wm.Tile(w.id, c.settings.Autotile))
 }
@@ -524,13 +590,13 @@ func (c *Compositor) ToplevelMapped(t *shell.Toplevel) error {
 }
 
 func (c *Compositor) mapToplevel(t toplevel) error {
-	w := &window{id: c.nextWindow, top: t, motion: anim.NewRectMotion(image.Rectangle{}), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook()}
+	w := &window{id: c.nextWindow, top: t, motion: anim.NewRectMotion(image.Rectangle{}), fade: anim.NewTween(1.0, anim.Lerp), look: newFocusLook(), initialAppID: t.AppID(), initialTitle: t.Title()}
 	if p, ok := c.plannedWindow(t); ok {
 		w.id = p.ID
 	} else {
 		c.nextWindow++
 	}
-	w.floated, _ = c.floats(t)
+	_, w.floated = c.ruled(t)
 	w.stated = *c.decision(w)
 	s, err := c.mapped(t, w.id)
 	if err != nil {
@@ -612,9 +678,9 @@ func (c *Compositor) ToplevelRequest(t *shell.Toplevel, r shell.Request) error {
 	}
 	switch r := r.(type) {
 	case shell.SetFullscreen:
-		return c.update(c.wm.ClientRequestsFullscreen(w.id, r.On))
+		return c.clientFullscreen(w, r.On)
 	case shell.SetMaximized:
-		return c.update(c.wm.SetMaximized(w.id, r.On))
+		return c.clientMaximize(w, r.On)
 	case shell.SetMinimized:
 		return c.minimize(w)
 	case shell.Move:
@@ -644,4 +710,18 @@ func (c *Compositor) ClientResponsive(cl *server.Client, responsive bool) error 
 		}
 	}
 	return nil
+}
+
+func (c *Compositor) clientFullscreen(w *window, on bool) error {
+	if c.decision(w).Suppress.Has(wm.SuppressFullscreen) {
+		return nil
+	}
+	return c.update(c.wm.ClientRequestsFullscreen(w.id, on))
+}
+
+func (c *Compositor) clientMaximize(w *window, on bool) error {
+	if c.decision(w).Suppress.Has(wm.SuppressMaximize) {
+		return nil
+	}
+	return c.update(c.wm.SetMaximized(w.id, on))
 }

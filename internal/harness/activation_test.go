@@ -151,8 +151,12 @@ func TestActivationRulesAndSetting(t *testing.T) {
 		urgent    bool
 	}{
 		"focus.on_activate urgent": {func(cfg *compositor.Config) { cfg.WM.OnActivate = wm.ActivateUrgent }, true},
-		"a rule's urgent":          {func(cfg *compositor.Config) { cfg.Rules = []wm.Rule{{Title: target, OnActivate: &urgent}} }, true},
-		"a rule's ignore":          {func(cfg *compositor.Config) { cfg.Rules = []wm.Rule{{Title: target, OnActivate: &ignore}} }, false},
+		"a rule's urgent": {func(cfg *compositor.Config) {
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: target}, OnActivate: &urgent}}
+		}, true},
+		"a rule's ignore": {func(cfg *compositor.Config) {
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: target}, OnActivate: &ignore}}
+		}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := StartWith(t, tc.configure, small)

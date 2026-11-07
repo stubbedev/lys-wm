@@ -14,7 +14,7 @@ import (
 
 func TestTearingFollowsTheSwitchTheHintAndTheRules(t *testing.T) {
 	testclientRule := func(tearing wm.RuleTearing) []wm.Rule {
-		return []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Tearing: tearing}}
+		return []wm.Rule{{Match: wm.Match{AppID: regexp.MustCompile(`^lys-wm\.testclient$`)}, Tearing: tearing}}
 	}
 	cases := []struct {
 		name    string

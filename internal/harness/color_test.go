@@ -730,7 +730,7 @@ func TestBlurShadowsAndCornersCompositeInTheWorkingSpace(t *testing.T) {
 			fullWindowConfig(compositor.OutputRule{})(cfg)
 			cfg.Decor.Rounding = 6
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 4, Passes: 2}
-			cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Opacity: &half}}
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 30), Opacity: &half}}
 		}, small)
 		c := testclient.Connect(t, h.Socket())
 		bg := c.Window("background", testclient.Fill(0xff, 0xff, 0xff))

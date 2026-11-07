@@ -184,7 +184,7 @@ func testAFloatingWindowCastsARoundedShadow(t *testing.T, start gpuStarter) {
 		cfg.Decor = compositor.PlainDecor()
 		cfg.Decor.BorderWidth, cfg.Decor.Rounding = 1, 6
 		cfg.Decor.Shadow = compositor.Shadow{Enabled: true, Range: 12, Power: 2, Offset: image.Pt(3, 5), Scale: 1, Active: render.Color{A: 0xc0}, Inactive: render.Color{A: 0xc0}}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^float$`), Mode: wm.RuleFloat, Size: image.Pt(70, 40)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^float$`)}, Mode: wm.RuleFloat, Size: wm.Px(70, 40)}}
 	}, tall)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("float", testclient.Fill(0xe0, 0xe0, 0xe0))

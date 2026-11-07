@@ -8,26 +8,22 @@ import (
 
 type ScratchpadName string
 
-type ScratchSize struct {
-	W, H int
-}
-
-func (z ScratchSize) area(usable image.Rectangle) image.Rectangle {
-	if z == (ScratchSize{}) {
+func scratchArea(size Extent, usable image.Rectangle) image.Rectangle {
+	if !size.Set() {
 		return usable
 	}
-	return Centered(usable, image.Pt(usable.Dx()*z.W/100, usable.Dy()*z.H/100))
+	return Centered(usable, size.In(usable.Size()))
 }
 
 type ScratchpadSpec struct {
 	Exec  string
-	Size  ScratchSize
+	Size  Extent
 	Stays bool
 }
 
 type Scratchpad struct {
 	Name  ScratchpadName
-	Size  ScratchSize
+	Size  Extent
 	Stays bool
 }
 
@@ -146,7 +142,7 @@ func (s State) placeScratchpad(all *Arranger, w *Workspace, sp Spacing) {
 		all.Windows = appendMinimized(all.Windows, w.Minimized)
 	} else {
 		over := *o
-		over.Area = w.Scratch.Size.area(o.Area)
+		over.Area = scratchArea(w.Scratch.Size, o.Area)
 		placeWorkspace(all, w, &over, o.Scratch == w.ID, sp)
 	}
 	all.inWorkspace(from, w.ID)

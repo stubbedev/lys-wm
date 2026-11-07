@@ -34,7 +34,7 @@ func benchHarness(b *testing.B, open func(testing.TB) setup, look wm.Look, curso
 		}
 		cfg.Decor.Rounding = 12
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 8, Passes: 2, Look: look}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(1000, 600), Opacity: &half}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(1000, 600), Opacity: &half}}
 	}
 	if cursor {
 		s.open = withCursorPlanes(s.open, image.Pt(64, 64))
@@ -118,7 +118,7 @@ func benchOverview(b *testing.B, open func(testing.TB) setup, windows int, movin
 		cfg.Animations = animated(b)
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor.Rounding = 12
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pile$`), Mode: wm.RuleFloat, Size: image.Pt(1000, 700)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pile$`)}, Mode: wm.RuleFloat, Size: wm.Px(1000, 700)}}
 	}
 	h := start(b, s, benchMode)
 	c := testclient.Connect(b, h.Socket())
@@ -170,7 +170,7 @@ func TestASettledOverviewFrameAllocatesNothing(t *testing.T) {
 	s := setup{open: softBackend}
 	s.configure = func(cfg *compositor.Config) {
 		cfg.Decor.Rounding = 12
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pile$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pile$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 30)}}
 	}
 	h := start(t, s, small)
 	c := testclient.Connect(t, h.Socket())

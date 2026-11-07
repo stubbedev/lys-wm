@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
+	"github.com/stubbedev/lys-wm/internal/wm"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -152,7 +153,7 @@ func TestAFallbackOutputRuleCoversTheOutputsNoRuleNames(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Outputs = compositor.OutputRules{
-			Named:    []compositor.OutputRule{{Name: "HEADLESS-1", Scale: 2 * output.Unit}},
+			Named:    []compositor.OutputRule{{Match: wm.OutputMatch{Name: "HEADLESS-1"}, Scale: 2 * output.Unit}},
 			Fallback: compositor.OutputRule{Mode: compositor.ExactMode{Size: medium.Size}},
 		}
 	})
@@ -186,9 +187,9 @@ func TestOutputRules(t *testing.T) {
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report
 		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{
-			{Name: "HEADLESS-1", Mode: wanted, Scale: 2 * output.Unit, Position: &at},
-			{Description: "Headless output HEADLESS-2", Disabled: true},
-			{Name: "HEADLESS-4", Mode: missing},
+			{Match: wm.OutputMatch{Name: "HEADLESS-1"}, Mode: wanted, Scale: 2 * output.Unit, Position: &at},
+			{Match: wm.OutputMatch{Description: "Headless output HEADLESS-2"}, Disabled: true},
+			{Match: wm.OutputMatch{Name: "HEADLESS-4"}, Mode: missing},
 		}}
 		cfg = *c
 	})
@@ -222,7 +223,7 @@ func TestOutputRules(t *testing.T) {
 		t.Fatalf("reports %v", errs)
 	}
 
-	cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "HEADLESS-3", Disabled: true}}}
+	cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Match: wm.OutputMatch{Name: "HEADLESS-3"}, Disabled: true}}}
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
 		if err := c.Reconfigure(cfg); err != nil {
 			return err
@@ -271,7 +272,7 @@ func TestRepeatingBindsWithRepeatOff(t *testing.T) {
 func TestClosingTheLidDisablesTheInternalPanel(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(c *compositor.Config) {
-		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "eDP-1", Scale: 2 * output.Unit}}}
+		c.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Match: wm.OutputMatch{Name: "eDP-1"}, Scale: 2 * output.Unit}}}
 	})
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		_, err := b.AddNamedOutput("eDP-1", small)
@@ -372,7 +373,7 @@ func TestAReenabledOutputComesBackPoweredOn(t *testing.T) {
 	}
 	h.Eventually("the output powered off", lit(false))
 	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
-		cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Name: "HEADLESS-1", Disabled: true}}}
+		cfg.Outputs = compositor.OutputRules{Named: []compositor.OutputRule{{Match: wm.OutputMatch{Name: "HEADLESS-1"}, Disabled: true}}}
 		if err := c.Reconfigure(cfg); err != nil {
 			return err
 		}

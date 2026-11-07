@@ -24,7 +24,7 @@ func toggle(t *testing.T, s State, spec ScratchpadSpec) (State, []Effect) {
 
 func TestAScratchpadShowsOverTheFocusedOutputAndHidesAgain(t *testing.T) {
 	must := ok(t)
-	spec := ScratchpadSpec{Exec: "foot", Size: ScratchSize{W: 50, H: 50}}
+	spec := ScratchpadSpec{Exec: "foot", Size: Extent{W: Length{N: 50, Percent: true}, H: Length{N: 50, Percent: true}}}
 	s, effects := toggle(t, scratchState(t), spec)
 	if len(effects) != 1 {
 		t.Fatalf("toggling an empty scratchpad gave %v, want its exec", effects)
@@ -108,9 +108,9 @@ func TestAWorkspaceSwitchHidesAScratchpadUnlessItStays(t *testing.T) {
 }
 
 func TestScratchpadsSurviveSaving(t *testing.T) {
-	s, _ := toggle(t, scratchState(t), ScratchpadSpec{Size: ScratchSize{W: 60, H: 40}})
+	s, _ := toggle(t, scratchState(t), ScratchpadSpec{Size: Extent{W: Length{N: 60, Percent: true}, H: Length{N: 40, Percent: true}}})
 	s = ok(t)(s.MapWindow(2, Autotile{}))
-	s = ok(t)(s.MoveWindowToScratchpad(2, "term", ScratchpadSpec{Size: ScratchSize{W: 60, H: 40}}, Autotile{}))
+	s = ok(t)(s.MoveWindowToScratchpad(2, "term", ScratchpadSpec{Size: Extent{W: Length{N: 60, Percent: true}, H: Length{N: 40, Percent: true}}}, Autotile{}))
 	data, err := s.Save()
 	if err != nil {
 		t.Fatal(err)

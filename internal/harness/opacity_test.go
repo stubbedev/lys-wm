@@ -39,7 +39,7 @@ func testInactiveWindowsAndRuledWindowsAreTranslucent(t *testing.T, start gpuSta
 	half := float32(0.25)
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Opacity = compositor.Opacity{Active: 1, Inactive: 0.5, Fullscreen: 1}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^ruled$`), Opacity: &half}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^ruled$`)}, Opacity: &half}}
 	}, tall)
 	c := testclient.Connect(t, h.Socket())
 	white := [3]byte{0xff, 0xff, 0xff}
@@ -129,7 +129,7 @@ func TestADimAroundWindowDimsWhatIsBelowIt(t *testing.T) {
 func testADimAroundWindowDimsWhatIsBelowIt(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Dim.Strength = 0.5
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^dialog$`), Mode: wm.RuleFloat, Size: image.Pt(60, 40), DimAround: true}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^dialog$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 40), DimAround: true}}
 	}, tall)
 	c := testclient.Connect(t, h.Socket())
 	white := [3]byte{0xff, 0xff, 0xff}

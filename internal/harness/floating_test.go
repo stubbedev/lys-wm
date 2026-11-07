@@ -135,9 +135,9 @@ func TestWindowRulesFloatAndSize(t *testing.T) {
 	steam := regexp.MustCompile(`^lys-wm\.testclient$`)
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{
-			{AppID: steam, Mode: wm.RuleFloat},
-			{AppID: steam, Title: regexp.MustCompile(`^Steam$`), Mode: wm.RuleTile},
-			{AppID: steam, Title: regexp.MustCompile(`^Friends List$`), Size: image.Pt(40, 90)},
+			{Match: wm.Match{AppID: steam}, Mode: wm.RuleFloat},
+			{Match: wm.Match{AppID: steam, Title: regexp.MustCompile(`^Steam$`)}, Mode: wm.RuleTile},
+			{Match: wm.Match{AppID: steam, Title: regexp.MustCompile(`^Friends List$`)}, Size: wm.Px(40, 90)},
 		}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
@@ -288,7 +288,7 @@ func TestWaylandWindowsThatDoNotAskToFloatTile(t *testing.T) {
 	}{
 		"only a minimum size": {setup: func(w *testclient.Window) error { return w.Toplevel.SetMinSize(20, 20) }},
 		"a fixed size overridden by a tile rule": {
-			rules: []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^second$`), Mode: wm.RuleTile}},
+			rules: []wm.Rule{{Match: wm.Match{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^second$`)}, Mode: wm.RuleTile}},
 			setup: fixedSize(image.Pt(60, 40)),
 		},
 	} {
@@ -336,7 +336,7 @@ func TestAFloatingWindowGrowsWhenItRaisesItsMinimum(t *testing.T) {
 func TestWindowsFloatOrTileAgainWhenWhatDecidedItChanges(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^Friends List$`), Mode: wm.RuleFloat}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Title: regexp.MustCompile(`^Friends List$`)}, Mode: wm.RuleFloat}}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
 	app := c.Window("app", testclient.Fill(0, 0, 0xff))
@@ -374,7 +374,7 @@ func TestWindowsFloatOrTileAgainWhenWhatDecidedItChanges(t *testing.T) {
 func TestAFloatingWindowIsNeverSmallerThanItAsks(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.Rules = []wm.Rule{{AppID: regexp.MustCompile(`^lys-wm\.testclient$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{AppID: regexp.MustCompile(`^lys-wm\.testclient$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 30)}}
 	}, desktop)
 	c := testclient.Connect(t, h.Socket())
 	w := c.WindowWith("roomy", testclient.Fill(0, 0, 0xff), func(w *testclient.Window) error { return w.Toplevel.SetMinSize(400, 300) })
@@ -412,7 +412,7 @@ func TestRulesMatchingATagSetAfterMappingFloatAndTintTheWindow(t *testing.T) {
 	quarter := float32(0.25)
 	settings := regexp.MustCompile(`^settings$`)
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.Rules = []wm.Rule{{Tag: settings, Mode: wm.RuleFloat, Size: image.Pt(40, 90)}, {Tag: settings, Opacity: &quarter}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Tag: settings}, Mode: wm.RuleFloat, Size: wm.Px(40, 90)}, {Match: wm.Match{Tag: settings}, Opacity: &quarter}}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
 	white := [3]byte{0xff, 0xff, 0xff}

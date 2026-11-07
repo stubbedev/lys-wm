@@ -30,10 +30,10 @@ func TestAFallbackOutputRuleIsKeptApart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Outputs.Named) != 1 || cfg.Outputs.Named[0].Name != "DP-1" || cfg.Outputs.Named[0].Scale != 2*output.Unit || cfg.Outputs.Named[0].Depth != backend.Depth10 {
+	if len(cfg.Outputs.Named) != 1 || cfg.Outputs.Named[0].Match.Name != "DP-1" || cfg.Outputs.Named[0].Scale != 2*output.Unit || cfg.Outputs.Named[0].Depth != backend.Depth10 {
 		t.Errorf("named rules %+v, want DP-1 at scale 2 and 10 bits alone", cfg.Outputs.Named)
 	}
-	if f := cfg.Outputs.Fallback; f.Mode != (compositor.HighResMode{}) || f.Scale != output.Scale(180) || f.Name != "" || f.Description != "" || f.Depth != backend.Depth8 {
+	if f := cfg.Outputs.Fallback; f.Mode != (compositor.HighResMode{}) || f.Scale != output.Scale(180) || f.Match.Name != "" || f.Match.Description != "" || f.Depth != backend.Depth8 {
 		t.Errorf("fallback %+v, want highres at scale 1.5 matching nothing by name", f)
 	}
 }
@@ -47,10 +47,10 @@ func TestExampleConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Outputs.Named[1].Description != "LG Electronics 27GL850" {
+	if cfg.Outputs.Named[1].Match.Description != "LG Electronics 27GL850" {
 		t.Errorf("second output %+v", cfg.Outputs.Named[1])
 	}
-	if o := cfg.Outputs.Named[0]; o.Name != "DP-1" || o.Mode != (compositor.ExactMode{Size: image.Pt(2560, 1440), RefreshMHz: 143912}) || o.Scale != output.Scale(150) {
+	if o := cfg.Outputs.Named[0]; o.Match.Name != "DP-1" || o.Mode != (compositor.ExactMode{Size: image.Pt(2560, 1440), RefreshMHz: 143912}) || o.Scale != output.Scale(150) {
 		t.Errorf("first output %+v", o)
 	}
 	if o := cfg.Outputs.Named[1]; o.Mode != (compositor.HighResMode{}) || o.Position != nil {
@@ -81,13 +81,13 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.Opacity != (compositor.Opacity{Active: 1, Inactive: 0.9, Fullscreen: 1}) {
 		t.Errorf("decoration opacity parsed to %+v", cfg.Decor.Opacity)
 	}
-	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, opacity: 0.8}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Opacity != 0.8 {
+	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, opacity: 0.8}\n")); err != nil || *wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""}).Opacity != 0.8 {
 		t.Errorf("a rule's opacity: %+v, %v", c.Rules, err)
 	}
 	if cfg.Decor.Dim != (compositor.Dim{Inactive: true, Strength: 0.2}) {
 		t.Errorf("decoration dim parsed to %+v", cfg.Decor.Dim)
 	}
-	if c, err := Parse("t.yaml", []byte("rules:\n  - {title: ^Open, dim_around: true}\n")); err != nil || !wm.Decide(c.Rules, "", "Open File").DimAround {
+	if c, err := Parse("t.yaml", []byte("rules:\n  - {title: ^Open, dim_around: true}\n")); err != nil || !wm.Decide(c.Rules, wm.Subject{AppID: "", Title: "Open File"}).DimAround {
 		t.Errorf("a rule's dim_around: %+v, %v", c.Rules, err)
 	}
 	if s := cfg.Decor.Shadow; !s.Enabled || s.Range != 12 || s.Power != compositor.DefaultDecor(compositor.DefaultAccent).Shadow.Power || s.Offset != image.Pt(2, 4) || s.Scale != 1 || s.Active != (render.Color{A: 0x80}) || s.Inactive != s.Active {
@@ -102,7 +102,7 @@ func TestExampleConfig(t *testing.T) {
 	if cfg.Decor.Blur != (compositor.Blur{Enabled: true, Size: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Size, Passes: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Passes, Look: compositor.DefaultDecor(compositor.DefaultAccent).Blur.Look}) || !slices.Equal(cfg.BlurLayers, []string{"waybar"}) {
 		t.Errorf("decoration.blur parsed to %+v, layers %v", cfg.Decor.Blur, cfg.BlurLayers)
 	}
-	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, "foot", "").Blur {
+	if c, err := Parse("t.yaml", []byte("rules:\n  - {app_id: foot, blur: false}\n")); err != nil || *wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""}).Blur {
 		t.Errorf("a rule's blur: %+v, %v", c.Rules, err)
 	}
 	if cfg.Decor.Rounding != 8 {
@@ -156,10 +156,10 @@ func TestExampleConfig(t *testing.T) {
 	if len(cfg.Binds) != 5 || cfg.Binds[3].Submap != "resize" || !cfg.Binds[3].Flags.Repeating || cfg.Binds[3].Action != (wm.ResizeAction{DX: 10}) {
 		t.Errorf("binds %+v", cfg.Binds)
 	}
-	if d := wm.Decide(cfg.Rules, "steam", "Friends List"); d != (wm.Decision{Mode: wm.RuleFloat, Size: image.Pt(400, 900), Tearing: wm.TearingDeny}) {
+	if d := wm.Decide(cfg.Rules, wm.Subject{AppID: "steam", Title: "Friends List"}); d != (wm.Decision{Mode: wm.RuleFloat, Size: wm.Px(400, 900), Tearing: wm.TearingDeny}) {
 		t.Errorf("rules decide %+v", d)
 	}
-	if d := wm.Decide(cfg.Rules, "cs2", "Counter-Strike 2"); d != (wm.Decision{Tearing: wm.TearingAllow}) {
+	if d := wm.Decide(cfg.Rules, wm.Subject{AppID: "cs2", Title: "Counter-Strike 2"}); d != (wm.Decision{Tearing: wm.TearingAllow}) {
 		t.Errorf("rules decide %+v for cs2", d)
 	}
 	if !cfg.Tearing {
@@ -210,7 +210,7 @@ func TestUnknownKeysWarnAndTheRestOfTheFileApplies(t *testing.T) {
 	cases := map[string]string{
 		"borders:\n  colour: red\n":                                           "t.yaml:2: borders.colour: unknown key (known: active, inactive, width)",
 		"submaps:\n  r:\n    - {chord: Q, action: kill, x: 1}\n":              "t.yaml:3: submaps.r[0].x: unknown key",
-		"rules:\n  - {app_id: a, floating: true}\n":                           "t.yaml:2: rules[0].floating: unknown key",
+		"rules:\n  - {app_id: a, floats: true}\n":                             "t.yaml:2: rules[0].floats: unknown key",
 		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n": "t.yaml:3: animations.curves.a.tension: unknown key",
 		"animations:\n  events:\n    border: {curve: linear}\n":               "t.yaml:3: animations.events.border: unknown event",
 		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, borderangle, windows_minimize, zoom, snap, fade_snap, overview, scratchpad)",
@@ -476,7 +476,7 @@ rules:
 	if m := c.Decor.Blur.Mica; m != (compositor.Mica{Enabled: true, Size: 20, Passes: 3, Tint: color.RGBA{G: 0x40, A: 0x40}}) {
 		t.Errorf("mica %+v", m)
 	}
-	d := wm.Decide(c.Rules, "foot", "")
+	d := wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""})
 	if d.Mica == nil || *d.Mica {
 		t.Errorf("a rule's mica: %+v", d.Mica)
 	}
@@ -751,7 +751,7 @@ func TestARuleCanMatchOnTheTagAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Rules) != 1 || cfg.Rules[0].Tag == nil || !cfg.Rules[0].Tag.MatchString("settings") || cfg.Rules[0].Mode != wm.RuleFloat {
+	if len(cfg.Rules) != 1 || cfg.Rules[0].Match.Tag == nil || !cfg.Rules[0].Match.Tag.MatchString("settings") || cfg.Rules[0].Mode != wm.RuleFloat {
 		t.Fatalf("rules %+v", cfg.Rules)
 	}
 	if _, err := Parse("t.yaml", []byte("rules:\n  - {tag: \"(\", float: true}\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: rules[0].tag:") {
@@ -866,7 +866,7 @@ func TestAnOutputRuleNamesItsAdaptiveSyncPolicy(t *testing.T) {
 	}
 	for i, want := range []compositor.VRRPolicy{compositor.VRROn, compositor.VRRFullscreen, compositor.VRROff, compositor.VRROff} {
 		if got := cfg.Outputs.Named[i].VRR; got != want {
-			t.Errorf("%s: vrr %d, want %d", cfg.Outputs.Named[i].Name, got, want)
+			t.Errorf("%s: vrr %d, want %d", cfg.Outputs.Named[i].Match.Name, got, want)
 		}
 	}
 }
@@ -879,10 +879,10 @@ func TestActivationPolicies(t *testing.T) {
 	if c.WM.OnActivate != wm.ActivateUrgent {
 		t.Errorf("focus.on_activate: urgent gave %d", c.WM.OnActivate)
 	}
-	if d := wm.Decide(c.Rules, "firefox", ""); d.OnActivate == nil || *d.OnActivate != wm.ActivateIgnore {
+	if d := wm.Decide(c.Rules, wm.Subject{AppID: "firefox", Title: ""}); d.OnActivate == nil || *d.OnActivate != wm.ActivateIgnore {
 		t.Errorf("a rule's on_activate: ignore gave %v", d.OnActivate)
 	}
-	if d := wm.Decide(c.Rules, "foot", ""); d.OnActivate != nil {
+	if d := wm.Decide(c.Rules, wm.Subject{AppID: "foot", Title: ""}); d.OnActivate != nil {
 		t.Errorf("a window no rule names got on_activate %d", *d.OnActivate)
 	}
 	if c, err := Parse("t.yaml", nil); err != nil || c.WM.OnActivate != wm.ActivateFocus {
@@ -926,7 +926,7 @@ func TestContentRules(t *testing.T) {
 		{"steam_app_570", "Launcher", new(wm.ContentNone)},
 		{"foot", "", nil},
 	} {
-		got := wm.Decide(c.Rules, tc.appID, tc.title).Content
+		got := wm.Decide(c.Rules, wm.Subject{AppID: tc.appID, Title: tc.title}).Content
 		if (got == nil) != (tc.want == nil) || got != nil && *got != *tc.want {
 			t.Errorf("%s %q: content %v, want %v", tc.appID, tc.title, got, tc.want)
 		}
@@ -966,7 +966,7 @@ func TestScratchpads(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[wm.ScratchpadName]wm.ScratchpadSpec{
-		"term":  {Exec: "foot --app-id dropterm", Size: wm.ScratchSize{W: 60, H: 50}},
+		"term":  {Exec: "foot --app-id dropterm", Size: wm.Extent{W: wm.Length{N: 60, Percent: true}, H: wm.Length{N: 50, Percent: true}}},
 		"notes": {Stays: true},
 	}
 	if !reflect.DeepEqual(c.WM.Scratchpads, want) {
@@ -986,5 +986,49 @@ func TestShowDesktopPeek(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("showdesktop:\n  peek: 0\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: showdesktop.peek:") {
 		t.Errorf("peek 0 was not refused: %v", err)
+	}
+}
+
+func TestPlacementRules(t *testing.T) {
+	c, err := Parse("t.yaml", []byte(`rules:
+  - {app_id: ^discord$, workspace: 9 silent, output: "desc:LG Electronics", focus: false}
+  - {app_id: ^steam$, title: Friends, float: true, size: 20%x60%, position: 80%x10%, pin: true}
+  - {app_id: ^game$, fullscreen: false, suppress: [fullscreen, activate]}
+  - {initial_title: ^Open, exclude: {xwayland: true}, group: tab, maximized: true, position: center}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := wm.Decide(c.Rules, wm.Subject{AppID: "discord"})
+	if d.Workspace == nil || *d.Workspace != (wm.WorkspacePlacement{ID: 9, Silent: true}) || d.Output == nil || *d.Output != (wm.OutputMatch{Description: "LG Electronics"}) || d.Focus == nil || *d.Focus {
+		t.Errorf("discord: %+v", d)
+	}
+	d = wm.Decide(c.Rules, wm.Subject{AppID: "steam", Title: "Friends List"})
+	if d.Size != (wm.Extent{W: wm.Length{N: 20, Percent: true}, H: wm.Length{N: 60, Percent: true}}) || d.Position != (wm.Position{Kind: wm.PositionAt, X: wm.Length{N: 80, Percent: true}, Y: wm.Length{N: 10, Percent: true}}) || d.Pin == nil || !*d.Pin {
+		t.Errorf("steam: %+v", d)
+	}
+	d = wm.Decide(c.Rules, wm.Subject{AppID: "game"})
+	if d.Fullscreen == nil || *d.Fullscreen || !d.Suppress.Has(wm.SuppressFullscreen) || !d.Suppress.Has(wm.SuppressActivate) || d.Suppress.Has(wm.SuppressMaximize) {
+		t.Errorf("game: %+v", d)
+	}
+	if d := wm.Decide(c.Rules, wm.Subject{Title: "renamed", InitialTitle: "Open File"}); d.Group == nil || *d.Group != wm.Tabbed || d.Position.Kind != wm.PositionCenter || d.Maximized == nil {
+		t.Errorf("by initial title: %+v", d)
+	}
+	if d := wm.Decide(c.Rules, wm.Subject{InitialTitle: "Open File", XWayland: true}); d.Group != nil {
+		t.Errorf("an excluded X window matched: %+v", d)
+	}
+	for text, want := range map[string]string{
+		"rules:\n  - {app_id: a, workspace: nine}\n":      "t.yaml:2: rules[0].workspace:",
+		"rules:\n  - {app_id: a, position: middle}\n":     "t.yaml:2: rules[0].position:",
+		"rules:\n  - {app_id: a, group: grid}\n":          "t.yaml:2: rules[0].group:",
+		"rules:\n  - {app_id: a, suppress: [resize]}\n":   "t.yaml:2: rules[0].suppress[0]:",
+		"rules:\n  - {app_id: a, size: 120%x10}\n":        "t.yaml:2: rules[0].size:",
+		"rules:\n  - {app_id: a, exclude: {}}\n":          "t.yaml:2: rules[0].exclude:",
+		"rules:\n  - {app_id: a, initial_title: \"(\"}\n": "t.yaml:2: rules[0].initial_title:",
+		"rules:\n  - {workspace: 2}\n":                    "t.yaml:2: rules[0]:",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", text, err, want)
+		}
 	}
 }

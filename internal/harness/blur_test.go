@@ -24,8 +24,8 @@ func testATranslucentWindowBlursWhatIsBehindIt(t *testing.T, start gpuStarter) {
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 4, Passes: 2}
 		cfg.Rules = []wm.Rule{
-			{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Opacity: &half},
-			{Title: regexp.MustCompile(`^spot$`), Mode: wm.RuleFloat, Size: image.Pt(10, 10)},
+			{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 30), Opacity: &half},
+			{Match: wm.Match{Title: regexp.MustCompile(`^spot$`)}, Mode: wm.RuleFloat, Size: wm.Px(10, 10)},
 		}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
@@ -67,8 +67,8 @@ func testXRayBlurShowsTheWallpaperNotTheWindowsBelow(t *testing.T, start gpuStar
 	h := start(t, func(cfg *compositor.Config) {
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1, XRay: true}
 		cfg.Rules = []wm.Rule{
-			{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Opacity: &half},
-			{Title: regexp.MustCompile(`^spot$`), Mode: wm.RuleFloat, Size: image.Pt(10, 10)},
+			{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 30), Opacity: &half},
+			{Match: wm.Match{Title: regexp.MustCompile(`^spot$`)}, Mode: wm.RuleFloat, Size: wm.Px(10, 10)},
 		}
 	}, small)
 	shell := testclient.Connect(t, h.Socket())

@@ -396,21 +396,43 @@ type rawGesture struct {
 	Drive     *At[string] `yaml:"drive"`
 }
 
+type rawMatch struct {
+	AppID        *At[string] `yaml:"app_id"`
+	Title        *At[string] `yaml:"title"`
+	Tag          *At[string] `yaml:"tag"`
+	InitialAppID *At[string] `yaml:"initial_app_id"`
+	InitialTitle *At[string] `yaml:"initial_title"`
+	XWayland     *bool       `yaml:"xwayland"`
+	Floating     *bool       `yaml:"floating"`
+}
+
+func (m rawMatch) empty() bool {
+	return m == rawMatch{}
+}
+
 type rawRule struct {
-	AppID      *At[string]  `yaml:"app_id"`
-	Title      *At[string]  `yaml:"title"`
-	Tag        *At[string]  `yaml:"tag"`
-	Float      bool         `yaml:"float"`
-	Tile       bool         `yaml:"tile"`
-	Size       *At[string]  `yaml:"size"`
-	Tearing    *bool        `yaml:"tearing"`
-	Opacity    *At[float64] `yaml:"opacity"`
-	DimAround  bool         `yaml:"dim_around"`
-	Blur       *bool        `yaml:"blur"`
-	BlurLook   rawLook      `yaml:"blur_look"`
-	Mica       *bool        `yaml:"mica"`
-	OnActivate *At[string]  `yaml:"on_activate"`
-	Content    *At[string]  `yaml:"content"`
+	rawMatch   `yaml:",inline"`
+	Exclude    *At[rawMatch] `yaml:"exclude"`
+	Workspace  *At[string]   `yaml:"workspace"`
+	Output     *At[string]   `yaml:"output"`
+	Focus      *bool         `yaml:"focus"`
+	Fullscreen *bool         `yaml:"fullscreen"`
+	Maximized  *bool         `yaml:"maximized"`
+	Position   *At[string]   `yaml:"position"`
+	Group      *At[string]   `yaml:"group"`
+	Suppress   []At[string]  `yaml:"suppress"`
+	Pin        *bool         `yaml:"pin"`
+	Float      bool          `yaml:"float"`
+	Tile       bool          `yaml:"tile"`
+	Size       *At[string]   `yaml:"size"`
+	Tearing    *bool         `yaml:"tearing"`
+	Opacity    *At[float64]  `yaml:"opacity"`
+	DimAround  bool          `yaml:"dim_around"`
+	Blur       *bool         `yaml:"blur"`
+	BlurLook   rawLook       `yaml:"blur_look"`
+	Mica       *bool         `yaml:"mica"`
+	OnActivate *At[string]   `yaml:"on_activate"`
+	Content    *At[string]   `yaml:"content"`
 }
 
 type Error struct {
@@ -907,17 +929,6 @@ func (p *parser) gaps(r rawGaps, def wm.Gaps) wm.Gaps {
 	return g
 }
 
-func parsePercentPair(s string) (image.Point, bool) {
-	w, h, ok := strings.Cut(s, "x")
-	percent := func(v string) (int, bool) {
-		n, err := strconv.Atoi(strings.TrimSuffix(v, "%"))
-		return n, err == nil && strings.HasSuffix(v, "%") && n > 0 && n <= 100
-	}
-	x, okX := percent(w)
-	y, okY := percent(h)
-	return image.Pt(x, y), ok && okX && okY
-}
-
 func (p *parser) scratchpads(raw map[string]At[rawScratchpad]) map[wm.ScratchpadName]wm.ScratchpadSpec {
 	if len(raw) == 0 {
 		return nil
@@ -930,11 +941,11 @@ func (p *parser) scratchpads(raw map[string]At[rawScratchpad]) map[wm.Scratchpad
 			spec.Exec = r.Exec.V
 		}
 		if r.Size != nil {
-			size, ok := parsePercentPair(r.Size.V)
-			if !ok {
+			size, ok := parseExtent(r.Size.V)
+			if !ok || !size.W.Percent || !size.H.Percent || size.W.N == 0 || size.H.N == 0 {
 				p.fail(r.Size.Line, key+".size", "%q is not <width>%%x<height>%% with each from 1%% to 100%%", r.Size.V)
 			}
-			spec.Size = wm.ScratchSize{W: size.X, H: size.Y}
+			spec.Size = size
 		}
 		out[wm.ScratchpadName(name)] = spec
 	}
@@ -983,14 +994,11 @@ func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
 		p.fail(at.Line, key+".match", "is missing; give a connector name, desc:<description> or %q", outputFallback)
 		return rule
 	}
-	switch desc, isDesc := strings.CutPrefix(r.Match.V, "desc:"); {
+	switch {
 	case r.Match.V == "":
 		p.fail(r.Match.Line, key+".match", "needs a connector name, desc:<description> or %q", outputFallback)
-	case r.Match.V == outputFallback:
-	case isDesc:
-		rule.Description = desc
-	default:
-		rule.Name = r.Match.V
+	case r.Match.V != outputFallback:
+		rule.Match = outputMatch(r.Match.V)
 	}
 	if r.Mode != nil {
 		rule.Mode = p.mode(r.Mode, key+".mode")
@@ -1308,7 +1316,15 @@ func (p *parser) regexp(a *At[string], key string) *regexp.Regexp {
 func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	r := at.V
 	key := fmt.Sprintf("rules[%d]", i)
-	rule := wm.Rule{AppID: p.regexp(r.AppID, key+".app_id"), Title: p.regexp(r.Title, key+".title"), Tag: p.regexp(r.Tag, key+".tag")}
+	rule := wm.Rule{Match: p.match(r.rawMatch, key)}
+	if r.Exclude != nil {
+		if r.Exclude.V.empty() {
+			p.fail(r.Exclude.Line, key+".exclude", "matches every window, which would exclude them all")
+		}
+		exclude := p.match(r.Exclude.V, key+".exclude")
+		rule.Match.Exclude = &exclude
+	}
+	rule.Decision = p.placement(r, key, rule.Decision)
 	switch {
 	case r.Float && r.Tile:
 		p.fail(at.Line, key, "cannot both float and tile")
@@ -1318,9 +1334,9 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 		rule.Mode = wm.RuleTile
 	}
 	if r.Size != nil {
-		size, ok := parsePair(r.Size.V)
-		if !ok || size.X <= 0 || size.Y <= 0 {
-			p.fail(r.Size.Line, key+".size", "%q is not <width>x<height>", r.Size.V)
+		size, ok := parseExtent(r.Size.V)
+		if !ok || size.W.N <= 0 || size.H.N <= 0 {
+			p.fail(r.Size.Line, key+".size", "%q is not <width>x<height>, each in pixels or a percentage of the usable area", r.Size.V)
 		} else {
 			rule.Size = size
 		}
@@ -1340,8 +1356,8 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 		o := float32(*v)
 		rule.Opacity = &o
 	}
-	if r.AppID == nil && r.Title == nil && r.Tag == nil {
-		p.fail(at.Line, key, "matches every window; give app_id, title or tag")
+	if r.empty() {
+		p.fail(at.Line, key, "matches every window; give app_id, title, tag, initial_app_id, initial_title, xwayland or floating")
 	}
 	return rule
 }
@@ -1582,4 +1598,81 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.Animations, cfg.BlurLayers, cfg.Overview = c.Animations, c.BlurLayers, c.Overview
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
 	return cfg, nil
+}
+
+func outputMatch(text string) wm.OutputMatch {
+	if desc, ok := strings.CutPrefix(text, "desc:"); ok {
+		return wm.OutputMatch{Description: desc}
+	}
+	return wm.OutputMatch{Name: text}
+}
+
+func (p *parser) match(m rawMatch, key string) wm.Match {
+	return wm.Match{
+		AppID: p.regexp(m.AppID, key+".app_id"), Title: p.regexp(m.Title, key+".title"), Tag: p.regexp(m.Tag, key+".tag"),
+		InitialAppID: p.regexp(m.InitialAppID, key+".initial_app_id"), InitialTitle: p.regexp(m.InitialTitle, key+".initial_title"),
+		XWayland: m.XWayland, Floating: m.Floating,
+	}
+}
+
+func parseLength(text string) (wm.Length, bool) {
+	digits, percent := strings.CutSuffix(text, "%")
+	n, err := strconv.Atoi(digits)
+	return wm.Length{N: n, Percent: percent}, err == nil && n >= 0 && (!percent || n <= 100)
+}
+
+func parseExtent(text string) (wm.Extent, bool) {
+	w, h, ok := strings.Cut(text, "x")
+	width, okW := parseLength(w)
+	height, okH := parseLength(h)
+	return wm.Extent{W: width, H: height}, ok && okW && okH
+}
+
+var suppressions = map[string]wm.Suppress{"fullscreen": wm.SuppressFullscreen, "maximize": wm.SuppressMaximize, "activate": wm.SuppressActivate}
+
+func (p *parser) placement(r rawRule, key string, d wm.Decision) wm.Decision {
+	d.Focus, d.Fullscreen, d.Maximized, d.Pin = r.Focus, r.Fullscreen, r.Maximized, r.Pin
+	if r.Workspace != nil {
+		id, silent := strings.CutSuffix(r.Workspace.V, " silent")
+		n, err := strconv.Atoi(strings.TrimSpace(id))
+		if err != nil || n < 1 {
+			p.fail(r.Workspace.Line, key+".workspace", "%q is not a workspace number, optionally followed by silent", r.Workspace.V)
+		} else {
+			d.Workspace = &wm.WorkspacePlacement{ID: wm.WorkspaceID(n), Silent: silent}
+		}
+	}
+	if r.Output != nil {
+		if r.Output.V == "" {
+			p.fail(r.Output.Line, key+".output", "needs a connector name or desc:<description>")
+		}
+		m := outputMatch(r.Output.V)
+		d.Output = &m
+	}
+	if r.Position != nil {
+		switch r.Position.V {
+		case "center":
+			d.Position = wm.Position{Kind: wm.PositionCenter}
+		case "cursor":
+			d.Position = wm.Position{Kind: wm.PositionCursor}
+		default:
+			at, ok := parseExtent(r.Position.V)
+			if !ok {
+				p.fail(r.Position.Line, key+".position", "%q is not center, cursor or <x>x<y>, each in pixels or a percentage of the usable area", r.Position.V)
+			}
+			d.Position = wm.Position{Kind: wm.PositionAt, X: at.W, Y: at.H}
+		}
+	}
+	if r.Group != nil {
+		l, ok := wm.ParseLayout(r.Group.V)
+		if !ok {
+			p.fail(r.Group.Line, key+".group", "%q is not tab, h or v", r.Group.V)
+		}
+		d.Group = &l
+	}
+	for i := range r.Suppress {
+		if v := choice(p, &r.Suppress[i], fmt.Sprintf("%s.suppress[%d]", key, i), suppressions); v != nil {
+			d.Suppress |= *v
+		}
+	}
+	return d
 }

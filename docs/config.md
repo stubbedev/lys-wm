@@ -947,10 +947,14 @@ direction: out, action: showdesktop toggle}]`.
 rules:
   - {app_id: ^steam$, float: true}
   - {app_id: ^steam$, title: ^Friends List$, size: 400x900}
+  - {app_id: ^(discord|spotify)$, workspace: 9 silent, output: eDP-1}
+  - {app_id: ^keepassxc$, title: Unlock, focus: false, position: center}
+  - {app_id: ^steam_app_, fullscreen: false, suppress: [fullscreen]}
+  - {initial_title: ^Picture-in-Picture$, float: true, size: 25%x25%, position: 74%x72%, pin: true}
 ```
 
 `app_id`, `title` and `tag` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
-a rule needs at least one. `tag` matches the stable tag a client gives its
+a rule needs at least one matcher. `initial_app_id` and `initial_title` match the values the window had when it first mapped, so a browser that retitles itself still matches; `xwayland: true` or `false` matches X11 windows or Wayland ones; `floating: true` or `false` matches by whether the window floats (when it opens: whether it asks to); `exclude:` takes the same matchers and drops the windows it matches. `tag` matches the stable tag a client gives its
 window through `xdg_toplevel_tag_v1` (`main window`, `settings`), and the
 empty string for a window without one, X11 windows included. `float: true` or `tile: true` decides where a new
 window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
@@ -972,6 +976,24 @@ never say (every Wine or Proton title through Xwayland, most SDL and Vulkan
 games): it decides `vrr: fullscreen`, the content type the connector tells a
 TV (its game mode) and the tearing default, and `lys-wmctl windows` shows it
 with `content_source: rule`. Later rules override earlier ones.
+
+These keys place a window once, when it first maps, in the same layout change,
+so it is never drawn where it does not belong:
+
+| Key | Value |
+| --- | --- |
+| `workspace` | `<n>`: open on workspace n and follow it there; `<n> silent`: open there without switching or taking focus |
+| `output` | A connector name or `desc:<description prefix>`, as in `outputs`: open on that output's shown workspace, following it unless `workspace` says `silent` |
+| `focus` | `false`: open without focus; the window goes behind the focused one in the focus order and is not marked urgent |
+| `fullscreen`, `maximized` | `true` opens the window so; `false` refuses the window's own request for it made before it maps |
+| `position` | Floating windows: `center`, `cursor` (centred on the pointer, kept on the output) or `<x>x<y>`, from the usable area's top left, in pixels or percent of the usable area |
+| `size` | `<w>x<h>` in pixels or percent of the usable area (`25%x40%`) |
+| `group` | `tab`, `h` or `v`: open inside the focused window's group of that layout, wrapping the focused window in one when its group has another |
+| `suppress` | A list of `fullscreen`, `maximize` and `activate`: ignore those requests from the window, at map and afterwards |
+| `pin` | `true`: open pinned to every workspace of its output (see the `pin` action); the window floats |
+
+A window launched through `exec` opens on the workspace it was launched from;
+a rule's `workspace` or `output` wins over that.
 
 X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 `jetbrains-idea`). Without a rule, a window floats when it has a parent

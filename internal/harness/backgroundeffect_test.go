@@ -106,7 +106,7 @@ func (e effects) set(t *testing.T, obj *cbe.ExtBackgroundEffectSurfaceV1, rects 
 	}
 }
 
-var glassRule = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30)}}
+var glassRule = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 30)}}
 
 func startGlass(t *testing.T, start gpuStarter, configure func(*compositor.Config)) (*Harness, *testclient.Client, *testclient.Window) {
 	t.Helper()
@@ -205,7 +205,7 @@ func TestARuleOffTurnsBlurRegionsOff(t *testing.T) {
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		off := false
 		h, c, glass := startGlass(t, start, func(cfg *compositor.Config) {
-			cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Mode: wm.RuleFloat, Size: image.Pt(60, 30), Blur: &off}}
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 30), Blur: &off}}
 		})
 		fx := bindEffects(t, c)
 		fx.set(t, fx.of(t, glass.Surface), image.Rect(0, 0, 60, 30))
@@ -368,7 +368,7 @@ func TestDecorationBlurReachesPopupsOfBlurredParents(t *testing.T) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 3, Passes: 2}
 			cfg.BlurLayers = []string{"lys-wm.testclient"}
-			cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^plain$`), Mode: wm.RuleFloat, Size: image.Pt(20, 20), Blur: &off}}
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^plain$`)}, Mode: wm.RuleFloat, Size: wm.Px(20, 20), Blur: &off}}
 		}, small)
 		c := testclient.Connect(t, h.Socket())
 		bg := c.Window("background", fineChecker)

@@ -17,7 +17,7 @@ var glassRect = image.Rect(50, 35, 110, 65)
 
 func clearWindowRule(title string) wm.Rule {
 	zero := float32(0)
-	return wm.Rule{Title: regexp.MustCompile("^" + title + "$"), Mode: wm.RuleFloat, Size: glassRect.Size(), Opacity: &zero}
+	return wm.Rule{Match: wm.Match{Title: regexp.MustCompile("^" + title + "$")}, Mode: wm.RuleFloat, Size: wm.Px(glassRect.Dx(), glassRect.Dy()), Opacity: &zero}
 }
 
 func TestAHiddenBlurCostsNothing(t *testing.T) {
@@ -27,8 +27,8 @@ func TestAHiddenBlurCostsNothing(t *testing.T) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1}
 			cfg.Rules = []wm.Rule{
 				clearWindowRule("glass"),
-				{Title: regexp.MustCompile(`^cover$`), Mode: wm.RuleFloat, Size: image.Pt(80, 50)},
-				{Title: regexp.MustCompile(`^behind$`), Mode: wm.RuleFloat, Size: image.Pt(80, 50)},
+				{Match: wm.Match{Title: regexp.MustCompile(`^cover$`)}, Mode: wm.RuleFloat, Size: wm.Px(80, 50)},
+				{Match: wm.Match{Title: regexp.MustCompile(`^behind$`)}, Mode: wm.RuleFloat, Size: wm.Px(80, 50)},
 			}
 		}, small)
 		c := testclient.Connect(t, h.Socket())
@@ -65,8 +65,8 @@ func TestABlurBehindAnOpaqueWindowIgnoresWhatThatWindowHides(t *testing.T) {
 			cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1}
 			cfg.Rules = []wm.Rule{
 				clearWindowRule("glass"),
-				{Title: regexp.MustCompile(`^behind$`), Mode: wm.RuleFloat, Size: image.Pt(80, 50)},
-				{Title: regexp.MustCompile(`^wall$`), Mode: wm.RuleFloat, Size: image.Pt(120, 80)},
+				{Match: wm.Match{Title: regexp.MustCompile(`^behind$`)}, Mode: wm.RuleFloat, Size: wm.Px(80, 50)},
+				{Match: wm.Match{Title: regexp.MustCompile(`^wall$`)}, Mode: wm.RuleFloat, Size: wm.Px(120, 80)},
 			}
 		}, small)
 		c := testclient.Connect(t, h.Socket())
@@ -127,7 +127,7 @@ func tiledGlassRedraws(t *testing.T, live bool) uint64 {
 	zero := float32(0)
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Decor.Blur = compositor.Blur{Enabled: true, Size: 2, Passes: 1, LiveTiled: live}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^glass$`), Opacity: &zero}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^glass$`)}, Opacity: &zero}}
 	}, small)
 	c := testclient.Connect(t, h.Socket())
 	for range 2 {

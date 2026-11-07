@@ -20,9 +20,9 @@ import (
 )
 
 func contentRule(appID, title string, t wm.ContentType) wm.Rule {
-	r := wm.Rule{AppID: regexp.MustCompile(appID), Content: &t}
+	r := wm.Rule{Match: wm.Match{AppID: regexp.MustCompile(appID)}, Content: &t}
 	if title != "" {
-		r.Title = regexp.MustCompile(title)
+		r.Match.Title = regexp.MustCompile(title)
 	}
 	return r
 }

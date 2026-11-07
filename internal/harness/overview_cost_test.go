@@ -21,7 +21,7 @@ func TestAPiledOverviewClosingDoesNotDrawWhatIsCovered(t *testing.T) {
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor.Rounding = 12
 		cfg.Decor.Shadow = compositor.Shadow{Enabled: true, Range: 24, Power: 3, Scale: 1, Offset: image.Pt(0, 8), Active: render.Color{A: 0x60}, Inactive: render.Color{A: 0x60}}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pile$`), Mode: wm.RuleFloat, Size: image.Pt(1000, 700)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pile$`)}, Mode: wm.RuleFloat, Size: wm.Px(1000, 700)}}
 	}, benchMode)
 	c := testclient.Connect(t, h.Socket())
 	for range 30 {

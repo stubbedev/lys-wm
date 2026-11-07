@@ -1593,7 +1593,55 @@
           "dim_around": {
             "type": "boolean"
           },
+          "exclude": {
+            "type": "object",
+            "properties": {
+              "app_id": {
+                "type": "string"
+              },
+              "floating": {
+                "type": "boolean"
+              },
+              "initial_app_id": {
+                "type": "string"
+              },
+              "initial_title": {
+                "type": "string"
+              },
+              "tag": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "xwayland": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
           "float": {
+            "type": "boolean"
+          },
+          "floating": {
+            "type": "boolean"
+          },
+          "focus": {
+            "type": "boolean"
+          },
+          "fullscreen": {
+            "type": "boolean"
+          },
+          "group": {
+            "type": "string"
+          },
+          "initial_app_id": {
+            "type": "string"
+          },
+          "initial_title": {
+            "type": "string"
+          },
+          "maximized": {
             "type": "boolean"
           },
           "mica": {
@@ -1610,8 +1658,23 @@
           "opacity": {
             "type": "number"
           },
+          "output": {
+            "type": "string"
+          },
+          "pin": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "string"
+          },
           "size": {
             "type": "string"
+          },
+          "suppress": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "tag": {
             "type": "string",
@@ -1626,6 +1689,12 @@
           "title": {
             "type": "string",
             "format": "regex"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "xwayland": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

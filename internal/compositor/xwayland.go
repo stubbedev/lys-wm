@@ -232,11 +232,14 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 	}
 	switch r := r.(type) {
 	case xwayland.Activate:
+		if c.decision(win).Suppress.Has(wm.SuppressActivate) {
+			return nil
+		}
 		return c.markUrgent(win)
 	case xwayland.SetFullscreen:
-		return c.update(c.wm.ClientRequestsFullscreen(win.id, r.On))
+		return c.clientFullscreen(win, r.On)
 	case xwayland.SetMaximized:
-		return c.update(c.wm.SetMaximized(win.id, r.On))
+		return c.clientMaximize(win, r.On)
 	case xwayland.Minimize:
 		return c.minimize(win)
 	case xwayland.Move:

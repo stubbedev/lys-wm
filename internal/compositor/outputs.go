@@ -12,11 +12,11 @@ import (
 	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/outputmanagement"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type OutputRule struct {
-	Name          string
-	Description   string
+	Match         wm.OutputMatch
 	Mode          ModePolicy
 	Position      *image.Point
 	Scale         output.Scale
@@ -44,10 +44,7 @@ func (rs OutputRules) For(b backend.Output) OutputRule {
 }
 
 func (r OutputRule) matches(b backend.Output) bool {
-	if r.Description != "" {
-		return strings.HasPrefix(b.Description(), r.Description)
-	}
-	return r.Name == b.Name()
+	return r.Match.Matches(b.Name(), b.Description())
 }
 
 func (r OutputRule) scale() output.Scale {

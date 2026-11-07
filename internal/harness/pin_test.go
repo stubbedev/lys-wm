@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"image"
 	"regexp"
 	"testing"
 	"time"
@@ -34,7 +33,7 @@ func runPinnedSwitch(t *testing.T, withPip bool) pinRun {
 		cfg.Clock = func() time.Duration { return now }
 		cfg.Decor.BorderWidth = 0
 		cfg.WM.Gaps = wm.Gaps{}
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pip$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pip$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 30)}}
 	}, tall)
 	at := func(d time.Duration) {
 		h.Do(func(*headless.Backend, *compositor.Compositor) error {
@@ -101,7 +100,7 @@ func TestAPinnedWindowStaysPutThroughAWorkspaceSwitchAndCostsOnlyItsOwnDraw(t *t
 func TestAPinnedWindowStaysPutWhileASwipeMovesTheWorkspaces(t *testing.T) {
 	t.Parallel()
 	r := startSwipeRig(t, StartWith, anim.Style{Kind: anim.Slide}, func(cfg *compositor.Config) {
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^pip$`), Mode: wm.RuleFloat, Size: image.Pt(40, 30)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^pip$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 30)}}
 	})
 	r.redBlue()
 	pip := r.c.Window("pip", testclient.Fill(0, 0xff, 0))

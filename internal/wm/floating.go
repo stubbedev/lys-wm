@@ -90,21 +90,7 @@ func Centered(area image.Rectangle, size image.Point) image.Rectangle {
 }
 
 func (s State) MapFloating(id WindowID, rect image.Rectangle) (State, error) {
-	if id == 0 {
-		return State{}, ErrReservedWindow
-	}
-	if s.windowWorkspace(id) != nil {
-		return State{}, fmt.Errorf("wm: map floating window %d: already mapped", id)
-	}
-	s = s.clone()
-	w := s.activeWorkspace()
-	if w == nil {
-		return State{}, fmt.Errorf("map floating window %d: %w", id, ErrUnknownOutput)
-	}
-	w.Floating = append(w.Floating, Floating{ID: id, Rect: rect})
-	w.floatFocus = true
-	w.record()
-	return s, nil
+	return s.Open(id, Opening{Float: true, Rect: rect})
 }
 
 func (s State) ToggleFloating(at Autotile) (State, error) {

@@ -78,8 +78,12 @@ func (c *Compositor) presentToken(t *shell.Toplevel, value string) error {
 
 func (c *Compositor) activated(w *window, tok activationToken) error {
 	policy := c.settings.OnActivate
-	if d := wm.DecideTagged(c.rules, w.top.AppID(), w.top.Title(), w.top.Tag()); d.OnActivate != nil {
+	d := c.decision(w)
+	if d.OnActivate != nil {
 		policy = *d.OnActivate
+	}
+	if d.Suppress.Has(wm.SuppressActivate) {
+		policy = wm.ActivateIgnore
 	}
 	switch {
 	case policy == wm.ActivateIgnore:
@@ -105,17 +109,6 @@ func (c *Compositor) launchToken(t toplevel) int {
 		}
 	}
 	return -1
-}
-
-func (c *Compositor) launched(s wm.State, t toplevel, id wm.WindowID) (wm.State, error) {
-	i := c.launchToken(t)
-	if i < 0 {
-		return s, nil
-	}
-	if name := c.tokens[i].scratchpad; name != "" {
-		return s.MoveWindowToScratchpad(id, name, c.settings.Scratchpads[name], c.settings.Autotile)
-	}
-	return s.MoveWindowToWorkspace(id, c.tokens[i].workspace, c.settings.Autotile)
 }
 
 func (c *Compositor) consumeLaunch(t toplevel) {

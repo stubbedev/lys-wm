@@ -545,7 +545,7 @@ func TestBorderColoursOfAWindowOpeningUnfocusedAreInactiveAtOnce(t *testing.T) {
 }
 
 func testBorderColoursOfAWindowOpeningUnfocusedAreInactiveAtOnce(t *testing.T, start gpuStarter) {
-	s := startBorderScene(t, start, placedAtOnce(slowMotion()), wm.Rule{Title: regexp.MustCompile(`^floating$`), Mode: wm.RuleFloat, Size: image.Pt(40, 40)})
+	s := startBorderScene(t, start, placedAtOnce(slowMotion()), wm.Rule{Match: wm.Match{Title: regexp.MustCompile(`^floating$`)}, Mode: wm.RuleFloat, Size: wm.Px(40, 40)})
 	s.open("floating")
 	s.at(2 * time.Hour)
 	floatingEdge := showing(70, 38, borderActive)

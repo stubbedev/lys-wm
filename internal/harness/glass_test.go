@@ -333,7 +333,7 @@ func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
 		first.Mica = &on
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Blur = compositor.Blur{Size: 2, Passes: 1, Mica: compositor.Mica{Size: 2, Passes: 2}}
-			cfg.Rules = []wm.Rule{first, second, {Title: regexp.MustCompile(`^under$`), Mode: wm.RuleFloat, Size: image.Pt(140, 90)}}
+			cfg.Rules = []wm.Rule{first, second, {Match: wm.Match{Title: regexp.MustCompile(`^under$`)}, Mode: wm.RuleFloat, Size: wm.Px(140, 90)}}
 		}, small)
 		shell, wallpaper := startWallpaper(t, h)
 		c := testclient.Connect(t, h.Socket())

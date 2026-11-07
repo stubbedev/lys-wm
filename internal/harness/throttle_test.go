@@ -21,8 +21,8 @@ const (
 func throttled(cfg *compositor.Config) {
 	cfg.HiddenFrame = hiddenFrame
 	cfg.Rules = []wm.Rule{
-		{Title: regexp.MustCompile(`^behind$`), Mode: wm.RuleFloat, Size: image.Pt(80, 50)},
-		{Title: regexp.MustCompile(`^wall$`), Mode: wm.RuleFloat, Size: image.Pt(120, 80)},
+		{Match: wm.Match{Title: regexp.MustCompile(`^behind$`)}, Mode: wm.RuleFloat, Size: wm.Px(80, 50)},
+		{Match: wm.Match{Title: regexp.MustCompile(`^wall$`)}, Mode: wm.RuleFloat, Size: wm.Px(120, 80)},
 	}
 }
 

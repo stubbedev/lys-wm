@@ -2,7 +2,6 @@ package harness
 
 import (
 	"errors"
-	"image"
 	"regexp"
 	"strconv"
 	"testing"
@@ -22,7 +21,7 @@ func overviewBenchHarness(b *testing.B, open func(testing.TB) setup, now *time.D
 		cfg.Clock = func() time.Duration { return *now }
 		cfg.Decor.Rounding = 12
 		if !tiled {
-			cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^float`), Mode: wm.RuleFloat, Size: image.Pt(1000, 700)}}
+			cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^float`)}, Mode: wm.RuleFloat, Size: wm.Px(1000, 700)}}
 		}
 	}
 	h := start(b, s, benchMode)

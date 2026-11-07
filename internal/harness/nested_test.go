@@ -243,7 +243,7 @@ func TestNestedTilingSession(t *testing.T) {
 			{chord: "SUPER + 2", action: "workspace 2"},
 		}
 		withBinds(t, specs...)(cfg)
-		cfg.Rules = []wm.Rule{{Title: regexp.MustCompile(`^float-me$`), Mode: wm.RuleFloat, Size: image.Pt(300, 200)}}
+		cfg.Rules = []wm.Rule{{Match: wm.Match{Title: regexp.MustCompile(`^float-me$`)}, Mode: wm.RuleFloat, Size: wm.Px(300, 200)}}
 	})
 	host.Eventually("the nested lys-wm window", mappedToplevels(1))
 	mapped := func(want int) {

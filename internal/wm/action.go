@@ -531,7 +531,7 @@ func parseWorkspace(s string) (WorkspaceTarget, bool) {
 	return WorkspaceID(n), err == nil && n >= 1
 }
 
-func parseLayout(s string) (Layout, bool) {
+func ParseLayout(s string) (Layout, bool) {
 	return parseEnum[Layout](layoutNames, s)
 }
 
@@ -763,7 +763,7 @@ var Actions = []ActionSpec{
 			if len(args) == 0 || len(args) > 2 {
 				return nil, badArgs(spec, "takes 1 or 2 arguments, got %d", len(args))
 			}
-			l, ok := parseLayout(args[0])
+			l, ok := ParseLayout(args[0])
 			if !ok {
 				return nil, badArgs(spec, "unknown layout %q", args[0])
 			}

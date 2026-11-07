@@ -19,7 +19,7 @@ func TestAScratchpadRunsItsExecAndTogglesOverTheFocusedOutput(t *testing.T) {
 	t.Parallel()
 	flower := testenv.Require(t, "weston-flower")
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.WM.Scratchpads = map[wm.ScratchpadName]wm.ScratchpadSpec{"term": {Exec: flower, Size: wm.ScratchSize{W: 50, H: 50}}}
+		cfg.WM.Scratchpads = map[wm.ScratchpadName]wm.ScratchpadSpec{"term": {Exec: flower, Size: wm.Extent{W: wm.Length{N: 50, Percent: true}, H: wm.Length{N: 50, Percent: true}}}}
 	}, small, small)
 	c := testclient.Connect(t, h.Socket())
 	c.DispatchUntil("base to map", c.Window("base", fillGreen).Mapped)

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -363,7 +362,7 @@ func TestWindowsReportTheirStackingOrder(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Rules = []wm.Rule{
-			{Title: regexp.MustCompile(`^float`), Mode: wm.RuleFloat, Size: image.Pt(60, 40)},
+			{Match: wm.Match{Title: regexp.MustCompile(`^float`)}, Mode: wm.RuleFloat, Size: wm.Px(60, 40)},
 		}
 	}, desktop)
 	c := testclient.Connect(t, h.Socket())

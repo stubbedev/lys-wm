@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 var virtualMode = ipc.Mode{Width: 200, Height: 120, RefreshMHz: 60000}
@@ -180,7 +181,7 @@ func TestOutputRulesApplyToAVirtualOutput(t *testing.T) {
 	t.Parallel()
 	at := image.Pt(500, 40)
 	h := StartWith(t, func(cfg *compositor.Config) {
-		cfg.Outputs.Named = []compositor.OutputRule{{Name: "VIRT-1", Scale: 2 * output.Unit, Position: &at}}
+		cfg.Outputs.Named = []compositor.OutputRule{{Match: wm.OutputMatch{Name: "VIRT-1"}, Scale: 2 * output.Unit, Position: &at}}
 	}, small)
 	h.createOutput(ipc.Request{Mode: &virtualMode})
 	h.createOutput(ipc.Request{Mode: &virtualMode, Scale: 1.25})

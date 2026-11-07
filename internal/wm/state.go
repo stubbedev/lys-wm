@@ -437,34 +437,7 @@ func (s State) Focused() (WindowID, bool) {
 var ErrReservedWindow = errors.New("wm: window id 0 is reserved")
 
 func (s State) MapWindow(id WindowID, at Autotile) (State, error) {
-	if id == 0 {
-		return State{}, ErrReservedWindow
-	}
-	if s.windowWorkspace(id) != nil {
-		return State{}, fmt.Errorf("wm: map window %d: already mapped", id)
-	}
-	s = s.clone()
-	w := s.activeWorkspace()
-	if w == nil {
-		if len(s.outputs) > 0 {
-			return State{}, fmt.Errorf("wm: map window %d: no active workspace", id)
-		}
-		w = s.firstOn("")
-		if w == nil {
-			w = s.create(s.firstUnused(), "")
-		}
-	}
-	area := image.Rectangle{}
-	if o := s.output(w.Output); o != nil {
-		area = o.Area
-	}
-	tree, err := w.Tree.Place(id, area, at)
-	if err != nil {
-		return State{}, err
-	}
-	w.Tree = tree
-	w.record()
-	return s, nil
+	return s.Open(id, Opening{Autotile: at})
 }
 
 func (s State) UnmapWindow(id WindowID) (State, error) {
