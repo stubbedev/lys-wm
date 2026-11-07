@@ -466,6 +466,11 @@ func TestFrameCallbacksWaitForTheCompositor(t *testing.T) {
 	}
 }
 
+func (e *env) onSurface(s *cw.WlSurface, f func(*Surface)) {
+	e.t.Helper()
+	e.on(func() { f(find(e.t, e.rec.commits, s).s) })
+}
+
 func TestAFrameCallbackCommittedAfterAFrameWasDrawnWaitsForTheNext(t *testing.T) {
 	e := setup(t, 6)
 	s := e.surface()
@@ -473,13 +478,12 @@ func TestAFrameCallbackCommittedAfterAFrameWasDrawnWaitsForTheNext(t *testing.T)
 	_, err := s.Frame(drawn)
 	must(t, err, s.Commit())
 	e.roundtrip()
-	surface := find(t, e.rec.commits, s).s
-	e.on(surface.Latch)
+	e.onSurface(s, (*Surface).Latch)
 	_, err = s.Frame(later)
 	must(t, err, s.Commit())
 	e.roundtrip()
 	done := func(ms uint32) {
-		e.on(func() {
+		e.onSurface(s, func(surface *Surface) {
 			if err := surface.FrameDone(ms); err != nil {
 				t.Error(err)
 			}
@@ -490,7 +494,7 @@ func TestAFrameCallbackCommittedAfterAFrameWasDrawnWaitsForTheNext(t *testing.T)
 	if !slices.Equal(drawn.done, []uint32{1}) || len(later.done) != 0 {
 		t.Fatalf("after the first frame: drawn %v, later %v; want only the drawn commit's callback", drawn.done, later.done)
 	}
-	e.on(surface.Latch)
+	e.onSurface(s, (*Surface).Latch)
 	done(2)
 	if !slices.Equal(later.done, []uint32{2}) {
 		t.Fatalf("after the second frame: later %v, want [2]", later.done)
@@ -504,12 +508,11 @@ func TestAnUndrawnSurfaceGetsEveryFrameCallback(t *testing.T) {
 	_, err := s.Frame(drawn)
 	must(t, err, s.Commit())
 	e.roundtrip()
-	surface := find(t, e.rec.commits, s).s
-	e.on(surface.Latch)
+	e.onSurface(s, (*Surface).Latch)
 	_, err = s.Frame(later)
 	must(t, err, s.Commit())
 	e.roundtrip()
-	e.on(func() {
+	e.onSurface(s, func(surface *Surface) {
 		if !surface.WantsFrame() {
 			t.Error("a surface with callbacks waiting does not want a frame")
 		}
