@@ -90,6 +90,14 @@ func (c *Compositor) Holds() HoldStats {
 	return c.holds
 }
 
+func (c *Compositor) Stalls(id wm.WindowID) (int, bool) {
+	w := c.windowByID(id)
+	if w == nil {
+		return 0, false
+	}
+	return w.stalls, true
+}
+
 func holdBound(dragging bool, configured time.Duration) time.Duration {
 	if dragging {
 		return min(dragHoldBound, configured)
@@ -223,6 +231,7 @@ func (c *Compositor) holdExpired() error {
 	for _, m := range c.txn.members {
 		if !m.reached || !m.w.top.synced() {
 			m.w.stalled = true
+			m.w.stalls++
 		}
 	}
 	return c.recovered(c.land(true))

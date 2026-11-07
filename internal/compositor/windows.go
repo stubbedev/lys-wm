@@ -21,6 +21,7 @@ type window struct {
 	top           toplevel
 	goal          image.Rectangle
 	stalled       bool
+	stalls        int
 	member        *member
 	tile          image.Rectangle
 	rect          image.Rectangle

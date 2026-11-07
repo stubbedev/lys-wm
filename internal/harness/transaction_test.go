@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -39,6 +41,26 @@ func heldForever(cfg *compositor.Config) {
 
 func holding(_ *headless.Backend, c *compositor.Compositor) bool {
 	return c.Holding()
+}
+
+func (h *Harness) stalls(title string) int {
+	h.t.Helper()
+	var id wm.WindowID
+	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+		if w.Title == title {
+			id = w.ID
+		}
+	}
+	var stalls int
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		n, ok := c.Stalls(id)
+		if !ok {
+			return fmt.Errorf("no window %q (id %d) to count the stalls of", title, id)
+		}
+		stalls = n
+		return nil
+	})
+	return stalls
 }
 
 func (h *Harness) holds() compositor.HoldStats {
@@ -562,8 +584,8 @@ func TestADragKeepsMovingAgainstAFrozenClient(t *testing.T) {
 		h.Eventually("the frame there, the frozen window stretched to it", showing(x-20-2, 50, blueColor))
 		h.Eventually("the dragged window beside it", showing(x-20+2, 50, greenColor))
 	}
-	if s := h.holds(); s.Expired > 1 {
-		t.Errorf("holds %+v: only the first step may wait for the frozen client", s)
+	if stalls := h.stalls("frozen"); stalls != 1 {
+		t.Errorf("the frozen client held %d steps back, holds %+v: only the first step may wait for it", stalls, h.holds())
 	}
 	t.Logf("8 steps against a frozen client took %v", time.Since(began))
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
