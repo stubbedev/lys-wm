@@ -85,6 +85,7 @@
     animation = "${pkgs.weston}/bin/weston-presentation-shm";
     firefox = "${pkgs.firefox}/bin/firefox --no-remote --profile /tmp/firefox '${page}'";
     chromium = "${pkgs.chromium}/bin/chromium --enable-logging=stderr --v=1 --no-first-run --user-data-dir=/tmp/chromium '${page}'";
+    tabs = "${pkgs.chromium}/bin/chromium --ozone-platform=wayland --enable-logging=stderr --vmodule=wayland_window_drag_controller=3,tab_drag_controller=3,wayland_data_drag_controller=3 --no-first-run --user-data-dir=/tmp/chromium-tabs file:///tmp/tab-one.html file:///tmp/tab-two.html";
     electron = "${pkgs.electron}/bin/electron --ozone-platform=wayland ${electronApp} ${toString seconds}";
   };
 in

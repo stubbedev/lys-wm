@@ -268,6 +268,9 @@ def capture_virtual(window_id):
     machine.succeed(as_alice(f"lys-wmctl output remove {name}"))
     assert list(outputs()) == [OUTPUT], f"outputs after removing {name}: {list(outputs())}"
     assert window_output(window_id) == OUTPUT, f"the window stayed on {window_output(window_id)} after {name} went"
+    [moved] = [w for w in windows() if w["id"] == window_id]
+    machine.succeed(as_alice(f"lys-wmctl dispatch workspace {moved['workspace']}"))
+    machine.wait_until_succeeds(as_alice("lys-wmctl workspaces") + f" | jq -e 'any(.[]; .id == {moved['workspace']} and .visible)'", timeout=30)
 
 
 CAST_SOURCE_CLASS = re.compile(r"^(Video/Source|Stream/Output/Video)$")
@@ -405,3 +408,73 @@ machine.succeed(as_alice(f"mkdir -p /tmp/firefox && cp {params['firefox_prefs']}
 for app, confirms in [("firefox", False), ("chromium", True), ("electron", False)]:
     for label in [MONITOR, WINDOW]:
         share(app, label, confirms)
+
+
+TAB_STRIP_Y = 22
+SECOND_TAB_X = 360
+ONLY_TAB_X = 120
+DOCK_X = 40
+DRAG_STEPS = 20
+
+
+def chromium_windows():
+    return [w for w in windows() if w["title"].startswith("tab-")]
+
+
+def press_drag(start, *stops):
+    move_pointer(*start)
+    machine.sleep(0.5)
+    pointer_events([{"type": "btn", "data": {"down": True, "button": "left"}}])
+    machine.sleep(0.3)
+    seen = []
+    for end in stops:
+        for i in range(1, DRAG_STEPS + 1):
+            move_pointer(start[0] + (end[0] - start[0]) * i // DRAG_STEPS, start[1] + (end[1] - start[1]) * i // DRAG_STEPS)
+            machine.sleep(0.15)
+            seen.append([(w["id"], w["floating"], w["rect"]["x"], w["rect"]["y"]) for w in chromium_windows()])
+        start = end
+    pointer_events([{"type": "btn", "data": {"down": False, "button": "left"}}])
+    machine.sleep(1)
+    return seen
+
+
+def tear_off_and_redock():
+    for name in ("one", "two"):
+        machine.succeed(f"echo '<title>tab-{name}</title>' > /tmp/tab-{name}.html && chmod 644 /tmp/tab-{name}.html")
+    launch("tabs")
+    try:
+        machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"tab-\"))'", timeout=PAGE_LOADS_S)
+    except Exception:
+        machine.screenshot("tabs-loading")
+        dump("tabs")
+        raise
+    machine.sleep(5)
+    [first] = chromium_windows()
+    r = first["rect"]
+    seen = press_drag((r["x"] + SECOND_TAB_X, r["y"] + TAB_STRIP_Y), (r["x"] + SECOND_TAB_X, r["y"] + 400))
+    torn = [w for w in chromium_windows() if w["id"] != first["id"]]
+    if len(torn) != 1:
+        machine.screenshot("tab-tear-off")
+        dump("tabs")
+        raise AssertionError(f"tearing off Chromium's second tab left windows {chromium_windows()}; during the drag: {seen}")
+    moving = [frame for frame in seen if any(i == torn[0]["id"] for i, _, _, _ in frame)]
+    places = {(x, y) for frame in moving for i, floating, x, y in frame if i == torn[0]["id"] and floating}
+    assert len(places) >= 3, f"the torn-off tab window did not float and follow the pointer during the drag: {seen}"
+    t = torn[0]["rect"]
+    grab = (t["x"] + ONLY_TAB_X, t["y"] + TAB_STRIP_Y)
+    redock = press_drag(grab, (grab[0], grab[1] + 250), (r["x"] + DOCK_X, r["y"] + 250), (r["x"] + DOCK_X, r["y"] + TAB_STRIP_Y))
+    try:
+        machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e '[.[] | select(.title | startswith(\"tab-\"))] | length == 1'", timeout=30)
+    except Exception:
+        machine.screenshot("tab-redock")
+        dump("tabs")
+        print(f"during the redock drag: {redock}")
+        print(machine.execute("grep -i -e drag -e attach /tmp/tabs.log | tail -60")[1])
+        raise
+    [docked] = chromium_windows()
+    machine.succeed(f"kill {docked['pid']}")
+    print(f"Chromium tore its second tab off into window {torn[0]['id']}, which followed the pointer through {len(places)} places, and docked it back")
+
+
+if params["portal"] == "wlr":
+    tear_off_and_redock()
