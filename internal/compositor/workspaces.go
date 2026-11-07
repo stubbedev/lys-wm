@@ -95,10 +95,25 @@ type wsSpaceRequests struct {
 func (r wsSpaceRequests) Activate(*sew.ExtWorkspaceHandleV1) error {
 	id := r.id
 	r.m.pending = append(r.m.pending, func(s wm.State) (wm.State, error) {
-		if _, ok := s.Workspace(id); !ok {
+		w, ok := s.Workspace(id)
+		switch {
+		case !ok:
 			return s, nil
+		case w.Scratch.Name != "":
+			return s.ShowScratchpad(id)
 		}
 		return s.SwitchWorkspace(id)
+	})
+	return nil
+}
+
+func (r wsSpaceRequests) Deactivate(*sew.ExtWorkspaceHandleV1) error {
+	id := r.id
+	r.m.pending = append(r.m.pending, func(s wm.State) (wm.State, error) {
+		if w, ok := s.Workspace(id); !ok || w.Scratch.Name == "" {
+			return s, nil
+		}
+		return s.HideScratchpadOf(id)
 	})
 	return nil
 }
@@ -120,7 +135,6 @@ func (r wsSpaceRequests) Assign(_ *sew.ExtWorkspaceHandleV1, group *sew.ExtWorks
 	return nil
 }
 
-func (wsSpaceRequests) Deactivate(*sew.ExtWorkspaceHandleV1) error { return nil }
 func (wsSpaceRequests) Remove(*sew.ExtWorkspaceHandleV1) error     { return nil }
 func (wsSpaceRequests) Destroy(*sew.ExtWorkspaceHandleV1) error    { return nil }
 
@@ -128,6 +142,9 @@ func (c *Compositor) workspaceState(w wm.Workspace) sew.ExtWorkspaceHandleV1Stat
 	var st sew.ExtWorkspaceHandleV1State
 	if c.wm.Shown(w) {
 		st |= sew.ExtWorkspaceHandleV1StateActive
+	}
+	if w.Scratch.Name != "" {
+		st |= sew.ExtWorkspaceHandleV1StateHidden
 	}
 	for _, win := range c.windows {
 		if id, ok := c.wm.WorkspaceOf(win.id); win.urgent && ok && id == w.ID {
@@ -164,7 +181,7 @@ func (c *Compositor) syncWorkspaceManager(m *wsManager) error {
 		}
 	}
 	live := map[wm.WorkspaceID]bool{}
-	for _, w := range c.wm.Workspaces() {
+	for _, w := range slices.Concat(c.wm.Workspaces(), c.wm.Scratchpads()) {
 		live[w.ID] = true
 		sp, ok := m.spaces[w.ID]
 		if !ok {
@@ -175,13 +192,7 @@ func (c *Compositor) syncWorkspaceManager(m *wsManager) error {
 			}
 			sp = &wsSpace{resource: res, state: ^sew.ExtWorkspaceHandleV1State(0)}
 			m.spaces[w.ID] = sp
-			id, name := strconv.Itoa(int(w.ID)), c.wm.WorkspaceName(w.ID)
-			if name == "" {
-				name = id
-			}
-			sent(errors.Join(res.SendID(id), res.SendName(name),
-				res.SendCoordinates(binary.LittleEndian.AppendUint32(nil, uint32(w.ID))), //nolint:gosec // workspace ids are small positive numbers
-				res.SendCapabilities(sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesActivate|sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesAssign)))
+			sent(c.announceWorkspace(res, w))
 		}
 		if st := c.workspaceState(w); st != sp.state {
 			sp.state = st
@@ -221,4 +232,18 @@ func (c *Compositor) syncWorkspaces() error {
 		errs = append(errs, c.syncWorkspaceManager(m))
 	}
 	return errors.Join(errs...)
+}
+
+func (c *Compositor) announceWorkspace(res *sew.ExtWorkspaceHandleV1, w wm.Workspace) error {
+	if name := w.Scratch.Name; name != "" {
+		return errors.Join(res.SendID("scratchpad:"+string(name)), res.SendName(string(name)),
+			res.SendCapabilities(sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesActivate|sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesDeactivate))
+	}
+	id, name := strconv.Itoa(int(w.ID)), c.wm.WorkspaceName(w.ID)
+	if name == "" {
+		name = id
+	}
+	return errors.Join(res.SendID(id), res.SendName(name),
+		res.SendCoordinates(binary.LittleEndian.AppendUint32(nil, uint32(w.ID))), //nolint:gosec // numbered workspace ids are small positive numbers
+		res.SendCapabilities(sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesActivate|sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesAssign))
 }

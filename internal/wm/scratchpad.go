@@ -114,6 +114,31 @@ func (s State) HideScratchpad() (State, error) {
 	return s, nil
 }
 
+func (s State) ShowScratchpad(id WorkspaceID) (State, error) {
+	if w := s.workspace(id); w == nil || w.Scratch.Name == "" {
+		return State{}, fmt.Errorf("show scratchpad %d: %w", id, ErrInvalidWorkspace)
+	}
+	if s.output(s.focused) == nil {
+		return State{}, fmt.Errorf("show scratchpad %d: %w", id, ErrUnknownOutput)
+	}
+	s = s.clone()
+	s.showScratch(s.output(s.focused), id)
+	return s, nil
+}
+
+func (s State) HideScratchpadOf(id WorkspaceID) (State, error) {
+	w := s.workspace(id)
+	if w == nil || w.Scratch.Name == "" {
+		return State{}, fmt.Errorf("hide scratchpad %d: %w", id, ErrInvalidWorkspace)
+	}
+	if !s.Shown(*w) {
+		return s, nil
+	}
+	s = s.clone()
+	s.hideScratch(s.output(s.workspace(id).Output))
+	return s, nil
+}
+
 func (s State) MoveToScratchpad(name ScratchpadName, spec ScratchpadSpec, at Autotile) (State, error) {
 	win, ok := s.Focused()
 	if !ok {

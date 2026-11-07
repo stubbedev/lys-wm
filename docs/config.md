@@ -1061,6 +1061,11 @@ the scratchpad takes, centred; without it the whole area. A workspace switch on
 its output hides it unless `hide_on_workspace_switch: false`. Focusing a window
 beneath it hides it too. The `scratchpad` animation event slides it in and out.
 Scratchpads need no entry here to be used; one without an entry has no `exec`.
+ext-workspace lists each scratchpad as a workspace named after it, with the
+id `scratchpad:<name>`, no coordinates and the `hidden` state, so bars that
+draw only numbered workspaces leave it out; it is `active` while it shows, in
+the group of the output it shows on or last showed on. Activating it shows it
+on the focused output and deactivating it hides it.
 
 ## showdesktop
 

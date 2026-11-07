@@ -187,3 +187,41 @@ func TestExtWorkspacesFollowAndDriveTheWindowManager(t *testing.T) {
 		return ok && ws.Output == "HEADLESS-2"
 	})
 }
+
+func TestNamedScratchpadsAreHiddenExtWorkspaces(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("dropdown", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	v, watcher, mgr := watchWorkspaces(t, h)
+	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+		a, err := wm.ParseAction("movetoscratchpad term")
+		if err != nil {
+			return err
+		}
+		return comp.Dispatch(a)
+	})
+	const hidden = cew.ExtWorkspaceHandleV1StateHidden
+	watcher.DispatchUntil("the term scratchpad listed hidden on the output", func() bool {
+		sp := v.named("term")
+		return sp != nil && v.states[sp] == hidden && v.members[sp] == v.groups[0]
+	})
+	if err := errors.Join(v.named("term").Activate(), mgr.Commit(), watcher.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	watcher.DispatchUntil("the scratchpad shown", func() bool { return v.states[v.named("term")] == hidden|cew.ExtWorkspaceHandleV1StateActive })
+	h.Eventually("the window manager shows it", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		return comp.WM().ScratchOn("HEADLESS-1") != 0
+	})
+	if !v.active("1") {
+		t.Error("workspace 1 stopped being active under the scratchpad")
+	}
+	if err := errors.Join(v.named("term").Deactivate(), mgr.Commit(), watcher.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	watcher.DispatchUntil("the scratchpad hidden again", func() bool { return v.states[v.named("term")] == hidden })
+	h.Eventually("the window manager hides it", func(_ *headless.Backend, comp *compositor.Compositor) bool {
+		return comp.WM().ScratchOn("HEADLESS-1") == 0
+	})
+}
