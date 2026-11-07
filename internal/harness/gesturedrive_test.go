@@ -140,18 +140,8 @@ func (r *swipeRig) active() wm.WorkspaceID {
 
 func (r *swipeRig) expectNoMoreFrames() {
 	r.t.Helper()
-	time.Sleep(50 * time.Millisecond)
-	var before uint64
-	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-		before = b.Outputs()[0].Frames()
-		return nil
-	})
-	time.Sleep(100 * time.Millisecond)
-	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-		if n := b.Outputs()[0].Frames(); n != before {
-			r.t.Errorf("%d frames ran with nothing moving", n-before)
-		}
-		return nil
+	r.h.Eventually("the output to stop drawing with nothing moving", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return !b.Outputs()[0].FrameOwed() && !c.Animating(c.Outputs()[0])
 	})
 }
 

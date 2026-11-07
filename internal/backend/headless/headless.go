@@ -797,6 +797,10 @@ func (o *Output) Frames() uint64 {
 	return o.frames
 }
 
+func (o *Output) FrameOwed() bool {
+	return o.clock.Requested() || o.inFrame || o.presentPending
+}
+
 func (o *Output) LastDamage() render.Region {
 	return slices.Clone(o.damage)
 }

@@ -97,18 +97,18 @@ func TestAHiddenScratchpadCostsNoFrames(t *testing.T) {
 	t.Parallel()
 	h := Start(t, small)
 	c := testclient.Connect(t, h.Socket())
-	c.DispatchUntil("a to map", c.Window("a", fillGreen).Mapped)
+	a := c.Window("a", fillGreen)
+	c.DispatchUntil("a to map", a.Mapped)
 	b := c.Window("b", fillGreen)
 	c.DispatchUntil("b to map", b.Mapped)
+	a.Stop()
 	b.Stop()
 	h.dispatch("movetoscratchpad notes")
 	h.settled(c, "b hidden", func(w ipc.Window) bool { return w.Stack == nil }, "b")
 	var frames uint64
 	h.Eventually("the output idle", func(be *headless.Backend, comp *compositor.Compositor) bool {
-		now := be.Outputs()[0].Frames()
-		idle := now == frames && !comp.Animating(comp.Outputs()[0])
-		frames = now
-		return idle
+		frames = be.Outputs()[0].Frames()
+		return !be.Outputs()[0].FrameOwed() && !comp.Animating(comp.Outputs()[0])
 	})
 	for range 10 {
 		if err := b.Redraw(); err != nil {
@@ -117,8 +117,8 @@ func TestAHiddenScratchpadCostsNoFrames(t *testing.T) {
 		c.Sync()
 	}
 	h.Do(func(be *headless.Backend, _ *compositor.Compositor) error {
-		if n := be.Outputs()[0].Frames() - frames; n != 0 {
-			t.Errorf("10 commits of a hidden scratchpad's window ran %d output frames, want 0", n)
+		if n, owed := be.Outputs()[0].Frames()-frames, be.Outputs()[0].FrameOwed(); n != 0 || owed {
+			t.Errorf("10 commits of a hidden scratchpad's window ran %d output frames and left one owed: %v, want none", n, owed)
 		}
 		return nil
 	})
