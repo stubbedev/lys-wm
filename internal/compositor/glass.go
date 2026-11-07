@@ -233,7 +233,7 @@ func (c *Compositor) windowFrost(w *window) *frost {
 		return nil
 	}
 	top := w.top.Surface()
-	f := &frost{surface: top, extent: deviceRect(o, w.rect), box: deviceRect(o, w.tile), mask: c.windowMask(o, w), alpha: c.alpha.Alpha(top), look: *c.lookOf(w), mica: c.micaOn(w)}
+	f := &frost{surface: top, extent: deviceRect(o, w.rect), box: deviceRect(o, w.tile), mask: c.windowMask(o, w), alpha: c.alphaOf(top), look: *c.lookOf(w), mica: c.micaOn(w)}
 	if (c.blurred(w) || f.mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.opacity(w)) {
 		f.shape = append(f.shape, f.extent)
 	}
@@ -249,7 +249,7 @@ func (c *Compositor) windowFrost(w *window) *frost {
 func (c *Compositor) layerFrost(l *layer) *frost {
 	s := l.surface.Surface()
 	box := deviceRect(l.output, l.bounds())
-	f := &frost{surface: s, extent: box, box: box, alpha: c.alpha.Alpha(s), look: c.decor.Blur.Look}
+	f := &frost{surface: s, extent: box, box: box, alpha: c.alphaOf(s), look: c.decor.Blur.Look}
 	if c.blursLayer(l.surface) && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
 		f.shape = append(f.shape, box)
 	}

@@ -202,7 +202,7 @@ func (c *Compositor) drawLayers(pass *frame, o *output.Output, levels []shell.La
 			look := &c.decor.Blur.Look
 			if c.blursLayer(e.surface) && c.effects.BlurRegion(e.surface.Surface()).Empty() && c.translucent(e.surface.Surface(), 1) {
 				under := deviceRect(o, e.bounds())
-				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: c.sceneOf(o).blurs.one(under), extent: under, alpha: c.alpha.Alpha(e.surface.Surface()), look: look})
+				c.drawBlur(pass, o, glassDraw{surface: e.surface.Surface(), shape: c.sceneOf(o).blurs.one(under), extent: under, alpha: c.alphaOf(e.surface.Surface()), look: look})
 			}
 			shown = c.drawBlurredTree(pass, o, e.surface.Surface(), flat(e.bounds().Min), shown, render.Mask{}, 1, look)
 			if err := c.drawRims(pass, o, rims); err != nil {

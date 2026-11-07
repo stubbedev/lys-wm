@@ -217,7 +217,7 @@ func (c *Compositor) honoursBlurRegions(w *window) bool {
 }
 
 func (c *Compositor) translucent(s *surface.Surface, opacity float32) bool {
-	return opacity*c.alpha.Alpha(s) < 1 || !c.opaque(s)
+	return opacity*c.alphaOf(s) < 1 || !c.opaque(s)
 }
 
 func (c *Compositor) blurSpec(o *output.Output) chainSpec {
@@ -245,7 +245,7 @@ func (c *Compositor) drawBlurRegion(pass *frame, o *output.Output, s *surface.Su
 	}
 	sc := c.sceneOf(o)
 	sc.blurs.shape = c.appendBlurRegion(sc.blurs.shape[:0], o, s, org)
-	c.drawBlur(pass, o, glassDraw{surface: s, shape: sc.blurs.shape, extent: org.device(o, s.Size()), mask: m, alpha: c.alpha.Alpha(s), look: look})
+	c.drawBlur(pass, o, glassDraw{surface: s, shape: sc.blurs.shape, extent: org.device(o, s.Size()), mask: m, alpha: c.alphaOf(s), look: look})
 }
 
 func (c *Compositor) appendBlurRegion(rects []image.Rectangle, o *output.Output, s *surface.Surface, org origin) []image.Rectangle {
@@ -253,7 +253,7 @@ func (c *Compositor) appendBlurRegion(rects []image.Rectangle, o *output.Output,
 	if shape.Empty() {
 		return rects
 	}
-	alpha := c.alpha.Alpha(s)
+	alpha := c.alphaOf(s)
 	t, ok := c.textures[s]
 	if alpha == 1 && ok && t.opaque() {
 		return rects

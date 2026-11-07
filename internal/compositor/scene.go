@@ -351,7 +351,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	rims := len(pass.rims)
 	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
 		under := deviceRect(o, w.rect)
-		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alpha.Alpha(top), look: look, mica: mica, tiled: w.layer == wm.LayerTiled})
+		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alphaOf(top), look: look, mica: mica, tiled: w.layer == wm.LayerTiled})
 	}
 	tree := len(pass.ops)
 	if c.honoursBlurRegions(w) {
@@ -416,7 +416,7 @@ func (c *Compositor) drawPopups(pass *frame, o *output.Output, popups []placedPo
 		rims := len(pass.rims)
 		if blur.whole && c.effects.BlurRegion(s).Empty() && c.translucent(s, 1) {
 			under := deviceRect(o, p.geometry())
-			c.drawBlur(pass, o, glassDraw{surface: s, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: c.popupMask(o, under), alpha: c.alpha.Alpha(s), look: blur.look})
+			c.drawBlur(pass, o, glassDraw{surface: s, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: c.popupMask(o, under), alpha: c.alphaOf(s), look: blur.look})
 		}
 		if blur.regions {
 			shown = c.drawBlurredTree(pass, o, s, flat(p.origin), shown, render.Mask{}, 1, blur.look)
@@ -471,12 +471,13 @@ func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surf
 		if st.regions {
 			c.drawBlurRegion(pass, o, s, org, st.mask, st.look)
 		}
-		dst, alpha := org.device(o, s.Size()), c.alpha.Alpha(s)*st.alpha
+		dst, alpha := org.device(o, s.Size()), c.alphaOf(s)*st.alpha
 		if f, fill := t.(filled); fill {
 			pass.fillSurface(s, dst, scaleColor(f.color, alpha), st.mask)
 		} else {
 			pass.drawSurface(s, c.surfaceSpace(s), t.texture(), s.BufferSource(), dst, s.Transform().Invert(), alpha, c.opaque(s), st.mask)
 		}
+		pass.keepVisible(s, c.hyprSurfaces.VisibleRegion(s))
 		shown = append(shown, s)
 	}
 	return shown

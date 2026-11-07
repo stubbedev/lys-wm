@@ -447,6 +447,10 @@ func (s *Surface) BufferSource() render.FRect {
 	return s.geometry().bufferSource()
 }
 
+func (s *Surface) SurfaceRect(buffer image.Rectangle) render.FRect {
+	return s.geometry().surfaceRect(buffer)
+}
+
 func (s *Surface) Damage() []image.Rectangle {
 	return s.damage.Rects()
 }

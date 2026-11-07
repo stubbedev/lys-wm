@@ -35,6 +35,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/gammacontrol"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/hyprlandsurface"
 	"github.com/stubbedev/lys-wm/internal/idle"
 	"github.com/stubbedev/lys-wm/internal/inputmethod"
 	"github.com/stubbedev/lys-wm/internal/loop"
@@ -188,6 +189,7 @@ type Compositor struct {
 	ctm             *ctmcontrol.Manager
 	outputConfig    *outputmanagement.Manager
 	alpha           *alphamodifier.Manager
+	hyprSurfaces    *hyprlandsurface.Manager
 	effects         *backgroundeffect.Manager
 	fifo            *fifo.Manager
 	timing          *committiming.Manager
@@ -502,6 +504,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 		return err
 	}
 	if c.alpha, err = alphamodifier.New(display); err != nil {
+		return err
+	}
+	if c.hyprSurfaces, err = hyprlandsurface.New(display); err != nil {
 		return err
 	}
 	if c.effects, err = backgroundeffect.New(display); err != nil {

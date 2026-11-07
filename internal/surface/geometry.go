@@ -115,17 +115,34 @@ func outward(x0, y0, x1, y1 float64) image.Rectangle {
 	return image.Rect(int(math.Floor(x0)), int(math.Floor(y0)), int(math.Ceil(x1)), int(math.Ceil(y1)))
 }
 
-func (g geometry) toSurface(r image.Rectangle) image.Rectangle {
+func (g geometry) surfaceEdges(r image.Rectangle) (x0, y0, x1, y1 float64) {
 	size := g.buffer.Size()
 	r = g.transform.Invert().Rect(r.Intersect(image.Rectangle{Max: size}), size)
 	k := float64(g.scale)
 	src, dst := g.src(), g.size()
-	if src.W <= 0 || src.H <= 0 {
-		return image.Rectangle{}
+	if src.W <= 0 || src.H <= 0 || r.Empty() {
+		return 0, 0, 0, 0
 	}
 	sx, sy := float64(dst.X)/src.W, float64(dst.Y)/src.H
-	out := outward((float64(r.Min.X)/k-src.X)*sx, (float64(r.Min.Y)/k-src.Y)*sy, (float64(r.Max.X)/k-src.X)*sx, (float64(r.Max.Y)/k-src.Y)*sy)
-	return out.Intersect(image.Rectangle{Max: dst})
+	return (float64(r.Min.X)/k - src.X) * sx, (float64(r.Min.Y)/k - src.Y) * sy, (float64(r.Max.X)/k - src.X) * sx, (float64(r.Max.Y)/k - src.Y) * sy
+}
+
+func (g geometry) toSurface(r image.Rectangle) image.Rectangle {
+	return outward(g.surfaceEdges(r)).Intersect(image.Rectangle{Max: g.size()})
+}
+
+func (g geometry) surfaceRect(r image.Rectangle) render.FRect {
+	if g.buffer == nil {
+		return render.FRect{}
+	}
+	x0, y0, x1, y1 := g.surfaceEdges(r)
+	size := g.size()
+	x0, y0 = max(x0, 0), max(y0, 0)
+	x1, y1 = min(x1, float64(size.X)), min(y1, float64(size.Y))
+	if x1 <= x0 || y1 <= y0 {
+		return render.FRect{}
+	}
+	return render.FRect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
 }
 
 func (g geometry) toBuffer(r image.Rectangle) image.Rectangle {

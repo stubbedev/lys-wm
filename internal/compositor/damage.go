@@ -70,8 +70,10 @@ func (op *drawOp) pieceSrc() render.FRect {
 	if op.whole.Empty() {
 		return op.src
 	}
-	x, w := subSpan(op.src.X, op.src.W, op.dst.Min.X-op.whole.Min.X, op.dst.Dx(), op.whole.Dx())
-	y, h := subSpan(op.src.Y, op.src.H, op.dst.Min.Y-op.whole.Min.Y, op.dst.Dy(), op.whole.Dy())
+	toBuffer := op.transform.Invert()
+	part, full := toBuffer.Rect(op.dst.Sub(op.whole.Min), op.whole.Size()), toBuffer.Size(op.whole.Size())
+	x, w := subSpan(op.src.X, op.src.W, part.Min.X, part.Dx(), full.X)
+	y, h := subSpan(op.src.Y, op.src.H, part.Min.Y, part.Dy(), full.Y)
 	return render.FRect{X: x, Y: y, W: w, H: h}
 }
 
@@ -296,7 +298,7 @@ func (f *frame) stretch(from int, src, dst image.Rectangle) {
 	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]
-		op.dst = mapRect(op.dst, src, dst)
+		op.dst, op.whole = mapRect(op.dst, src, dst), mapRect(op.whole, src, dst)
 	}
 }
 
@@ -311,7 +313,7 @@ func (f *frame) remap(from int, src, dst image.Rectangle) {
 	}
 	for i := range f.ops[from:] {
 		op := &f.ops[from+i]
-		op.dst, op.mask.Keep.Rect, op.mask.Cut.Rect, op.mask.Merge = rect(op.dst), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect), rect(op.mask.Merge)
+		op.dst, op.whole, op.mask.Keep.Rect, op.mask.Cut.Rect, op.mask.Merge = rect(op.dst), rect(op.whole), rect(op.mask.Keep.Rect), rect(op.mask.Cut.Rect), rect(op.mask.Merge)
 		op.gradient = mapGradient(op.gradient, point)
 	}
 }
@@ -747,4 +749,29 @@ func (c *Compositor) FrameCost(o *output.Output) (draws, pixels int) {
 		pixels += op.dst.Dx() * op.dst.Dy()
 	}
 	return draws, pixels
+}
+
+func (f *frame) keepVisible(s *surface.Surface, visible region.Region) {
+	if visible.Empty() {
+		return
+	}
+	last := len(f.ops) - 1
+	op := f.ops[last]
+	f.ops = f.ops[:last]
+	if op.size.X <= 0 || op.size.Y <= 0 {
+		return
+	}
+	edge := func(from, extent, surfaceExtent int, v float64) int {
+		return from + int(math.Round(v*float64(extent)/float64(surfaceExtent)))
+	}
+	for i := range visible.Len() {
+		r := s.SurfaceRect(visible.At(i))
+		p := image.Rect(
+			edge(op.dst.Min.X, op.dst.Dx(), op.size.X, r.X), edge(op.dst.Min.Y, op.dst.Dy(), op.size.Y, r.Y),
+			edge(op.dst.Min.X, op.dst.Dx(), op.size.X, r.X+r.W), edge(op.dst.Min.Y, op.dst.Dy(), op.size.Y, r.Y+r.H),
+		).Intersect(op.dst)
+		if !p.Empty() {
+			f.ops = append(f.ops, op.piece(p))
+		}
+	}
 }

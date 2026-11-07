@@ -263,6 +263,16 @@
       "path": "protocols/hyprland-ctm-control-v1.xml"
     },
     {
+      "package": "hyprlandsurface",
+      "source": "hyprland-protocols",
+      "path": "protocols/hyprland-surface-v1.xml"
+    },
+    {
+      "package": "hyprlandtoplevelexport",
+      "source": "hyprland-protocols",
+      "path": "protocols/hyprland-toplevel-export-v1.xml"
+    },
+    {
       "package": "colorrepresentation",
       "source": "wayland-protocols",
       "path": "staging/color-representation/color-representation-v1.xml"

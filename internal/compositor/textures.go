@@ -395,3 +395,7 @@ func (c *Compositor) destroyTexture(t render.Texture) error {
 	}
 	return errors.Join(append(errs, t.Destroy())...)
 }
+
+func (c *Compositor) alphaOf(s *surface.Surface) float32 {
+	return c.alpha.Alpha(s) * c.hyprSurfaces.Opacity(s)
+}
