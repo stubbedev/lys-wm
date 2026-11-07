@@ -559,7 +559,8 @@ func run(args []string) (err error) {
 	flags.Bool("holder", false, "run the compositor under a small process that holds the session, so that lys-wmctl upgrade can replace the compositor; see docs/guide/upgrade.md")
 	handoverFD := flags.Int("handover-fd", -1, "take over a running session from the lys-wm that started this process and passed this descriptor")
 	handoverInfo := flags.Bool("handover-info", false, "print what this binary needs to take over a running session, the config's problems included, as JSON, and exit")
-	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy> and end, for lys-wm-pace")
+	swipes := flags.Bool("headless-swipes", false, "feed the headless backend's fake touchpad from stdin: lines of begin, swipe <dx> <dy>, end and move <dx> <dy>, for lys-wm-pace")
+	headlessScanout := flags.Bool("headless-scanout", false, "let the headless backend scan out fullscreen dmabufs it can import, as a primary plane would, for lys-wm-pace")
 	checkConfig := flags.Bool("check-config", false, "load the config and its runtime overrides as a reload would, and exit without starting: nothing printed and status 0 when it would be accepted")
 	effective := flags.Bool("effective-config", false, "print every key the config and its runtime overrides set, with the layer, file and line its value comes from, as JSON, and exit")
 	defaultConfig := flags.Bool("default-config", false, "print the built-in config and exit")
@@ -688,6 +689,11 @@ func run(args []string) (err error) {
 	s.comp.ShowConfigProblems(compositor.ConfigProblems{Messages: errorLines(errors.Join(first.warnings...))})
 	if *swipes {
 		if err := readSwipes(l, b.Backend, os.Stdin); err != nil {
+			return err
+		}
+	}
+	if *headlessScanout {
+		if err := allowHeadlessScanout(b.Backend); err != nil {
 			return err
 		}
 	}

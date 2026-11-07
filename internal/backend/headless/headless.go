@@ -303,6 +303,7 @@ type Output struct {
 	tearFrame      bool
 	filled         bool
 	frameCap       int
+	scannedAt      backend.Placement
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
@@ -662,6 +663,10 @@ func (o *Output) Scanouts() uint64 {
 	return o.scanouts
 }
 
+func (o *Output) ScannedAt() backend.Placement {
+	return o.scannedAt
+}
+
 func (o *Output) ShowsClientBuffer() bool {
 	return o.shownRelease != nil || o.queuedRelease != nil
 }
@@ -670,13 +675,14 @@ func (o *Output) ForgetScanout(backend.ScanoutKey) error {
 	return nil
 }
 
-func (o *Output) Scanout(_ backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
-	if o.scanout == nil || !slices.Contains(o.scanout.Formats, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) || o.removed || !o.state.Lit() || o.inFrame || o.presentPending || d.Size != o.state.Mode.Size {
+func (o *Output) Scanout(_ backend.ScanoutKey, d gpu.DMABUF, at backend.Placement, release func() error, tear bool) (bool, error) {
+	if o.scanout == nil || !slices.Contains(o.scanout.Formats, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) || o.removed || !o.state.Lit() || o.inFrame || o.presentPending || !at.Valid(d.Size, o.state.Mode.Size) {
 		return false, nil
 	}
 	o.queuedRelease, o.presentPending, o.drawn, o.queuedTorn, o.inherited = release, true, false, tear, false
 	o.presents++
 	o.scanouts++
+	o.scannedAt = at
 	if tear {
 		o.torn++
 	}

@@ -242,7 +242,7 @@ func (c *Compositor) render(o *output.Output) error {
 	if sc.zoom != nil {
 		return c.renderZoomed(o, sc, bounds)
 	}
-	if direct, err := c.scanout(o, sc, bounds, op, alone); err != nil || direct {
+	if direct, err := c.scanout(o, sc, op, alone); err != nil || direct {
 		if err != nil {
 			return err
 		}
@@ -364,6 +364,9 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	if (c.blurred(w) || mica) && c.effects.BlurRegion(top).Empty() && c.translucent(top, c.shownOpacity(w)) {
 		under := deviceRect(o, w.rect)
 		c.drawBlur(pass, o, glassDraw{surface: top, shape: c.sceneOf(o).blurs.one(under), extent: under, mask: mask, alpha: c.alphaOf(top), look: look, mica: mica, tiled: w.layer == wm.LayerTiled})
+	}
+	if _, x := w.top.(xToplevel); !x && c.letterboxed(w) != (image.Point{}) {
+		pass.FillRect(deviceRect(o, w.rect), letterbox)
 	}
 	tree := len(pass.ops)
 	if c.honoursBlurRegions(w) {

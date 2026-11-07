@@ -9,6 +9,7 @@ import (
 	"image"
 	"iter"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,6 +80,7 @@ type scanout struct {
 	target       render.Target
 	client       *clientFB
 	fb           uint32
+	at           backend.Placement
 	fence        func() (int, error)
 	painted      func(damage render.Region)
 	prepare      func() error
@@ -1074,6 +1076,8 @@ type Output struct {
 	late          *scanout
 	lateFence     int
 	lateTimed     bool
+	primaryAt     backend.Placement
+	primaryNext   backend.Placement
 }
 
 func (o *Output) Name() string {
@@ -1788,7 +1792,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	if o.kms == kmsModeset {
 		flags |= kdrm.AtomicAllowModeset
 	}
-	torn := o.tearFrame && flags == planeFlags && o.tearable(s.fb, flags|kdrm.AtomicPageFlipAsync, fence)
+	torn := o.tearFrame && flags == planeFlags && o.tearable(s.fb, o.placementOf(s), flags|kdrm.AtomicPageFlipAsync, fence)
 	if torn {
 		err = o.commitFrame(flags | kdrm.AtomicPageFlipAsync)
 		torn = !refused(err)
@@ -1881,8 +1885,9 @@ func (o *Output) ForgetScanout(key backend.ScanoutKey) error {
 	return nil
 }
 
-func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error) {
-	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || d.Size != modeOf(o.mode).Size || !slices.Contains(o.primary.clients, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
+func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, at backend.Placement, release func() error, tear bool) (bool, error) {
+	size := modeOf(o.mode).Size
+	if !o.enabled || o.off || o.b.paused || o.kms != kmsFlip || o.drawing != nil || o.flipping || !at.Valid(d.Size, size) || o.tiled() && at != backend.Whole(size) || !slices.Contains(o.primary.clients, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
 		return false, nil
 	}
 	o.setDamageClips(nil)
@@ -1890,9 +1895,9 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	if err != nil {
 		return false, nil
 	}
-	s := o.takeScanout(cf, release)
+	s := o.takeScanout(cf, at, release)
 	flags := planeFlags
-	torn := tear && o.asyncFormat(d) && o.tearable(cf.fb, flags|kdrm.AtomicPageFlipAsync, -1)
+	torn := tear && o.asyncFormat(d) && o.tearable(cf.fb, at, flags|kdrm.AtomicPageFlipAsync, -1)
 	if torn {
 		flags |= kdrm.AtomicPageFlipAsync
 	} else {
@@ -1912,6 +1917,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	}
 	o.sentOverlay()
 	cf.shown++
+	o.primaryAt = at
 	if o.cursor != nil && !torn {
 		o.cursor.sent()
 	}
@@ -1923,7 +1929,7 @@ func (o *Output) Scanout(key backend.ScanoutKey, d gpu.DMABUF, release func() er
 	return true, o.colorSent()
 }
 
-func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
+func (o *Output) takeScanout(cf *clientFB, at backend.Placement, release func() error) *scanout {
 	var s *scanout
 	if n := len(o.spare); n > 0 {
 		s = o.spare[n-1]
@@ -1931,7 +1937,7 @@ func (o *Output) takeScanout(cf *clientFB, release func() error) *scanout {
 	} else {
 		s = &scanout{}
 	}
-	*s = scanout{client: cf, fb: cf.fb, release: release}
+	*s = scanout{client: cf, fb: cf.fb, at: at, release: release}
 	return s
 }
 
@@ -1939,11 +1945,11 @@ func (o *Output) asyncFormat(d gpu.DMABUF) bool {
 	return o.primary.async == nil || slices.Contains(o.primary.async, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier})
 }
 
-func (o *Output) tearable(fb uint32, flags uint32, fence int) bool {
-	if !o.b.async || o.tiled() || o.front == nil || o.color.dirty() || o.contentDirty || o.vrrDirty() || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
+func (o *Output) tearable(fb uint32, at backend.Placement, flags uint32, fence int) bool {
+	if at != o.primaryAt || !o.b.async || o.tiled() || o.front == nil || o.color.dirty() || o.contentDirty || o.vrrDirty() || o.cursor != nil && o.cursor.dirty || o.overlayNext != o.overlayShown {
 		return false
 	}
-	key := planeKey{primary: fb, flags: flags}
+	key := planeKey{primary: fb, flags: flags, primaryAt: o.primaryAt}
 	r := &o.b.req
 	r.Reset()
 	o.primary.set(r, "FB_ID", uint64(fb))
@@ -1969,6 +1975,7 @@ func (o *Output) TearFrame(tear bool) {
 
 type planeKey struct {
 	primary, cursor uint32
+	primaryAt       backend.Placement
 	overlay         overlayTest
 	cursorClipped   bool
 	hotspot         image.Point
@@ -1978,7 +1985,7 @@ type planeKey struct {
 const testedPlaneStates = 16
 
 func (o *Output) planeKey(fb, flags uint32) planeKey {
-	k := planeKey{primary: fb, flags: flags}
+	k := planeKey{primary: fb, flags: flags, primaryAt: o.primaryNext}
 	if u := o.overlayNext; u != nil {
 		k.overlay = overlayTest{fb: u.client.fb, dst: u.dst, yuv: u.yuv}
 	}
@@ -2041,6 +2048,7 @@ func (o *Output) submit(s *scanout, fence int, flags uint32) error {
 	if err != nil {
 		return err
 	}
+	o.primaryAt = o.primaryNext
 	if o.cursor != nil {
 		o.cursor.sent()
 	}
@@ -2062,6 +2070,9 @@ func (o *Output) frame(s *scanout, fence int) {
 	switch o.kms {
 	case kmsFlip:
 		o.primary.set(r, "FB_ID", uint64(s.fb))
+		if o.primaryNext = o.placementOf(s); o.primaryNext != o.primaryAt {
+			o.primary.setRects(r, o.primaryNext.Src, o.primaryNext.Dst)
+		}
 		if _, ok := o.primary.props["FB_DAMAGE_CLIPS"]; ok {
 			o.primary.set(r, "FB_DAMAGE_CLIPS", uint64(o.damageBlob))
 		}
@@ -2078,8 +2089,8 @@ func (o *Output) frame(s *scanout, fence int) {
 		}
 		fallthrough
 	default:
-		lead := o.crtcMode(o.mode)
-		o.place(o.primary, s.fb, image.Rectangle{Max: image.Pt(int(lead.HDisplay), int(lead.VDisplay))}, fence)
+		o.primaryNext = o.wholePrimary()
+		o.place(o.primary, s.fb, o.primaryNext.Dst, fence)
 		o.placeTiles(s.fb, fence)
 	}
 	o.addOverlay()
@@ -2101,19 +2112,38 @@ func (o *Output) place(p *plane, fb uint32, at image.Rectangle, fence int) {
 }
 
 func (o *Output) placeOn(p *plane, cr *crtc, fb uint32, src image.Point, at image.Rectangle, fence int) {
-	w, h := uint64(at.Dx()), uint64(at.Dy()) //nolint:gosec // plane sizes are positive
 	p.set(&o.b.req, "FB_ID", uint64(fb))
 	p.set(&o.b.req, "CRTC_ID", uint64(cr.id))
-	p.set(&o.b.req, "SRC_X", uint64(src.X)<<16) //nolint:gosec // a source offset is not negative
-	p.set(&o.b.req, "SRC_Y", uint64(src.Y)<<16) //nolint:gosec // a source offset is not negative
-	p.set(&o.b.req, "SRC_W", w<<16)
-	p.set(&o.b.req, "SRC_H", h<<16)
-	p.setPosition(&o.b.req, at.Min)
-	p.set(&o.b.req, "CRTC_W", w)
-	p.set(&o.b.req, "CRTC_H", h)
+	p.setRects(&o.b.req, render.FRect{X: float64(src.X), Y: float64(src.Y), W: float64(at.Dx()), H: float64(at.Dy())}, at)
 	if fence >= 0 {
 		p.set(&o.b.req, "IN_FENCE_FD", uint64(fence))
 	}
+}
+
+func (p *plane) setRects(r *kdrm.Request, src render.FRect, dst image.Rectangle) {
+	p.set(r, "SRC_X", fixed16(src.X))
+	p.set(r, "SRC_Y", fixed16(src.Y))
+	p.set(r, "SRC_W", fixed16(src.W))
+	p.set(r, "SRC_H", fixed16(src.H))
+	p.setPosition(r, dst.Min)
+	p.set(r, "CRTC_W", uint64(dst.Dx())) //nolint:gosec // plane sizes are positive
+	p.set(r, "CRTC_H", uint64(dst.Dy())) //nolint:gosec // plane sizes are positive
+}
+
+func fixed16(v float64) uint64 {
+	return uint64(math.Round(v * 65536))
+}
+
+func (o *Output) wholePrimary() backend.Placement {
+	lead := o.crtcMode(o.mode)
+	return backend.Whole(image.Pt(int(lead.HDisplay), int(lead.VDisplay)))
+}
+
+func (o *Output) placementOf(s *scanout) backend.Placement {
+	if s.client == nil {
+		return o.wholePrimary()
+	}
+	return s.at
 }
 
 func (o *Output) test(flags uint32) error {

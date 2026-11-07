@@ -31,7 +31,10 @@ fingers and its release, the genie, and glass: over a client redrawing every
 frame, over nothing moving (which must draw nothing), and sliding with a
 workspace, three translucent tiled windows sliding with a workspace and
 resizing, and the overview with 10 and 30 overlapping floating windows, by action
-and scrubbed by three fingers. Swipes come from the headless backend's fake touchpad, through
+and scrubbed by three fingers. On a real GPU, `scaled-fullscreen` has a client
+flip half-size dmabufs viewported to fill the output, which `lys-wm
+-headless-scanout` scans out as a scaling primary plane would; with
+`-allow-software` it is not measured. Swipes come from the headless backend's fake touchpad, through
 `lys-wm -headless-swipes`; `-backend drm` has no fingers to fake, and says it did
 not measure them.
 
@@ -79,6 +82,7 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `render_passes_per_frame` | `Renderer.Begin` calls since the last composited frame, at worst | A new offscreen pass on every frame |
 | `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
 | `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
+| `render_passes_per_scanout_frame` | In the `scaled-fullscreen` step, the worst `Renderer.Begin` calls of any frame, with no slack: 0 | A scaled or letterboxed fullscreen buffer composited instead of scanned out |
 | `render_passes_after_first_frame`, `filter_passes_after_first_frame` | In the `glass-tiles` steps, the worst `Renderer.Begin` calls and Kawase passes of any composited frame but the first of a play, with no slack: 1 and 0, the frame's own pass and no filter, since tiled windows blur over the output's shared background chain | A tiled window that refilters its own chain on every frame of a slide or a resize |
 | `filter_pixels_per_frame`, `repaint_pixels_per_frame` | In `glass-over-busy`, whose client damages only the band it moves, the worst frame's pixels covered by Kawase passes within their damage and pixels of the output repainted | A change under glass that refilters or repaints the whole window instead of the band grown by the blur's reach |
 | `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |

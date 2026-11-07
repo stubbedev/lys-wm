@@ -27,18 +27,30 @@ func applySwipeLine(p *headless.Pointer, line string) error {
 	case "end":
 		return p.GestureEnd(backend.Swipe, false)
 	case "swipe":
-		x, y, _ := strings.Cut(arg, " ")
-		dx, err := strconv.ParseFloat(x, 64)
+		dx, dy, err := deltas(verb, arg)
 		if err != nil {
-			return fmt.Errorf("swipe %q: dx: %w", arg, err)
-		}
-		dy, err := strconv.ParseFloat(y, 64)
-		if err != nil {
-			return fmt.Errorf("swipe %q: dy: %w", arg, err)
+			return err
 		}
 		return p.Swipe(dx, dy)
+	case "move":
+		dx, dy, err := deltas(verb, arg)
+		if err != nil {
+			return err
+		}
+		return errors.Join(p.Move(dx, dy), p.Frame())
 	}
-	return fmt.Errorf("unknown swipe line %q (known: begin, swipe <dx> <dy>, end)", line)
+	return fmt.Errorf("unknown swipe line %q (known: begin, swipe <dx> <dy>, end, move <dx> <dy>)", line)
+}
+
+func deltas(verb, arg string) (dx, dy float64, err error) {
+	x, y, _ := strings.Cut(arg, " ")
+	if dx, err = strconv.ParseFloat(x, 64); err != nil {
+		return 0, 0, fmt.Errorf("%s %q: dx: %w", verb, arg, err)
+	}
+	if dy, err = strconv.ParseFloat(y, 64); err != nil {
+		return 0, 0, fmt.Errorf("%s %q: dy: %w", verb, arg, err)
+	}
+	return dx, dy, nil
 }
 
 func readSwipes(l *loop.Loop, b backend.Backend, stdin *os.File) error {

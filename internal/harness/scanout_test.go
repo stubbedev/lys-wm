@@ -8,12 +8,14 @@ import (
 
 	"github.com/stubbedev/lys-lib/fourcc"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	ccm "github.com/stubbedev/lys-wm/internal/protocol/client/colormanagement"
 	cpt "github.com/stubbedev/lys-wm/internal/protocol/client/presentationtime"
 	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
@@ -300,4 +302,64 @@ func TestAScannedOutFrameIsZeroCopyAndACompositedOneIsNot(t *testing.T) {
 			t.Fatalf("a composited frame presented with flags %#x, want no zero_copy", composited.flags)
 		}
 	})
+}
+
+func composited(h *Harness) uint64 {
+	var n uint64
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		o := b.Outputs()[0]
+		n = o.Presents() - o.Scanouts()
+		return nil
+	})
+	return n
+}
+
+func scannedAt(h *Harness) backend.Placement {
+	var at backend.Placement
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		at = b.Outputs()[0].ScannedAt()
+		return nil
+	})
+	return at
+}
+
+func TestScaledAndLetterboxedFullscreenDMABUFsScanOut(t *testing.T) {
+	onEachDMABUFRenderer(t, testScaledAndLetterboxedFullscreenDMABUFsScanOut)
+}
+
+func testScaledAndLetterboxedFullscreenDMABUFsScanOut(t *testing.T, start gpuStarter) {
+	for _, tc := range []struct {
+		name     string
+		buffer   image.Point
+		viewport bool
+		want     backend.Placement
+	}{
+		{"a half-size buffer viewported to the output", image.Pt(80, 50), true, backend.Placement{Src: render.FRect{W: 80, H: 50}, Dst: image.Rect(0, 0, 160, 100)}},
+		{"a narrower buffer pillarboxed", image.Pt(120, 100), false, backend.Placement{Src: render.FRect{W: 120, H: 100}, Dst: image.Rect(20, 0, 140, 100)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := fullscreenScanout(t, start, func(*compositor.Config) {})
+			if tc.viewport {
+				vp, err := s.c.Viewporter.GetViewport(s.w.Surface)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := vp.SetDestination(160, 100); err != nil {
+					t.Fatal(err)
+				}
+			}
+			buffers := [2]*testclient.DMABUF{s.c.DMABUF(tc.buffer, testclient.Fill(0xff, 0, 0)), s.c.DMABUF(tc.buffer, testclient.Fill(0, 0xff, 0))}
+			s.show(t, "the first buffer", buffers[0])
+			if at := scannedAt(s.h); at != tc.want {
+				t.Fatalf("scanned out at %+v, want %+v", at, tc.want)
+			}
+			before := composited(s.h)
+			for i := range 100 {
+				s.show(t, "a buffer", buffers[(i+1)%2])
+			}
+			if n := composited(s.h) - before; n != 0 {
+				t.Fatalf("100 commits of a placed fullscreen buffer composited %d frames, want 0", n)
+			}
+		})
+	}
 }

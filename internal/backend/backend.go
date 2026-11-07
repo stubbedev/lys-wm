@@ -159,8 +159,22 @@ type ScanoutKey interface {
 	DMABUF() gpu.DMABUF
 }
 
+type Placement struct {
+	Src render.FRect
+	Dst image.Rectangle
+}
+
+func Whole(size image.Point) Placement {
+	return Placement{Src: render.FRect{W: float64(size.X), H: float64(size.Y)}, Dst: image.Rectangle{Max: size}}
+}
+
+func (p Placement) Valid(buffer, output image.Point) bool {
+	s := p.Src
+	return !p.Dst.Empty() && p.Dst.In(image.Rectangle{Max: output}) && s.W > 0 && s.H > 0 && s.X >= 0 && s.Y >= 0 && s.X+s.W <= float64(buffer.X) && s.Y+s.H <= float64(buffer.Y)
+}
+
 type Scanner interface {
-	Scanout(key ScanoutKey, d gpu.DMABUF, release func() error, tear bool) (bool, error)
+	Scanout(key ScanoutKey, d gpu.DMABUF, at Placement, release func() error, tear bool) (bool, error)
 	ForgetScanout(key ScanoutKey) error
 	ScanoutFormats() gpu.ScanoutTarget
 }

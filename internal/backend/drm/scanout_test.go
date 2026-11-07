@@ -2,12 +2,15 @@ package drm
 
 import (
 	"image"
+	"slices"
 	"testing"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
@@ -27,7 +30,12 @@ func tests(commits []commit, flag uint32) int {
 
 func (r *rig) scanout(o *Output, k *fakeBuffer, tear bool) bool {
 	r.t.Helper()
-	ok, err := o.Scanout(k, k.d, func() error { return nil }, tear)
+	return r.scanoutAt(o, k, backend.Whole(k.d.Size), tear)
+}
+
+func (r *rig) scanoutAt(o *Output, k *fakeBuffer, at backend.Placement, tear bool) bool {
+	r.t.Helper()
+	ok, err := o.Scanout(k, k.d, at, func() error { return nil }, tear)
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -179,5 +187,115 @@ func TestACompositedFrameOfATearingSurfaceFlipsAsync(t *testing.T) {
 	r.dev.refuseAsync = true
 	if refused := r.nextFrame(o); refused.flags&kdrm.AtomicPageFlipAsync != 0 || refused.values[[2]uint32{40, propFB}] == 0 {
 		t.Fatalf("a composited async flip the driver refuses did not fall back to a vblank flip: %+v", refused)
+	}
+}
+
+func placedBuffer(fd int, size image.Point) *fakeBuffer {
+	return &fakeBuffer{gpu.DMABUF{Size: size, Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: fd, Stride: uint32(size.X) * 4}}}}
+}
+
+func primaryRects(c commit) (src [4]uint64, dst [4]uint64) {
+	for i, p := range []uint32{propSrcX, propSrcY, propSrcW, propSrcH} {
+		src[i] = c.values[[2]uint32{40, p}]
+	}
+	for i, p := range []uint32{propCRTCX, propCRTCY, propCRTCW, propCRTCH} {
+		dst[i] = c.values[[2]uint32{40, p}]
+	}
+	return src, dst
+}
+
+func lastReal(commits []commit) commit {
+	for _, c := range slices.Backward(commits) {
+		if c.flags&kdrm.AtomicTestOnly == 0 {
+			return c
+		}
+	}
+	return commit{}
+}
+
+func TestScaledAndLetterboxedBuffersScanOutWithTheirRects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		size image.Point
+		at   backend.Placement
+		src  [4]uint64
+		dst  [4]uint64
+	}{
+		{"a 1280x720 buffer scaled to the output", image.Pt(1280, 720), backend.Placement{Src: render.FRect{W: 1280, H: 720}, Dst: image.Rect(0, 0, 1920, 1080)}, [4]uint64{0, 0, 1280 << 16, 720 << 16}, [4]uint64{0, 0, 1920, 1080}},
+		{"a 4:3 buffer pillarboxed", image.Pt(1440, 1080), backend.Placement{Src: render.FRect{W: 1440, H: 1080}, Dst: image.Rect(240, 0, 1680, 1080)}, [4]uint64{0, 0, 1440 << 16, 1080 << 16}, [4]uint64{240, 0, 1440, 1080}},
+		{"a cropped half-pixel source", image.Pt(1920, 1080), backend.Placement{Src: render.FRect{X: 0.5, Y: 10, W: 1600, H: 900}, Dst: image.Rect(0, 0, 1920, 1080)}, [4]uint64{1 << 15, 10 << 16, 1600 << 16, 900 << 16}, [4]uint64{0, 0, 1920, 1080}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := start(t)
+			o := r.lit()
+			k := placedBuffer(7, tc.size)
+			for i := range 3 {
+				r.dev.commits = nil
+				if !r.scanoutAt(o, k, tc.at, false) {
+					t.Fatalf("scanout %d refused", i)
+				}
+				c := lastReal(r.dev.commits)
+				src, dst := primaryRects(c)
+				_, placed := c.values[[2]uint32{40, propSrcW}]
+				if i == 0 && (src != tc.src || dst != tc.dst) {
+					t.Fatalf("the primary plane got source %v and destination %v, want %v and %v", src, dst, tc.src, tc.dst)
+				}
+				if i > 0 && placed {
+					t.Fatalf("scanout %d restated the unchanged rects: %+v", i, c)
+				}
+				r.dev.flip(t, 10, uint32(i+2))
+				r.until("the flip", func() bool { return !o.flipping })
+			}
+			c := r.nextFrame(o)
+			if src, dst := primaryRects(c); src != [4]uint64{0, 0, 1920 << 16, 1080 << 16} || dst != [4]uint64{0, 0, 1920, 1080} {
+				t.Fatalf("the composited frame after it put the primary at source %v and destination %v, want the whole output", src, dst)
+			}
+		})
+	}
+}
+
+func TestAPlaneThatCannotScaleIsTestedOncePerBufferAndRects(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.dev.refuseScaling = true
+	k := placedBuffer(7, image.Pt(1280, 720))
+	at := backend.Placement{Src: render.FRect{W: 1280, H: 720}, Dst: image.Rect(0, 0, 1920, 1080)}
+	r.dev.commits = nil
+	for range 100 {
+		if r.scanoutAt(o, k, at, false) {
+			t.Fatal("a scaled buffer scanned out on a plane that cannot scale")
+		}
+	}
+	if n := tests(r.dev.commits, 0); n != 1 || len(r.dev.commits) != 1 {
+		t.Fatalf("100 refused scaled scanouts made %d test commits in %d commits, want one", n, len(r.dev.commits))
+	}
+	other := backend.Placement{Src: render.FRect{W: 1280, H: 720}, Dst: image.Rect(0, 0, 1280, 720)}
+	if !r.scanoutAt(o, k, other, false) {
+		t.Fatal("the same buffer unscaled in a corner did not scan out")
+	}
+}
+
+func TestAScaledTearingScanoutFlipsAsyncOnceItsRectsAreSet(t *testing.T) {
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.asyncFlips = true
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.b.Outputs()[0]
+	r.nextFrame(o)
+	at := backend.Placement{Src: render.FRect{W: 1280, H: 720}, Dst: image.Rect(0, 0, 1920, 1080)}
+	for i, want := range []bool{false, true, true} {
+		r.dev.commits = nil
+		if !r.scanoutAt(o, placedBuffer(7+i, image.Pt(1280, 720)), at, true) {
+			t.Fatalf("scanout %d refused", i)
+		}
+		c := lastReal(r.dev.commits)
+		if torn := c.flags&kdrm.AtomicPageFlipAsync != 0; torn != want {
+			t.Fatalf("scaled tearing scanout %d flipped async %v, want %v: the rects change only in a vblank flip", i, torn, want)
+		}
+		r.dev.flip(t, 10, uint32(i+2))
+		r.until("the flip", func() bool { return !o.flipping })
+		if p := r.rec.presents[len(r.rec.presents)-1]; p.Torn != want {
+			t.Fatalf("scaled tearing scanout %d presented torn %v, want %v", i, p.Torn, want)
+		}
 	}
 }

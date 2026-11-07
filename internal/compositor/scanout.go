@@ -51,7 +51,7 @@ func (c *Compositor) showFrameHints(o *output.Output, sc *scene, bounds image.Re
 	return op, alone
 }
 
-func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle, op drawOp, alone bool) (bool, error) {
+func (c *Compositor) scanout(o *output.Output, sc *scene, op drawOp, alone bool) (bool, error) {
 	out, ok := o.Backend().(backend.Scanner)
 	if !ok || c.adopting != nil {
 		return false, nil
@@ -69,10 +69,10 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, bounds image.Rectangle
 	b := t.buffer
 	d := b.DMABUF()
 	d.Format = d.Format.Opaque()
-	if d.Size != bounds.Size() || op.src != (render.FRect{W: float64(d.Size.X), H: float64(d.Size.Y)}) || !op.covers() || !slices.Contains(scanoutFormats, d.Format) {
+	if !op.covers() || !slices.Contains(scanoutFormats, d.Format) {
 		return false, nil
 	}
-	shown, err := out.Scanout(b, d, c.imported[b].left, c.tears(op.surface))
+	shown, err := out.Scanout(b, d, backend.Placement{Src: op.src, Dst: op.dst}, c.imported[b].left, c.tears(op.surface))
 	if err != nil || !shown {
 		return false, err
 	}
@@ -115,14 +115,21 @@ func (c *Compositor) scanoutTarget(o *output.Output) *colorspace.Target {
 }
 
 func fills(ops []drawOp, bounds image.Rectangle) (drawOp, bool) {
-	if len(ops) != 1 {
-		return drawOp{}, false
+	switch {
+	case len(ops) == 1 && ops[0].dst == bounds && ops[0].plain():
+		return ops[0], true
+	case len(ops) == 2 && ops[0] == letterboxFill(bounds) && ops[1].dst.In(bounds) && ops[1].plain():
+		return ops[1], true
 	}
-	op := ops[0]
-	if op.surface == nil || op.dst != bounds || op.transform != render.Normal || op.alpha != 1 {
-		return drawOp{}, false
-	}
-	return op, true
+	return drawOp{}, false
+}
+
+func (op *drawOp) plain() bool {
+	return op.surface != nil && op.transform == render.Normal && op.alpha == 1
+}
+
+func letterboxFill(bounds image.Rectangle) drawOp {
+	return drawOp{fill: true, color: letterbox, dst: bounds, opaque: true}
 }
 
 func (c *Compositor) fill(o *output.Output, s *surface.Surface, out backend.Scanner) error {

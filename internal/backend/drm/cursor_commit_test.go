@@ -196,7 +196,7 @@ func TestAScanoutTheKernelRefusesForTheCursorIsComposited(t *testing.T) {
 	r.cursorCommit("the move", o, func() error { return c.MoveCursor(image.Pt(50, 50)) })
 	client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
 	key := &fakeBuffer{client}
-	if ok, err := o.Scanout(key, client, func() error { return nil }, false); err != nil || !ok {
+	if ok, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { return nil }, false); err != nil || !ok {
 		t.Fatalf("Scanout = %t, %v", ok, err)
 	}
 	r.dev.flip(t, 10, uint32(len(r.dev.commits)))
@@ -205,7 +205,7 @@ func TestAScanoutTheKernelRefusesForTheCursorIsComposited(t *testing.T) {
 	if err := errors.Join(o.ScheduleFrame(), c.MoveCursor(image.Pt(30, 20))); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := o.Scanout(key, client, func() error { return nil }, false); err != nil || ok {
+	if ok, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { return nil }, false); err != nil || ok {
 		t.Fatalf("Scanout with a refused cursor = %t, %v, want the frame composited", ok, err)
 	}
 	if len(o.tested) != 0 {

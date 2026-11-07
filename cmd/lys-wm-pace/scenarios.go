@@ -80,6 +80,7 @@ type scenario struct {
 	steps     []step
 	once      bool
 	fakeInput bool
+	scansOut  bool
 }
 
 type mark struct {
@@ -98,6 +99,7 @@ type session struct {
 	marks   []mark
 	windows []*testclient.Window
 	opened  *testclient.Window
+	flipper *flipper
 }
 
 func (s *session) dispatch(action string) {
@@ -436,6 +438,13 @@ var scenarios = []scenario{
 			{name: "glass-tiles-resize-grow", measure: sprung, act: dispatches("resizeactive 120 0")},
 			{name: "glass-tiles-resize-shrink", measure: sprung, act: dispatches("resizeactive -120 0")},
 		},
+	},
+	{
+		name:     scaledTitle,
+		once:     true,
+		scansOut: true,
+		setup:    (*session).scaledFullscreen,
+		steps:    []step{{name: scaledTitle + "-fullscreen", measure: steady, continuous: true, act: flipsScaled(true), after: flipsScaled(false)}},
 	},
 	overviewByAction(10),
 	overviewByFingers(10),

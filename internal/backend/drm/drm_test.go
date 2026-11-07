@@ -130,6 +130,7 @@ type fakeDevice struct {
 	tiles             map[uint32]string
 	overlayYUV        bool
 	refuseLone        bool
+	refuseScaling     bool
 	noMaster          bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -497,6 +498,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	if f.refuseOverlay && c.values[[2]uint32{42, propFB}] != 0 {
 		return unix.EINVAL
 	}
+	if f.refuseScaling && scales(c) {
+		return unix.EINVAL
+	}
 	if f.refusesModeset(c) {
 		return unix.EINVAL
 	}
@@ -536,6 +540,16 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 		}
 	}
 	return nil
+}
+
+func scales(c commit) bool {
+	for _, plane := range []uint32{40, 41, 42} {
+		srcW, ok := c.values[[2]uint32{plane, propSrcW}]
+		if ok && (srcW>>16 != c.values[[2]uint32{plane, propCRTCW}] || c.values[[2]uint32{plane, propSrcH}]>>16 != c.values[[2]uint32{plane, propCRTCH}]) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *fakeDevice) refusesModeset(c commit) bool {
@@ -1572,7 +1586,7 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 	released := 0
 	client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
 	key := &fakeBuffer{client}
-	ok, err := o.Scanout(key, client, func() error { released++; return nil }, false)
+	ok, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { released++; return nil }, false)
 	if err != nil || !ok {
 		t.Fatalf("Scanout = %t, %v", ok, err)
 	}
@@ -1581,7 +1595,7 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 	if shown.flags&kdrm.AtomicTestOnly != 0 || r.dev.scanouts[uint32(fb)] != primeHandles+7 {
 		t.Fatalf("the client buffer went out as framebuffer %d with flags %#x", fb, shown.flags)
 	}
-	if again, err := o.Scanout(key, client, func() error { return nil }, false); again || err != nil {
+	if again, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { return nil }, false); again || err != nil {
 		t.Fatalf("a second scanout during the flip = %t, %v", again, err)
 	}
 	r.dev.flip(t, 10, 2)
@@ -1600,8 +1614,8 @@ func TestClientBuffersScanOutUntilTheNextFlip(t *testing.T) {
 		t.Fatalf("the client buffer was released %d times after a frame replaced it", released)
 	}
 	small := gpu.DMABUF{Size: image.Pt(640, 480), Format: scanoutFormat}
-	if ok, err := o.Scanout(&fakeBuffer{small}, small, func() error { return nil }, false); ok || err != nil {
-		t.Fatalf("a buffer that does not fill the mode scanned out: %t, %v", ok, err)
+	if ok, err := o.Scanout(&fakeBuffer{small}, small, backend.Whole(modeOf(o.mode).Size), func() error { return nil }, false); ok || err != nil {
+		t.Fatalf("a placement reading past the buffer scanned out: %t, %v", ok, err)
 	}
 }
 
@@ -1612,7 +1626,7 @@ func TestAClientBufferKeepsOneFramebufferUntilItIsForgotten(t *testing.T) {
 	key := &fakeBuffer{client}
 	var fbs []uint64
 	for seq := uint32(2); seq < 5; seq++ {
-		if ok, err := o.Scanout(key, client, func() error { return nil }, false); err != nil || !ok {
+		if ok, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { return nil }, false); err != nil || !ok {
 			t.Fatalf("Scanout = %t, %v", ok, err)
 		}
 		fbs = append(fbs, r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{40, propFB}])
@@ -1665,7 +1679,7 @@ func TestClientBuffersAreReleasedWhenTheOutputStopsShowingThem(t *testing.T) {
 			released := 0
 			client := gpu.DMABUF{Size: image.Pt(1920, 1080), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 7, Stride: 1920 * 4}}}
 			key := &fakeBuffer{client}
-			if ok, err := o.Scanout(key, client, func() error { released++; return nil }, false); err != nil || !ok {
+			if ok, err := o.Scanout(key, client, backend.Whole(client.Size), func() error { released++; return nil }, false); err != nil || !ok {
 				t.Fatalf("Scanout = %t, %v", ok, err)
 			}
 			fb := r.b.clientFBs[key].fb
@@ -1879,7 +1893,7 @@ func TestTearingScanoutsFlipAsync(t *testing.T) {
 	scanout := func(fd int, tear bool) commit {
 		t.Helper()
 		k := client(fd)
-		if ok, err := o.Scanout(k, k.d, func() error { return nil }, tear); err != nil || !ok {
+		if ok, err := o.Scanout(k, k.d, backend.Whole(k.d.Size), func() error { return nil }, tear); err != nil || !ok {
 			t.Fatalf("Scanout = %t, %v", ok, err)
 		}
 		return r.dev.commits[len(r.dev.commits)-1]
@@ -2555,7 +2569,7 @@ func TestScanoutFramesReuseTheirRecords(t *testing.T) {
 	release := func() error { return nil }
 	records := map[*scanout]struct{}{}
 	for i := range 20 {
-		ok, err := o.Scanout(keys[i%2], client, release, false)
+		ok, err := o.Scanout(keys[i%2], client, backend.Whole(client.Size), release, false)
 		if err != nil || !ok {
 			t.Fatalf("frame %d: Scanout = %t, %v", i, ok, err)
 		}

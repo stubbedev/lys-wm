@@ -84,7 +84,15 @@ func (c *Compositor) windowOrigin(w *window) origin {
 	if _, ok := w.top.(xToplevel); ok {
 		return c.xOrigin(c.toX(w.rect).Min)
 	}
-	return flat(w.rect.Min.Sub(w.top.Geometry().Min))
+	return flat(w.rect.Min.Add(c.letterboxed(w)).Sub(w.top.Geometry().Min))
+}
+
+func (c *Compositor) letterboxed(w *window) image.Point {
+	if w.layer != wm.LayerFullscreen {
+		return image.Point{}
+	}
+	gap := w.rect.Size().Sub(w.top.Geometry().Size())
+	return image.Pt(max(gap.X, 0)/2, max(gap.Y, 0)/2)
 }
 
 func (c *Compositor) firstOutput() *output.Output {

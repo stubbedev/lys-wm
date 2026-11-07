@@ -137,6 +137,7 @@ type compositor struct {
 	socket  string
 	display string
 	trace   string
+	scanout bool
 }
 
 func tail(path string) string {
@@ -179,6 +180,9 @@ func startCompositor(o options, binary, run string) (*compositor, error) {
 	args := []string{"-backend", o.backend, "-renderer", o.renderer, "-config", config, "-frame-trace", c.trace}
 	if o.backend == "headless" {
 		args = append(args, "-headless-swipes")
+		if !o.allowSoftware && o.renderer != "soft" {
+			args, c.scanout = append(args, "-headless-scanout"), true
+		}
 	}
 	if o.cpuProfile != "" {
 		args = append(args, "-cpu-profile", o.cpuProfile)
@@ -337,6 +341,10 @@ func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, g
 	for i := range scenarios {
 		sc := &scenarios[i]
 		if len(o.only) > 0 && !slices.Contains(o.only, sc.name) {
+			continue
+		}
+		if sc.scansOut && !c.scanout {
+			fmt.Fprintf(out, "not measured: %s needs planes to scan out on, which -backend headless fakes only on a real GPU, without -allow-software\n", sc.name)
 			continue
 		}
 		if sc.fakeInput && c.swipes == nil {

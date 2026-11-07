@@ -61,7 +61,10 @@ import (
 	"github.com/stubbedev/lys-wm/internal/xwayland"
 )
 
-var Background = render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
+var (
+	Background = render.Color{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
+	letterbox  = render.Color{A: 0xff}
+)
 
 type Config struct {
 	Seat            seat.Config

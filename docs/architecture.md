@@ -469,6 +469,16 @@ allocates buffers that plane can show. A scanned-out frame keeps the scene's dif
 base, so a commit that changes nothing commits nothing; only the composited
 targets count as stale, and the next composited frame repaints them whole.
 
+The buffer need not match the mode (#379): a `wp_viewporter` source and
+destination go to the primary plane's `SRC_*` (16.16) and `CRTC_*` rectangles, so a
+game rendering below the panel's resolution scans out scaled. A fullscreen
+surface smaller than its output is centred over a black border fill, as
+xdg-shell suggests, and that letterbox scans out too, the CRTC showing black
+outside a primary plane that does not cover it. A driver that cannot scale or
+needs a full-screen primary refuses in the test commit, cached per buffer and
+rectangles, and the frame is composited. An async flip changes only `FB_ID`, so
+a tearing surface whose rectangles change takes one vblank flip first.
+
 Composited frames are 8-bit XRGB8888 unless an output rule asks for
 `bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
 because XR30 primaries break screen sharing and some fullscreen games on
