@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wire"
+	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 type fakeTablet struct{}
@@ -280,4 +282,22 @@ func TestAPenInProximitySetsTheCursor(t *testing.T) {
 	h.Eventually("the pen's cursor hidden", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		return c.Seat().Cursor() == seat.HiddenCursor{}
 	})
+}
+
+func TestAMappedTabletMovesTheCursorOverItsOutputOnly(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(c *compositor.Config) {
+		c.DeviceOutputs = map[string]wm.OutputMatch{fakeTablet{}.Name(): {Name: "HEADLESS-2"}}
+	}, small, small)
+	addTablet(h)
+	for _, step := range []struct{ x, y, wantX, wantY float64 }{{0, 0, 160, 0}, {0.5, 0.5, 240, 50}, {1, 1, 319, 99}} {
+		tablet(h, &tabletinput.Proximity{Time: time.Millisecond, Tool: pen, In: true, Axes: at(step.x, step.y)})
+		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+			if x, y := c.Cursor(); x != step.wantX || y != step.wantY {
+				return fmt.Errorf("the pen at %g,%g put the cursor at %g,%g, want %g,%g", step.x, step.y, x, y, step.wantX, step.wantY)
+			}
+			return nil
+		})
+		tablet(h, &tabletinput.Proximity{Time: 2 * time.Millisecond, Tool: pen, Axes: at(step.x, step.y)})
+	}
 }

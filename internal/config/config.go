@@ -284,6 +284,7 @@ type rawNamedDevice struct {
 	Calibration *At[[]float64] `yaml:"calibration"`
 	Region      *At[[]float64] `yaml:"region"`
 	Keyboard    *rawXkb        `yaml:"keyboard"`
+	Output      *At[string]    `yaml:"output"`
 }
 
 type rawXkb struct {
@@ -655,6 +656,7 @@ type Config struct {
 	Warnings        []error
 	Keyboard        xkb.Names
 	DeviceKeyboards map[string]xkb.Names
+	DeviceOutputs   map[string]wm.OutputMatch
 	RepeatRate      int32
 	RepeatDelay     int32
 	StickyKeys      bool
@@ -1441,6 +1443,25 @@ func (p *parser) deviceKeyboards(devices map[string]rawNamedDevice) map[string]x
 	return out
 }
 
+func (p *parser) deviceOutputs(devices map[string]rawNamedDevice) map[string]wm.OutputMatch {
+	var out map[string]wm.OutputMatch
+	for _, name := range slices.Sorted(maps.Keys(devices)) {
+		a := devices[name].Output
+		if a == nil {
+			continue
+		}
+		if a.V == "" {
+			p.fail(a.Line, fmt.Sprintf("input.devices.%q.output", name), "needs a connector name or desc:<description>")
+			continue
+		}
+		if out == nil {
+			out = map[string]wm.OutputMatch{}
+		}
+		out[name] = outputMatch(a.V)
+	}
+	return out
+}
+
 func (p *parser) input(r rawInput) session.InputConfig {
 	c := session.InputConfig{Pointer: p.device(r.Pointer, "input.pointer"), Touchpad: p.device(r.Touchpad, "input.touchpad")}
 	if len(r.Devices) > 0 {
@@ -1744,6 +1765,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		File:            file,
 		Keyboard:        p.keyboard(raw.Input.Keyboard.rawXkb, "input.keyboard"),
 		DeviceKeyboards: p.deviceKeyboards(raw.Input.Devices),
+		DeviceOutputs:   p.deviceOutputs(raw.Input.Devices),
 		RepeatRate:      p.repeat(raw.Input.Keyboard.RepeatRate, "input.keyboard.repeat_rate", seat.DefaultRepeatRate),
 		RepeatDelay:     p.repeat(raw.Input.Keyboard.RepeatDelay, "input.keyboard.repeat_delay", seat.DefaultRepeatDelay),
 		StickyKeys:      raw.Input.Keyboard.StickyKeys,
@@ -1908,6 +1930,7 @@ func (c Config) Compositor(keymaps xkb.Keymaps, font *gtext.Typeface) (composito
 	cfg.Seat.RepeatRate, cfg.Seat.RepeatDelay = c.RepeatRate, c.RepeatDelay
 	cfg.Seat.StickyKeys, cfg.Seat.SlowKeys = c.StickyKeys, c.SlowKeys
 	cfg.Seat.NumLock, cfg.Seat.Devices = c.NumLock, keymaps.Devices
+	cfg.DeviceOutputs = c.DeviceOutputs
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
 	cfg.VirtualOutputs = c.VirtualOutputs
 	cfg.ColorManagement = c.ColorManagement

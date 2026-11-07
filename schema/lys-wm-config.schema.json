@@ -2708,6 +2708,9 @@
               "natural_scroll": {
                 "type": "boolean"
               },
+              "output": {
+                "type": "string"
+              },
               "region": {
                 "type": "array",
                 "minItems": 4,

@@ -16,6 +16,7 @@ import (
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
+	"github.com/stubbedev/lys-wm/internal/wm"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -198,6 +199,44 @@ func TestAbsoluteDevicesWithoutAnOutputSpanTheLayout(t *testing.T) {
 		return errors.Join(b.Touch().Motion(1, 0.375, 0.5), b.Touch().Frame())
 	})
 	r.expect("touch_motion 1 120,50", "touch_frame")
+}
+
+func TestAMappedTouchscreenAndTabletStayOnTheirOutput(t *testing.T) {
+	t.Parallel()
+	r := inputOn(t, StartWith(t, func(c *compositor.Config) {
+		c.DeviceOutputs = map[string]wm.OutputMatch{"headless-touch": {Name: "HEADLESS-1"}, "headless-pointer": {Name: "HEADLESS-1"}}
+	}, small, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Down(1, nil, 0.25, 0.5), b.Touch().Frame())
+	})
+	r.expect("down 1 win 40,50", "touch_frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Motion(1, 1, 0.5), b.Touch().Frame())
+	})
+	r.expect("touch_motion 1 159,50", "touch_frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Up(1), b.Touch().Frame(), b.Pointer().MoveTo(nil, 0.5, 0.25), b.Pointer().Frame())
+	})
+	r.expect("up 1", "touch_frame", "motion 80,25", "frame")
+	r.h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if x, y := c.Cursor(); x != 80 || y != 25 {
+			return fmt.Errorf("an absolute pointer mapped to HEADLESS-1 put the cursor at %g,%g", x, y)
+		}
+		return nil
+	})
+}
+
+func TestADeviceMappedToAnAbsentOutputGoesNowhere(t *testing.T) {
+	t.Parallel()
+	r := inputOn(t, StartWith(t, func(c *compositor.Config) {
+		c.DeviceOutputs = map[string]wm.OutputMatch{"headless-touch": {Name: "eDP-1"}}
+	}, small))
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	r.inject(func(b *headless.Backend, _ *headless.Output) error {
+		return errors.Join(b.Touch().Down(1, nil, 0.5, 0.5), b.Touch().Frame(), b.Keyboard().Key(30, true))
+	})
+	r.expect("key 30 1")
 }
 
 func TestLeavingToTheDesktopEndsThePointerFrame(t *testing.T) {

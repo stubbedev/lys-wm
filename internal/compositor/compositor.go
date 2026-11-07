@@ -97,6 +97,7 @@ type Config struct {
 	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
 	ClientHotkeys   bool
+	DeviceOutputs   map[string]wm.OutputMatch
 }
 
 type Hooks struct {
@@ -185,6 +186,7 @@ type Compositor struct {
 	shm                *shm.Manager
 	seat               *seat.Seat
 	keyboards          []backend.KeyboardLEDs
+	deviceOutputs      map[string]wm.OutputMatch
 	devices            []backend.Device
 	leds               xkb.Locks
 	shell              *shell.Shell
@@ -465,6 +467,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
 	c.virtualConfig = cfg.VirtualOutputs
+	c.deviceOutputs = cfg.DeviceOutputs
 	c.colorManagement = cfg.ColorManagement
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound

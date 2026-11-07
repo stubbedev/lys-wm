@@ -1378,3 +1378,17 @@ func TestADeviceKeyboardParsesIntoItsOwnNames(t *testing.T) {
 		t.Fatalf("a bad device layout: %v", err)
 	}
 }
+
+func TestADeviceOutputParsesIntoAnOutputMatch(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte("input:\n  devices:\n    \"ELAN touchscreen\":\n      output: eDP-1\n    \"Wacom Pen\":\n      output: \"desc:Dell Inc.\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]wm.OutputMatch{"ELAN touchscreen": {Name: "eDP-1"}, "Wacom Pen": {Description: "Dell Inc."}}
+	if !reflect.DeepEqual(cfg.DeviceOutputs, want) {
+		t.Fatalf("device outputs %+v", cfg.DeviceOutputs)
+	}
+	if _, err := Parse("t.yaml", []byte("input:\n  devices:\n    x:\n      output: \"\"\n")); err == nil || !strings.Contains(err.Error(), `t.yaml:4: input.devices."x".output:`) {
+		t.Fatalf("an empty output: %v", err)
+	}
+}

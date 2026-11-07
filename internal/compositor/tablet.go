@@ -78,7 +78,7 @@ func (c *Compositor) tabletEvent(d backend.Device, at time.Duration, tool *table
 }
 
 func (c *Compositor) tabletMove(d backend.Device, at time.Duration, tool *tabletinput.Tool, axes tabletinput.Axes) error {
-	area, ok := c.absoluteArea(nil)
+	area, ok := c.deviceArea(d, nil)
 	if !ok {
 		return nil
 	}

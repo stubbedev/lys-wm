@@ -150,8 +150,23 @@ func (c *Compositor) absoluteArea(o backend.Output) (image.Rectangle, bool) {
 	return out.Logical(), true
 }
 
+func (c *Compositor) deviceArea(d backend.Device, o backend.Output) (image.Rectangle, bool) {
+	m, mapped := c.deviceOutputs[d.Name()]
+	if o != nil || !mapped {
+		return c.absoluteArea(o)
+	}
+	out := c.outputMatching(m)
+	if out == nil {
+		return image.Rectangle{}, false
+	}
+	return out.Logical(), true
+}
+
 func (c *Compositor) inArea(area image.Rectangle, x, y float64) point {
-	return c.clampToOutputs(denormalize(area, x, y))
+	p := denormalize(area, x, y)
+	p.X = math.Min(math.Max(p.X, float64(area.Min.X)), float64(area.Max.X)-1)
+	p.Y = math.Min(math.Max(p.Y, float64(area.Min.Y)), float64(area.Max.Y)-1)
+	return c.clampToOutputs(p)
 }
 
 func (c *Compositor) Input(d backend.Device, e backend.Event) error {
@@ -184,9 +199,9 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		c.pushHotCorner(from, want, e)
 		return nil
 	case backend.PointerMotionAbsolute:
-		return c.inputAbsolute(e)
+		return c.inputAbsolute(d, e)
 	case *backend.PointerMotionAbsolute:
-		return c.inputAbsolute(*e)
+		return c.inputAbsolute(d, *e)
 	case backend.PointerButton:
 		return c.inputButton(e)
 	case *backend.PointerButton:
@@ -210,9 +225,9 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 	case backend.GestureEnd:
 		return c.gestureEnd(e)
 	case backend.TouchDown:
-		return c.touchDown(e)
+		return c.touchDown(d, e)
 	case *backend.TouchDown:
-		return c.touchDown(*e)
+		return c.touchDown(d, *e)
 	case backend.TouchMotion:
 		return c.touchMotion(e)
 	case *backend.TouchMotion:
@@ -276,11 +291,11 @@ func (c *Compositor) acceptKey(device string, e backend.Key) error {
 	return err
 }
 
-func (c *Compositor) inputAbsolute(e backend.PointerMotionAbsolute) error {
+func (c *Compositor) inputAbsolute(d backend.Device, e backend.PointerMotionAbsolute) error {
 	if c.capturing != nil {
 		return nil
 	}
-	area, ok := c.absoluteArea(e.Output)
+	area, ok := c.deviceArea(d, e.Output)
 	if !ok {
 		return nil
 	}
@@ -381,8 +396,8 @@ func (c *Compositor) inputAxis(e backend.PointerAxis) error {
 	return c.seat.PointerAxis(e.Time, a)
 }
 
-func (c *Compositor) touchDown(e backend.TouchDown) error {
-	area, ok := c.absoluteArea(e.Output)
+func (c *Compositor) touchDown(d backend.Device, e backend.TouchDown) error {
+	area, ok := c.deviceArea(d, e.Output)
 	if !ok {
 		return nil
 	}
