@@ -1492,6 +1492,1017 @@
       "type": "boolean",
       "default": false
     },
+    "hot_corners": {
+      "type": "object",
+      "properties": {
+        "bottom_left": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "enum": [
+                false
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "format": "lys-wm-action",
+                  "x-lys-wm-actions": [
+                    {
+                      "name": "focus",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                    },
+                    {
+                      "name": "move",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                    },
+                    {
+                      "name": "workspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                      "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    },
+                    {
+                      "name": "movetoworkspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                      "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                    },
+                    {
+                      "name": "focusoutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                    },
+                    {
+                      "name": "movetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                    },
+                    {
+                      "name": "moveworkspacetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                    },
+                    {
+                      "name": "swapworkspaces",
+                      "args": "<output> <output>",
+                      "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                    },
+                    {
+                      "name": "scratchpad",
+                      "args": "<toggle <name>|hide>",
+                      "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                    },
+                    {
+                      "name": "movetoscratchpad",
+                      "args": "<name>",
+                      "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                    },
+                    {
+                      "name": "kill",
+                      "summary": "Ask the focused window to close."
+                    },
+                    {
+                      "name": "focuswindow",
+                      "args": "<id>",
+                      "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                    },
+                    {
+                      "name": "minimize",
+                      "args": "[id]",
+                      "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                    },
+                    {
+                      "name": "restore",
+                      "args": "[id]",
+                      "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                    },
+                    {
+                      "name": "overview",
+                      "args": "[toggle|show|hide]",
+                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    },
+                    {
+                      "name": "closewindow",
+                      "args": "<id>",
+                      "summary": "Ask the window with this IPC ID to close."
+                    },
+                    {
+                      "name": "dpms",
+                      "args": "<on|off|toggle> [output]",
+                      "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                    },
+                    {
+                      "name": "reload",
+                      "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                    },
+                    {
+                      "name": "dismissconfignotice",
+                      "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                    },
+                    {
+                      "name": "exit",
+                      "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                    },
+                    {
+                      "name": "nextlayout",
+                      "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                    },
+                    {
+                      "name": "stickykeys",
+                      "args": "<on|off>",
+                      "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                    },
+                    {
+                      "name": "slowkeys",
+                      "args": "<ms>",
+                      "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                    },
+                    {
+                      "name": "global",
+                      "args": "<app_id>:<id>",
+                      "summary": "Press the global shortcut an application registered, and release it with the bind."
+                    },
+                    {
+                      "name": "exec",
+                      "args": "<command>",
+                      "summary": "Run a shell command with sh -c."
+                    },
+                    {
+                      "name": "makegroup",
+                      "args": "<h|v|tab> [ephemeral]",
+                      "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                    },
+                    {
+                      "name": "changegroup",
+                      "args": "<h|v|tab|toggletab|opposite>",
+                      "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                    },
+                    {
+                      "name": "focustab",
+                      "args": "<prev|next|n> [wrap]",
+                      "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                    },
+                    {
+                      "name": "focusparent",
+                      "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                    },
+                    {
+                      "name": "focuschild",
+                      "summary": "Undo one focusparent, down toward the focused window."
+                    },
+                    {
+                      "name": "swap",
+                      "args": "<left|right|up|down>",
+                      "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                    },
+                    {
+                      "name": "moveout",
+                      "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                    },
+                    {
+                      "name": "equalize",
+                      "args": "[all]",
+                      "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                    },
+                    {
+                      "name": "locktab",
+                      "args": "[toggle|on|off]",
+                      "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                    },
+                    {
+                      "name": "submap",
+                      "args": "<name|reset>",
+                      "summary": "Switch binds to the named submap, or back to the default ones."
+                    },
+                    {
+                      "name": "togglefloating",
+                      "summary": "Float the focused window centred at half the output, or tile it again."
+                    },
+                    {
+                      "name": "place",
+                      "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                      "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                    },
+                    {
+                      "name": "focusfloating",
+                      "args": "[toggle|on|off]",
+                      "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                    },
+                    {
+                      "name": "fullscreen",
+                      "args": "[toggle|on|off] [fake]",
+                      "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                    },
+                    {
+                      "name": "setprop",
+                      "args": "<id> <key> <value>",
+                      "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                    },
+                    {
+                      "name": "showdesktop",
+                      "args": "[toggle|on|off] [all]",
+                      "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "pin",
+                      "args": "[toggle|on|off]",
+                      "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                    },
+                    {
+                      "name": "maximize",
+                      "args": "[toggle|on|off]",
+                      "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                    },
+                    {
+                      "name": "resizeactive",
+                      "args": "<dx> <dy>",
+                      "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                    },
+                    {
+                      "name": "movewindow",
+                      "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                    },
+                    {
+                      "name": "resizewindow",
+                      "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                    },
+                    {
+                      "name": "zoom",
+                      "args": "<in|out|reset|set> [factor]",
+                      "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    }
+                  ]
+                },
+                "modifiers": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "bottom_right": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "enum": [
+                false
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "format": "lys-wm-action",
+                  "x-lys-wm-actions": [
+                    {
+                      "name": "focus",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                    },
+                    {
+                      "name": "move",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                    },
+                    {
+                      "name": "workspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                      "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    },
+                    {
+                      "name": "movetoworkspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                      "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                    },
+                    {
+                      "name": "focusoutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                    },
+                    {
+                      "name": "movetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                    },
+                    {
+                      "name": "moveworkspacetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                    },
+                    {
+                      "name": "swapworkspaces",
+                      "args": "<output> <output>",
+                      "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                    },
+                    {
+                      "name": "scratchpad",
+                      "args": "<toggle <name>|hide>",
+                      "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                    },
+                    {
+                      "name": "movetoscratchpad",
+                      "args": "<name>",
+                      "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                    },
+                    {
+                      "name": "kill",
+                      "summary": "Ask the focused window to close."
+                    },
+                    {
+                      "name": "focuswindow",
+                      "args": "<id>",
+                      "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                    },
+                    {
+                      "name": "minimize",
+                      "args": "[id]",
+                      "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                    },
+                    {
+                      "name": "restore",
+                      "args": "[id]",
+                      "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                    },
+                    {
+                      "name": "overview",
+                      "args": "[toggle|show|hide]",
+                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    },
+                    {
+                      "name": "closewindow",
+                      "args": "<id>",
+                      "summary": "Ask the window with this IPC ID to close."
+                    },
+                    {
+                      "name": "dpms",
+                      "args": "<on|off|toggle> [output]",
+                      "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                    },
+                    {
+                      "name": "reload",
+                      "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                    },
+                    {
+                      "name": "dismissconfignotice",
+                      "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                    },
+                    {
+                      "name": "exit",
+                      "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                    },
+                    {
+                      "name": "nextlayout",
+                      "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                    },
+                    {
+                      "name": "stickykeys",
+                      "args": "<on|off>",
+                      "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                    },
+                    {
+                      "name": "slowkeys",
+                      "args": "<ms>",
+                      "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                    },
+                    {
+                      "name": "global",
+                      "args": "<app_id>:<id>",
+                      "summary": "Press the global shortcut an application registered, and release it with the bind."
+                    },
+                    {
+                      "name": "exec",
+                      "args": "<command>",
+                      "summary": "Run a shell command with sh -c."
+                    },
+                    {
+                      "name": "makegroup",
+                      "args": "<h|v|tab> [ephemeral]",
+                      "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                    },
+                    {
+                      "name": "changegroup",
+                      "args": "<h|v|tab|toggletab|opposite>",
+                      "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                    },
+                    {
+                      "name": "focustab",
+                      "args": "<prev|next|n> [wrap]",
+                      "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                    },
+                    {
+                      "name": "focusparent",
+                      "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                    },
+                    {
+                      "name": "focuschild",
+                      "summary": "Undo one focusparent, down toward the focused window."
+                    },
+                    {
+                      "name": "swap",
+                      "args": "<left|right|up|down>",
+                      "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                    },
+                    {
+                      "name": "moveout",
+                      "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                    },
+                    {
+                      "name": "equalize",
+                      "args": "[all]",
+                      "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                    },
+                    {
+                      "name": "locktab",
+                      "args": "[toggle|on|off]",
+                      "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                    },
+                    {
+                      "name": "submap",
+                      "args": "<name|reset>",
+                      "summary": "Switch binds to the named submap, or back to the default ones."
+                    },
+                    {
+                      "name": "togglefloating",
+                      "summary": "Float the focused window centred at half the output, or tile it again."
+                    },
+                    {
+                      "name": "place",
+                      "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                      "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                    },
+                    {
+                      "name": "focusfloating",
+                      "args": "[toggle|on|off]",
+                      "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                    },
+                    {
+                      "name": "fullscreen",
+                      "args": "[toggle|on|off] [fake]",
+                      "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                    },
+                    {
+                      "name": "setprop",
+                      "args": "<id> <key> <value>",
+                      "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                    },
+                    {
+                      "name": "showdesktop",
+                      "args": "[toggle|on|off] [all]",
+                      "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "pin",
+                      "args": "[toggle|on|off]",
+                      "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                    },
+                    {
+                      "name": "maximize",
+                      "args": "[toggle|on|off]",
+                      "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                    },
+                    {
+                      "name": "resizeactive",
+                      "args": "<dx> <dy>",
+                      "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                    },
+                    {
+                      "name": "movewindow",
+                      "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                    },
+                    {
+                      "name": "resizewindow",
+                      "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                    },
+                    {
+                      "name": "zoom",
+                      "args": "<in|out|reset|set> [factor]",
+                      "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    }
+                  ]
+                },
+                "modifiers": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "fullscreen": {
+          "type": "boolean",
+          "default": false
+        },
+        "pressure": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 80
+        },
+        "top_left": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "enum": [
+                false
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "format": "lys-wm-action",
+                  "x-lys-wm-actions": [
+                    {
+                      "name": "focus",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                    },
+                    {
+                      "name": "move",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                    },
+                    {
+                      "name": "workspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                      "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    },
+                    {
+                      "name": "movetoworkspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                      "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                    },
+                    {
+                      "name": "focusoutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                    },
+                    {
+                      "name": "movetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                    },
+                    {
+                      "name": "moveworkspacetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                    },
+                    {
+                      "name": "swapworkspaces",
+                      "args": "<output> <output>",
+                      "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                    },
+                    {
+                      "name": "scratchpad",
+                      "args": "<toggle <name>|hide>",
+                      "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                    },
+                    {
+                      "name": "movetoscratchpad",
+                      "args": "<name>",
+                      "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                    },
+                    {
+                      "name": "kill",
+                      "summary": "Ask the focused window to close."
+                    },
+                    {
+                      "name": "focuswindow",
+                      "args": "<id>",
+                      "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                    },
+                    {
+                      "name": "minimize",
+                      "args": "[id]",
+                      "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                    },
+                    {
+                      "name": "restore",
+                      "args": "[id]",
+                      "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                    },
+                    {
+                      "name": "overview",
+                      "args": "[toggle|show|hide]",
+                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    },
+                    {
+                      "name": "closewindow",
+                      "args": "<id>",
+                      "summary": "Ask the window with this IPC ID to close."
+                    },
+                    {
+                      "name": "dpms",
+                      "args": "<on|off|toggle> [output]",
+                      "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                    },
+                    {
+                      "name": "reload",
+                      "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                    },
+                    {
+                      "name": "dismissconfignotice",
+                      "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                    },
+                    {
+                      "name": "exit",
+                      "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                    },
+                    {
+                      "name": "nextlayout",
+                      "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                    },
+                    {
+                      "name": "stickykeys",
+                      "args": "<on|off>",
+                      "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                    },
+                    {
+                      "name": "slowkeys",
+                      "args": "<ms>",
+                      "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                    },
+                    {
+                      "name": "global",
+                      "args": "<app_id>:<id>",
+                      "summary": "Press the global shortcut an application registered, and release it with the bind."
+                    },
+                    {
+                      "name": "exec",
+                      "args": "<command>",
+                      "summary": "Run a shell command with sh -c."
+                    },
+                    {
+                      "name": "makegroup",
+                      "args": "<h|v|tab> [ephemeral]",
+                      "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                    },
+                    {
+                      "name": "changegroup",
+                      "args": "<h|v|tab|toggletab|opposite>",
+                      "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                    },
+                    {
+                      "name": "focustab",
+                      "args": "<prev|next|n> [wrap]",
+                      "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                    },
+                    {
+                      "name": "focusparent",
+                      "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                    },
+                    {
+                      "name": "focuschild",
+                      "summary": "Undo one focusparent, down toward the focused window."
+                    },
+                    {
+                      "name": "swap",
+                      "args": "<left|right|up|down>",
+                      "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                    },
+                    {
+                      "name": "moveout",
+                      "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                    },
+                    {
+                      "name": "equalize",
+                      "args": "[all]",
+                      "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                    },
+                    {
+                      "name": "locktab",
+                      "args": "[toggle|on|off]",
+                      "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                    },
+                    {
+                      "name": "submap",
+                      "args": "<name|reset>",
+                      "summary": "Switch binds to the named submap, or back to the default ones."
+                    },
+                    {
+                      "name": "togglefloating",
+                      "summary": "Float the focused window centred at half the output, or tile it again."
+                    },
+                    {
+                      "name": "place",
+                      "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                      "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                    },
+                    {
+                      "name": "focusfloating",
+                      "args": "[toggle|on|off]",
+                      "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                    },
+                    {
+                      "name": "fullscreen",
+                      "args": "[toggle|on|off] [fake]",
+                      "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                    },
+                    {
+                      "name": "setprop",
+                      "args": "<id> <key> <value>",
+                      "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                    },
+                    {
+                      "name": "showdesktop",
+                      "args": "[toggle|on|off] [all]",
+                      "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "pin",
+                      "args": "[toggle|on|off]",
+                      "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                    },
+                    {
+                      "name": "maximize",
+                      "args": "[toggle|on|off]",
+                      "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                    },
+                    {
+                      "name": "resizeactive",
+                      "args": "<dx> <dy>",
+                      "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                    },
+                    {
+                      "name": "movewindow",
+                      "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                    },
+                    {
+                      "name": "resizewindow",
+                      "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                    },
+                    {
+                      "name": "zoom",
+                      "args": "<in|out|reset|set> [factor]",
+                      "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    }
+                  ]
+                },
+                "modifiers": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "top_right": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "enum": [
+                false
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "format": "lys-wm-action",
+                  "x-lys-wm-actions": [
+                    {
+                      "name": "focus",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                    },
+                    {
+                      "name": "move",
+                      "args": "<left|right|up|down>",
+                      "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                    },
+                    {
+                      "name": "workspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                      "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    },
+                    {
+                      "name": "movetoworkspace",
+                      "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                      "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                    },
+                    {
+                      "name": "focusoutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                    },
+                    {
+                      "name": "movetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                    },
+                    {
+                      "name": "moveworkspacetooutput",
+                      "args": "<left|right|up|down|name>",
+                      "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                    },
+                    {
+                      "name": "swapworkspaces",
+                      "args": "<output> <output>",
+                      "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                    },
+                    {
+                      "name": "scratchpad",
+                      "args": "<toggle <name>|hide>",
+                      "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                    },
+                    {
+                      "name": "movetoscratchpad",
+                      "args": "<name>",
+                      "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                    },
+                    {
+                      "name": "kill",
+                      "summary": "Ask the focused window to close."
+                    },
+                    {
+                      "name": "focuswindow",
+                      "args": "<id>",
+                      "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                    },
+                    {
+                      "name": "minimize",
+                      "args": "[id]",
+                      "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                    },
+                    {
+                      "name": "restore",
+                      "args": "[id]",
+                      "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                    },
+                    {
+                      "name": "overview",
+                      "args": "[toggle|show|hide]",
+                      "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                    },
+                    {
+                      "name": "closewindow",
+                      "args": "<id>",
+                      "summary": "Ask the window with this IPC ID to close."
+                    },
+                    {
+                      "name": "dpms",
+                      "args": "<on|off|toggle> [output]",
+                      "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                    },
+                    {
+                      "name": "reload",
+                      "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                    },
+                    {
+                      "name": "dismissconfignotice",
+                      "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                    },
+                    {
+                      "name": "exit",
+                      "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                    },
+                    {
+                      "name": "nextlayout",
+                      "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                    },
+                    {
+                      "name": "stickykeys",
+                      "args": "<on|off>",
+                      "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                    },
+                    {
+                      "name": "slowkeys",
+                      "args": "<ms>",
+                      "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                    },
+                    {
+                      "name": "global",
+                      "args": "<app_id>:<id>",
+                      "summary": "Press the global shortcut an application registered, and release it with the bind."
+                    },
+                    {
+                      "name": "exec",
+                      "args": "<command>",
+                      "summary": "Run a shell command with sh -c."
+                    },
+                    {
+                      "name": "makegroup",
+                      "args": "<h|v|tab> [ephemeral]",
+                      "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                    },
+                    {
+                      "name": "changegroup",
+                      "args": "<h|v|tab|toggletab|opposite>",
+                      "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                    },
+                    {
+                      "name": "focustab",
+                      "args": "<prev|next|n> [wrap]",
+                      "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                    },
+                    {
+                      "name": "focusparent",
+                      "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                    },
+                    {
+                      "name": "focuschild",
+                      "summary": "Undo one focusparent, down toward the focused window."
+                    },
+                    {
+                      "name": "swap",
+                      "args": "<left|right|up|down>",
+                      "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                    },
+                    {
+                      "name": "moveout",
+                      "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                    },
+                    {
+                      "name": "equalize",
+                      "args": "[all]",
+                      "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                    },
+                    {
+                      "name": "locktab",
+                      "args": "[toggle|on|off]",
+                      "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                    },
+                    {
+                      "name": "submap",
+                      "args": "<name|reset>",
+                      "summary": "Switch binds to the named submap, or back to the default ones."
+                    },
+                    {
+                      "name": "togglefloating",
+                      "summary": "Float the focused window centred at half the output, or tile it again."
+                    },
+                    {
+                      "name": "place",
+                      "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                      "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                    },
+                    {
+                      "name": "focusfloating",
+                      "args": "[toggle|on|off]",
+                      "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                    },
+                    {
+                      "name": "fullscreen",
+                      "args": "[toggle|on|off] [fake]",
+                      "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                    },
+                    {
+                      "name": "setprop",
+                      "args": "<id> <key> <value>",
+                      "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                    },
+                    {
+                      "name": "showdesktop",
+                      "args": "[toggle|on|off] [all]",
+                      "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                    },
+                    {
+                      "name": "pin",
+                      "args": "[toggle|on|off]",
+                      "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                    },
+                    {
+                      "name": "maximize",
+                      "args": "[toggle|on|off]",
+                      "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                    },
+                    {
+                      "name": "resizeactive",
+                      "args": "<dx> <dy>",
+                      "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                    },
+                    {
+                      "name": "movewindow",
+                      "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                    },
+                    {
+                      "name": "resizewindow",
+                      "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                    },
+                    {
+                      "name": "zoom",
+                      "args": "<in|out|reset|set> [factor]",
+                      "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                    }
+                  ]
+                },
+                "modifiers": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "input": {
       "type": "object",
       "properties": {
@@ -1896,19 +2907,26 @@
         "type": "object",
         "properties": {
           "animation": {
-            "type": "object",
-            "properties": {
-              "-": {
-                "type": "boolean"
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
               },
-              "in": {
-                "type": "string"
-              },
-              "out": {
-                "type": "string"
+              {
+                "type": "object",
+                "properties": {
+                  "in": {
+                    "type": "string"
+                  },
+                  "out": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
               }
-            },
-            "additionalProperties": false
+            ]
           },
           "block_out_from": {
             "type": "string"
@@ -1962,6 +2980,1018 @@
           },
           "hdr_peak": {
             "type": "number"
+          },
+          "hot_corners": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "bottom_left": {
+                    "oneOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string",
+                            "format": "lys-wm-action",
+                            "x-lys-wm-actions": [
+                              {
+                                "name": "focus",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                              },
+                              {
+                                "name": "move",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                              },
+                              {
+                                "name": "workspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                                "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                              },
+                              {
+                                "name": "movetoworkspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                                "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                              },
+                              {
+                                "name": "focusoutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                              },
+                              {
+                                "name": "movetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                              },
+                              {
+                                "name": "moveworkspacetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                              },
+                              {
+                                "name": "swapworkspaces",
+                                "args": "<output> <output>",
+                                "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                              },
+                              {
+                                "name": "scratchpad",
+                                "args": "<toggle <name>|hide>",
+                                "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                              },
+                              {
+                                "name": "movetoscratchpad",
+                                "args": "<name>",
+                                "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                              },
+                              {
+                                "name": "kill",
+                                "summary": "Ask the focused window to close."
+                              },
+                              {
+                                "name": "focuswindow",
+                                "args": "<id>",
+                                "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                              },
+                              {
+                                "name": "minimize",
+                                "args": "[id]",
+                                "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                              },
+                              {
+                                "name": "restore",
+                                "args": "[id]",
+                                "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                              },
+                              {
+                                "name": "overview",
+                                "args": "[toggle|show|hide]",
+                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                              },
+                              {
+                                "name": "closewindow",
+                                "args": "<id>",
+                                "summary": "Ask the window with this IPC ID to close."
+                              },
+                              {
+                                "name": "dpms",
+                                "args": "<on|off|toggle> [output]",
+                                "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                              },
+                              {
+                                "name": "reload",
+                                "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                              },
+                              {
+                                "name": "dismissconfignotice",
+                                "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                              },
+                              {
+                                "name": "exit",
+                                "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                              },
+                              {
+                                "name": "nextlayout",
+                                "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                              },
+                              {
+                                "name": "stickykeys",
+                                "args": "<on|off>",
+                                "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                              },
+                              {
+                                "name": "slowkeys",
+                                "args": "<ms>",
+                                "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                              },
+                              {
+                                "name": "global",
+                                "args": "<app_id>:<id>",
+                                "summary": "Press the global shortcut an application registered, and release it with the bind."
+                              },
+                              {
+                                "name": "exec",
+                                "args": "<command>",
+                                "summary": "Run a shell command with sh -c."
+                              },
+                              {
+                                "name": "makegroup",
+                                "args": "<h|v|tab> [ephemeral]",
+                                "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                              },
+                              {
+                                "name": "changegroup",
+                                "args": "<h|v|tab|toggletab|opposite>",
+                                "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                              },
+                              {
+                                "name": "focustab",
+                                "args": "<prev|next|n> [wrap]",
+                                "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                              },
+                              {
+                                "name": "focusparent",
+                                "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                              },
+                              {
+                                "name": "focuschild",
+                                "summary": "Undo one focusparent, down toward the focused window."
+                              },
+                              {
+                                "name": "swap",
+                                "args": "<left|right|up|down>",
+                                "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                              },
+                              {
+                                "name": "moveout",
+                                "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                              },
+                              {
+                                "name": "equalize",
+                                "args": "[all]",
+                                "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                              },
+                              {
+                                "name": "locktab",
+                                "args": "[toggle|on|off]",
+                                "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                              },
+                              {
+                                "name": "submap",
+                                "args": "<name|reset>",
+                                "summary": "Switch binds to the named submap, or back to the default ones."
+                              },
+                              {
+                                "name": "togglefloating",
+                                "summary": "Float the focused window centred at half the output, or tile it again."
+                              },
+                              {
+                                "name": "place",
+                                "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                                "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                              },
+                              {
+                                "name": "focusfloating",
+                                "args": "[toggle|on|off]",
+                                "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                              },
+                              {
+                                "name": "fullscreen",
+                                "args": "[toggle|on|off] [fake]",
+                                "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                              },
+                              {
+                                "name": "setprop",
+                                "args": "<id> <key> <value>",
+                                "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                              },
+                              {
+                                "name": "showdesktop",
+                                "args": "[toggle|on|off] [all]",
+                                "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "pin",
+                                "args": "[toggle|on|off]",
+                                "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                              },
+                              {
+                                "name": "maximize",
+                                "args": "[toggle|on|off]",
+                                "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                              },
+                              {
+                                "name": "resizeactive",
+                                "args": "<dx> <dy>",
+                                "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                              },
+                              {
+                                "name": "movewindow",
+                                "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                              },
+                              {
+                                "name": "resizewindow",
+                                "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                              },
+                              {
+                                "name": "zoom",
+                                "args": "<in|out|reset|set> [factor]",
+                                "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "bottom_right": {
+                    "oneOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string",
+                            "format": "lys-wm-action",
+                            "x-lys-wm-actions": [
+                              {
+                                "name": "focus",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                              },
+                              {
+                                "name": "move",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                              },
+                              {
+                                "name": "workspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                                "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                              },
+                              {
+                                "name": "movetoworkspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                                "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                              },
+                              {
+                                "name": "focusoutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                              },
+                              {
+                                "name": "movetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                              },
+                              {
+                                "name": "moveworkspacetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                              },
+                              {
+                                "name": "swapworkspaces",
+                                "args": "<output> <output>",
+                                "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                              },
+                              {
+                                "name": "scratchpad",
+                                "args": "<toggle <name>|hide>",
+                                "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                              },
+                              {
+                                "name": "movetoscratchpad",
+                                "args": "<name>",
+                                "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                              },
+                              {
+                                "name": "kill",
+                                "summary": "Ask the focused window to close."
+                              },
+                              {
+                                "name": "focuswindow",
+                                "args": "<id>",
+                                "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                              },
+                              {
+                                "name": "minimize",
+                                "args": "[id]",
+                                "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                              },
+                              {
+                                "name": "restore",
+                                "args": "[id]",
+                                "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                              },
+                              {
+                                "name": "overview",
+                                "args": "[toggle|show|hide]",
+                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                              },
+                              {
+                                "name": "closewindow",
+                                "args": "<id>",
+                                "summary": "Ask the window with this IPC ID to close."
+                              },
+                              {
+                                "name": "dpms",
+                                "args": "<on|off|toggle> [output]",
+                                "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                              },
+                              {
+                                "name": "reload",
+                                "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                              },
+                              {
+                                "name": "dismissconfignotice",
+                                "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                              },
+                              {
+                                "name": "exit",
+                                "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                              },
+                              {
+                                "name": "nextlayout",
+                                "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                              },
+                              {
+                                "name": "stickykeys",
+                                "args": "<on|off>",
+                                "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                              },
+                              {
+                                "name": "slowkeys",
+                                "args": "<ms>",
+                                "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                              },
+                              {
+                                "name": "global",
+                                "args": "<app_id>:<id>",
+                                "summary": "Press the global shortcut an application registered, and release it with the bind."
+                              },
+                              {
+                                "name": "exec",
+                                "args": "<command>",
+                                "summary": "Run a shell command with sh -c."
+                              },
+                              {
+                                "name": "makegroup",
+                                "args": "<h|v|tab> [ephemeral]",
+                                "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                              },
+                              {
+                                "name": "changegroup",
+                                "args": "<h|v|tab|toggletab|opposite>",
+                                "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                              },
+                              {
+                                "name": "focustab",
+                                "args": "<prev|next|n> [wrap]",
+                                "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                              },
+                              {
+                                "name": "focusparent",
+                                "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                              },
+                              {
+                                "name": "focuschild",
+                                "summary": "Undo one focusparent, down toward the focused window."
+                              },
+                              {
+                                "name": "swap",
+                                "args": "<left|right|up|down>",
+                                "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                              },
+                              {
+                                "name": "moveout",
+                                "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                              },
+                              {
+                                "name": "equalize",
+                                "args": "[all]",
+                                "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                              },
+                              {
+                                "name": "locktab",
+                                "args": "[toggle|on|off]",
+                                "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                              },
+                              {
+                                "name": "submap",
+                                "args": "<name|reset>",
+                                "summary": "Switch binds to the named submap, or back to the default ones."
+                              },
+                              {
+                                "name": "togglefloating",
+                                "summary": "Float the focused window centred at half the output, or tile it again."
+                              },
+                              {
+                                "name": "place",
+                                "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                                "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                              },
+                              {
+                                "name": "focusfloating",
+                                "args": "[toggle|on|off]",
+                                "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                              },
+                              {
+                                "name": "fullscreen",
+                                "args": "[toggle|on|off] [fake]",
+                                "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                              },
+                              {
+                                "name": "setprop",
+                                "args": "<id> <key> <value>",
+                                "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                              },
+                              {
+                                "name": "showdesktop",
+                                "args": "[toggle|on|off] [all]",
+                                "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "pin",
+                                "args": "[toggle|on|off]",
+                                "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                              },
+                              {
+                                "name": "maximize",
+                                "args": "[toggle|on|off]",
+                                "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                              },
+                              {
+                                "name": "resizeactive",
+                                "args": "<dx> <dy>",
+                                "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                              },
+                              {
+                                "name": "movewindow",
+                                "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                              },
+                              {
+                                "name": "resizewindow",
+                                "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                              },
+                              {
+                                "name": "zoom",
+                                "args": "<in|out|reset|set> [factor]",
+                                "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "top_left": {
+                    "oneOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string",
+                            "format": "lys-wm-action",
+                            "x-lys-wm-actions": [
+                              {
+                                "name": "focus",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                              },
+                              {
+                                "name": "move",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                              },
+                              {
+                                "name": "workspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                                "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                              },
+                              {
+                                "name": "movetoworkspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                                "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                              },
+                              {
+                                "name": "focusoutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                              },
+                              {
+                                "name": "movetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                              },
+                              {
+                                "name": "moveworkspacetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                              },
+                              {
+                                "name": "swapworkspaces",
+                                "args": "<output> <output>",
+                                "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                              },
+                              {
+                                "name": "scratchpad",
+                                "args": "<toggle <name>|hide>",
+                                "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                              },
+                              {
+                                "name": "movetoscratchpad",
+                                "args": "<name>",
+                                "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                              },
+                              {
+                                "name": "kill",
+                                "summary": "Ask the focused window to close."
+                              },
+                              {
+                                "name": "focuswindow",
+                                "args": "<id>",
+                                "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                              },
+                              {
+                                "name": "minimize",
+                                "args": "[id]",
+                                "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                              },
+                              {
+                                "name": "restore",
+                                "args": "[id]",
+                                "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                              },
+                              {
+                                "name": "overview",
+                                "args": "[toggle|show|hide]",
+                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                              },
+                              {
+                                "name": "closewindow",
+                                "args": "<id>",
+                                "summary": "Ask the window with this IPC ID to close."
+                              },
+                              {
+                                "name": "dpms",
+                                "args": "<on|off|toggle> [output]",
+                                "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                              },
+                              {
+                                "name": "reload",
+                                "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                              },
+                              {
+                                "name": "dismissconfignotice",
+                                "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                              },
+                              {
+                                "name": "exit",
+                                "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                              },
+                              {
+                                "name": "nextlayout",
+                                "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                              },
+                              {
+                                "name": "stickykeys",
+                                "args": "<on|off>",
+                                "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                              },
+                              {
+                                "name": "slowkeys",
+                                "args": "<ms>",
+                                "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                              },
+                              {
+                                "name": "global",
+                                "args": "<app_id>:<id>",
+                                "summary": "Press the global shortcut an application registered, and release it with the bind."
+                              },
+                              {
+                                "name": "exec",
+                                "args": "<command>",
+                                "summary": "Run a shell command with sh -c."
+                              },
+                              {
+                                "name": "makegroup",
+                                "args": "<h|v|tab> [ephemeral]",
+                                "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                              },
+                              {
+                                "name": "changegroup",
+                                "args": "<h|v|tab|toggletab|opposite>",
+                                "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                              },
+                              {
+                                "name": "focustab",
+                                "args": "<prev|next|n> [wrap]",
+                                "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                              },
+                              {
+                                "name": "focusparent",
+                                "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                              },
+                              {
+                                "name": "focuschild",
+                                "summary": "Undo one focusparent, down toward the focused window."
+                              },
+                              {
+                                "name": "swap",
+                                "args": "<left|right|up|down>",
+                                "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                              },
+                              {
+                                "name": "moveout",
+                                "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                              },
+                              {
+                                "name": "equalize",
+                                "args": "[all]",
+                                "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                              },
+                              {
+                                "name": "locktab",
+                                "args": "[toggle|on|off]",
+                                "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                              },
+                              {
+                                "name": "submap",
+                                "args": "<name|reset>",
+                                "summary": "Switch binds to the named submap, or back to the default ones."
+                              },
+                              {
+                                "name": "togglefloating",
+                                "summary": "Float the focused window centred at half the output, or tile it again."
+                              },
+                              {
+                                "name": "place",
+                                "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                                "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                              },
+                              {
+                                "name": "focusfloating",
+                                "args": "[toggle|on|off]",
+                                "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                              },
+                              {
+                                "name": "fullscreen",
+                                "args": "[toggle|on|off] [fake]",
+                                "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                              },
+                              {
+                                "name": "setprop",
+                                "args": "<id> <key> <value>",
+                                "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                              },
+                              {
+                                "name": "showdesktop",
+                                "args": "[toggle|on|off] [all]",
+                                "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "pin",
+                                "args": "[toggle|on|off]",
+                                "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                              },
+                              {
+                                "name": "maximize",
+                                "args": "[toggle|on|off]",
+                                "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                              },
+                              {
+                                "name": "resizeactive",
+                                "args": "<dx> <dy>",
+                                "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                              },
+                              {
+                                "name": "movewindow",
+                                "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                              },
+                              {
+                                "name": "resizewindow",
+                                "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                              },
+                              {
+                                "name": "zoom",
+                                "args": "<in|out|reset|set> [factor]",
+                                "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "top_right": {
+                    "oneOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string",
+                            "format": "lys-wm-action",
+                            "x-lys-wm-actions": [
+                              {
+                                "name": "focus",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move focus to the neighbouring window, or to the next output at the edge."
+                              },
+                              {
+                                "name": "move",
+                                "args": "<left|right|up|down>",
+                                "summary": "Move the focused window, hy3 style; at the workspace edge it crosses to the neighbouring output's workspace, entering its tree at the near edge, and focus follows. A floating window steps by `floating.step` pixels inside the usable area, and from its edge crosses to the neighbouring output."
+                              },
+                              {
+                                "name": "workspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                                "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                              },
+                              {
+                                "name": "movetoworkspace",
+                                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                                "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
+                              },
+                              {
+                                "name": "focusoutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Focus the neighbouring output in that direction, or the output with that name, and the window focused there."
+                              },
+                              {
+                                "name": "movetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused window onto the workspace that output shows and focus it there; a floating window keeps its place relative to the output."
+                              },
+                              {
+                                "name": "moveworkspacetooutput",
+                                "args": "<left|right|up|down|name>",
+                                "summary": "Move the focused workspace with its windows, layout and focus to that output and show it there; floating windows keep their place relative to the output, inside its area."
+                              },
+                              {
+                                "name": "swapworkspaces",
+                                "args": "<output> <output>",
+                                "summary": "Swap the workspaces two outputs show, each with its windows; an output is a direction from the focused one or a name."
+                              },
+                              {
+                                "name": "scratchpad",
+                                "args": "<toggle <name>|hide>",
+                                "summary": "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output."
+                              },
+                              {
+                                "name": "movetoscratchpad",
+                                "args": "<name>",
+                                "summary": "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back."
+                              },
+                              {
+                                "name": "kill",
+                                "summary": "Ask the focused window to close."
+                              },
+                              {
+                                "name": "focuswindow",
+                                "args": "<id>",
+                                "summary": "Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back."
+                              },
+                              {
+                                "name": "minimize",
+                                "args": "[id]",
+                                "summary": "Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space."
+                              },
+                              {
+                                "name": "restore",
+                                "args": "[id]",
+                                "summary": "Bring back the window with this IPC ID, or the one minimized last on the focused workspace, and focus it."
+                              },
+                              {
+                                "name": "overview",
+                                "args": "[toggle|show|hide]",
+                                "summary": "Open or close the overview on every output: each output's windows side by side under a strip of its workspaces. Without an argument, toggle."
+                              },
+                              {
+                                "name": "closewindow",
+                                "args": "<id>",
+                                "summary": "Ask the window with this IPC ID to close."
+                              },
+                              {
+                                "name": "dpms",
+                                "args": "<on|off|toggle> [output]",
+                                "summary": "Turn outputs on or off, or one output by name; off outputs keep their windows and wake only on dpms on."
+                              },
+                              {
+                                "name": "reload",
+                                "summary": "Read the config file again; a bad file keeps the running config and reports the error."
+                              },
+                              {
+                                "name": "dismissconfignotice",
+                                "summary": "Hide the notice on screen about config problems; `lys-wmctl configproblems` still lists them, and the next reload shows what it finds."
+                              },
+                              {
+                                "name": "exit",
+                                "summary": "End the session: lys-wm closes its clients, Xwayland and IPC socket and exits, as on SIGTERM."
+                              },
+                              {
+                                "name": "nextlayout",
+                                "summary": "Switch the keyboard to its next layout, wrapping after the last. With one layout it does nothing."
+                              },
+                              {
+                                "name": "stickykeys",
+                                "args": "<on|off>",
+                                "summary": "Turn sticky keys on or off: a modifier pressed and released alone applies to the next key, pressed twice it stays on until pressed again."
+                              },
+                              {
+                                "name": "slowkeys",
+                                "args": "<ms>",
+                                "summary": "Accept a key only once it was held this many milliseconds; 0 turns slow keys off."
+                              },
+                              {
+                                "name": "global",
+                                "args": "<app_id>:<id>",
+                                "summary": "Press the global shortcut an application registered, and release it with the bind."
+                              },
+                              {
+                                "name": "exec",
+                                "args": "<command>",
+                                "summary": "Run a shell command with sh -c."
+                              },
+                              {
+                                "name": "makegroup",
+                                "args": "<h|v|tab> [ephemeral]",
+                                "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                              },
+                              {
+                                "name": "changegroup",
+                                "args": "<h|v|tab|toggletab|opposite>",
+                                "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                              },
+                              {
+                                "name": "focustab",
+                                "args": "<prev|next|n> [wrap]",
+                                "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                              },
+                              {
+                                "name": "focusparent",
+                                "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                              },
+                              {
+                                "name": "focuschild",
+                                "summary": "Undo one focusparent, down toward the focused window."
+                              },
+                              {
+                                "name": "swap",
+                                "args": "<left|right|up|down>",
+                                "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                              },
+                              {
+                                "name": "moveout",
+                                "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                              },
+                              {
+                                "name": "equalize",
+                                "args": "[all]",
+                                "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                              },
+                              {
+                                "name": "locktab",
+                                "args": "[toggle|on|off]",
+                                "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                              },
+                              {
+                                "name": "submap",
+                                "args": "<name|reset>",
+                                "summary": "Switch binds to the named submap, or back to the default ones."
+                              },
+                              {
+                                "name": "togglefloating",
+                                "summary": "Float the focused window centred at half the output, or tile it again."
+                              },
+                              {
+                                "name": "place",
+                                "args": "<left|right|top|bottom|topleft|topright|bottomleft|bottomright|fill|center|restore>",
+                                "summary": "Float the focused window onto that half, quarter or the whole usable area, inside the gaps and its size limits, the same rect a drag to that edge snaps to, or centre it; restore returns it to where it was, floating or tiled, before the last place or drag snap."
+                              },
+                              {
+                                "name": "focusfloating",
+                                "args": "[toggle|on|off]",
+                                "summary": "Move focus between the floating windows of the focused workspace (on) and its tiled ones (off); toggle unless told."
+                              },
+                              {
+                                "name": "fullscreen",
+                                "args": "[toggle|on|off] [fake]",
+                                "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                              },
+                              {
+                                "name": "setprop",
+                                "args": "<id> <key> <value>",
+                                "summary": "Give the window with this IPC ID a rule key until it closes, as a rule matching only it would, after every rule: `setprop 7 border {active: red}`, `setprop 7 opacity 0.8`. The value is YAML, as in the config file."
+                              },
+                              {
+                                "name": "showdesktop",
+                                "args": "[toggle|on|off] [all]",
+                                "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                              },
+                              {
+                                "name": "pin",
+                                "args": "[toggle|on|off]",
+                                "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
+                              },
+                              {
+                                "name": "maximize",
+                                "args": "[toggle|on|off]",
+                                "summary": "Make the focused window fill its output's usable area inside the outer gaps, keeping bars and its border, above its workspace's other windows, or end that; toggle unless told."
+                              },
+                              {
+                                "name": "resizeactive",
+                                "args": "<dx> <dy>",
+                                "summary": "Grow or shrink the focused window by pixels; tiled windows move their right or bottom edge, else their left or top one."
+                              },
+                              {
+                                "name": "movewindow",
+                                "summary": "Mouse binds only: drag the window under the pointer; tiled windows drop into the tree where released. A window drawing its own title bar starts the same drag with xdg_toplevel.move or _NET_WM_MOVERESIZE, with the button or touch point it was pressed with."
+                              },
+                              {
+                                "name": "resizewindow",
+                                "summary": "Mouse binds only: resize the window under the pointer from its nearest corner; tiled windows change their split ratios. A window drawing its own edges starts the same drag from the edge it names with xdg_toplevel.resize or _NET_WM_MOVERESIZE."
+                              },
+                              {
+                                "name": "zoom",
+                                "args": "<in|out|reset|set> [factor]",
+                                "summary": "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16."
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
           },
           "icc": {
             "type": "string"
@@ -2057,19 +4087,26 @@
         "type": "object",
         "properties": {
           "animation": {
-            "type": "object",
-            "properties": {
-              "-": {
-                "type": "boolean"
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
               },
-              "in": {
-                "type": "string"
-              },
-              "out": {
-                "type": "string"
+              {
+                "type": "object",
+                "properties": {
+                  "in": {
+                    "type": "string"
+                  },
+                  "out": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
               }
-            },
-            "additionalProperties": false
+            ]
           },
           "app_id": {
             "type": "string",

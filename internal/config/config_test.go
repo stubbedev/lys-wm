@@ -620,6 +620,86 @@ func TestBadGesturesAreReported(t *testing.T) {
 	}
 }
 
+func TestHotCornersParseWithPerOutputOverrides(t *testing.T) {
+	file, err := Parse("corners.yaml", []byte(`
+hot_corners:
+  top_left: {action: overview toggle}
+  bottom_right: {action: kill, modifiers: SUPER}
+  pressure: 120
+  fullscreen: true
+outputs:
+  - {match: eDP-1, hot_corners: false}
+  - match: DP-1
+    hot_corners:
+      top_left: false
+      top_right: {action: fullscreen}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := file.HotCorners
+	want := compositor.HotCornerSet{
+		compositor.TopLeft:     {Action: wm.OverviewAction{Mode: wm.OverviewToggle}},
+		compositor.BottomRight: {Action: wm.KillAction{}, Modifiers: binds.ModSuper},
+	}
+	if h.Corners != want || h.Pressure != 120 || !h.Fullscreen {
+		t.Fatalf("hot corners %+v", h)
+	}
+	if got := file.Outputs.Named[0].HotCorners; got == nil || *got != (compositor.HotCornerSet{}) {
+		t.Errorf("eDP-1 corners %+v, want all off", got)
+	}
+	dp := want
+	dp[compositor.TopLeft], dp[compositor.TopRight] = compositor.HotCorner{}, compositor.HotCorner{Action: wm.FullscreenAction{}}
+	if got := file.Outputs.Named[1].HotCorners; got == nil || *got != dp {
+		t.Errorf("DP-1 corners %+v, want %+v", got, dp)
+	}
+	if file.Outputs.Fallback.HotCorners != nil {
+		t.Errorf("an output without hot_corners overrides them: %+v", file.Outputs.Fallback.HotCorners)
+	}
+	cfg, err := file.Compositor(testenv.Keymap(t), testenv.Font(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	super, err := binds.ModSuper.Mask(testenv.Keymap(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.HotCorners.Corners[compositor.BottomRight].Mods; got != super || got == 0 {
+		t.Errorf("the bottom right corner's modifier mask %#x, want %#x", got, super)
+	}
+	if got := cfg.Outputs.Named[1].HotCorners[compositor.BottomRight].Mods; got != super {
+		t.Errorf("DP-1's inherited corner's modifier mask %#x, want %#x", got, super)
+	}
+}
+
+func TestHotCornersAreOffByDefault(t *testing.T) {
+	file, err := Parse("empty.yaml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.HotCorners != compositor.DefaultHotCorners() || file.HotCorners.Corners != (compositor.HotCornerSet{}) {
+		t.Fatalf("hot corners %+v", file.HotCorners)
+	}
+}
+
+func TestBadHotCornersAreReported(t *testing.T) {
+	for _, tc := range []struct{ text, want string }{
+		{"hot_corners:\n  top_left: {modifiers: SUPER}\n", "hot_corners.top_left.action"},
+		{"hot_corners:\n  top_left: {action: nope}\n", "hot_corners.top_left.action"},
+		{"hot_corners:\n  top_right: {action: movewindow}\n", "hot_corners.top_right.action"},
+		{"hot_corners:\n  bottom_left: {action: kill, modifiers: HYPER}\n", "hot_corners.bottom_left.modifiers"},
+		{"hot_corners:\n  top_left: true\n", "a hot corner takes false"},
+		{"hot_corners:\n  pressure: 0\n", "hot_corners.pressure"},
+		{"outputs:\n  - {match: eDP-1, hot_corners: true}\n", "hot_corners takes false"},
+		{"outputs:\n  - {match: eDP-1, hot_corners: {bottom_right: {action: nope}}}\n", "outputs[0].hot_corners.bottom_right.action"},
+	} {
+		_, err := Parse("bad.yaml", []byte(tc.text))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want one naming %s", tc.text, err, tc.want)
+		}
+	}
+}
+
 func TestTheOverviewKeysParseAndCheck(t *testing.T) {
 	cfg, err := Parse("t.yaml", []byte("overview:\n  blur: false\n  dim: 0.5\n"))
 	if err != nil {

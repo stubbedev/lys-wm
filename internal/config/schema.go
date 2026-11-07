@@ -204,6 +204,8 @@ func annotations() map[string]annotation {
 		"autotile.min_trigger":             atLeastAnn(0, s.Autotile.MinTrigger),
 		"autotile.divisor":                 atLeastAnn(1, s.Autotile.Divisor),
 		"gestures.distance":                {exclusiveMinimum: new(0.0), def: compositor.DefaultGestures().Distance},
+		"hot_corners.pressure":             {exclusiveMinimum: new(0.0), def: compositor.DefaultHotCornerPressure},
+		"hot_corners.fullscreen":           {def: false},
 		"xwayland.enabled":                 {def: true},
 		"xwayland.zero_scaling":            {def: true},
 		"color_management":                 {def: false},
@@ -241,6 +243,10 @@ func annotations() map[string]annotation {
 		"gestures.swipe[].action":          actionAnn,
 		"gestures.pinch[].action":          actionAnn,
 		"gestures.hold[].action":           actionAnn,
+	}
+	for k := range compositor.CornerCount {
+		out["hot_corners."+k.String()+".action"] = actionAnn
+		out["outputs[].hot_corners."+k.String()+".action"] = actionAnn
 	}
 	for _, state := range []string{"active", "inactive", "urgent"} {
 		out["tabs."+state+".background"] = colorAnn(nil)
@@ -284,6 +290,8 @@ func schemaFor(t reflect.Type, path string, notes map[string]annotation) *schema
 	case t == borderType:
 		object := objectSchema(t, path, notes)
 		n.OneOf = []*schemaNode{{Type: "string", Format: colorFormat}, object}
+	case reflect.PointerTo(t).Implements(switchableType):
+		n.OneOf = []*schemaNode{{Type: "boolean", Enum: []any{false}}, objectSchema(t, path, notes)}
 	case t.Kind() == reflect.Struct:
 		n = objectSchema(t, path, notes)
 	case t.Kind() == reflect.Map:

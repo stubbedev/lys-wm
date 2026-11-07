@@ -90,6 +90,7 @@ type Config struct {
 	LayerRules      []wm.LayerRule
 	WorkspaceRules  []WorkspaceRule
 	Gestures        Gestures
+	HotCorners      HotCorners
 	Overview        OverviewStyle
 	Slower          map[render.Speed]Effects
 	Clock           func() time.Duration
@@ -155,6 +156,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		HDRHold:        DefaultHDRHold,
 		Clock:          backend.Now,
 		Gestures:       DefaultGestures(),
+		HotCorners:     DefaultHotCorners(),
 		Overview:       DefaultOverviewStyle(),
 	}
 }
@@ -375,6 +377,8 @@ type Compositor struct {
 	drawnSwitch        *workspaceSwitch
 	gooFrom, gooTo     []*window
 	gestures           Gestures
+	hotCorners         HotCorners
+	hot                hotCornerState
 	gesture            gestureInput
 	shownWorkspace     map[string]wm.WorkspaceID
 	shaders            map[string]*screenShader
@@ -404,6 +408,9 @@ func validate(cfg Config) (binds.Map, error) {
 	}
 	if !(cfg.Gestures.Distance > 0) {
 		return binds.Map{}, fmt.Errorf("compositor: gesture distance %v is not positive", cfg.Gestures.Distance)
+	}
+	if !(cfg.HotCorners.Pressure > 0) {
+		return binds.Map{}, fmt.Errorf("compositor: hot corner pressure %v is not positive", cfg.HotCorners.Pressure)
 	}
 	if cfg.HoldBound <= 0 {
 		return binds.Map{}, fmt.Errorf("compositor: layout hold bound %v is not positive", cfg.HoldBound)
@@ -448,6 +455,8 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.animations, c.clock, c.layerRules, c.workspaceRules = cfg.Animations, cfg.Clock, cfg.LayerRules, cfg.WorkspaceRules
 	c.syncWorkspaceRules()
 	c.gestures = cfg.Gestures
+	c.hotCorners = cfg.HotCorners
+	c.hot.forget()
 	c.hidden.every = cfg.HiddenFrame
 	c.powerSaverRate = cfg.PowerSaverRate
 	c.hdrHold = cfg.HDRHold

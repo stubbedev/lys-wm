@@ -176,7 +176,13 @@ func (c *Compositor) Input(d backend.Device, e backend.Event) error {
 		if err := c.seat.RelativeMotion(e.Time, e.DX, e.DY, e.UnaccelDX, e.UnaccelDY); err != nil {
 			return err
 		}
-		return c.moveCursor(e.Time, c.clampToOutputs(point{X: c.cursor.X + e.DX, Y: c.cursor.Y + e.DY}))
+		from := c.cursor
+		want := point{X: from.X + e.DX, Y: from.Y + e.DY}
+		if err := c.moveCursor(e.Time, c.clampToOutputs(want)); err != nil {
+			return err
+		}
+		c.pushHotCorner(from, want, e)
+		return nil
 	case backend.PointerMotionAbsolute:
 		return c.inputAbsolute(e)
 	case *backend.PointerMotionAbsolute:

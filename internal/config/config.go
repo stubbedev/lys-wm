@@ -60,11 +60,13 @@ func (*At[T]) located() {}
 
 var locatedType = reflect.TypeFor[interface{ located() }]()
 
+var switchableType = reflect.TypeFor[interface{ switchable() }]()
+
 func fieldNames(t reflect.Type) map[string]reflect.Type {
 	fields := make(map[string]reflect.Type, t.NumField())
 	for f := range t.Fields() {
 		name, opts, _ := strings.Cut(f.Tag.Get("yaml"), ",")
-		if name != "" {
+		if name != "" && name != "-" {
 			fields[name] = f.Type
 		}
 		if opts == "inline" {
@@ -145,6 +147,7 @@ type rawConfig struct {
 	Tearing         bool                         `yaml:"tearing"`
 	LidSuspend      *bool                        `yaml:"lid_suspend"`
 	Gestures        rawGestures                  `yaml:"gestures"`
+	HotCorners      rawHotCorners                `yaml:"hot_corners"`
 	Focus           rawFocus                     `yaml:"focus"`
 	Fullscreen      rawFullscreen                `yaml:"fullscreen"`
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
@@ -212,18 +215,19 @@ type rawXwayland struct {
 }
 
 type rawOutput struct {
-	Match         *At[string]  `yaml:"match"`
-	Mode          *At[string]  `yaml:"mode"`
-	Position      *At[string]  `yaml:"position"`
-	Scale         *At[float64] `yaml:"scale"`
-	BitDepth      *At[int]     `yaml:"bitdepth"`
-	VRR           *At[string]  `yaml:"vrr"`
-	Disabled      bool         `yaml:"disabled"`
-	HDR           *At[string]  `yaml:"hdr"`
-	SDRBrightness *At[float64] `yaml:"sdr_brightness"`
-	HDRPeak       *At[float64] `yaml:"hdr_peak"`
-	Shader        *At[string]  `yaml:"shader"`
-	ICC           *At[string]  `yaml:"icc"`
+	Match         *At[string]           `yaml:"match"`
+	Mode          *At[string]           `yaml:"mode"`
+	Position      *At[string]           `yaml:"position"`
+	Scale         *At[float64]          `yaml:"scale"`
+	BitDepth      *At[int]              `yaml:"bitdepth"`
+	VRR           *At[string]           `yaml:"vrr"`
+	Disabled      bool                  `yaml:"disabled"`
+	HDR           *At[string]           `yaml:"hdr"`
+	SDRBrightness *At[float64]          `yaml:"sdr_brightness"`
+	HDRPeak       *At[float64]          `yaml:"hdr_peak"`
+	Shader        *At[string]           `yaml:"shader"`
+	ICC           *At[string]           `yaml:"icc"`
+	HotCorners    *At[rawOutputCorners] `yaml:"hot_corners"`
 }
 
 type rawInput struct {
@@ -311,20 +315,79 @@ type rawRuleAnim struct {
 }
 
 func (a *rawRuleAnim) UnmarshalYAML(n *yaml.Node) error {
-	if n.Kind == yaml.ScalarNode {
-		var on bool
-		if err := n.Decode(&on); err != nil {
-			return err
-		}
-		if on {
-			return fmt.Errorf("line %d: animation takes false or {in, out}, not true", n.Line)
-		}
-		a.Off = true
-		return nil
+	if off, err := decodeOff(n, "animation takes false or {in, out}"); off || err != nil {
+		a.Off = off
+		return err
 	}
 	type plain rawRuleAnim
 	return n.Decode((*plain)(a))
 }
+
+func (*rawRuleAnim) switchable() {}
+
+func decodeOff(n *yaml.Node, takes string) (bool, error) {
+	if n.Kind != yaml.ScalarNode {
+		return false, nil
+	}
+	var on bool
+	if err := n.Decode(&on); err != nil {
+		return false, err
+	}
+	if on {
+		return false, fmt.Errorf("line %d: %s, not true", n.Line, takes)
+	}
+	return true, nil
+}
+
+type rawHotCorners struct {
+	rawCornerSet `yaml:",inline"`
+	Pressure     *At[float64] `yaml:"pressure"`
+	Fullscreen   *bool        `yaml:"fullscreen"`
+}
+
+type rawCornerSet struct {
+	TopLeft     *At[rawHotCorner] `yaml:"top_left"`
+	TopRight    *At[rawHotCorner] `yaml:"top_right"`
+	BottomLeft  *At[rawHotCorner] `yaml:"bottom_left"`
+	BottomRight *At[rawHotCorner] `yaml:"bottom_right"`
+}
+
+func (r rawCornerSet) corners() [compositor.CornerCount]*At[rawHotCorner] {
+	return [compositor.CornerCount]*At[rawHotCorner]{compositor.TopLeft: r.TopLeft, compositor.TopRight: r.TopRight, compositor.BottomLeft: r.BottomLeft, compositor.BottomRight: r.BottomRight}
+}
+
+type rawHotCorner struct {
+	Off       bool        `yaml:"-"`
+	Action    *At[string] `yaml:"action"`
+	Modifiers *At[string] `yaml:"modifiers"`
+}
+
+func (c *rawHotCorner) UnmarshalYAML(n *yaml.Node) error {
+	if off, err := decodeOff(n, "a hot corner takes false or {action, modifiers}"); off || err != nil {
+		c.Off = off
+		return err
+	}
+	type plain rawHotCorner
+	return n.Decode((*plain)(c))
+}
+
+func (*rawHotCorner) switchable() {}
+
+type rawOutputCorners struct {
+	Off          bool `yaml:"-"`
+	rawCornerSet `yaml:",inline"`
+}
+
+func (c *rawOutputCorners) UnmarshalYAML(n *yaml.Node) error {
+	if off, err := decodeOff(n, "an output's hot_corners takes false or a mapping of corners"); off || err != nil {
+		c.Off = off
+		return err
+	}
+	type plain rawOutputCorners
+	return n.Decode((*plain)(c))
+}
+
+func (*rawOutputCorners) switchable() {}
 
 type rawAnimations struct {
 	Enabled       *bool                   `yaml:"enabled"`
@@ -599,6 +662,7 @@ type Config struct {
 	LayerRules      []wm.LayerRule
 	WorkspaceRules  []compositor.WorkspaceRule
 	Gestures        compositor.Gestures
+	HotCorners      compositor.HotCorners
 	Overview        compositor.OverviewStyle
 	Slower          map[render.Speed]compositor.Effects
 }
@@ -1098,7 +1162,7 @@ const (
 	maxLuminance   = 10000
 )
 
-func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
+func (p *parser) output(i int, at At[rawOutput], corners compositor.HotCornerSet) compositor.OutputRule {
 	r := at.V
 	key := fmt.Sprintf("outputs[%d]", i)
 	rule := compositor.OutputRule{Disabled: r.Disabled}
@@ -1158,6 +1222,7 @@ func (p *parser) output(i int, at At[rawOutput]) compositor.OutputRule {
 	if r.ICC != nil {
 		rule.ICC, rule.ICCPath = p.profile(*r.ICC, key+".icc")
 	}
+	rule.HotCorners = p.outputCorners(r.HotCorners, key+".hot_corners", corners)
 	return rule
 }
 
@@ -1416,13 +1481,7 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, a
 	default:
 		b.Fingers = uint32(r.Fingers.V) //nolint:gosec // at least minFingers, and finger counts are small
 	}
-	if r.Modifiers != nil {
-		set, err := binds.ParseModifiers(r.Modifiers.V)
-		if err != nil {
-			p.fail(r.Modifiers.Line, key+".modifiers", "%v", err)
-		}
-		b.Modifiers = set
-	}
+	b.Modifiers = p.modifiers(r.Modifiers, key+".modifiers")
 	switch {
 	case directions == nil && r.Direction != nil:
 		p.fail(r.Direction.Line, key+".direction", "a %s has no direction", name)
@@ -1452,14 +1511,7 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, a
 			p.fail(r.Drive.Line, key+".drive", "overview takes the direction up, down or vertical")
 		}
 	default:
-		a, err := wm.ParseAction(r.Action.V)
-		if err != nil {
-			p.fail(r.Action.Line, key+".action", "%v", err)
-		}
-		if _, drag := a.(wm.DragAction); drag {
-			p.fail(r.Action.Line, key+".action", "%s is for mouse binds only", a)
-		}
-		b.Action = a
+		b.Action = p.nonDragAction(*r.Action, key+".action")
 	}
 	return b, len(p.errs) == failures
 }
@@ -1712,9 +1764,10 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	cfg.Gestures = p.gestures(raw.Gestures, raw.Input, cfg.Animations.Style(anim.Workspaces))
 	cfg.Overview = p.overview(raw.Overview, look.Overview)
+	cfg.HotCorners = p.hotCorners(raw.HotCorners)
 	fallback := false
 	for i, o := range raw.Outputs {
-		rule := p.output(i, o)
+		rule := p.output(i, o, cfg.HotCorners.Corners)
 		if o.V.Match == nil || o.V.Match.V != outputFallback {
 			cfg.Outputs.Named = append(cfg.Outputs.Named, rule)
 			continue
@@ -1807,6 +1860,13 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err
+	}
+	cfg.HotCorners = c.HotCorners
+	if cfg.HotCorners.Corners, err = c.HotCorners.Corners.Resolve(keymap); err != nil {
+		return compositor.Config{}, fmt.Errorf("config: %w", err)
+	}
+	if cfg.Outputs, err = c.Outputs.ResolveHotCorners(keymap); err != nil {
+		return compositor.Config{}, fmt.Errorf("config: %w", err)
 	}
 	cfg.Animations, cfg.Overview = c.Animations, c.Overview
 	cfg.Icons = icontheme.New(c.IconTheme, nil)
@@ -2080,4 +2140,75 @@ func (p *parser) workspaceRules(raw []At[rawWorkspaceRule], globalGaps wm.Gaps) 
 		out = append(out, rule)
 	}
 	return out
+}
+
+func (p *parser) modifiers(a *At[string], key string) binds.ModifierSet {
+	if a == nil {
+		return 0
+	}
+	set, err := binds.ParseModifiers(a.V)
+	if err != nil {
+		p.fail(a.Line, key, "%v", err)
+	}
+	return set
+}
+
+func (p *parser) nonDragAction(a At[string], key string) wm.Action {
+	action, err := wm.ParseAction(a.V)
+	if err != nil {
+		p.fail(a.Line, key, "%v", err)
+		return nil
+	}
+	if _, drag := action.(wm.DragAction); drag {
+		p.fail(a.Line, key, "%s is for mouse binds only", action)
+		return nil
+	}
+	return action
+}
+
+func (p *parser) hotCorners(r rawHotCorners) compositor.HotCorners {
+	h := compositor.DefaultHotCorners()
+	h.Corners = p.cornerSet(r.rawCornerSet, "hot_corners", h.Corners)
+	if v := p.between(r.Pressure, "hot_corners.pressure", 0, math.MaxFloat64, true); v != nil {
+		h.Pressure = *v
+	}
+	if r.Fullscreen != nil {
+		h.Fullscreen = *r.Fullscreen
+	}
+	return h
+}
+
+func (p *parser) cornerSet(r rawCornerSet, key string, set compositor.HotCornerSet) compositor.HotCornerSet {
+	raws := r.corners()
+	for k := range compositor.CornerCount {
+		if raws[k] != nil {
+			set[k] = p.hotCorner(*raws[k], key+"."+k.String())
+		}
+	}
+	return set
+}
+
+func (p *parser) hotCorner(a At[rawHotCorner], key string) compositor.HotCorner {
+	r := a.V
+	if r.Off {
+		return compositor.HotCorner{}
+	}
+	h := compositor.HotCorner{Modifiers: p.modifiers(r.Modifiers, key+".modifiers")}
+	if r.Action == nil {
+		p.fail(a.Line, key+".action", "is missing; give the corner an action, or false to leave it off")
+		return h
+	}
+	h.Action = p.nonDragAction(*r.Action, key+".action")
+	return h
+}
+
+func (p *parser) outputCorners(a *At[rawOutputCorners], key string, global compositor.HotCornerSet) *compositor.HotCornerSet {
+	if a == nil {
+		return nil
+	}
+	var set compositor.HotCornerSet
+	if !a.V.Off {
+		set = p.cornerSet(a.V.rawCornerSet, key, global)
+	}
+	return &set
 }

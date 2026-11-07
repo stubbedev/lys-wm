@@ -29,6 +29,7 @@ type OutputRule struct {
 	HDRPeak       float64
 	ICC           *colorspace.Description
 	ICCPath       string
+	HotCorners    *HotCornerSet
 }
 
 const refreshToleranceMHz = 1000
@@ -216,6 +217,7 @@ func (c *Compositor) commitOutput(b backend.Output, rule OutputRule) (changed, r
 }
 
 func (c *Compositor) relayout() error {
+	c.hot.forget()
 	right := 0
 	for _, o := range c.outputs {
 		if at := c.outputRule(o.Backend()).Position; at != nil {

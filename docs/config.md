@@ -193,6 +193,7 @@ mode and scale 1. Only one rule can use `"*"`.
 | `icc` | A matrix-shaper ICC profile for an SDR output, a path absolute, under `~/` or beside the config file. Where the CRTC has `DEGAMMA_LUT`, `CTM` and `GAMMA_LUT` the correction runs there (sRGB decode, sRGB to the profile's primaries, the profile's inverse curve, with gamma-control ramps applied after it and a colour matrix before), so frames and direct scanout cost what they cost without one; otherwise every draw is converted to the profile. Colour-managed clients are told the profile's primaries and curve. A profile lys-wm cannot read is a warning naming the file, and the output stays sRGB |
 | `disabled` | `true` turns the output off |
 | `shader` | A fragment shader for the output's final image: see [Screen shaders](./shaders). A shader that does not compile leaves the output unshaded and says why. Reloading the config reads the file again |
+| `hot_corners` | `false` turns every [hot corner](#hot_corners) off on this output, say a touch panel. A mapping of corners, written as under `hot_corners`, replaces those corners on this output, `false` for one turns it off, and the rest stay as `hot_corners` has them |
 
 A mode the output does not have is reported, and the output keeps its current
 mode.
@@ -747,6 +748,37 @@ gesture, and the level follows the fingers without animating, from 1 to 16.
 The fingers move the content unless `natural_scroll` is `false`, read from
 `input.devices` for that device and then `input.touchpad`. Left unset it counts as
 on for gestures, whatever libinput's default for scrolling is.
+
+## hot_corners
+
+Pushing the pointer into a screen corner runs an action. None is set by
+default.
+
+```yaml
+hot_corners:
+  top_left: {action: overview toggle}
+  bottom_right: {action: global dev.stubbe.lys.shell:dashboard, modifiers: SUPER}
+  pressure: 80
+  fullscreen: false
+```
+
+| Key | Value |
+| --- | --- |
+| `top_left`, `top_right`, `bottom_left`, `bottom_right` | `{action, modifiers}`: any [action](./actions.md) but `movewindow` and `resizewindow`, and optionally the modifiers that must be held for it, as in `SUPER + SHIFT`; without them it fires whatever is held. `false` leaves the corner off |
+| `pressure` | How far, in unaccelerated pointer units, the pointer must keep pushing against the corner before it fires. Above 0. Default `80` |
+| `fullscreen` | `true` lets the corners fire while a fullscreen window has focus. Default `false` |
+
+A corner is the one pixel where the pointer stops against two edges. Pressure
+is the motion the edges hold back while the pointer sits there: it counts only
+from a motion that starts in the corner, so a fast flick into the corner or past
+it does nothing, and slow drifts barely add up. Once it fires, the corner waits
+for the pointer to leave before it can fire again. There is no timer.
+
+Only a corner whose two edges border no other output counts, so the corners
+between side-by-side outputs never fire. The corners stay off while a client
+confines or locks the pointer, while the session is locked, and while a
+fullscreen window has focus unless `fullscreen` is `true`. They do fire during a
+window drag and a drag-and-drop. `outputs[].hot_corners` changes them per output.
 
 ## overview
 

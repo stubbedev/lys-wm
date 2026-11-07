@@ -82,23 +82,6 @@ func (c *Compositor) tiledDropTarget(it *interaction, at image.Point) (image.Rec
 	return target, nil
 }
 
-func (c *Compositor) sharedEdges(o *output.Output) wm.SharedEdges {
-	r := o.Logical()
-	var shared wm.SharedEdges
-	for _, other := range c.outputs {
-		n := other.Logical()
-		if other == o {
-			continue
-		}
-		overlapsY, overlapsX := n.Min.Y < r.Max.Y && r.Min.Y < n.Max.Y, n.Min.X < r.Max.X && r.Min.X < n.Max.X
-		shared.Left = shared.Left || (n.Max.X == r.Min.X && overlapsY)
-		shared.Right = shared.Right || (n.Min.X == r.Max.X && overlapsY)
-		shared.Top = shared.Top || (n.Max.Y == r.Min.Y && overlapsX)
-		shared.Bottom = shared.Bottom || (n.Min.Y == r.Max.Y && overlapsX)
-	}
-	return shared
-}
-
 func (c *Compositor) trackDrop(it *interaction, now time.Duration) error {
 	target, ok, err := c.dropTarget(it)
 	if err != nil {
