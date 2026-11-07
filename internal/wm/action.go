@@ -85,6 +85,8 @@ type Settings struct {
 	Scratchpads  map[ScratchpadName]ScratchpadSpec
 	Peek         int
 	FloatStep    int
+	Scroll       Scrolling
+	Layout       LayoutKind
 }
 
 type WorkspaceTarget interface {
@@ -584,7 +586,8 @@ func ValidWorkspaceName(s string) bool {
 }
 
 func ParseLayout(s string) (Layout, bool) {
-	return parseEnum[Layout](layoutNames, s)
+	l, ok := parseEnum[Layout](layoutNames, s)
+	return l, ok && l != Scrolled
 }
 
 func exactly(spec ActionSpec, args []string, n int) error {
@@ -866,6 +869,36 @@ var Actions = []ActionSpec{
 			}
 			return MakeGroupAction{Layout: l, Ephemeral: len(args) == 2}, nil
 		},
+	},
+	{
+		Name: "setlayout", Args: "<tree|scroll>",
+		Summary: "Turn the focused workspace into a tree of splits and tab groups, or into a scrollable strip of columns: each top-level child becomes a column, keeping its share of the width, and nested groups flatten into the column's stack; back, the columns become a horizontal split. Every window and the focus stay.",
+		parse:   parseSetLayout,
+	},
+	{
+		Name: "columnwidth", Args: "<preset next|preset prev|+n%|-n%|n%>",
+		Summary: "On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent.",
+		parse:   parseColumnWidth,
+	},
+	{
+		Name: "consume", Args: "<left|right>",
+		Summary: "On a scrolling workspace, move the focused window into the bottom of the column on that side.",
+		parse:   parseConsume,
+	},
+	{
+		Name:    "expel",
+		Summary: "On a scrolling workspace, take the focused window out of its column into a column of its own to the right.",
+		parse:   bare(ExpelAction{}),
+	},
+	{
+		Name:    "center",
+		Summary: "On a scrolling workspace, scroll the view so the focused column is in the middle of the output.",
+		parse:   bare(CenterAction{}),
+	},
+	{
+		Name: "columndisplay", Args: "<stack|tab>",
+		Summary: "On a scrolling workspace, show the windows of the focused column stacked over each other or as tabs.",
+		parse:   parseColumnDisplay,
 	},
 	{
 		Name: "changegroup", Args: "<h|v|tab|toggletab|opposite>",

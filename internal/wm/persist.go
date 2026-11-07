@@ -23,6 +23,7 @@ type savedGroup struct {
 	Ephemeral uint8       `json:"ephemeral"`
 	Locked    bool        `json:"locked,omitempty"`
 	Untabbed  Layout      `json:"untabbed,omitempty"`
+	View      int         `json:"view,omitempty"`
 }
 
 type savedWorkspace struct {
@@ -30,6 +31,7 @@ type savedWorkspace struct {
 	Output     string      `json:"output"`
 	Tree       *savedGroup `json:"tree,omitempty"`
 	Lift       int         `json:"lift,omitempty"`
+	Scroll     bool        `json:"scroll,omitempty"`
 	Floating   []Floating  `json:"floating,omitempty"`
 	Minimized  []Minimized `json:"minimized,omitempty"`
 	Fullscreen WindowID    `json:"fullscreen,omitempty"`
@@ -70,7 +72,7 @@ func saveGroup(g *Group) *savedGroup {
 	if g == nil {
 		return nil
 	}
-	out := &savedGroup{ID: g.id, Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, Children: make([]savedNode, len(g.Children))}
+	out := &savedGroup{ID: g.id, Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, View: g.view, Children: make([]savedNode, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch n := ch.Node.(type) {
@@ -83,8 +85,8 @@ func saveGroup(g *Group) *savedGroup {
 	return out
 }
 
-func loadTree(g *savedGroup, lift int) (Tree, error) {
-	t := Tree{lift: lift}
+func loadTree(g *savedGroup, lift int, scroll bool) (Tree, error) {
+	t := Tree{lift: lift, scroll: scroll}
 	root, err := t.loadGroup(g)
 	if err != nil {
 		return Tree{}, err
@@ -114,7 +116,7 @@ func (t *Tree) loadGroup(g *savedGroup) (*Group, error) {
 		return nil, nil
 	}
 	t.minted = max(t.minted, g.ID)
-	out := &Group{id: g.ID, Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, Children: make([]Child, len(g.Children))}
+	out := &Group{id: g.ID, Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, view: g.View, Children: make([]Child, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch {
@@ -220,7 +222,7 @@ func savedCover(w savedWorkspace) Cover {
 
 func saveWorkspace(w Workspace) savedWorkspace {
 	sw := savedWorkspace{
-		ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Lift: w.Tree.lift, Floating: w.Floating, Minimized: w.Minimized,
+		ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Lift: w.Tree.lift, Scroll: w.Tree.scroll, Floating: w.Floating, Minimized: w.Minimized,
 		FloatFocus: w.floatFocus, Home: w.home, History: w.history,
 	}
 	if w.Scratch.Name != "" {
@@ -239,7 +241,7 @@ func saveWorkspace(w Workspace) savedWorkspace {
 func loadWorkspaces(saved []savedWorkspace) ([]Workspace, error) {
 	out := make([]Workspace, 0, len(saved))
 	for _, w := range saved {
-		tree, err := loadTree(w.Tree, w.Lift)
+		tree, err := loadTree(w.Tree, w.Lift, w.Scroll)
 		if err != nil {
 			return nil, err
 		}

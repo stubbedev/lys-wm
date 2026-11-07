@@ -37,6 +37,7 @@ type WorkspaceRule struct {
 	Default        bool
 	Persistent     bool
 	OnCreatedEmpty string
+	Layout         LayoutKind
 	Look           WorkspaceLook
 }
 

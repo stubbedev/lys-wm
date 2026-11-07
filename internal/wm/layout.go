@@ -17,6 +17,7 @@ type Placement struct {
 	Scratch   bool
 	Pinned    bool
 	Look      WorkspaceLook
+	Clip      image.Rectangle
 }
 
 func (p Placement) Told() PlacementLayer {
@@ -29,6 +30,7 @@ type TabBar struct {
 	Active    int
 	Workspace WorkspaceID
 	Shown     bool
+	Clip      image.Rectangle
 }
 
 type GroupRing struct {
@@ -103,6 +105,9 @@ func firstWindow(n Node) WindowID {
 
 func appendChildRects(out []image.Rectangle, g *Group, r image.Rectangle, sp Spacing) []image.Rectangle {
 	n, inner := len(g.Children), sp.Gaps.Inner
+	if g.Layout == Scrolled {
+		return appendColumns(out, g, r, inner)
+	}
 	if g.Layout == Tabbed {
 		content := image.Rect(r.Min.X, r.Min.Y+min(sp.TabBar, r.Dy()), r.Max.X, r.Max.Y)
 		for range n {
@@ -134,6 +139,9 @@ func childRects(g *Group, r image.Rectangle, sp Spacing) []image.Rectangle {
 }
 
 func gaplessChildRect(g *Group, r image.Rectangle, target int) image.Rectangle {
+	if g.Layout == Scrolled {
+		return appendColumns(nil, g, r, 0)[target]
+	}
 	if g.Layout == Tabbed {
 		return r
 	}
@@ -206,7 +214,7 @@ func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
 		base := len(x.rects)
 		x.rects = appendChildRects(x.rects, n, r, sp)
 		for i, c := range n.Children {
-			x.place(c.Node, x.rects[base+i], visible && (n.Layout != Tabbed || i == n.Focus), sp)
+			x.place(c.Node, x.rects[base+i], visible && (n.Layout != Tabbed || i == n.Focus) && (n.Layout != Scrolled || x.rects[base+i].Overlaps(r)), sp)
 		}
 		x.rects = x.rects[:base]
 	}
@@ -228,4 +236,20 @@ func (a *Arrangement) inWorkspace(from int, id WorkspaceID) {
 	for i := from; i < len(a.Windows); i++ {
 		a.Windows[i].Workspace = id
 	}
+}
+
+const DefaultColumnWidth = 0.5
+
+func columnWidth(c Child, span int) int {
+	return max(int(math.Round(c.Ratio*float64(span))), minTile)
+}
+
+func appendColumns(out []image.Rectangle, g *Group, r image.Rectangle, inner int) []image.Rectangle {
+	x := r.Min.X - g.view
+	for _, c := range g.Children {
+		w := columnWidth(c, r.Dx()+inner) - inner
+		out = append(out, image.Rect(x, r.Min.Y, x+max(w, 1), r.Max.Y))
+		x += w + inner
+	}
+	return out
 }

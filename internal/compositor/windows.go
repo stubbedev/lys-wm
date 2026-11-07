@@ -20,6 +20,7 @@ type window struct {
 	id            wm.WindowID
 	top           toplevel
 	goal          image.Rectangle
+	clip          image.Rectangle
 	stalled       bool
 	stalls        int
 	member        *member
@@ -160,8 +161,9 @@ func (c *Compositor) outputAtRect(r image.Rectangle) *output.Output {
 
 func (c *Compositor) wanted(rect image.Rectangle, p wm.Placement, activated bool) want {
 	w := want{rect: rect, layer: p.Layer, told: p.Told(), activated: activated}
-	if o := c.outputAtRect(rect); o != nil {
-		w.placed, w.scale, w.bounds = true, c.scaleOver(rect), c.usable[o].Size()
+	on := clipped(rect, p)
+	if o := c.outputAtRect(on); o != nil {
+		w.placed, w.scale, w.bounds = true, c.scaleOver(on), c.usable[o].Size()
 	}
 	return w
 }
@@ -188,7 +190,7 @@ func (c *Compositor) update(s wm.State, err error) error {
 	if err != nil {
 		return err
 	}
-	c.wm = s
+	c.wm = s.FollowFocus(c.spacing(), c.settings.Scroll.Center)
 	c.stateUpdates++
 	c.stateChanged()
 	return c.reconcile()
@@ -309,8 +311,8 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned, w.wsLook = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned, p.Look
-		if o := c.outputAtRect(p.Rect); o != nil {
+		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned, w.wsLook, w.clip = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned, p.Look, p.Clip
+		if o := c.outputAtRect(clipped(p.Rect, p)); o != nil {
 			w.output = o
 		}
 		if moved && w.visible {
@@ -336,7 +338,7 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 		w.motion.Jump(p.Rect)
 	case c.interaction != nil && c.interaction.w == w && c.springMoves():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
-	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w):
+	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w) || c.gesture.view.tracking:
 		w.motion.Jump(p.Rect)
 	case p.Rect != w.motion.Target():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))

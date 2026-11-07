@@ -1428,3 +1428,29 @@ func TestBindFlagsDescriptionsAndModifierTaps(t *testing.T) {
 		}
 	}
 }
+
+func TestLayoutScrollAndWorkspaceLayoutsParse(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("layout: scroll\nscroll:\n  presets: [0.5, 0.25, 0.5]\n  center: on-overflow\nworkspaces:\n  - id: 3\n    layout: tree\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WM.Layout != wm.ScrollLayout || c.WM.Scroll.Center != wm.CenterOnOverflow || !slices.Equal(c.WM.Scroll.Presets, []float64{0.25, 0.5}) {
+		t.Fatalf("layout %v scroll %+v", c.WM.Layout, c.WM.Scroll)
+	}
+	if len(c.WorkspaceRules) != 1 || c.WorkspaceRules[0].Layout != wm.TreeLayout {
+		t.Fatalf("workspace rules %+v", c.WorkspaceRules)
+	}
+	if d, err := Parse("t.yaml", nil); err != nil || d.WM.Layout != wm.TreeLayout || d.WM.Scroll.Center != wm.CenterNever || len(d.WM.Scroll.Presets) != 3 {
+		t.Fatalf("defaults: layout %v scroll %+v, %v", d.WM.Layout, d.WM.Scroll, err)
+	}
+	for text, want := range map[string]string{
+		"scroll:\n  presets: [0]\n":                                                   "t.yaml:2: scroll.presets: 0 is not a share",
+		"scroll:\n  presets: []\n":                                                    "t.yaml:2: scroll.presets: needs at least one width",
+		"workspaces:\n  - match: any\n    layout: scroll\n":                           "a match rule takes only",
+		"gestures:\n  swipe:\n    - {fingers: 3, direction: vertical, drive: view}\n": "view scrolls sideways",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", text, err, want)
+		}
+	}
+}

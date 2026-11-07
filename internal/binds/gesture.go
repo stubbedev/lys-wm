@@ -30,6 +30,7 @@ const (
 	DriveWorkspaces
 	DriveZoom
 	DriveOverview
+	DriveView
 )
 
 type GestureBind struct {

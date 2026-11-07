@@ -157,6 +157,8 @@ type rawConfig struct {
 	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
 	Floating        rawFloating                  `yaml:"floating"`
 	Swallow         rawSwallow                   `yaml:"swallow"`
+	Layout          *At[string]                  `yaml:"layout"`
+	Scroll          rawScroll                    `yaml:"scroll"`
 	LayerRules      []At[rawLayerRule]           `yaml:"layer_rules"`
 	Workspaces      []At[rawWorkspaceRule]       `yaml:"workspaces"`
 }
@@ -185,10 +187,16 @@ type rawWorkspaceRule struct {
 	Borders        *rawWorkspaceBorders `yaml:"borders"`
 	Rounding       *At[int]             `yaml:"rounding"`
 	Shadow         *bool                `yaml:"shadow"`
+	Layout         *At[string]          `yaml:"layout"`
 }
 
 type rawWorkspaceBorders struct {
 	Width *At[int] `yaml:"width"`
+}
+
+type rawScroll struct {
+	Presets *At[[]float64] `yaml:"presets"`
+	Center  *At[string]    `yaml:"center"`
 }
 
 type rawSwallow struct {
@@ -1555,7 +1563,7 @@ var swipeDirections = map[string]binds.GestureDirection{
 
 var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut, "both": binds.PinchBoth}
 
-var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview}
+var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview, "view": binds.DriveView}
 
 func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, at At[rawGesture], directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
 	r := at.V
@@ -1596,6 +1604,8 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, a
 			p.fail(r.Drive.Line, key+".drive", "only a swipe can drive something")
 		} else if b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical {
 			p.fail(r.Drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
+		} else if b.Drive == binds.DriveView && b.Direction != binds.SwipeHorizontal {
+			p.fail(r.Drive.Line, key+".drive", "view scrolls sideways, so it takes the direction horizontal")
 		} else if b.Drive == binds.DriveOverview && b.Direction != binds.SwipeVertical && b.Direction != binds.SwipeUp && b.Direction != binds.SwipeDown {
 			p.fail(r.Drive.Line, key+".drive", "overview takes the direction up, down or vertical")
 		}
@@ -1856,6 +1866,10 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	cfg.LayerRules = p.layerRules(raw.LayerRules)
 	cfg.WorkspaceRules = p.workspaceRules(raw.Workspaces, cfg.WM.Gaps)
 	cfg.Swallow.Terminals, cfg.Swallow.ExceptTitle = p.regexp(raw.Swallow.Terminals, "swallow.terminals"), p.regexp(raw.Swallow.ExceptTitle, "swallow.except_title")
+	if k := choice(p, raw.Layout, "layout", layoutKinds); k != nil {
+		cfg.WM.Layout = *k
+	}
+	cfg.WM.Scroll = p.scroll(raw.Scroll, cfg.WM.Scroll)
 	cfg.WM.FloatStep = p.positive(raw.Floating.Step, "floating.step", cfg.WM.FloatStep)
 	if v := raw.ShowDesktop.Peek; v != nil {
 		if v.V < 1 || v.V > 50 {
@@ -2198,6 +2212,10 @@ var removedKeys = map[string]string{
 	"decoration.blur.layers": "removed; blur a layer surface with layer_rules: [{namespace: ^name$, blur: true}]",
 }
 
+var layoutKinds = map[string]wm.LayoutKind{"tree": wm.TreeLayout, "scroll": wm.ScrollLayout}
+
+var centerModes = map[string]wm.CenterMode{"never": wm.CenterNever, "always": wm.CenterAlways, "on-overflow": wm.CenterOnOverflow}
+
 var workspaceSelectors = map[string]wm.WorkspaceSelector{"any": wm.SelectAny, "single_tiled": wm.SelectSingleTiled, "fullscreen": wm.SelectFullscreen}
 
 func (p *parser) workspaceRules(raw []At[rawWorkspaceRule], globalGaps wm.Gaps) []compositor.WorkspaceRule {
@@ -2216,7 +2234,7 @@ func (p *parser) workspaceRules(raw []At[rawWorkspaceRule], globalGaps wm.Gaps) 
 				continue
 			}
 			rule.Select = *sel
-			if r.Name != nil || r.Output != nil || r.Default || r.Persistent || r.OnCreatedEmpty != nil {
+			if r.Name != nil || r.Output != nil || r.Default || r.Persistent || r.OnCreatedEmpty != nil || r.Layout != nil {
 				p.fail(at.Line, key, "a match rule takes only gaps, borders, rounding and shadow")
 				continue
 			}
@@ -2245,6 +2263,9 @@ func (p *parser) workspaceRules(raw []At[rawWorkspaceRule], globalGaps wm.Gaps) 
 			p.fail(at.Line, key+".default", "needs output, the output that shows it first")
 		}
 		rule.Default, rule.Persistent = r.Default, r.Persistent
+		if k := choice(p, r.Layout, key+".layout", layoutKinds); k != nil {
+			rule.Layout = *k
+		}
 		if r.OnCreatedEmpty != nil {
 			rule.OnCreatedEmpty = r.OnCreatedEmpty.V
 		}
@@ -2365,5 +2386,29 @@ func (p *parser) virtualOutputs(raw []At[rawVirtualOutput]) []compositor.Virtual
 		}
 		out = append(out, compositor.VirtualOutput{Name: v.Name.V, Size: image.Pt(m.Width, m.Height), RefreshMHz: m.RefreshMHz})
 	}
+	return out
+}
+
+func (p *parser) scroll(r rawScroll, def wm.Scrolling) wm.Scrolling {
+	out := def
+	if m := choice(p, r.Center, "scroll.center", centerModes); m != nil {
+		out.Center = *m
+	}
+	if r.Presets == nil {
+		return out
+	}
+	if len(r.Presets.V) == 0 {
+		p.fail(r.Presets.Line, "scroll.presets", "needs at least one width")
+		return out
+	}
+	for _, w := range r.Presets.V {
+		if !(w > 0 && w <= 1) {
+			p.fail(r.Presets.Line, "scroll.presets", "%g is not a share of the output above 0 and up to 1", w)
+			return out
+		}
+	}
+	presets := slices.Clone(r.Presets.V)
+	slices.Sort(presets)
+	out.Presets = slices.Compact(presets)
 	return out
 }

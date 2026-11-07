@@ -108,7 +108,7 @@ func (t *Tree) detachFocused() Node {
 }
 
 func (t *Tree) attach(n Node, rootLayout Layout) {
-	if g, isGroup := n.(*Group); isGroup && t.root == nil {
+	if g, isGroup := n.(*Group); isGroup && t.root == nil && !t.scroll {
 		t.root = g
 	} else {
 		t.insertNode(n, rootLayout)
@@ -131,7 +131,7 @@ var groupChanges = []string{ChangeToH: "h", ChangeToV: "v", ChangeToTab: "tab", 
 func (c GroupChange) String() string { return enumName(groupChanges, c, "GroupChange") }
 
 func (g *Group) setLayout(l Layout) bool {
-	if g.Layout == l {
+	if g.Layout == l || g.Layout == Scrolled {
 		return false
 	}
 	if l == Tabbed {
@@ -302,7 +302,7 @@ func equalize(g *Group, all bool) bool {
 	changed := false
 	for i := range g.Children {
 		c := &g.Children[i]
-		if c.Ratio != 1 {
+		if c.Ratio != 1 && g.Layout != Scrolled {
 			c.Ratio, changed = 1, true
 		}
 		if sub, ok := c.Node.(*Group); ok && all && equalize(sub, true) {
@@ -343,6 +343,9 @@ func (t Tree) WrapFocused(layout Layout, ephemeral bool) (Tree, bool) {
 	}
 	t = t.clone()
 	groups, idx := t.focusPath()
+	if len(groups) == 0 && t.scroll {
+		return t, false
+	}
 	t.wrapAt(groups, idx, layout, ephemeral)
 	return t, true
 }

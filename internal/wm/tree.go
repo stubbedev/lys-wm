@@ -18,13 +18,14 @@ const (
 	SplitH Layout = iota + 1
 	SplitV
 	Tabbed
+	Scrolled
 )
 
 func (l Layout) split() bool {
 	return l == SplitH || l == SplitV
 }
 
-var layoutNames = []string{SplitH: "h", SplitV: "v", Tabbed: "tab"}
+var layoutNames = []string{SplitH: "h", SplitV: "v", Tabbed: "tab", Scrolled: "scroll"}
 
 func (l Layout) String() string {
 	return enumName(layoutNames, l, "Layout")
@@ -84,6 +85,7 @@ type Group struct {
 	Focus     int
 	Locked    bool
 	untabbed  Layout
+	view      int
 	ephemeral ephemerality
 }
 
@@ -97,7 +99,11 @@ func (g *Group) clone() Node {
 }
 
 func (g *Group) insert(at int, n Node) {
-	g.Children = slices.Insert(g.Children, at, Child{Node: n, Ratio: 1})
+	ratio := 1.0
+	if g.Layout == Scrolled {
+		ratio = DefaultColumnWidth
+	}
+	g.Children = slices.Insert(g.Children, at, Child{Node: n, Ratio: ratio})
 	if g.ephemeral == ephemeralStaged && len(g.Children) >= 2 {
 		g.ephemeral = ephemeralActive
 	}
@@ -112,7 +118,7 @@ func (g *Group) remove(i int) {
 	case g.Focus > i, g.Focus == i && i > 0:
 		g.Focus--
 	}
-	if count := float64(len(g.Children)); count > 0 {
+	if count := float64(len(g.Children)); count > 0 && g.Layout != Scrolled {
 		scale := count / (count + 1 - ratio)
 		for j := range g.Children {
 			g.Children[j].Ratio *= scale
@@ -124,6 +130,7 @@ type Tree struct {
 	root   *Group
 	lift   int
 	minted GroupID
+	scroll bool
 }
 
 func (t *Tree) newGroup(l Layout) *Group {
@@ -161,7 +168,8 @@ func (t Tree) clone() Tree {
 		return t
 	}
 	g, _ := t.root.clone().(*Group)
-	return Tree{root: g, lift: t.lift, minted: t.minted}
+	t.root = g
+	return t
 }
 
 func (t Tree) Windows() []WindowID {
@@ -265,12 +273,19 @@ func (t Tree) Insert(id WindowID, rootLayout Layout) (Tree, error) {
 
 func (t *Tree) insertNode(n Node, rootLayout Layout) {
 	if t.root == nil {
+		if t.scroll {
+			rootLayout = Scrolled
+		}
 		t.root = t.newGroup(rootLayout)
 		t.root.insert(0, n)
 		return
 	}
 	focused, _ := t.Focused()
 	groups, idx, _ := t.path(focused)
+	if t.scroll {
+		t.root.insert(idx[0]+1, n)
+		return
+	}
 	k := len(groups) - 1
 	for k >= 0 && groups[k].Locked {
 		k--
@@ -299,7 +314,7 @@ func (a Autotile) trigger(area image.Rectangle) int {
 func (t Tree) Place(id WindowID, area image.Rectangle, at Autotile) (Tree, error) {
 	root := rootLayout(area)
 	focused, ok := t.Focused()
-	if !at.Enabled || !ok {
+	if !at.Enabled || !ok || t.scroll {
 		return t.Insert(id, root)
 	}
 	groups, _, _ := t.path(focused)
@@ -355,7 +370,7 @@ func (t *Tree) wrapAt(groups []*Group, idx []int, layout Layout, ephemeral bool)
 }
 
 func shouldCollapse(g *Group, rootGroup bool, policy CollapsePolicy) bool {
-	if len(g.Children) != 1 {
+	if len(g.Children) != 1 || g.Layout == Scrolled {
 		return false
 	}
 	child, isGroup := g.Children[0].Node.(*Group)

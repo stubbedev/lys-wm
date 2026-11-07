@@ -30,7 +30,7 @@ func (c *Compositor) resolvedWorkspaceRules() []wm.WorkspaceRule {
 }
 
 func (c *Compositor) syncWorkspaceRules() {
-	c.wm = c.wm.WithWorkspaceRules(c.resolvedWorkspaceRules())
+	c.wm = c.wm.WithLayoutDefault(c.settings.Layout).WithWorkspaceRules(c.resolvedWorkspaceRules())
 }
 
 func (c *Compositor) runOnCreatedEmpty() error {

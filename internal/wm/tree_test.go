@@ -559,7 +559,7 @@ func TestAGroupKeepsItsIDWhileItsMembersChange(t *testing.T) {
 func TestGroupIDsSurviveSavingAndStayUnique(t *testing.T) {
 	tree := on(t)(build(t, 1, 2).Wrap(2, Tabbed, false))
 	before, _ := tree.MembershipOf(2)
-	loaded, err := loadTree(saveGroup(tree.root), 0)
+	loaded, err := loadTree(saveGroup(tree.root), 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func TestGroupIDsSurviveSavingAndStayUnique(t *testing.T) {
 	}
 	saved := saveGroup(tree.root)
 	saved.ID = 0
-	unnumbered, err := loadTree(saved, 0)
+	unnumbered, err := loadTree(saved, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}

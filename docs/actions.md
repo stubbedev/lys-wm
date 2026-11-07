@@ -30,6 +30,12 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `global` | `<app_id>:<id>` | Press the global shortcut an application registered, and release it with the bind. |
 | `exec` | `<command>` | Run a shell command with sh -c. |
 | `makegroup` | `<h\|v\|tab> [ephemeral]` | Wrap the focused window in a new group; an ephemeral group dissolves when one window is left. |
+| `setlayout` | `<tree\|scroll>` | Turn the focused workspace into a tree of splits and tab groups, or into a scrollable strip of columns: each top-level child becomes a column, keeping its share of the width, and nested groups flatten into the column's stack; back, the columns become a horizontal split. Every window and the focus stay. |
+| `columnwidth` | `<preset next\|preset prev\|+n%\|-n%\|n%>` | On a scrolling workspace, set the focused column's width to the next or previous of `scroll.presets`, change it by n percent of the output's width, or set it to n percent. |
+| `consume` | `<left\|right>` | On a scrolling workspace, move the focused window into the bottom of the column on that side. |
+| `expel` |  | On a scrolling workspace, take the focused window out of its column into a column of its own to the right. |
+| `center` |  | On a scrolling workspace, scroll the view so the focused column is in the middle of the output. |
+| `columndisplay` | `<stack\|tab>` | On a scrolling workspace, show the windows of the focused column stacked over each other or as tabs. |
 | `changegroup` | `<h\|v\|tab\|toggletab\|opposite>` | Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back. |
 | `focustab` | `<prev\|next\|n> [wrap]` | Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap. |
 | `focusparent` |  | Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside. |

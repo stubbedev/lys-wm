@@ -53,6 +53,7 @@ type gestureInput struct {
 	binds      []binds.GestureBind
 	drive      driven
 	workspaces workspaceDrive
+	view       viewDrive
 	held       *workspaceSwitch
 	heldOn     *output.Output
 	overview   bool
@@ -110,6 +111,9 @@ func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration) error {
 	case b.Drive == binds.DriveWorkspaces && !c.overviewHolds():
 		g.drive = c.driveWorkspaces(at)
 		return nil
+	case b.Drive == binds.DriveView && !c.overviewHolds():
+		g.drive = c.driveView()
+		return c.releaseHeld(at)
 	case b.Drive == binds.DriveZoom:
 		g.drive = c.driveZoom()
 		return c.releaseHeld(at)

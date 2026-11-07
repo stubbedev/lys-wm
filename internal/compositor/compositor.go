@@ -138,6 +138,8 @@ func PlainSettings() wm.Settings {
 		Autotile:  wm.Autotile{Enabled: true, Ephemeral: true, MinTrigger: 400, Divisor: 3},
 		Peek:      wm.DefaultPeek,
 		FloatStep: wm.DefaultFloatStep,
+		Scroll:    wm.DefaultScrolling(),
+		Layout:    wm.TreeLayout,
 	}
 }
 

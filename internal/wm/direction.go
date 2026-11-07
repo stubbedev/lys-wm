@@ -433,7 +433,8 @@ func (t Tree) Resize(id WindowID, area image.Rectangle, d Direction, delta int) 
 	if root == nil {
 		return t, false, nil
 	}
-	return Tree{root: root, lift: t.lift, minted: t.minted}, true, nil
+	t.root = root
+	return t, true, nil
 }
 
 func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) (next *Group, settled bool) {
@@ -454,6 +455,12 @@ func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) 
 	span := r.Dx()
 	if d.vertical() {
 		want, span = SplitV, r.Dy()
+	}
+	if g.Layout == Scrolled && want == SplitH && span > 0 {
+		c := *g
+		c.Children = slices.Clone(g.Children)
+		c.Children[i].Ratio = min(max(c.Children[i].Ratio+float64(delta)/float64(span), minColumnWidth), 1)
+		return &c, true
 	}
 	j := step(i, d)
 	if g.Layout != want || j < 0 || j >= len(g.Children) {

@@ -62,6 +62,19 @@ func (t *Tree) insertEdge(n Node, d Direction, area image.Rectangle) {
 		t.attach(n, rootLayout(area))
 		return
 	}
+	if t.scroll {
+		if d.vertical() {
+			t.attach(n, Scrolled)
+			return
+		}
+		at := 0
+		if !d.forward() {
+			at = len(t.root.Children)
+		}
+		t.root.insert(at, n)
+		t.focusNode(n)
+		return
+	}
 	want := splitAlong(d)
 	switch {
 	case t.root.Layout == want:

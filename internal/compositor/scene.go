@@ -351,7 +351,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 func (c *Compositor) drawWindow(pass *frame, o *output.Output, w *window, shown []*surface.Surface) []*surface.Surface {
 	v, drawn := c.workspaceView(o, w)
 	at := v.rect(w.motion.At(c.frameTime), o.Logical())
-	if !drawn || !at.Overlaps(o.Logical()) {
+	if !drawn || !at.Overlaps(o.Logical()) || !w.clip.Empty() && !w.clip.Overlaps(o.Logical()) {
 		return shown
 	}
 	if c.decision(w).DimAround {

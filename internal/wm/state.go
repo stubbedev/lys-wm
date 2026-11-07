@@ -132,17 +132,18 @@ func (w *Workspace) record() {
 }
 
 type State struct {
-	outputs    []Output
-	workspaces []Workspace
-	scratch    []Workspace
-	focused    string
-	remembered map[string]WorkspaceID
-	limits     map[WindowID]Limits
-	restore    map[WindowID]restorePoint
-	fake       map[WindowID]struct{}
-	pinned     map[WindowID]struct{}
-	swallows   []Swallow
-	wsRules    []WorkspaceRule
+	outputs       []Output
+	workspaces    []Workspace
+	scratch       []Workspace
+	focused       string
+	remembered    map[string]WorkspaceID
+	limits        map[WindowID]Limits
+	restore       map[WindowID]restorePoint
+	fake          map[WindowID]struct{}
+	pinned        map[WindowID]struct{}
+	swallows      []Swallow
+	layoutDefault LayoutKind
+	wsRules       []WorkspaceRule
 }
 
 var (
@@ -152,16 +153,17 @@ var (
 
 func (s State) clone() State {
 	c := State{
-		outputs:    slices.Clone(s.outputs),
-		workspaces: make([]Workspace, len(s.workspaces)),
-		focused:    s.focused,
-		remembered: make(map[string]WorkspaceID, len(s.remembered)),
-		limits:     maps.Clone(s.limits),
-		restore:    maps.Clone(s.restore),
-		fake:       maps.Clone(s.fake),
-		pinned:     maps.Clone(s.pinned),
-		swallows:   slices.Clone(s.swallows),
-		wsRules:    s.wsRules,
+		outputs:       slices.Clone(s.outputs),
+		workspaces:    make([]Workspace, len(s.workspaces)),
+		focused:       s.focused,
+		remembered:    make(map[string]WorkspaceID, len(s.remembered)),
+		limits:        maps.Clone(s.limits),
+		restore:       maps.Clone(s.restore),
+		fake:          maps.Clone(s.fake),
+		pinned:        maps.Clone(s.pinned),
+		swallows:      slices.Clone(s.swallows),
+		wsRules:       s.wsRules,
+		layoutDefault: s.layoutDefault,
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
@@ -261,7 +263,7 @@ func (s *State) create(id WorkspaceID, output string) *Workspace {
 	if bound := s.boundOutput(id); bound != "" {
 		output = bound
 	}
-	s.workspaces = append(s.workspaces, Workspace{ID: id, Output: output})
+	s.workspaces = append(s.workspaces, Workspace{ID: id, Output: output, Tree: Tree{scroll: s.kindFor(id) == ScrollLayout}})
 	slices.SortFunc(s.workspaces, func(a, b Workspace) int { return int(a.ID) - int(b.ID) })
 	return s.workspace(id)
 }
@@ -682,14 +684,7 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 			all.inWorkspace(from, w.ID)
 			continue
 		}
-		wsp := sp
-		var look WorkspaceLook
-		if len(s.wsRules) > 0 {
-			look = s.lookFor(w)
-			if look.Gaps != nil {
-				wsp.Gaps = *look.Gaps
-			}
-		}
+		look, wsp := s.spacingFor(w, sp)
 		placeWorkspace(all, w, o, o.Active == w.ID, wsp)
 		all.inWorkspace(from, w.ID)
 		if look != (WorkspaceLook{}) {
@@ -745,6 +740,9 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 		}
 		p.Laid = p.Visible && !covered
 		p.Visible = p.Laid && shown
+		if w.Tree.scroll {
+			p.Clip = o.Full
+		}
 		kept = append(kept, p)
 	}
 	all.Windows = kept
@@ -753,6 +751,9 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 	}
 	for i := bars; i < len(all.TabBars); i++ {
 		all.TabBars[i].Workspace, all.TabBars[i].Shown = w.ID, shown
+		if w.Tree.scroll {
+			all.TabBars[i].Clip = o.Full
+		}
 	}
 	for i := rings; i < len(all.Rings); i++ {
 		all.Rings[i].Workspace, all.Rings[i].Shown = w.ID, shown
@@ -766,4 +767,15 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 		all.Windows = append(all.Windows, Placement{ID: w.Cover.ID, Rect: w.Cover.rect(o, sp), Visible: shown, Laid: true, Layer: w.Cover.Mode.layer()})
 	}
 	all.Windows = appendMinimized(all.Windows, w.Minimized)
+}
+
+func (s *State) spacingFor(w *Workspace, sp Spacing) (WorkspaceLook, Spacing) {
+	if len(s.wsRules) == 0 {
+		return WorkspaceLook{}, sp
+	}
+	look := s.lookFor(w)
+	if look.Gaps != nil {
+		sp.Gaps = *look.Gaps
+	}
+	return look, sp
 }

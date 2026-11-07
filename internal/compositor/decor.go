@@ -548,7 +548,7 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) {
 		bar := &c.tabBars[i]
 		v, drawn := c.workspaceDecorView(bar.Workspace, bar.Shown)
 		moved := v.rect(bar.Rect, o.Logical())
-		if !drawn || !bar.Rect.Overlaps(o.Logical()) || !moved.Overlaps(o.Logical()) {
+		if !drawn || !bar.Rect.Overlaps(o.Logical()) || !moved.Overlaps(o.Logical()) || !bar.Clip.Empty() && !bar.Clip.Overlaps(o.Logical()) {
 			continue
 		}
 		from := len(pass.ops)

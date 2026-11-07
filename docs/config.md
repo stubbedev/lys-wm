@@ -803,6 +803,12 @@ a spring, otherwise the built-in `spring`. With animations off it jumps. Three f
 on an overview still settling grab it where it is. While it is open, a swipe bound
 to `workspaces` does nothing.
 
+`drive: view` scrolls the strip of a [scrolling workspace](#layout-and-scroll) under
+the pointer with the fingers, one `distance` for the width of its output, on
+`horizontal` only, and `natural` flips it. Windows follow the fingers without
+animating and are only moved, never resized. On release the view settles on the
+nearest column edge, on `windows_move`, and that column takes focus.
+
 `drive: zoom` sets the [zoom](#animations) of the output under the pointer by the
 pinch's scale, from the moment the fingers land: the client sees nothing of the
 gesture, and the level follows the fingers without animating, from 1 to 16.
@@ -950,6 +956,38 @@ A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
 the title, as a square as tall as the tab less `text_padding` on each side,
 when the tab is at least four icons wide. An icon name that resolves in
 `icon_theme` wins; otherwise the window's own pixel buffers are drawn.
+
+## layout and scroll
+
+```yaml
+layout: tree
+scroll:
+  presets: [0.333, 0.5, 0.667]
+  center: never
+```
+
+`layout` is the layout a new workspace starts with; a workspace rule's `layout`
+wins for its workspace, and `setlayout` converts the focused one. `tree` is the
+tree of splits and tab groups. `scroll` lays a workspace out as a strip of columns
+that may be wider than the output: a new window opens as a column right of the
+focused one, half the output wide, and nothing else is resized. A column holds one
+window, or several stacked (`consume`, `expel`, `columndisplay stack`) or as tabs
+(`columndisplay tab`). `focus left` and `right` move between columns and `up` and
+`down` within one; `move` moves a window or column; `columnwidth` cycles `presets`,
+shares of the output's width, or changes the width; `center` puts the focused column
+in the middle. Scrolling only moves windows, so it sends them no configure, and a
+column outside its output is not shown: it draws nothing, takes no input and gets
+frame callbacks at `hidden_frame_rate`.
+
+| `center` | When the view scrolls to the focused column |
+| --- | --- |
+| `never` | Only as far as it takes to show the whole column |
+| `always` | Always, to put it in the middle |
+| `on-overflow` | To put it in the middle when it was not wholly shown |
+
+The view moves on the `windows_move` animation, and a swipe can drive it (see
+`drive: view` in [gestures](#gestures)). The overview shows every column of a
+strip.
 
 ## autotile
 
@@ -1174,6 +1212,7 @@ workspace it matches, after the `id` rules' and in order.
 | `persistent` | `true`: the workspace exists from startup and is never dropped, so bars and `lys-wmctl workspaces` list it empty |
 | `name` | Shown by ext-workspace and IPC, and accepted by `workspace <name>` and `movetoworkspace <name>`; starts with a letter |
 | `on_created_empty` | A command run each time the workspace is shown empty; the window it opens lands on the workspace |
+| `layout` | `tree` or `scroll`: the workspace is created with this layout in place of the global `layout` |
 | `gaps`, `borders.width`, `rounding`, `shadow` | The workspace's look in place of `gaps`, `borders.width`, `decoration.rounding` and `decoration.shadow.enabled`; a window rule's still wins |
 
 A `match` rule takes only the look keys.
