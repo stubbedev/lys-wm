@@ -67,6 +67,9 @@ func TestMatchersAndExclusions(t *testing.T) {
 }
 
 func TestDecidingAllocatesNothing(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector drops sync.Pool entries, so regexp matching allocates")
+	}
 	rules := []Rule{
 		{Match: Match{AppID: regexp.MustCompile(`^steam$`), Exclude: &Match{Title: regexp.MustCompile(`^Steam$`)}}, Mode: RuleFloat},
 		{Match: Match{InitialTitle: regexp.MustCompile(`Friends`)}, Size: Px(400, 900)},
