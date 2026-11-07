@@ -111,7 +111,7 @@ func TestTheDemotionTestSkipsOnlyWhereTheThreadCannotBeDemoted(t *testing.T) {
 	}
 }
 
-func TestARealtimeTimeoutDemotesTheThreadToNormal(t *testing.T) {
+func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
 	type probe struct {
 		reason string
 		err    error
@@ -131,20 +131,37 @@ func TestARealtimeTimeoutDemotesTheThreadToNormal(t *testing.T) {
 		if reason != "" || err != nil {
 			return
 		}
-		release := demoteOnRTTimeout(unix.Gettid())
-		defer release()
-		if err := unix.Kill(unix.Getpid(), unix.SIGXCPU); err != nil {
-			done <- err
-			return
-		}
-		for {
+		asked := make(chan uint32, 2)
+		release := demoteOnRTTimeout(unix.Gettid(), func() error {
 			attr, err := unix.SchedGetAttr(0, 0)
-			if err != nil || attr.Policy == unix.SCHED_NORMAL {
+			if err != nil {
+				return err
+			}
+			asked <- attr.Policy
+			return nil
+		}, time.Millisecond)
+		defer release()
+		for round := range 2 {
+			if err := unix.SchedSetAttr(0, &batch, 0); err != nil {
 				done <- err
 				return
 			}
-			time.Sleep(time.Millisecond)
+			if err := unix.Kill(unix.Getpid(), unix.SIGXCPU); err != nil {
+				done <- err
+				return
+			}
+			select {
+			case policy := <-asked:
+				if policy != unix.SCHED_NORMAL {
+					done <- fmt.Errorf("round %d: rtkit was asked again while the thread ran at policy %d, want SCHED_NORMAL first", round, policy)
+					return
+				}
+			case <-time.After(10 * time.Second):
+				done <- fmt.Errorf("round %d: rtkit was not asked again within 10s of SIGXCPU", round)
+				return
+			}
 		}
+		done <- nil
 	}()
 	p := <-probed
 	if p.err != nil {

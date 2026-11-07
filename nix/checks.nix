@@ -94,8 +94,21 @@
           machine.succeed(f"grep -E '^Max nice priority +0 +0 ' /proc/{compositor}/limits")
           machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'the compositor thread runs at SCHED_RR through rtkit'")
           machine.succeed(f"grep -E '^Max realtime timeout +[0-9]+ +[0-9]+ ' /proc/{compositor}/limits")
-          threads = machine.succeed(f"ps -L -o cls=,rtprio= -p {compositor}").split("\n")
-          assert ["RR", "1"] in [t.split() for t in threads], f"no thread of lys-wm runs at SCHED_RR 1: {threads}"
+          rr = f"ps -L -o cls=,rtprio= -p {compositor} | grep -Eq '^ *RR +1$'"
+          def realtime():
+              try:
+                  machine.wait_until_succeeds(rr, timeout=30)
+              except Exception:
+                  print(machine.execute(f"ps -L -o tid=,cls=,rtprio= -p {compositor}; journalctl -b --no-pager -t lys-wm -t rtkit-daemon")[1])
+                  raise
+          realtime()
+          demoted, regained = "ran past rtkit's RLIMIT_RTTIME without blocking", "runs at SCHED_RR through rtkit again"
+          journal = machine.succeed("journalctl -b --no-pager -t lys-wm")
+          seen = {line: journal.count(line) for line in (demoted, regained)}
+          machine.succeed(f"kill -XCPU {compositor}")
+          for line, count in seen.items():
+              machine.wait_until_succeeds(f"test \"$(journalctl -b --no-pager -t lys-wm | grep -cF \"{line}\")\" -gt {count}", timeout=10)
+          realtime()
         '';
       };
       vm-screencast = screencast "wlr";
