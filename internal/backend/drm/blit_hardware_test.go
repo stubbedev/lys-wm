@@ -167,3 +167,104 @@ func blitThroughACopy(t *testing.T, open func(*kdrm.Device, gpu.Paths) (*gbmAllo
 	per := time.Since(start) / frames
 	t.Logf("a %v frame copied and blitted in %v", big, per)
 }
+
+type finishOnly struct {
+	gpuRenderer
+}
+
+func (finishOnly) NativeFences() bool { return false }
+
+func localTarget(t *testing.T, local *gbmAllocator, size image.Point) render.ReadTarget {
+	t.Helper()
+	mods, err := local.renderable(scanoutFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo, err := local.gbm.Allocate(size, scanoutFormat, mods, gpu.UseRendering)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := local.gpu.ImportTarget(bo.DMABUF)
+	if err != nil {
+		t.Fatal(errors.Join(err, bo.Close()))
+	}
+	t.Cleanup(func() {
+		if err := errors.Join(target.Destroy(), bo.Close()); err != nil {
+			t.Error(err)
+		}
+	})
+	return target
+}
+
+func TestABlitBetweenTwoStacksOnTheRenderNodeShowsTheFrameOnHardware(t *testing.T) {
+	const node = "/dev/dri/renderD128"
+	stacks := []struct {
+		name string
+		open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
+	}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}}
+	for _, p := range stacks {
+		for _, l := range stacks {
+			for _, native := range []bool{true, false} {
+				name := p.name + " to " + l.name + " handing over with a sync_file"
+				if !native {
+					name = p.name + " to " + l.name + " handing over with glFinish"
+				}
+				t.Run(name, func(t *testing.T) { blitBetweenStacks(t, node, p.open, l.open, native) })
+			}
+		}
+	}
+}
+
+func blitBetweenStacks(t *testing.T, node string, openPrimary, openLocal func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error), native bool) {
+	unpin := gpu.PinThread()
+	defer func() {
+		if err := unpin(); err != nil {
+			t.Error(err)
+		}
+	}()
+	primary, local := stackOn(t, node, openPrimary), stackOn(t, node, openLocal)
+	if !native {
+		local.gpu = finishOnly{local.gpu}
+	}
+	a := &blitAllocator{primary: primary, local: local}
+	t.Cleanup(func() {
+		if err := errors.Join(a.close(), primary.close()); err != nil {
+			t.Error(err)
+		}
+	})
+	if direct := a.probe(); direct != nil {
+		t.Logf("%s renders into no linear buffer (%v), so the frame goes through a Vulkan copy", node, direct)
+		if err := a.copyThroughVulkan(); err != nil {
+			t.Fatalf("a linear copy through Vulkan on %s: %v", node, err)
+		}
+	}
+	t.Logf("primary native fences %v, local native fences %v", primary.gpu.NativeFences(), local.gpu.NativeFences())
+	size := image.Pt(301, 203)
+	s, err := a.share(size, scanoutFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.release(); err != nil {
+			t.Error(err)
+		}
+	})
+	out := localTarget(t, local, size)
+	drawQuadrants(t, primary.gpu, s.target)
+	if err := a.blit(s, out, size); err != nil {
+		t.Fatal(err)
+	}
+	pix := make([]byte, size.X*size.Y*4)
+	if err := out.Read(pix, size.X*4); err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range quadrantColors {
+		q := quadrant(i, size)
+		for _, at := range []image.Point{q.Min, q.Max.Sub(image.Pt(1, 1))} {
+			o := at.Y*size.X*4 + at.X*4
+			if got := [3]byte{pix[o+2], pix[o+1], pix[o]}; got != [3]byte{c.R, c.G, c.B} {
+				t.Errorf("quadrant %d shows %v at %v, want %v", i, got, at, [3]byte{c.R, c.G, c.B})
+			}
+		}
+	}
+}
