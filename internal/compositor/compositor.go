@@ -99,11 +99,12 @@ type Config struct {
 }
 
 type Hooks struct {
-	Reload    func() (apply func() error)
-	ParseProp func(key, value string) (wm.Decision, error)
-	Exit      func() error
-	SwitchVT  func(vt uint32) error
-	Lid       LidPolicy
+	Reload         func() (apply func() error)
+	ParseProp      func(key, value string) (wm.Decision, error)
+	Exit           func() error
+	SwitchVT       func(vt uint32) error
+	OpenFrameTrace func(path string) (*frametrace.Recorder, error)
+	Lid            LidPolicy
 }
 
 type LidPolicy struct {
@@ -279,6 +280,8 @@ type Compositor struct {
 	layers             []*layer
 	layerIDs           uint64
 	picking            *pick
+	debugDraw          *debugOverlays
+	recorders          debugRecorders
 	data               *data.Manager
 	drag               *dragging
 	usable             map[*output.Output]image.Rectangle
@@ -724,7 +727,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.landInFlight(), c.closeVirtualOutputs(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.dropShaders()}
+	errs := []error{c.landInFlight(), c.stopDebugRecorders(), c.closeVirtualOutputs(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.dropShaders()}
 	for _, sc := range c.scenes {
 		errs = append(errs, sc.dropImage())
 	}

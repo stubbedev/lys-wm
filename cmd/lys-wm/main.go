@@ -663,6 +663,9 @@ func run(args []string) (err error) {
 		return err
 	}
 	cfg.Hooks.SwitchVT, cfg.Hooks.Lid, s.configureInput = b.switchVT, b.lid, b.configureInput
+	cfg.Hooks.OpenFrameTrace = func(path string) (*frametrace.Recorder, error) {
+		return openFrameTrace(path, kind, renderer, b, cfg.Report)
+	}
 	defer leave(func() error { return b.Close() })
 	frames, err := openFrameTrace(*framesPath, kind, renderer, b, cfg.Report)
 	if err != nil {

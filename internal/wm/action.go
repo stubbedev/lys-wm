@@ -1008,6 +1008,11 @@ var Actions = []ActionSpec{
 		Summary: "Magnify the output under the pointer around the pointer: by factor, 1.5 unless given, from where it is going, back to 1, or to factor, up to 16.",
 		parse:   parseZoom,
 	},
+	{
+		Name: "debug", Args: "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
+		Summary: "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once.",
+		parse:   parseDebug,
+	},
 }
 
 func optionalSwitch(spec ActionSpec, args []string) (Switch, error) {

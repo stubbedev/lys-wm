@@ -231,6 +231,31 @@ unplugged, and its captures stop. Only virtual outputs can be removed. They
 last until removed or until lys-wm exits, and an [upgrade](./guide/upgrade)
 is refused while any exists.
 
+## Debugging a running session
+
+The `debug` action answers on the session that misbehaves, without a restart:
+
+```sh
+lys-wmctl dispatch debug damage on      # tint each frame's damage, fading over 8 frames
+lys-wmctl dispatch debug opaque on      # tint what the culler takes as opaque
+lys-wmctl dispatch debug planes on      # tint composited frames; untinted means direct scanout or an overlay plane
+lys-wmctl dispatch debug trace start /tmp/frames.jsonl
+lys-wmctl dispatch debug trace stop     # the file is what -frame-trace writes; lys-wm-pace reads it
+lys-wmctl dispatch debug profile start /tmp/cpu.pprof
+lys-wmctl dispatch debug profile stop
+lys-wmctl dispatch debug heap /tmp/heap.pprof
+```
+
+The overlays take `on`, `off` or `toggle` (the default) and are drawn after
+the scene, so they never count as the scene's own damage: a still screen
+under `debug damage on` stops drawing once the last tint has faded. With every
+overlay off, a frame costs what it did before. `debug planes` tints only
+frames lys-wm composites, so it never takes a window off direct scanout.
+Files are absolute paths. A trace started with `-frame-trace` cannot be
+stopped here, and a second trace or profile is refused while one records;
+the trace is written by its own goroutine, as with the flag, and the heap
+profile off the loop.
+
 ## Events
 
 `watch` answers `{"version":1}`, then writes one JSON object per line. Each

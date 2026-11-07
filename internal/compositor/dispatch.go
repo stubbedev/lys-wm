@@ -75,6 +75,10 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.dpms(e)
 	case wm.ZoomAction:
 		return c.applyZoom(e)
+	case wm.DebugOverlayAction:
+		return c.debugOverlay(e)
+	case wm.DebugRecordAction:
+		return c.debugRecord(e)
 	case wm.ReloadAction:
 		if c.hooks.Reload == nil {
 			return errors.New("no config file to reload")

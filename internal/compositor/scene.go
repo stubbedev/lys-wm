@@ -101,7 +101,7 @@ func (c *Compositor) frame(o *output.Output) error {
 	if err := c.settleWobbles(); err != nil {
 		return err
 	}
-	animated := c.animating(o, c.frameTime)
+	animated := c.animating(o, c.frameTime) || c.debugDraw.fading(c.sceneOf(o))
 	c.sceneOf(o).animated = animated
 	if animated {
 		if err := c.schedule(o); err != nil {
@@ -236,7 +236,11 @@ func (c *Compositor) render(o *output.Output) error {
 		view := zoomView(bounds.Max, z.focus, z.factor(c.frameTime))
 		viewMoved, z.shown = view != z.shown, view
 	}
-	if sc.diff(bounds).Empty() && !viewMoved && (shading == nil || !shading.animated) {
+	damage := sc.diff(bounds)
+	if c.debugDraw != nil {
+		c.debugDraw.draw(sc)
+	}
+	if damage.Empty() && !viewMoved && (shading == nil || !shading.animated) {
 		return c.lockBlanked(o)
 	}
 	op, alone := c.showFrameHints(o, sc, bounds, shading == nil && sc.zoom == nil)

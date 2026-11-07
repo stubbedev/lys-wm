@@ -241,6 +241,7 @@ func piecesContinue(group []drawOp, next *drawOp) bool {
 
 type frame struct {
 	ops        []drawOp
+	debugOps   int
 	cursorFrom int
 	background int
 	sharedBlur bool
@@ -528,6 +529,7 @@ type scene struct {
 	blurDamage  region.Set
 	blurScratch region.Set
 	cursorOnly  bool
+	debug       debugDamage
 }
 
 func newScene() *scene {
@@ -629,13 +631,13 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 
 func (sc *scene) onlyCursorChanged() bool {
 	prev, cur := &sc.prev, &sc.cur
-	return !slices.Equal(prev.ops[prev.cursorFrom:], cur.ops[cur.cursorFrom:]) &&
+	return !slices.Equal(prev.sceneOps()[prev.cursorFrom:], cur.sceneOps()[cur.cursorFrom:]) &&
 		slices.Equal(prev.ops[:prev.cursorFrom], cur.ops[:cur.cursorFrom]) &&
 		!sc.contentPending() && sc.blurDamage.Empty()
 }
 
 func (sc *scene) diffOps() {
-	prev, cur := sc.prev.ops, sc.cur.ops
+	prev, cur := sc.prev.sceneOps(), sc.cur.sceneOps()
 	start, shared := 0, min(len(prev), len(cur))
 	for start < shared && prev[start] == cur[start] {
 		start++
@@ -777,7 +779,7 @@ func (sc *scene) draws(t render.Texture) bool {
 }
 
 func (sc *scene) begin() *frame {
-	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background, sc.cur.sharedBlur = sc.cur.ops[:0], 0, -1, false
+	sc.cur.ops, sc.cur.cursorFrom, sc.cur.background, sc.cur.sharedBlur, sc.cur.debugOps = sc.cur.ops[:0], 0, -1, false, 0
 	sc.cur.blurs, sc.cur.below, sc.cur.rims = sc.cur.blurs[:0], sc.cur.below[:0], sc.cur.rims[:0]
 	return &sc.cur
 }

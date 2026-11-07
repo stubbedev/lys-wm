@@ -89,6 +89,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 			return nil, err
 		}
 		sc.cur.replayOnPrimary(p, c.sdrOut(o))
+		c.tintComposited(p, bounds)
 		return repaint, p.End()
 	}
 	if err := c.ensureWorking(o, sc, bounds); err != nil {
@@ -110,6 +111,7 @@ func (c *Compositor) paintFrame(o *output.Output, sc *scene, f backend.Frame, bo
 	size := bounds.Size()
 	p.SetColor(c.plans.Of(hc.working.Description(), hc.signal))
 	p.DrawTexture(sc.working.Texture(), render.FRect{W: float64(size.X), H: float64(size.Y)}, bounds, render.Normal, 1, render.Mask{})
+	c.tintComposited(p, bounds)
 	return repaint, p.End()
 }
 
