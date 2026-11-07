@@ -889,6 +889,8 @@ func TestActivationPolicies(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("focus:\n  on_activate: ignore\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: focus.on_activate:") {
 		t.Errorf("focus.on_activate: ignore was not refused: %v", err)
+	}
+}
 
 func TestStickyAndSlowKeysReachTheSeat(t *testing.T) {
 	cfg, err := Parse("a11y.yaml", []byte("input:\n  keyboard:\n    sticky_keys: true\n    slow_keys: 300\n"))
