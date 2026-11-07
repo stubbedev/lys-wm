@@ -301,7 +301,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			continue
 		}
 		c.stack = append(c.stack, w)
-		rect := content(p.Rect, p.Layer, c.frameBorder(c.decision(w), p.Look))
+		rect := content(p.Rect, p.Layer, c.frameBorder(c.decision(w), p.Look), c.titlebarHeight(w.top, p.Layer))
 		moved := rect != w.rect
 		switch {
 		case c.overview != nil:
@@ -362,11 +362,13 @@ func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	})
 }
 
-func content(tile image.Rectangle, layer wm.PlacementLayer, border int) image.Rectangle {
+func content(tile image.Rectangle, layer wm.PlacementLayer, border, bar int) image.Rectangle {
 	if layer == wm.LayerFullscreen {
 		return tile
 	}
-	return tile.Inset(border)
+	r := tile.Inset(border)
+	r.Min.Y = min(r.Min.Y+bar, r.Max.Y)
+	return r
 }
 
 func sameState(a, b shell.State) bool {
@@ -404,7 +406,7 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == c.nextWindow {
 			d, _ := c.ruled(t)
-			return t.apply(c.wanted(content(p.Rect, p.Layer, c.borderWidthOf(&d)), p, true))
+			return t.apply(c.wanted(content(p.Rect, p.Layer, c.borderWidthOf(&d), c.titlebarHeight(t, p.Layer)), p, true))
 		}
 	}
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)

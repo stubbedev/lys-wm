@@ -188,6 +188,10 @@ func (t xToplevel) close() error {
 	return t.Close()
 }
 
+func (t xToplevel) decorated() bool {
+	return !t.Undecorated()
+}
+
 func (t xToplevel) ping() error {
 	return t.Ping(shell.PingTimeout)
 }

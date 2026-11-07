@@ -6003,6 +6003,48 @@
       "type": "boolean",
       "default": false
     },
+    "titlebars": {
+      "type": "object",
+      "properties": {
+        "buttons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "close",
+              "maximize",
+              "minimize"
+            ]
+          }
+        },
+        "double_click": {
+          "type": "string",
+          "enum": [
+            "float",
+            "maximize"
+          ],
+          "default": "maximize"
+        },
+        "floating": {
+          "type": "boolean",
+          "default": true
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 24
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "right"
+        }
+      },
+      "additionalProperties": false
+    },
     "virtual_outputs": {
       "type": "array",
       "items": {

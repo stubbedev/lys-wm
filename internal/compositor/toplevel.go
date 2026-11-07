@@ -48,6 +48,11 @@ type toplevel interface {
 	overflows(frame image.Point) bool
 	close() error
 	ping() error
+	decorated() bool
+}
+
+func (t xdgToplevel) decorated() bool {
+	return t.ServerDecorated()
 }
 
 type xdgToplevel struct {

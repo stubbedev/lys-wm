@@ -295,6 +295,8 @@ type Compositor struct {
 	layers             []*layer
 	layerIDs           uint64
 	picking            *pick
+	barHover           barHover
+	lastBarPress       barPress
 	debugDraw          *debugOverlays
 	recorders          debugRecorders
 	data               *data.Manager

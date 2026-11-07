@@ -137,6 +137,7 @@ type rawConfig struct {
 	DragPreview     rawDragPreview               `yaml:"drag_preview"`
 	Animations      rawAnimations                `yaml:"animations"`
 	Tabs            rawTabs                      `yaml:"tabs"`
+	Titlebars       rawTitlebars                 `yaml:"titlebars"`
 	Overview        rawOverview                  `yaml:"overview"`
 	Switcher        rawSwitcher                  `yaml:"switcher"`
 	Autotile        rawAutotile                  `yaml:"autotile"`
@@ -571,6 +572,14 @@ type rawTabs struct {
 	Active      *rawTabColors `yaml:"active"`
 	Inactive    *rawTabColors `yaml:"inactive"`
 	Urgent      *rawTabColors `yaml:"urgent"`
+}
+
+type rawTitlebars struct {
+	Floating    *bool         `yaml:"floating"`
+	Height      *At[int]      `yaml:"height"`
+	Buttons     *At[[]string] `yaml:"buttons"`
+	Side        *At[string]   `yaml:"side"`
+	DoubleClick *At[string]   `yaml:"double_click"`
 }
 
 type rawAutotile struct {
@@ -1880,6 +1889,7 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 			Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
 		},
 		DragPreview: p.dragPreview(raw.DragPreview, def.DragPreview),
+		Titlebar:    p.titlebars(raw.Titlebars, def.Titlebar),
 	}
 }
 
@@ -2528,4 +2538,43 @@ func (p *parser) scroll(r rawScroll, def wm.Scrolling) wm.Scrolling {
 	slices.Sort(presets)
 	out.Presets = slices.Compact(presets)
 	return out
+}
+
+var (
+	titlebarButtons = map[string]compositor.TitlebarButton{"minimize": compositor.TitlebarMinimize, "maximize": compositor.TitlebarMaximize, "close": compositor.TitlebarClose}
+	titlebarSides   = map[string]compositor.TitlebarSide{"right": compositor.TitlebarRight, "left": compositor.TitlebarLeft}
+	doubleClicks    = map[string]compositor.TitlebarDoubleClick{"maximize": compositor.DoubleClickMaximize, "float": compositor.DoubleClickFloat}
+)
+
+func (p *parser) titlebars(raw rawTitlebars, def compositor.Titlebars) compositor.Titlebars {
+	t := def
+	if raw.Floating != nil {
+		t.Floating = *raw.Floating
+	}
+	t.Height = p.positive(raw.Height, "titlebars.height", def.Height)
+	if s := choice(p, raw.Side, "titlebars.side", titlebarSides); s != nil {
+		t.Side = *s
+	}
+	if d := choice(p, raw.DoubleClick, "titlebars.double_click", doubleClicks); d != nil {
+		t.DoubleClick = *d
+	}
+	if raw.Buttons == nil {
+		return t
+	}
+	t.Buttons = [len(def.Buttons)]compositor.TitlebarButton{}
+	n := 0
+	for i, name := range raw.Buttons.V {
+		key := fmt.Sprintf("titlebars.buttons[%d]", i)
+		b, ok := titlebarButtons[name]
+		switch {
+		case !ok:
+			p.fail(raw.Buttons.Line, key, "%q is not one of %s", name, strings.Join(slices.Sorted(maps.Keys(titlebarButtons)), ", "))
+		case slices.Contains(t.Buttons[:], b):
+			p.fail(raw.Buttons.Line, key, "%q is listed twice", name)
+		default:
+			t.Buttons[n] = b
+			n++
+		}
+	}
+	return t
 }

@@ -403,6 +403,11 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 			return err
 		}
 	}
+	if e.Pressed {
+		if taken, err := c.pressTitlebar(e.Button); taken || err != nil {
+			return err
+		}
+	}
 	if o := c.outputAt(c.cursor); e.Pressed && c.peeking(o) {
 		if w := c.sliverAt(o, c.cursor.pixel()); w != nil {
 			c.consumed = append(c.consumed, e.Button)
@@ -597,7 +602,7 @@ func (c *Compositor) pointerMoved(at time.Duration) error {
 			return errors.Join(over, c.seat.PointerMotion(at, local.X, local.Y), c.cursorMoved())
 		}
 	}
-	s, local, w := c.pointerTarget()
+	s, local, w, bar := c.pointerHit()
 	var err error
 	if s != c.seat.PointerFocus() {
 		err = c.seat.SetPointerFocus(s, local.X, local.Y)
@@ -608,15 +613,23 @@ func (c *Compositor) pointerMoved(at time.Duration) error {
 	if c.overviewHolds() && s == nil {
 		err = errors.Join(err, c.overviewMoved(c.cursor))
 	}
-	return errors.Join(err, c.cursorMoved())
+	return errors.Join(err, c.hoverTitlebar(bar), c.cursorMoved())
 }
 
 func (c *Compositor) pointerTarget() (*surface.Surface, point, *window) {
-	s, local, w := c.surfaceAt(c.cursor)
-	if s != nil && c.outsideGrab(s) {
-		return nil, point{}, nil
-	}
+	s, local, w, _ := c.pointerHit()
 	return s, local, w
+}
+
+func (c *Compositor) pointerHit() (*surface.Surface, point, *window, barHit) {
+	s, local, w := c.surfaceAt(c.cursor)
+	if hit, ok := c.barAt(c.cursor, s, w); ok {
+		return nil, point{}, hit.w, hit
+	}
+	if s != nil && c.outsideGrab(s) {
+		return nil, point{}, nil, barHit{}
+	}
+	return s, local, w, barHit{}
 }
 
 func (c *Compositor) refreshPointer() error {

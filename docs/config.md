@@ -1012,6 +1012,28 @@ the title, as a square as tall as the tab less `text_padding` on each side,
 when the tab is at least four icons wide. An icon name that resolves in
 `icon_theme` wins; otherwise the window's own pixel buffers are drawn.
 
+## titlebars
+
+A title bar on floating windows that let lys-wm draw their decorations: those
+that bind `xdg-decoration` or KDE's server decoration (Qt, foot, Kitty,
+Alacritty, mpv and GTK3 apps that honour it), and X11 windows whose
+`_MOTIF_WM_HINTS` leave decorations on. Windows drawing their own (GTK4 and
+libadwaita) get none, nor does any tiled, maximized or fullscreen window.
+It shows the title and icon as a tab does, in the `tabs` colours and font.
+
+| Key | Value |
+| --- | --- |
+| `floating` | `false` turns the bars off. Default `true` |
+| `height` | The bar's height in logical pixels, taken from the top of the floating rect, so the client gets that much less. Default `24` |
+| `buttons` | Any of `minimize`, `maximize` and `close`, in order, each once. Default all three |
+| `side` | `right` (the default) or `left`: where the buttons sit |
+| `double_click` | `maximize` (the default) toggles maximize; `float` tiles the window |
+
+Dragging the bar moves the window, as `movewindow` or a client's own move
+does. A button acts on a press; a hovered button shows in the bar's inverted
+colours. A middle click minimizes, and a right click sends the `windowmenu`
+[IPC event](./ipc#events) for a shell to draw a window menu.
+
 ## layout and scroll
 
 ```yaml

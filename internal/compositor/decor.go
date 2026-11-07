@@ -55,6 +55,7 @@ type Decor struct {
 	Blur                         Blur
 	ActiveBorder, InactiveBorder render.Border
 	Tab                          TabStyle
+	Titlebar                     Titlebars
 	DragPreview                  DragPreview
 }
 
@@ -86,6 +87,7 @@ func PlainDecor() Decor {
 			Urgent:   TabColors{Background: red, Text: crust},
 		},
 		DragPreview: DragPreview{Enabled: true, Opacity: 0.25, SnapDistance: 16, Switch: DragSwitch{Width: 4, Frames: 30}},
+		Titlebar:    Titlebars{Height: 15, Buttons: [titlebarButtonKinds]TitlebarButton{TitlebarMinimize, TitlebarMaximize, TitlebarClose}},
 	}
 }
 
@@ -106,6 +108,7 @@ func DefaultDecor(accent render.Color) Decor {
 		Inactive: render.Color{A: 0x38},
 	}
 	d.Blur = Blur{Size: 6, Passes: 2, Look: wm.Look{SaturationShift: 0.3}}
+	d.Titlebar.Floating, d.Titlebar.Height = true, 24
 	d.Tab = TabStyle{
 		Height: 24, Padding: 0, TextHeight: 11, TextPadding: 8,
 		Active:   TabColors{Background: accent, Text: crust},
@@ -146,12 +149,13 @@ const (
 )
 
 type labelKey struct {
-	text   string
-	icon   *shell.Icon
-	theme  *icontheme.Theme
-	size   image.Point
-	px     int
-	colors TabColors
+	text     string
+	icon     *shell.Icon
+	theme    *icontheme.Theme
+	size     image.Point
+	px       int
+	colors   TabColors
+	centered bool
 }
 
 type label struct {
@@ -257,7 +261,11 @@ func rasterLabel(font *gtext.Typeface, key labelKey, pad int) ([]byte, error) {
 		box.W -= side + pad
 	}
 	text := font.Ellipsize(key.text, float64(box.W), float64(key.px))
-	font.DrawAligned(cv, text, box, float64(key.px), lysUIColor(key.colors.Text), gtext.AlignStart)
+	align := gtext.AlignStart
+	if key.centered {
+		align = gtext.AlignCenter
+	}
+	font.DrawAligned(cv, text, box, float64(key.px), lysUIColor(key.colors.Text), align)
 	return pix, nil
 }
 
@@ -407,6 +415,9 @@ func (c *Compositor) drawnMask(o *output.Output, w *window) render.Mask {
 	m := c.windowMask(o, w)
 	if _, joined := c.stripAbove(w); joined {
 		m.Keep.Rect.Min.Y = c.outline(o, w).Min.Y
+	}
+	if bar, ok := c.barOf(w); ok && m.Keep.Rect != (image.Rectangle{}) {
+		m.Keep.Rect.Min.Y = deviceRect(o, bar).Min.Y
 	}
 	return m
 }

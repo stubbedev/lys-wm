@@ -401,6 +401,7 @@ func (c *Compositor) paintWindow(pass *frame, o *output.Output, w *window, at im
 	if err := c.drawRims(pass, o, rims); err != nil {
 		c.report(fmt.Errorf("compositor: the rim of window %d: %w", w.id, err))
 	}
+	c.drawTitlebar(pass, o, w, c.drawnMask(o, w))
 	if !wholeBorder {
 		c.drawOutlined(pass, o, w)
 	}
