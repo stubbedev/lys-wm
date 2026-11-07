@@ -179,11 +179,21 @@ type Scanner interface {
 	ScanoutFormats() gpu.ScanoutTarget
 }
 
+const MaxOverlayPlanes = 3
+
+type Overlay struct {
+	Key     ScanoutKey
+	Buffer  gpu.DMABUF
+	At      Placement
+	Release func() error
+}
+
 type OverlayPlanes interface {
-	TestOverlay(key ScanoutKey, d gpu.DMABUF, dst image.Rectangle) bool
-	SetOverlay(key ScanoutKey, d gpu.DMABUF, dst image.Rectangle, release func() error) error
-	ClearOverlay()
-	FlipOverlay() (bool, error)
+	OverlayPlanes() int
+	OverlayTarget() gpu.ScanoutTarget
+	TestOverlays(layers []Overlay) uint
+	SetOverlays(layers []Overlay) error
+	FlipOverlays() (bool, error)
 }
 
 type CursorPlane interface {

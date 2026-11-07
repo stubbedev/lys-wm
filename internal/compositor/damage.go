@@ -492,7 +492,9 @@ type scene struct {
 	zoom        *outputZoom
 	whole       [1]image.Rectangle
 	culled      map[*surface.Surface]bool
-	zeroCopy    [2]*surface.Surface
+	zeroCopy    [1 + backend.MaxOverlayPlanes]*surface.Surface
+	blurClean   bool
+	changed     []*surface.Surface
 	blurDamage  region.Set
 	blurScratch region.Set
 	cursorOnly  bool
@@ -575,6 +577,7 @@ func (op *drawOp) deviceDamage(r image.Rectangle) image.Rectangle {
 func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 	sc.damage.Reset()
 	sc.cursorOnly = sc.drawn && sc.onlyCursorChanged()
+	sc.blurClean = sc.blurDamage.Empty()
 	if sc.drawn {
 		sc.diffOps()
 		sc.addContentDamage()
@@ -583,7 +586,11 @@ func (sc *scene) diff(bounds image.Rectangle) *region.Set {
 		sc.damage.Add(bounds)
 	}
 	sc.blurDamage.Reset()
-	for _, content := range sc.content {
+	sc.changed = sc.changed[:0]
+	for s, content := range sc.content {
+		if !content.Empty() {
+			sc.changed = append(sc.changed, s)
+		}
 		content.Reset()
 	}
 	sc.damage.Clip(bounds)

@@ -999,11 +999,12 @@ const (
 
 type Output struct {
 	spare         []*scanout
-	overlay       *plane
-	overlayNext   *overlayUse
-	overlayQueued *overlayUse
-	overlayShown  *overlayUse
+	overlays      []*plane
+	overlayNext   overlayUses
+	overlayQueued overlayUses
+	overlayShown  overlayUses
 	overlayTested map[overlayTest]bool
+	overlaySets   map[overlaySet]bool
 	damageBlob    uint32
 	damageRects   render.Region
 	damageBytes   []byte
@@ -1479,7 +1480,7 @@ func (o *Output) bind(cr *crtc, p *plane) {
 	o.crtc, o.primary = cr, p
 	cr.output, p.taken = o, true
 	clear(o.tested)
-	o.overlayTested = nil
+	o.overlayTested, o.overlaySets = nil, nil
 	if cp := o.b.free(cursorPlane, cr); cp != nil && !o.tiled() {
 		cp.taken = true
 		if o.cursor == nil {
@@ -1494,13 +1495,12 @@ func (o *Output) bind(cr *crtc, p *plane) {
 		o.cursor = nil
 	}
 	for ov := range o.b.frees(overlayPlane, cr) {
-		if o.tiled() {
+		if o.tiled() || len(o.overlays) == backend.MaxOverlayPlanes {
 			break
 		}
 		if ov.props["zpos"].Value > p.props["zpos"].Value {
 			ov.taken = true
-			o.overlay = ov
-			break
+			o.overlays = append(o.overlays, ov)
 		}
 	}
 }
@@ -1512,9 +1512,10 @@ func (o *Output) unbind() {
 	o.crtc.output, o.primary.taken = nil, false
 	o.vrrSent = false
 	o.unbindTiles()
-	if o.overlay != nil {
-		o.overlay.taken, o.overlay = false, nil
+	for _, ov := range o.overlays {
+		ov.taken = false
 	}
+	o.overlays = nil
 	if o.cursor != nil {
 		o.cursor.plane.taken = false
 	}
@@ -1537,9 +1538,11 @@ func (o *Output) commitDisable(r *kdrm.Request) error {
 }
 
 func (o *Output) detach() {
-	if ov := o.overlay; ov != nil && o.overlayShown != nil {
-		ov.set(&o.b.req, "FB_ID", 0)
-		ov.set(&o.b.req, "CRTC_ID", 0)
+	for i, ov := range o.overlays {
+		if o.overlayShown[i] != nil {
+			ov.set(&o.b.req, "FB_ID", 0)
+			ov.set(&o.b.req, "CRTC_ID", 0)
+		}
 	}
 	o.primary.set(&o.b.req, "FB_ID", 0)
 	o.primary.set(&o.b.req, "CRTC_ID", 0)
@@ -1976,7 +1979,7 @@ func (o *Output) TearFrame(tear bool) {
 type planeKey struct {
 	primary, cursor uint32
 	primaryAt       backend.Placement
-	overlay         overlayTest
+	overlay         overlaySet
 	cursorClipped   bool
 	hotspot         image.Point
 	flags           uint32
@@ -1986,9 +1989,7 @@ const testedPlaneStates = 16
 
 func (o *Output) planeKey(fb, flags uint32) planeKey {
 	k := planeKey{primary: fb, flags: flags, primaryAt: o.primaryNext}
-	if u := o.overlayNext; u != nil {
-		k.overlay = overlayTest{fb: u.client.fb, dst: u.dst, yuv: u.yuv}
-	}
+	k.overlay = o.overlayNext.set()
 	if c := o.cursor; c != nil && c.visible {
 		k.cursor, k.cursorClipped, k.hotspot = c.pending.fb, c.clipped(), c.hotspot
 	}
@@ -2019,8 +2020,8 @@ func (o *Output) remember(key planeKey, ok bool) {
 
 func (b *Backend) forgetTests(fb uint32) {
 	for _, o := range b.outputs {
-		maps.DeleteFunc(o.tested, func(k planeKey, _ bool) bool { return k.primary == fb || k.overlay.fb == fb })
-		maps.DeleteFunc(o.overlayTested, func(k overlayTest, _ bool) bool { return k.fb == fb })
+		maps.DeleteFunc(o.tested, func(k planeKey, _ bool) bool { return k.primary == fb || k.overlay.holds(fb) })
+		o.forgetOverlayTests(fb)
 	}
 }
 

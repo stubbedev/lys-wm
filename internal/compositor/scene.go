@@ -223,8 +223,8 @@ func (c *Compositor) render(o *output.Output) error {
 		return err
 	}
 	sc.cur.dropHiddenRims()
-	sc.zeroCopy = [2]*surface.Surface{}
-	if err := c.assignOverlay(o, sc, bounds, shading != nil); err != nil {
+	sc.zeroCopy = [1 + backend.MaxOverlayPlanes]*surface.Surface{}
+	if err := c.assignOverlays(o, sc, bounds, shading != nil); err != nil {
 		c.report(fmt.Errorf("compositor: an overlay plane on %s: %w", o.Backend().Name(), err))
 	}
 	if err := sc.blurs.dropUnused(); err != nil {
@@ -255,10 +255,11 @@ func (c *Compositor) render(o *output.Output) error {
 		sc.targetStale = true
 		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
 	}
-	if flipped, err := c.flipOverlay(o, sc); err != nil || flipped {
+	if flipped, err := c.flipOverlays(o, sc); err != nil || flipped {
 		if err != nil {
 			return err
 		}
+		c.frames.Scanout(o.Backend().Name())
 		sc.presented()
 		return errors.Join(c.lockBlanked(o), c.runCaptures(o))
 	}

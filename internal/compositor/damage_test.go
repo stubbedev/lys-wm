@@ -440,7 +440,9 @@ func TestOverlayCandidatesAreOpaqueUntransformedAndUnderNothing(t *testing.T) {
 		{"something beside it", []drawOp{bg, op(), {fill: true, dst: image.Rect(1000, 50, 1200, 200)}}, 1},
 		{"a translucent window", []drawOp{bg, func() drawOp { o := op(); o.opaque = false; return o }()}, -1},
 		{"a rotated window", []drawOp{bg, func() drawOp { o := op(); o.transform = render.Rotate90; return o }()}, -1},
-		{"a scaled window", []drawOp{bg, func() drawOp { o := op(); o.src.W = 400; return o }()}, -1},
+		{"a scaled window", []drawOp{bg, func() drawOp { o := op(); o.src.W = 400; return o }()}, 1},
+		{"a border ring around it", []drawOp{bg, op(), {fill: true, dst: video.Inset(-4), mask: render.Mask{Keep: render.RoundRect{Rect: video.Inset(-4), Radius: 6}, Cut: render.RoundRect{Rect: video}}}}, 1},
+		{"a ring that cuts into it", []drawOp{bg, op(), {fill: true, dst: video.Inset(-4), mask: render.Mask{Keep: render.RoundRect{Rect: video.Inset(-4), Radius: 6}, Cut: render.RoundRect{Rect: video.Inset(20), Radius: 2}}}}, -1},
 		{"a rounded window", []drawOp{bg, func() drawOp {
 			o := op()
 			o.mask.Keep = render.RoundRect{Rect: video, Radius: 8}
@@ -453,7 +455,11 @@ func TestOverlayCandidatesAreOpaqueUntransformedAndUnderNothing(t *testing.T) {
 		}()}, -1},
 	}
 	for _, tc := range cases {
-		if got := overlayCandidate(tc.ops, len(tc.ops), bounds); got != tc.want {
+		got := -1
+		if picked := overlayCandidates(tc.ops, len(tc.ops), bounds, make([]int, 0, 1)); len(picked) == 1 {
+			got = picked[0]
+		}
+		if got != tc.want {
 			t.Errorf("%s: candidate %d, want %d", tc.name, got, tc.want)
 		}
 	}

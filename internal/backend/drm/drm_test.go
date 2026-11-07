@@ -131,6 +131,8 @@ type fakeDevice struct {
 	overlayYUV        bool
 	refuseLone        bool
 	refuseScaling     bool
+	secondOverlay     bool
+	overlayBudget     int
 	noMaster          bool
 	refuseMode        func(m kdrm.Mode) bool
 	active            map[uint32]bool
@@ -243,7 +245,12 @@ func (f *fakeDevice) Encoder(id uint32) (kdrm.Encoder, error) {
 	return kdrm.Encoder{ID: id, PossibleCRTCs: 0b11}, nil
 }
 
-func (f *fakeDevice) Planes() ([]uint32, error) { return []uint32{40, 41, 42, 43}, nil }
+func (f *fakeDevice) Planes() ([]uint32, error) {
+	if f.secondOverlay {
+		return []uint32{40, 41, 42, 43, 44}, nil
+	}
+	return []uint32{40, 41, 42, 43}, nil
+}
 
 func (f *fakeDevice) Plane(id uint32) (kdrm.Plane, error) {
 	formats := []fourcc.Format{scanoutFormat}
@@ -253,7 +260,7 @@ func (f *fakeDevice) Plane(id uint32) (kdrm.Plane, error) {
 	default:
 		formats = append(formats, f.deep...)
 	}
-	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01}[id], Formats: formats}, nil
+	return kdrm.Plane{ID: id, PossibleCRTCs: map[uint32]uint32{40: 0b01, 41: 0b10, 42: 0b11, 43: 0b01, 44: 0b11}[id], Formats: formats}, nil
 }
 
 func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, error) {
@@ -279,11 +286,11 @@ func (f *fakeDevice) Properties(object, kind uint32) (map[string]kdrm.Property, 
 		if f.damageClips {
 			props["FB_DAMAGE_CLIPS"] = kdrm.Property{ID: propDamageClips}
 		}
-		if f.overlayYUV && object == 42 {
+		if f.overlayYUV && (object == 42 || object == 44) {
 			props[propColorEncoding], props[propColorRange] = kdrm.Property{ID: propColorEncodingID}, kdrm.Property{ID: propColorRangeID}
 		}
 		if f.overlayZpos != 0 {
-			props["zpos"] = kdrm.Property{ID: propZpos, Value: map[uint32]uint64{40: 0, 41: 0, 42: f.overlayZpos}[object]}
+			props["zpos"] = kdrm.Property{ID: propZpos, Value: map[uint32]uint64{40: 0, 41: 0, 42: f.overlayZpos, 44: f.overlayZpos + 1}[object]}
 		}
 		if object == 43 {
 			props["HOTSPOT_X"], props["HOTSPOT_Y"] = kdrm.Property{ID: propHotspotX}, kdrm.Property{ID: propHotspotY}
@@ -501,6 +508,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	if f.refuseScaling && scales(c) {
 		return unix.EINVAL
 	}
+	if f.overlayBudget > 0 && overlaysOn(c) > f.overlayBudget {
+		return unix.EINVAL
+	}
 	if f.refusesModeset(c) {
 		return unix.EINVAL
 	}
@@ -542,8 +552,18 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	return nil
 }
 
+func overlaysOn(c commit) int {
+	n := 0
+	for _, plane := range []uint32{42, 44} {
+		if c.values[[2]uint32{plane, propFB}] != 0 {
+			n++
+		}
+	}
+	return n
+}
+
 func scales(c commit) bool {
-	for _, plane := range []uint32{40, 41, 42} {
+	for _, plane := range []uint32{40, 41, 42, 44} {
 		srcW, ok := c.values[[2]uint32{plane, propSrcW}]
 		if ok && (srcW>>16 != c.values[[2]uint32{plane, propCRTCW}] || c.values[[2]uint32{plane, propSrcH}]>>16 != c.values[[2]uint32{plane, propCRTCH}]) {
 			return true
@@ -2778,7 +2798,7 @@ func overlayRig(t *testing.T, zpos uint64) (*rig, *Output, gpu.DMABUF) {
 		return &fakeAlloc{soft: soft.New()}
 	})
 	o := r.lit()
-	if o.overlay != nil {
+	if len(o.overlays) != 0 {
 		r.b.planes[slices.IndexFunc(r.b.planes, func(p *plane) bool { return p.id == 42 })].clients = []gpu.FormatModifier{{Format: scanoutFormat, Modifier: fourcc.Linear}}
 	}
 	return r, o, gpu.DMABUF{Size: image.Pt(640, 360), Format: scanoutFormat, Modifier: fourcc.Linear, Planes: []gpu.Plane{{FD: 9, Stride: 640 * 4}}}
@@ -2786,21 +2806,21 @@ func overlayRig(t *testing.T, zpos uint64) (*rig, *Output, gpu.DMABUF) {
 
 func TestAnOverlayBelowThePrimaryPlaneIsNotUsed(t *testing.T) {
 	_, o, _ := overlayRig(t, 0)
-	if o.overlay != nil {
+	if len(o.overlays) != 0 {
 		t.Fatal("an overlay with no zpos above the primary plane was claimed")
 	}
 }
 
 func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 	r, o, client := overlayRig(t, 2)
-	if o.overlay == nil {
+	if len(o.overlays) == 0 {
 		t.Fatal("no overlay plane claimed")
 	}
 	key := &fakeBuffer{client}
 	dst := image.Rect(100, 100, 740, 460)
 	r.dev.refuseOverlay = true
 	n := len(r.dev.commits)
-	if o.TestOverlay(key, client, dst) {
+	if testOverlay(o, key, client, dst) {
 		t.Fatal("a TEST_ONLY commit the kernel refuses passed")
 	}
 	if got := r.dev.commits[n:]; len(got) != 1 || got[0].flags&kdrm.AtomicTestOnly == 0 {
@@ -2808,18 +2828,18 @@ func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 	}
 	r.dev.refuseOverlay = false
 	clear(o.overlayTested)
-	if !o.TestOverlay(key, client, dst) {
+	if !testOverlay(o, key, client, dst) {
 		t.Fatal("the overlay was refused")
 	}
 	tests := len(r.dev.commits)
-	if !o.TestOverlay(key, client, dst) || len(r.dev.commits) != tests {
+	if !testOverlay(o, key, client, dst) || len(r.dev.commits) != tests {
 		t.Fatal("the same overlay was tested twice")
 	}
 	released := 0
-	if err := o.SetOverlay(key, client, dst, func() error { released++; return nil }); err != nil {
+	if err := o.SetOverlays([]backend.Overlay{overlayLayer(key, client, dst, func() error { released++; return nil })}); err != nil {
 		t.Fatal(err)
 	}
-	flipped, err := o.FlipOverlay()
+	flipped, err := o.FlipOverlays()
 	if err != nil || !flipped {
 		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
 	}
@@ -2832,8 +2852,10 @@ func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 	}
 	r.dev.flip(t, 10, 2)
 	r.until("the overlay's flip", func() bool { return !o.flipping })
-	o.ClearOverlay()
-	if flipped, err := o.FlipOverlay(); err != nil || !flipped {
+	if err := o.SetOverlays(nil); err != nil {
+		t.Fatal(err)
+	}
+	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
 		t.Fatalf("clearing the overlay: %t, %v", flipped, err)
 	}
 	if off := r.dev.commits[len(r.dev.commits)-1]; off.values[[2]uint32{42, propFB}] != 0 {

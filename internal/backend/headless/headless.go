@@ -26,24 +26,26 @@ import (
 )
 
 type Backend struct {
-	shallow    bool
-	sdrOnly    bool
-	vrr        bool
-	loop       *loop.Loop
-	renderer   render.Renderer
-	closeGPU   func() error
-	handler    backend.Handler
-	outputs    []*Output
-	next       int
-	keyboard   *Keyboard
-	pointer    *Pointer
-	touch      *Touch
-	switches   *Switches
-	cursorSize image.Point
-	inherit    bool
-	closed     bool
-	fenceTime  func(fd int) (time.Duration, bool, error)
-	report     func(error)
+	shallow       bool
+	sdrOnly       bool
+	vrr           bool
+	loop          *loop.Loop
+	renderer      render.Renderer
+	closeGPU      func() error
+	handler       backend.Handler
+	outputs       []*Output
+	next          int
+	keyboard      *Keyboard
+	pointer       *Pointer
+	touch         *Touch
+	switches      *Switches
+	cursorSize    image.Point
+	overlayPlanes int
+	overlayTarget gpu.ScanoutTarget
+	inherit       bool
+	closed        bool
+	fenceTime     func(fd int) (time.Duration, bool, error)
+	report        func(error)
 }
 
 type frameFencer interface {
@@ -304,6 +306,11 @@ type Output struct {
 	filled         bool
 	frameCap       int
 	scannedAt      backend.Placement
+	overlayNext    overlayLayers
+	overlayQueued  overlayLayers
+	overlayShown   overlayLayers
+	overlayLatched bool
+	overlayFlips   uint64
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
@@ -472,6 +479,7 @@ func (o *Output) releaseClientBuffers() error {
 		}
 	}
 	o.shownRelease, o.queuedRelease, o.queuedTorn = nil, nil, false
+	errs = append(errs, o.releaseOverlays())
 	return errors.Join(errs...)
 }
 
@@ -548,6 +556,7 @@ func (o *Output) Present(damage render.Region) error {
 		}
 		o.takeover, o.inherited = snap, false
 	}
+	o.latchOverlays()
 	o.presentPending, o.queuedTorn = true, false
 	o.presents++
 	o.fenceFrame()
@@ -811,6 +820,9 @@ func (o *Output) present() error {
 	h := o.backend.handler
 	if h == nil {
 		return nil
+	}
+	if err := o.overlaysFlipped(); err != nil {
+		return err
 	}
 	o.presentPending = false
 	left := o.shownRelease

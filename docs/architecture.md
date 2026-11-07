@@ -479,6 +479,19 @@ needs a full-screen primary refuses in the test commit, cached per buffer and
 rectangles, and the frame is composited. An async flip changes only `FB_ID`, so
 a tearing surface whose rectangles change takes one vblank flip first.
 
+Opaque, untransformed, unrounded windows of at least 256x256 go to overlay
+planes (#380), up to three per CRTC (`backend.MaxOverlayPlanes`), topmost first,
+scaled and cropped by their viewport as the primary is. Since KMS overlays sit
+above the primary, a candidate must have nothing painted over it, judged by
+what the ops above paint rather than their bounds, so a border ring around a
+window does not disqualify it. Each frame makes at most one test commit: a new
+layer is tested alone, then the set together, and a set the planes refuse
+together drops its lowest layer; every result is cached. A frame in which only
+overlaid surfaces changed flips the overlay planes and composites nothing. A
+surface that is a candidate for two frames running is offered the overlay
+planes' formats as its dmabuf scanout tranche, and loses it after two frames
+out, so a client allocates what a plane takes without the feedback flapping.
+
 Composited frames are 8-bit XRGB8888 unless an output rule asks for
 `bitdepth: 10` (#187). Ten bits are opt-in per output, as in Hyprland,
 because XR30 primaries break screen sharing and some fullscreen games on

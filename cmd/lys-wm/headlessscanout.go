@@ -31,8 +31,9 @@ func allowHeadlessScanout(b backend.Backend) error {
 	if err != nil {
 		return fmt.Errorf("-headless-scanout: the renderer's dmabuf formats: %w", err)
 	}
+	target := gpu.ScanoutTarget{Device: dev, Formats: formats}
 	for _, o := range h.Outputs() {
-		o.AllowScanout(gpu.ScanoutTarget{Device: dev, Formats: formats})
+		o.AllowScanout(target)
 	}
-	return nil
+	return h.SetOverlayPlanes(backend.MaxOverlayPlanes, target)
 }

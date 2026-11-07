@@ -81,6 +81,7 @@ type scenario struct {
 	once      bool
 	fakeInput bool
 	scansOut  bool
+	teardown  func(*session)
 }
 
 type mark struct {
@@ -90,16 +91,17 @@ type mark struct {
 }
 
 type session struct {
-	client  *testclient.Client
-	ipc     string
-	now     func() time.Duration
-	swipes  io.Writer
-	rss     func() int64
-	growth  []rssGrowth
-	marks   []mark
-	windows []*testclient.Window
-	opened  *testclient.Window
-	flipper *flipper
+	client   *testclient.Client
+	ipc      string
+	now      func() time.Duration
+	swipes   io.Writer
+	rss      func() int64
+	growth   []rssGrowth
+	marks    []mark
+	windows  []*testclient.Window
+	opened   *testclient.Window
+	flippers []*flipper
+	runtime  string
 }
 
 func (s *session) dispatch(action string) {
@@ -163,7 +165,7 @@ func (s *session) clear() {
 			panic(fatal{fmt.Errorf("destroy a window: %w", err)})
 		}
 	}
-	s.windows = nil
+	s.windows, s.flippers = nil, nil
 	s.client.Sync()
 	s.dispatch("workspace 1")
 	s.settle()
@@ -200,6 +202,9 @@ func (s *session) run(sc *scenario, rounds int) {
 	}
 	if rounds > warmupRounds {
 		s.growth = append(s.growth, rssGrowth{Scenario: sc.name, KiB: repeatedGrowth(samples)})
+	}
+	if sc.teardown != nil {
+		sc.teardown(s)
 	}
 	s.clear()
 }
@@ -440,11 +445,19 @@ var scenarios = []scenario{
 		},
 	},
 	{
-		name:     scaledTitle,
+		name:     "scaled",
 		once:     true,
 		scansOut: true,
 		setup:    (*session).scaledFullscreen,
-		steps:    []step{{name: scaledTitle + "-fullscreen", measure: steady, continuous: true, act: flipsScaled(true), after: flipsScaled(false)}},
+		steps:    []step{{name: scanoutSteps + "-scaled-fullscreen", measure: steady, continuous: true, act: flips(true), after: flips(false)}},
+	},
+	{
+		name:     "video",
+		once:     true,
+		scansOut: true,
+		setup:    (*session).windowedVideos,
+		teardown: squareCorners(false),
+		steps:    []step{{name: scanoutSteps + "-windowed-video", measure: steady, continuous: true, act: flips(true), after: flips(false)}},
 	},
 	overviewByAction(10),
 	overviewByFingers(10),

@@ -443,7 +443,20 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
-      "scaled-fullscreen": {
+      "scanout-scaled-fullscreen": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 2,
+        "render_passes_per_scanout_frame": 0,
+        "submits_per_frame": 0,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "scanout-windowed-video": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 2,
@@ -902,7 +915,20 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
-      "scaled-fullscreen": {
+      "scanout-scaled-fullscreen": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 2,
+        "render_passes_per_scanout_frame": 0,
+        "submits_per_frame": 0,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "scanout-windowed-video": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 2,
@@ -1361,7 +1387,20 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
-      "scaled-fullscreen": {
+      "scanout-scaled-fullscreen": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 2,
+        "render_passes_per_scanout_frame": 0,
+        "submits_per_frame": 0,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "scanout-windowed-video": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 2,
@@ -1820,7 +1859,20 @@
         "thumb_draws_per_settle": 2,
         "uploads_per_frame": 4
       },
-      "scaled-fullscreen": {
+      "scanout-scaled-fullscreen": {
+        "allocs_per_frame": 32,
+        "damage_rects_per_frame": 32,
+        "draws_per_frame": 2,
+        "file_io_per_frame": 2,
+        "filter_passes_per_frame": 2,
+        "gpu_waits_per_frame": 0,
+        "render_passes_per_frame": 2,
+        "render_passes_per_scanout_frame": 0,
+        "submits_per_frame": 0,
+        "thumb_draws_per_settle": 2,
+        "uploads_per_frame": 2
+      },
+      "scanout-windowed-video": {
         "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 2,

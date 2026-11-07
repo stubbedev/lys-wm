@@ -1,9 +1,10 @@
 package drm
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"image"
+	"maps"
 	"slices"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -29,15 +30,33 @@ type planeYUV struct {
 
 type overlayUse struct {
 	client  *clientFB
-	dst     image.Rectangle
-	yuv     planeYUV
+	test    overlayTest
 	release func() error
 }
 
 type overlayTest struct {
-	fb  uint32
-	dst image.Rectangle
-	yuv planeYUV
+	plane uint32
+	fb    uint32
+	at    backend.Placement
+	yuv   planeYUV
+}
+
+type overlaySet [backend.MaxOverlayPlanes]overlayTest
+
+type overlayUses [backend.MaxOverlayPlanes]*overlayUse
+
+func (u *overlayUses) set() overlaySet {
+	var s overlaySet
+	for i, use := range u {
+		if use != nil {
+			s[i] = use.test
+		}
+	}
+	return s
+}
+
+func (s *overlaySet) holds(fb uint32) bool {
+	return slices.ContainsFunc(s[:], func(t overlayTest) bool { return t.fb == fb })
 }
 
 type overlayFlip struct {
@@ -46,37 +65,118 @@ type overlayFlip struct {
 }
 
 func (o *Output) overlaysUsable() bool {
-	return o.overlay != nil && o.enabled && o.lit && !o.off && !o.b.paused && o.kms == kmsFlip && !o.flipping && o.drawing == nil && o.front != nil
+	return len(o.overlays) > 0 && o.enabled && o.lit && !o.off && !o.b.paused && o.kms == kmsFlip && !o.flipping && o.drawing == nil && o.front != nil
 }
 
-func (o *Output) TestOverlay(key backend.ScanoutKey, d gpu.DMABUF, dst image.Rectangle) bool {
-	if !o.overlaysUsable() || !slices.Contains(o.overlay.clients, gpu.FormatModifier{Format: d.Format, Modifier: d.Modifier}) {
-		return false
+func (o *Output) OverlayPlanes() int {
+	return len(o.overlays)
+}
+
+func (o *Output) OverlayTarget() gpu.ScanoutTarget {
+	var formats []gpu.FormatModifier
+	for _, p := range o.overlays {
+		for _, f := range p.clients {
+			if !slices.Contains(formats, f) {
+				formats = append(formats, f)
+			}
+		}
 	}
-	yuv, err := o.overlayYUV(d)
+	slices.SortFunc(formats, func(a, b gpu.FormatModifier) int {
+		return cmp.Or(cmp.Compare(a.Format, b.Format), cmp.Compare(a.Modifier, b.Modifier))
+	})
+	return gpu.ScanoutTarget{Device: o.b.number, Formats: formats}
+}
+
+func (o *Output) layerTest(i int, l backend.Overlay) (overlayTest, *clientFB, bool) {
+	p := o.overlays[i]
+	if !l.At.Valid(l.Buffer.Size, modeOf(o.mode).Size) || !slices.Contains(p.clients, gpu.FormatModifier{Format: l.Buffer.Format, Modifier: l.Buffer.Modifier}) {
+		return overlayTest{}, nil, false
+	}
+	yuv, err := o.overlayYUV(p, l.Buffer)
 	if err != nil {
-		return false
+		return overlayTest{}, nil, false
 	}
-	cf, err := o.b.clientFB(key, d)
+	cf, err := o.b.clientFB(l.Key, l.Buffer)
 	if err != nil {
-		return false
+		return overlayTest{}, nil, false
 	}
-	test := overlayTest{fb: cf.fb, dst: dst, yuv: yuv}
-	if ok, seen := o.overlayTested[test]; seen {
-		return ok
+	return overlayTest{plane: p.id, fb: cf.fb, at: l.At, yuv: yuv}, cf, true
+}
+
+func (o *Output) TestOverlays(layers []backend.Overlay) uint {
+	if !o.overlaysUsable() {
+		return 0
 	}
-	r := &o.b.req
-	r.Reset()
-	o.placeOverlay(cf.fb, dst, yuv)
-	ok := o.test(planeFlags) == nil
+	spent := false
+	var set overlaySet
+	var taken []int
+	for i, l := range layers[:min(len(layers), len(o.overlays))] {
+		t, _, ok := o.layerTest(i, l)
+		if !ok {
+			continue
+		}
+		passed, seen := o.overlayTested[t]
+		if !seen {
+			if spent {
+				continue
+			}
+			spent = true
+			var alone overlaySet
+			alone[i] = t
+			passed = o.testOverlays(alone)
+			o.rememberOverlay(t, passed)
+		}
+		if passed {
+			set[i] = t
+			taken = append(taken, i)
+		}
+	}
+	for len(taken) > 1 {
+		passed, seen := o.overlaySets[set]
+		if !seen && !spent {
+			spent = true
+			passed = o.testOverlays(set)
+			o.rememberOverlaySet(set, passed)
+			seen = true
+		}
+		if seen && passed {
+			break
+		}
+		last := taken[len(taken)-1]
+		set[last], taken = overlayTest{}, taken[:len(taken)-1]
+	}
+	var mask uint
+	for _, i := range taken {
+		mask |= 1 << i
+	}
+	return mask
+}
+
+func (o *Output) testOverlays(set overlaySet) bool {
+	o.b.req.Reset()
+	for i, t := range set {
+		if t.fb != 0 {
+			o.placeOverlay(o.overlays[i], t)
+		}
+	}
+	return o.test(planeFlags) == nil
+}
+
+func (o *Output) rememberOverlay(t overlayTest, ok bool) {
 	if o.overlayTested == nil || len(o.overlayTested) >= testedOverlays {
 		o.overlayTested = map[overlayTest]bool{}
 	}
-	o.overlayTested[test] = ok
-	return ok
+	o.overlayTested[t] = ok
 }
 
-func (o *Output) overlayYUV(d gpu.DMABUF) (planeYUV, error) {
+func (o *Output) rememberOverlaySet(s overlaySet, ok bool) {
+	if o.overlaySets == nil || len(o.overlaySets) >= testedOverlays {
+		o.overlaySets = map[overlaySet]bool{}
+	}
+	o.overlaySets[s] = ok
+}
+
+func (o *Output) overlayYUV(p *plane, d gpu.DMABUF) (planeYUV, error) {
 	if !d.Format.YUV() {
 		return planeYUV{}, nil
 	}
@@ -87,11 +187,11 @@ func (o *Output) overlayYUV(d gpu.DMABUF) (planeYUV, error) {
 			y.Range = gpu.FullRange
 		}
 	}
-	encoding, err := o.overlay.enum(o.b.dev, propColorEncoding, colorEncodings[y.Coefficients])
+	encoding, err := p.enum(o.b.dev, propColorEncoding, colorEncodings[y.Coefficients])
 	if err != nil {
 		return planeYUV{}, err
 	}
-	rng, err := o.overlay.enum(o.b.dev, propColorRange, colorRanges[y.Range])
+	rng, err := p.enum(o.b.dev, propColorRange, colorRanges[y.Range])
 	if err != nil {
 		return planeYUV{}, err
 	}
@@ -114,55 +214,49 @@ func (p *plane) enum(dev device, name, value string) (uint64, error) {
 	return v, nil
 }
 
-func (o *Output) placeOverlay(fb uint32, dst image.Rectangle, yuv planeYUV) {
-	p, r := o.overlay, &o.b.req
-	w, h := uint64(dst.Dx()), uint64(dst.Dy()) //nolint:gosec // plane sizes are positive
-	p.set(r, "FB_ID", uint64(fb))
+func (o *Output) placeOverlay(p *plane, t overlayTest) {
+	r := &o.b.req
+	p.set(r, "FB_ID", uint64(t.fb))
 	p.set(r, "CRTC_ID", uint64(o.crtc.id))
-	p.set(r, "SRC_X", 0)
-	p.set(r, "SRC_Y", 0)
-	p.set(r, "SRC_W", w<<16)
-	p.set(r, "SRC_H", h<<16)
-	p.setPosition(r, dst.Min)
-	p.set(r, "CRTC_W", w)
-	p.set(r, "CRTC_H", h)
-	if yuv.set {
-		p.set(r, propColorEncoding, yuv.encoding)
-		p.set(r, propColorRange, yuv.rng)
+	p.setRects(r, t.at.Src, t.at.Dst)
+	if t.yuv.set {
+		p.set(r, propColorEncoding, t.yuv.encoding)
+		p.set(r, propColorRange, t.yuv.rng)
 	}
 }
 
-func (o *Output) SetOverlay(key backend.ScanoutKey, d gpu.DMABUF, dst image.Rectangle, release func() error) error {
-	if o.overlay == nil {
-		return fmt.Errorf("drm: %s has no overlay plane", o.Name())
+func (o *Output) SetOverlays(layers []backend.Overlay) error {
+	if len(layers) > len(o.overlays) {
+		return fmt.Errorf("drm: %d overlays on %s, which has %d overlay planes", len(layers), o.Name(), len(o.overlays))
 	}
-	yuv, err := o.overlayYUV(d)
-	if err != nil {
-		return fmt.Errorf("drm: an overlay on %s: %w", o.Name(), err)
+	var next overlayUses
+	for i, l := range layers {
+		if l.Key == nil {
+			continue
+		}
+		t, cf, ok := o.layerTest(i, l)
+		if !ok {
+			return fmt.Errorf("drm: overlay plane %d of %s cannot show a %v %v buffer at %+v", o.overlays[i].id, o.Name(), l.Buffer.Format, l.Buffer.Modifier, l.At)
+		}
+		next[i] = &overlayUse{client: cf, test: t, release: l.Release}
 	}
-	cf, err := o.b.clientFB(key, d)
-	if err != nil {
-		return fmt.Errorf("drm: an overlay framebuffer on %s: %w", o.Name(), err)
-	}
-	o.overlayNext = &overlayUse{client: cf, dst: dst, yuv: yuv, release: release}
+	o.overlayNext = next
 	return nil
 }
 
-func (o *Output) ClearOverlay() {
-	o.overlayNext = nil
-}
-
 func (o *Output) addOverlay() {
-	p := o.overlay
-	if p == nil || o.overlayNext == o.overlayShown {
-		return
+	r := &o.b.req
+	for i, p := range o.overlays {
+		next := o.overlayNext[i]
+		switch {
+		case next == o.overlayShown[i]:
+		case next != nil:
+			o.placeOverlay(p, next.test)
+		default:
+			p.set(r, "FB_ID", 0)
+			p.set(r, "CRTC_ID", 0)
+		}
 	}
-	if u := o.overlayNext; u != nil {
-		o.placeOverlay(u.client.fb, u.dst, u.yuv)
-		return
-	}
-	p.set(&o.b.req, "FB_ID", 0)
-	p.set(&o.b.req, "CRTC_ID", 0)
 }
 
 func (o *Output) sentOverlay() {
@@ -170,12 +264,14 @@ func (o *Output) sentOverlay() {
 		return
 	}
 	o.overlayQueued = o.overlayNext
-	if o.overlayQueued != nil {
-		o.overlayQueued.client.shown++
+	for i, u := range o.overlayQueued {
+		if u != nil && u != o.overlayShown[i] {
+			u.client.shown++
+		}
 	}
 }
 
-func (o *Output) FlipOverlay() (bool, error) {
+func (o *Output) FlipOverlays() (bool, error) {
 	if !o.overlaysUsable() {
 		return false, nil
 	}
@@ -184,9 +280,10 @@ func (o *Output) FlipOverlay() (bool, error) {
 	o.addOverlay()
 	if err := o.b.dev.Commit(r, planeFlags, uint64(o.crtc.id)); err != nil {
 		if refused(err) {
+			o.overlayRefused()
 			return false, nil
 		}
-		return false, fmt.Errorf("drm: flip the overlay of %s: %w", o.Name(), err)
+		return false, fmt.Errorf("drm: flip the overlays of %s: %w", o.Name(), err)
 	}
 	o.sentOverlay()
 	o.flipping = true
@@ -197,40 +294,48 @@ func (o *Output) overlayFlipped() overlayFlip {
 	if o.overlayQueued == o.overlayShown {
 		return overlayFlip{}
 	}
-	old := o.overlayShown
-	o.overlayShown = o.overlayQueued
-	if old == nil {
-		return overlayFlip{changed: true}
+	var errs []error
+	for i, old := range o.overlayShown {
+		if old != nil && old != o.overlayQueued[i] {
+			old.client.leave()
+			errs = append(errs, old.release())
+		}
 	}
-	old.client.leave()
-	return overlayFlip{err: old.release(), changed: true}
+	o.overlayShown = o.overlayQueued
+	return overlayFlip{err: errors.Join(errs...), changed: true}
 }
 
 func (o *Output) dropOverlays() error {
-	if o.overlay == nil {
-		return nil
-	}
 	var errs []error
-	if u := o.overlayShown; u != nil {
-		u.client.leave()
-		errs = append(errs, u.release())
+	for i := range o.overlays {
+		shown, queued := o.overlayShown[i], o.overlayQueued[i]
+		if shown != nil {
+			shown.client.leave()
+			errs = append(errs, shown.release())
+		}
+		if queued != nil && queued != shown {
+			queued.client.leave()
+			errs = append(errs, queued.release())
+		}
 	}
-	if u := o.overlayQueued; u != nil && u != o.overlayShown {
-		u.client.leave()
-		errs = append(errs, u.release())
-	}
-	o.overlayShown, o.overlayQueued, o.overlayNext = nil, nil, nil
+	o.overlayShown, o.overlayQueued, o.overlayNext = overlayUses{}, overlayUses{}, overlayUses{}
 	return errors.Join(errs...)
 }
 
 func (o *Output) overlayRefused() {
-	u := o.overlayNext
-	if u == nil || u == o.overlayShown {
+	if o.overlayNext == o.overlayShown {
 		return
 	}
-	if o.overlayTested == nil {
-		o.overlayTested = map[overlayTest]bool{}
+	set := o.overlayNext.set()
+	if layers := slices.DeleteFunc(slices.Clone(set[:]), func(t overlayTest) bool { return t.fb == 0 }); len(layers) == 1 {
+		o.rememberOverlay(layers[0], false)
+	} else {
+		o.rememberOverlaySet(set, false)
 	}
-	o.overlayTested[overlayTest{fb: u.client.fb, dst: u.dst, yuv: u.yuv}] = false
 	o.overlayNext = o.overlayShown
+}
+
+func (o *Output) forgetOverlayTests(fb uint32) {
+	maps.DeleteFunc(o.overlayTested, func(t overlayTest, _ bool) bool { return t.fb == fb })
+	maps.DeleteFunc(o.overlaySets, func(s overlaySet, _ bool) bool { return s.holds(fb) })
 }

@@ -330,8 +330,8 @@ func TestDamageClipsReachTheDriverOnASeat(t *testing.T) {
 
 func TestAnOverlayTakesAClientBufferOnASeat(t *testing.T) {
 	s, o := onASeat(t, "vkms")
-	if o.overlay == nil {
-		o.overlay = s.unstackedOverlay(o)
+	if len(o.overlays) == 0 {
+		o.overlays = []*plane{s.unstackedOverlay(o)}
 	}
 	size := image.Pt(256, 144)
 	d, free, err := testclient.UDMABUF(size, testclient.Fill(0x10, 0x80, 0xf0))
@@ -349,27 +349,29 @@ func TestAnOverlayTakesAClientBufferOnASeat(t *testing.T) {
 	key := &fakeBuffer{d}
 	dst := image.Rectangle{Min: image.Pt(100, 60), Max: image.Pt(100, 60).Add(size)}
 	n := len(s.dev.commits)
-	if !o.TestOverlay(key, d, dst) {
+	if !testOverlay(o, key, d, dst) {
 		t.Fatalf("vkms refused a 1:1 opaque %v overlay at %v: %v", d.Format, dst, s.dev.errs[len(s.dev.errs)-1])
 	}
 	if real, tests := s.dev.since(n); real != 0 || tests != 1 {
 		t.Fatalf("testing the overlay took %d commits and %d tests", real, tests)
 	}
 	released := false
-	if err := o.SetOverlay(key, d, dst, func() error { released = true; return nil }); err != nil {
+	if err := o.SetOverlays([]backend.Overlay{overlayLayer(key, d, dst, func() error { released = true; return nil })}); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlay(); err != nil || !flipped {
+	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
 		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
 	}
 	s.until("the overlay's flip", func() bool { return !o.flipping })
-	p := o.overlay.id
+	p := o.overlays[0].id
 	if fb, crtc, x := s.property(p, kdrm.ObjectPlane, "FB_ID"), s.property(p, kdrm.ObjectPlane, "CRTC_ID"), s.property(p, kdrm.ObjectPlane, "CRTC_X"); fb == 0 || crtc != uint64(o.crtc.id) || x != uint64(dst.Min.X) {
 		t.Fatalf("after the flip overlay plane %d shows framebuffer %d on CRTC %d at x %d", p, fb, crtc, x)
 	}
 	t.Logf("overlay plane %d scans out the client buffer at %v", p, dst)
-	o.ClearOverlay()
-	if flipped, err := o.FlipOverlay(); err != nil || !flipped {
+	if err := o.SetOverlays(nil); err != nil {
+		t.Fatal(err)
+	}
+	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
 		t.Fatalf("clearing the overlay: FlipOverlay = %t, %v", flipped, err)
 	}
 	s.until("the cleared overlay's flip", func() bool { return !o.flipping && released })

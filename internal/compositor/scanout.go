@@ -13,7 +13,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
-	spt "github.com/stubbedev/lys-wm/internal/protocol/server/presentationtime"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -162,6 +161,9 @@ func (c *Compositor) SurfaceScanout(s *surface.Surface) gpu.ScanoutTarget {
 			return t
 		}
 	}
+	if k, ok := c.candidates[s]; ok && k.offered {
+		return k.out.OverlayTarget()
+	}
 	return gpu.ScanoutTarget{}
 }
 
@@ -215,110 +217,4 @@ func (c *Compositor) scanoutBufferGone(b *dmabuf.Buffer) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-const overlayMinPixels = 256 * 256
-
-func overlayCandidate(ops []drawOp, cursorFrom int, bounds image.Rectangle) int {
-	for i := cursorFrom - 1; i >= 0; i-- {
-		if op := &ops[i]; op.overlayable(bounds) && !overlapped(ops[i+1:], op.dst) {
-			return i
-		}
-	}
-	return -1
-}
-
-func overlapped(above []drawOp, r image.Rectangle) bool {
-	for i := range above {
-		if above[i].dst.Overlaps(r) {
-			return true
-		}
-	}
-	return false
-}
-
-func (op *drawOp) overlayable(bounds image.Rectangle) bool {
-	return op.surface != nil && op.covers() && op.transform == render.Normal && op.alpha == 1 && op.whole.Empty() &&
-		op.dst != bounds && op.dst.In(bounds) && op.dst.Dx()*op.dst.Dy() >= overlayMinPixels &&
-		op.src == render.FRect{W: float64(op.dst.Dx()), H: float64(op.dst.Dy())}
-}
-
-type overlayShown struct {
-	buffer *dmabuf.Buffer
-	dst    image.Rectangle
-}
-
-func (c *Compositor) assignOverlay(o *output.Output, sc *scene, bounds image.Rectangle, shading bool) error {
-	out, ok := o.Backend().(backend.OverlayPlanes)
-	if !ok {
-		return nil
-	}
-	var want overlayShown
-	var op *drawOp
-	if !shading && sc.zoom == nil && c.adopting == nil && c.hdr[o.Backend()] == nil {
-		if i := overlayCandidate(sc.cur.ops, sc.cur.cursorFrom, bounds); i >= 0 {
-			op = &sc.cur.ops[i]
-			if t, isImported := c.textures[op.surface].(imported); isImported && colorspace.Passthrough(op.space, c.scanoutTarget(o)) {
-				if out.TestOverlay(t.buffer, c.overlayBuffer(t.buffer, op.surface), op.dst) {
-					want = overlayShown{t.buffer, op.dst}
-				}
-			}
-		}
-	}
-	if want.buffer != nil {
-		op.overlay, sc.zeroCopy[1] = true, op.surface
-	}
-	if want == c.overlays[o] {
-		return nil
-	}
-	if want.buffer == nil {
-		delete(c.overlays, o)
-		out.ClearOverlay()
-		return nil
-	}
-	if c.overlays == nil {
-		c.overlays = map[*output.Output]overlayShown{}
-	}
-	if err := out.SetOverlay(want.buffer, c.overlayBuffer(want.buffer, op.surface), want.dst, c.imported[want.buffer].left); err != nil {
-		op.overlay, sc.zeroCopy[1] = false, nil
-		return err
-	}
-	held, ok := c.scannedOut[want.buffer]
-	if !ok {
-		held = c.takeScannedOut()
-		c.scannedOut[want.buffer] = held
-	}
-	held.outputs++
-	c.overlays[o] = want
-	return nil
-}
-
-func (c *Compositor) overlayBuffer(b *dmabuf.Buffer, s *surface.Surface) gpu.DMABUF {
-	d := b.DMABUF()
-	d.Format = d.Format.Opaque()
-	if d.Format.YUV() {
-		d.YUV = c.colorrep.Of(s)
-	}
-	return d
-}
-
-func (c *Compositor) flipOverlay(o *output.Output, sc *scene) (bool, error) {
-	shown, ok := c.overlays[o]
-	out, planes := o.Backend().(backend.OverlayPlanes)
-	if !ok || !planes || !sc.drawn || sc.targetStale {
-		return false, nil
-	}
-	for _, r := range sc.damage.Rects() {
-		if !r.In(shown.dst) {
-			return false, nil
-		}
-	}
-	return out.FlipOverlay()
-}
-
-func (sc *scene) feedbackKind(s *surface.Surface, kind spt.WpPresentationFeedbackKind, idle bool) spt.WpPresentationFeedbackKind {
-	if !idle && (sc.zeroCopy[0] == s || sc.zeroCopy[1] == s) {
-		kind |= spt.WpPresentationFeedbackKindZeroCopy
-	}
-	return kind
 }
