@@ -98,8 +98,8 @@ func TestCursorShapeFromTheThemeAtFractionalScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Sync()
-	h.Eventually("the window under the pointer shape", func(b *headless.Backend, c *compositor.Compositor) bool {
-		return pixel(snapshot(b.Outputs()[0]), 2, 2) == [3]byte{0x40, 0x40, 0x40} && c.Seat().Cursor() == seat.ShapeCursor{Shape: "pointer"}
+	h.Eventually("the window under the pointer shape, loaded at the output's size", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return !c.CursorsLoading() && pixel(snapshot(b.Outputs()[0]), 2, 2) == [3]byte{0x40, 0x40, 0x40} && c.Seat().Cursor() == seat.ShapeCursor{Shape: "pointer"}
 	})
 	golden.Assert(t, "cursor-shape", h.Rendered(0))
 	if err := device.SetShape(in.Serial, 99); err != nil {
