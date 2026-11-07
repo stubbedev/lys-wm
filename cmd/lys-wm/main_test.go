@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -558,5 +559,43 @@ func TestEffectiveConfigNamesEachKeysLayer(t *testing.T) {
 		if want := map[string]string{"inner": config.SourceRuntime, "outer": config.SourceConfig}[k.Path[1]]; k.Source != want {
 			t.Errorf("%v comes from %s, want %s", k.Path, k.Source, want)
 		}
+	}
+}
+
+func TestCheckConfigPrintsNothingWhenItAcceptsTheBuiltInConfig(t *testing.T) {
+	testenv.Font(t)
+	testenv.XKBCompiler(t)
+	dir := t.TempDir()
+	getenv := func(name string) string {
+		if name == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return os.Getenv(name)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = w
+	err = checkConfigFile("", "", getenv)
+	os.Stderr = stderr
+	if cerr := w.Close(); cerr != nil {
+		t.Fatal(cerr)
+	}
+	printed, rerr := io.ReadAll(r)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err != nil || len(printed) > 0 {
+		t.Fatalf("printed %q, %v", printed, err)
+	}
+	var notices strings.Builder
+	s, err := newSource("", "", getenv, &notices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.read(); err != nil || !strings.Contains(notices.String(), "no config at") {
+		t.Fatalf("a start says it runs the built-in config: %q, %v", notices.String(), err)
 	}
 }

@@ -261,10 +261,11 @@ type source struct {
 	runtimeExplicit bool
 	keymaps         *xkb.Compiler
 	getenv          func(string) string
+	notices         io.Writer
 }
 
-func newSource(path, runtime string, getenv func(string) string) (source, error) {
-	s := source{path: path, explicit: path != "", runtime: runtime, runtimeExplicit: runtime != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv}
+func newSource(path, runtime string, getenv func(string) string, notices io.Writer) (source, error) {
+	s := source{path: path, explicit: path != "", runtime: runtime, runtimeExplicit: runtime != "", keymaps: xkb.NewCompiler(getenv), getenv: getenv, notices: notices}
 	if !s.explicit {
 		var err error
 		if s.path, err = configPath(getenv); err != nil {
@@ -284,7 +285,7 @@ func (s source) read() ([]config.Layer, error) {
 	case err == nil:
 		base.Data = data
 	case errors.Is(err, fs.ErrNotExist) && !s.explicit:
-		fmt.Fprintf(os.Stderr, "lys-wm: no config at %s; using the built-in one\n", s.path)
+		fmt.Fprintf(s.notices, "lys-wm: no config at %s; using the built-in one\n", s.path)
 		base = config.Layer{Source: config.SourceBuiltIn, File: "built-in config", Data: config.Default}
 	default:
 		return nil, fmt.Errorf("read the config: %w", err)
@@ -341,7 +342,7 @@ func (s source) load(accent render.Color) (loaded, error) {
 
 func printHandoverInfo(path, runtime string, getenv func(string) string, out io.Writer) error {
 	info := preflightInfo{Format: handover.Format}
-	s, err := newSource(path, runtime, getenv)
+	s, err := newSource(path, runtime, getenv, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -360,7 +361,7 @@ func printHandoverInfo(path, runtime string, getenv func(string) string, out io.
 }
 
 func checkConfigFile(path, runtime string, getenv func(string) string) error {
-	s, err := newSource(path, runtime, getenv)
+	s, err := newSource(path, runtime, getenv, io.Discard)
 	if err != nil {
 		return err
 	}
@@ -382,7 +383,7 @@ type effectiveConfig struct {
 }
 
 func printEffectiveConfig(path, runtime string, getenv func(string) string, out io.Writer) error {
-	s, err := newSource(path, runtime, getenv)
+	s, err := newSource(path, runtime, getenv, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -601,7 +602,7 @@ func run(args []string) (err error) {
 	if dbg.wire {
 		trace = os.Stderr
 	}
-	src, err := newSource(*path, *runtime, os.Getenv)
+	src, err := newSource(*path, *runtime, os.Getenv, os.Stderr)
 	if err != nil {
 		return err
 	}
