@@ -289,7 +289,7 @@ func errUnknownWindow(id wm.WindowID) error {
 
 func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 	var err error
-	c.tabBars = a.TabBars
+	c.tabBars, c.rings = a.TabBars, a.Rings
 	c.stack = c.stack[:0]
 	for _, p := range a.Windows {
 		w := c.windowByID(p.ID)

@@ -20,12 +20,15 @@ type savedGroup struct {
 	Children  []savedNode `json:"children"`
 	Focus     int         `json:"focus"`
 	Ephemeral uint8       `json:"ephemeral"`
+	Locked    bool        `json:"locked,omitempty"`
+	Untabbed  Layout      `json:"untabbed,omitempty"`
 }
 
 type savedWorkspace struct {
 	ID         WorkspaceID `json:"id"`
 	Output     string      `json:"output"`
 	Tree       *savedGroup `json:"tree,omitempty"`
+	Lift       int         `json:"lift,omitempty"`
 	Floating   []Floating  `json:"floating,omitempty"`
 	Minimized  []Minimized `json:"minimized,omitempty"`
 	Fullscreen WindowID    `json:"fullscreen,omitempty"`
@@ -65,7 +68,7 @@ func saveGroup(g *Group) *savedGroup {
 	if g == nil {
 		return nil
 	}
-	out := &savedGroup{Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Children: make([]savedNode, len(g.Children))}
+	out := &savedGroup{Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, Children: make([]savedNode, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch n := ch.Node.(type) {
@@ -82,7 +85,7 @@ func loadGroup(g *savedGroup) (*Group, error) {
 	if g == nil {
 		return nil, nil
 	}
-	out := &Group{Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Children: make([]Child, len(g.Children))}
+	out := &Group{Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, Children: make([]Child, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch {
@@ -186,7 +189,7 @@ func savedCover(w savedWorkspace) Cover {
 
 func saveWorkspace(w Workspace) savedWorkspace {
 	sw := savedWorkspace{
-		ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Floating: w.Floating, Minimized: w.Minimized,
+		ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Lift: w.Tree.lift, Floating: w.Floating, Minimized: w.Minimized,
 		FloatFocus: w.floatFocus, Home: w.home, History: w.history,
 	}
 	if w.Scratch.Name != "" {
@@ -210,7 +213,7 @@ func loadWorkspaces(saved []savedWorkspace) ([]Workspace, error) {
 			return nil, err
 		}
 		ws := Workspace{
-			ID: w.ID, Output: w.Output, Tree: Tree{root: root}, Floating: w.Floating, Minimized: w.Minimized,
+			ID: w.ID, Output: w.Output, Tree: Tree{root: root, lift: w.Lift}, Floating: w.Floating, Minimized: w.Minimized,
 			Cover: savedCover(w), floatFocus: w.FloatFocus, home: w.Home, history: w.History,
 		}
 		if w.Scratch != nil {

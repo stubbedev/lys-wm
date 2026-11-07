@@ -94,6 +94,9 @@ func (s State) MapFloating(id WindowID, rect image.Rectangle) (State, error) {
 }
 
 func (s State) ToggleFloating(at Autotile) (State, error) {
+	if w, g := s.lifted(); g != nil {
+		return s.floatLifted(w, g)
+	}
 	id, ok := s.Focused()
 	if !ok {
 		return s, nil

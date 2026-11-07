@@ -302,6 +302,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 		}
 		if layer == wm.LayerTiled {
 			c.drawTabBars(pass, o)
+			c.drawRings(pass, o)
 			c.drawDragPreview(pass, o)
 		}
 	}

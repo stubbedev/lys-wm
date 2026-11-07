@@ -79,6 +79,8 @@ type Group struct {
 	Layout    Layout
 	Children  []Child
 	Focus     int
+	Locked    bool
+	untabbed  Layout
 	ephemeral ephemerality
 }
 
@@ -117,6 +119,7 @@ func (g *Group) remove(i int) {
 
 type Tree struct {
 	root *Group
+	lift int
 }
 
 var ErrUnknownWindow = errors.New("wm: unknown window")
@@ -134,7 +137,7 @@ func (t Tree) clone() Tree {
 		return t
 	}
 	g, _ := t.root.clone().(*Group)
-	return Tree{root: g}
+	return Tree{root: g, lift: t.lift}
 }
 
 func (t Tree) Windows() []WindowID {
@@ -223,6 +226,7 @@ func (t Tree) Focus(id WindowID) (Tree, error) {
 	for i, g := range groups {
 		g.Focus = idx[i]
 	}
+	t.lift = 0
 	return t, nil
 }
 
@@ -231,16 +235,28 @@ func (t Tree) Insert(id WindowID, rootLayout Layout) (Tree, error) {
 		return Tree{}, fmt.Errorf("wm: insert window %d: already in the tree", id)
 	}
 	t = t.clone()
+	t.insertNode(Window{ID: id}, rootLayout)
+	return t.Focus(id)
+}
+
+func (t *Tree) insertNode(n Node, rootLayout Layout) {
 	if t.root == nil {
 		t.root = &Group{Layout: rootLayout}
-		t.root.insert(0, Window{ID: id})
-		return t, nil
+		t.root.insert(0, n)
+		return
 	}
 	focused, _ := t.Focused()
 	groups, idx, _ := t.path(focused)
-	parent, at := groups[len(groups)-1], idx[len(idx)-1]
-	parent.insert(at+1, Window{ID: id})
-	return t.Focus(id)
+	k := len(groups) - 1
+	for k >= 0 && groups[k].Locked {
+		k--
+	}
+	if k < 0 {
+		t.root = &Group{Layout: rootLayout, Children: []Child{{Node: t.root, Ratio: 1}}}
+		t.root.insert(1, n)
+		return
+	}
+	groups[k].insert(idx[k]+1, n)
 }
 
 type Autotile struct {
@@ -273,6 +289,7 @@ func (t Tree) Place(id WindowID, area image.Rectangle, at Autotile) (Tree, error
 }
 
 func (t Tree) Remove(id WindowID) (Tree, error) {
+	focused, _ := t.Focused()
 	t = t.clone()
 	groups, idx, ok := t.path(id)
 	if !ok {
@@ -280,6 +297,9 @@ func (t Tree) Remove(id WindowID) (Tree, error) {
 	}
 	groups[len(groups)-1].remove(idx[len(idx)-1])
 	t.collapse(groups, idx, CollapseInvalid)
+	if focused == id {
+		t.lift = 0
+	}
 	return t, nil
 }
 
@@ -289,14 +309,23 @@ func (t Tree) Wrap(id WindowID, layout Layout, ephemeral bool) (Tree, error) {
 	if !ok {
 		return Tree{}, fmt.Errorf("wrap window %d: %w", id, ErrUnknownWindow)
 	}
-	parent, at := groups[len(groups)-1], idx[len(idx)-1]
+	t.wrapAt(groups, idx, layout, ephemeral)
+	return t, nil
+}
+
+func (t *Tree) wrapAt(groups []*Group, idx []int, layout Layout, ephemeral bool) {
 	g := &Group{Layout: layout}
-	g.insert(0, parent.Children[at].Node)
 	if ephemeral {
 		g.ephemeral = ephemeralStaged
 	}
+	if len(groups) == 0 {
+		g.insert(0, t.root)
+		t.root = g
+		return
+	}
+	parent, at := groups[len(groups)-1], idx[len(idx)-1]
+	g.insert(0, parent.Children[at].Node)
 	parent.Children[at].Node = g
-	return t, nil
 }
 
 func shouldCollapse(g *Group, rootGroup bool, policy CollapsePolicy) bool {

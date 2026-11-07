@@ -31,9 +31,16 @@ type TabBar struct {
 	Shown     bool
 }
 
+type GroupRing struct {
+	Rect      image.Rectangle
+	Workspace WorkspaceID
+	Shown     bool
+}
+
 type Arrangement struct {
 	Windows []Placement
 	TabBars []TabBar
+	Rings   []GroupRing
 }
 
 type Insets struct {
@@ -172,12 +179,13 @@ func (t Tree) rectOf(area image.Rectangle, target *Group) image.Rectangle {
 
 type Arranger struct {
 	Arrangement
-	rects []image.Rectangle
-	tabs  []WindowID
+	rects  []image.Rectangle
+	tabs   []WindowID
+	lifted *Group
 }
 
 func (x *Arranger) reset() {
-	x.Windows, x.TabBars, x.rects, x.tabs = x.Windows[:0], x.TabBars[:0], x.rects[:0], x.tabs[:0]
+	x.Windows, x.TabBars, x.Rings, x.rects, x.tabs = x.Windows[:0], x.TabBars[:0], x.Rings[:0], x.rects[:0], x.tabs[:0]
 }
 
 func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
@@ -185,6 +193,9 @@ func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
 	case Window:
 		x.Windows = append(x.Windows, Placement{ID: n.ID, Rect: r, Visible: visible})
 	case *Group:
+		if n == x.lifted && visible {
+			x.Rings = append(x.Rings, GroupRing{Rect: r})
+		}
 		if n.Layout == Tabbed && visible {
 			from := len(x.tabs)
 			for _, c := range n.Children {

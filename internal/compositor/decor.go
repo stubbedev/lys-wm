@@ -514,19 +514,39 @@ func (c *Compositor) tabColors(id wm.WindowID, active bool) TabColors {
 	return c.decor.Tab.Inactive
 }
 
-func (c *Compositor) tabBarView(bar *wm.TabBar) (view, bool) {
+func (c *Compositor) workspaceDecorView(ws wm.WorkspaceID, shown bool) (view, bool) {
 	if sw := c.drawnSwitch; sw != nil {
-		if v, ok := sw.viewOf(bar.Workspace); ok {
+		if v, ok := sw.viewOf(ws); ok {
 			return v, true
 		}
 	}
-	return identity, bar.Shown
+	return identity, shown
+}
+
+func (c *Compositor) drawRings(pass *frame, o *output.Output) {
+	width := c.decor.BorderWidth
+	if width <= 0 {
+		return
+	}
+	for _, ring := range c.rings {
+		v, drawn := c.workspaceDecorView(ring.Workspace, ring.Shown)
+		moved := v.rect(ring.Rect, o.Logical())
+		if !drawn || !moved.Overlaps(o.Logical()) {
+			continue
+		}
+		outer, inner := deviceRect(o, moved), deviceRect(o, moved.Inset(width))
+		mask := render.Mask{Keep: render.RoundRect{Rect: outer}, Cut: render.RoundRect{Rect: inner}}
+		if c.decor.Rounding > 0 {
+			mask.Keep.Radius, mask.Cut.Radius = deviceLength(o, c.decor.Rounding+width), deviceLength(o, c.decor.Rounding)
+		}
+		c.paintBorder(pass, c.decor.ActiveBorder, outer, inner, mask, float32(min(max(v.alpha, 0), 1)), 0)
+	}
 }
 
 func (c *Compositor) drawTabBars(pass *frame, o *output.Output) {
 	for i := range c.tabBars {
 		bar := &c.tabBars[i]
-		v, drawn := c.tabBarView(bar)
+		v, drawn := c.workspaceDecorView(bar.Workspace, bar.Shown)
 		moved := v.rect(bar.Rect, o.Logical())
 		if !drawn || !bar.Rect.Overlaps(o.Logical()) || !moved.Overlaps(o.Logical()) {
 			continue

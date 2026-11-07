@@ -338,3 +338,194 @@ func BenchmarkTreeContains(b *testing.B) {
 		}
 	}
 }
+
+func split3(t *testing.T) Tree {
+	t.Helper()
+	tree := on(t)(build(t, 1, 2).Wrap(2, SplitV, false))
+	tree = on(t)(tree.Focus(2))
+	return on(t)(tree.Insert(3, SplitH))
+}
+
+func ephemeralNested(t *testing.T) Tree {
+	t.Helper()
+	tree := on(t)(build(t, 1, 2).Wrap(2, SplitV, true))
+	tree = on(t)(tree.Focus(2))
+	return on(t)(tree.Insert(3, SplitH))
+}
+
+func lifted(t *testing.T, tree Tree) Tree {
+	t.Helper()
+	tree, changed := tree.FocusParent()
+	if !changed {
+		t.Fatalf("focusparent changed nothing in %s", tree)
+	}
+	return tree
+}
+
+func TestGroupOperations(t *testing.T) {
+	cases := []struct {
+		name    string
+		tree    func(t *testing.T) Tree
+		op      func(Tree) (Tree, bool)
+		want    string
+		changed bool
+	}{
+		{"changegroup turns the innermost group", split3, func(t Tree) (Tree, bool) { return t.ChangeGroup(ChangeToH) }, "h[1 *h[2 *3]]", true},
+		{"changegroup to the layout it has", split3, func(t Tree) (Tree, bool) { return t.ChangeGroup(ChangeToV) }, "h[1 *v[2 *3]]", false},
+		{"changegroup opposite", split3, func(t Tree) (Tree, bool) { return t.ChangeGroup(ChangeOpposite) }, "h[1 *h[2 *3]]", true},
+		{"changegroup on a lifted group", func(t *testing.T) Tree { return lifted(t, lifted(t, split3(t))) }, func(t Tree) (Tree, bool) { return t.ChangeGroup(ChangeToTab) }, "tab[1 *v[2 *3]]", true},
+		{"focustab next", func(t *testing.T) Tree { return on(t)(on(t)(build(t, 1, 2, 3).Wrap(1, Tabbed, false)).Focus(1)) }, func(t Tree) (Tree, bool) { return t.FocusTab(TabStep(1), false) }, "h[*tab[*1] 2 3]", false},
+		{"focustab wraps", func(t *testing.T) Tree { return tabs(t, 1, 2, 3) }, func(t Tree) (Tree, bool) { return t.FocusTab(TabStep(1), true) }, "tab[*1 2 3]", true},
+		{"focustab stops at the end", func(t *testing.T) Tree { return tabs(t, 1, 2, 3) }, func(t Tree) (Tree, bool) { return t.FocusTab(TabStep(1), false) }, "tab[1 2 *3]", false},
+		{"focustab by number", func(t *testing.T) Tree { return tabs(t, 1, 2, 3) }, func(t Tree) (Tree, bool) { return t.FocusTab(TabIndex(2), false) }, "tab[1 *2 3]", true},
+		{"focustab past the last", func(t *testing.T) Tree { return tabs(t, 1, 2, 3) }, func(t Tree) (Tree, bool) { return t.FocusTab(TabIndex(4), false) }, "tab[1 2 *3]", false},
+		{"focustab in a split3 tab group", func(t *testing.T) Tree {
+			tree := on(t)(tabs(t, 1, 2).Wrap(2, SplitV, false))
+			tree = on(t)(tree.Focus(2))
+			return on(t)(tree.Insert(3, SplitH))
+		}, func(t Tree) (Tree, bool) { return t.FocusTab(TabStep(-1), false) }, "tab[*1 v[2 *3]]", true},
+		{"swap keeps the slots", split3, func(t Tree) (Tree, bool) { return t.Swap(Left) }, "h[*3 v[2 *1]]", true},
+		{"swap at the edge", split3, func(t Tree) (Tree, bool) { return t.Swap(Right) }, "h[1 *v[2 *3]]", false},
+		{"swap a lifted group", func(t *testing.T) Tree { return lifted(t, split3(t)) }, func(t Tree) (Tree, bool) { return t.Swap(Left) }, "h[*v[2 *3] 1]", true},
+		{"moveout lifts a window after its group", split3, Tree.MoveOut, "h[1 v[*2] *3]", true},
+		{"moveout of an ephemeral group dissolves it", ephemeralNested, Tree.MoveOut, "h[1 2 *3]", true},
+		{"moveout at the root", func(t *testing.T) Tree { return build(t, 1, 2) }, Tree.MoveOut, "h[1 *2]", false},
+		{"moveout of a lifted group", func(t *testing.T) Tree {
+			tree := on(t)(split3(t).Wrap(3, SplitH, false))
+			tree = on(t)(tree.Focus(3))
+			tree = on(t)(tree.Insert(4, SplitH))
+			return lifted(t, tree)
+		}, Tree.MoveOut, "h[1 v[*2] *h[3 *4]]", true},
+		{"focuschild without a lift", split3, Tree.FocusChild, "h[1 *v[2 *3]]", false},
+		{"focusparent at the root", func(t *testing.T) Tree { return lifted(t, lifted(t, split3(t))) }, Tree.FocusParent, "h[1 *v[2 *3]]", false},
+		{"locktab on no tabs", split3, func(t Tree) (Tree, bool) { return t.LockTabs(SwitchToggle) }, "h[1 *v[2 *3]]", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tree := c.tree(t)
+			before := tree.String()
+			got, changed := c.op(tree)
+			if got.String() != c.want || changed != c.changed {
+				t.Fatalf("%s gave %s (changed %t), want %s (changed %t)", before, got, changed, c.want, c.changed)
+			}
+			if tree.String() != before {
+				t.Fatalf("the operation changed its input to %s", tree)
+			}
+		})
+	}
+}
+
+func tabs(t *testing.T, ids ...WindowID) Tree {
+	t.Helper()
+	var tree Tree
+	for _, id := range ids {
+		tree = on(t)(tree.Insert(id, Tabbed))
+	}
+	return tree
+}
+
+func ratios(g *Group) []float64 {
+	out := make([]float64, len(g.Children))
+	for i, c := range g.Children {
+		out[i] = c.Ratio
+	}
+	return out
+}
+
+func TestToggleTabTwiceRestoresTheSplitAndItsRatios(t *testing.T) {
+	tree := build(t, 1, 2, 3)
+	tree, _, err := tree.Resize(1, image.Rect(0, 0, 900, 600), Right, 150)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ratios(tree.Root())
+	tree, _ = tree.ChangeGroup(ChangeToggleTab)
+	if tree.String() != "tab[1 2 *3]" {
+		t.Fatalf("toggletab gave %s", tree)
+	}
+	tree, _ = tree.ChangeGroup(ChangeToggleTab)
+	if tree.String() != "h[1 2 *3]" || !slices.Equal(ratios(tree.Root()), want) {
+		t.Fatalf("toggletab twice gave %s with ratios %v, want h with %v", tree, ratios(tree.Root()), want)
+	}
+	made := tabs(t, 1, 2)
+	if made, _ = made.ChangeGroup(ChangeToggleTab); made.String() != "h[1 *2]" {
+		t.Fatalf("a group made as tabs toggled to %s", made)
+	}
+}
+
+func TestEqualizeResetsTheFocusedGroupOrTheWholeTree(t *testing.T) {
+	area := image.Rect(0, 0, 1200, 800)
+	tree := split3(t)
+	tree, _, _ = tree.Resize(3, area, Up, 100)
+	tree, _, _ = tree.Resize(1, area, Right, 100)
+	inner, _ := tree.Root().Children[1].Node.(*Group)
+	if slices.Equal(ratios(inner), []float64{1, 1}) || slices.Equal(ratios(tree.Root()), []float64{1, 1}) {
+		t.Fatal("the resizes did not change the ratios")
+	}
+	one, changed := tree.Equalize(false)
+	oneInner, _ := one.Root().Children[1].Node.(*Group)
+	if !changed || !slices.Equal(ratios(oneInner), []float64{1, 1}) || slices.Equal(ratios(one.Root()), []float64{1, 1}) {
+		t.Fatalf("equalize gave %v inside %v", ratios(oneInner), ratios(one.Root()))
+	}
+	all, _ := tree.Equalize(true)
+	allInner, _ := all.Root().Children[1].Node.(*Group)
+	if !slices.Equal(ratios(allInner), []float64{1, 1}) || !slices.Equal(ratios(all.Root()), []float64{1, 1}) {
+		t.Fatalf("equalize all gave %v inside %v", ratios(allInner), ratios(all.Root()))
+	}
+	if _, changed := all.Equalize(true); changed {
+		t.Fatal("equalizing an equal tree changed it")
+	}
+}
+
+func TestALockedTabGroupKeepsWindowsOutAndIn(t *testing.T) {
+	tree := on(t)(build(t, 1, 2).Wrap(2, Tabbed, false))
+	tree = on(t)(tree.Focus(2))
+	tree = on(t)(tree.Insert(3, SplitH))
+	tree, changed := tree.LockTabs(SwitchOn)
+	if !changed {
+		t.Fatal("locktab on changed nothing")
+	}
+	tree = on(t)(tree.Insert(4, SplitH))
+	if got := tree.String(); got != "h[1 tab[2 *3] *4]" {
+		t.Fatalf("a window opened from a locked tab group landed in %s", got)
+	}
+	if moved, ok, _ := tree.Move(4, Left, CollapseEmptySplits); !ok || moved.String() != "h[1 *4 tab[2 *3]]" {
+		t.Fatalf("moving into a locked group gave %s, want it passed over", moved)
+	}
+	tree = on(t)(tree.Focus(3))
+	if moved, ok, _ := tree.Move(3, Left, CollapseEmptySplits); !ok || moved.String() != "h[1 *tab[*3 2] 4]" {
+		t.Fatalf("reordering inside a locked group gave %s", moved)
+	}
+	if _, result := tree.MoveFocused(Up, CollapseEmptySplits); result != moveBlocked {
+		t.Fatalf("leaving a locked group gave %d, want blocked", result)
+	}
+	if _, changed := tree.MoveOut(); changed {
+		t.Fatal("moveout left a locked group")
+	}
+	if _, changed := tree.Swap(Right); changed {
+		t.Fatal("swap left a locked group")
+	}
+	tree = on(t)(tree.Focus(1))
+	if swapped, _ := tree.Swap(Right); swapped.String() != "h[tab[2 *3] *1 4]" {
+		t.Fatalf("swapping with a locked group gave %s, want the whole group exchanged", swapped)
+	}
+	root := tabs(t, 1, 2)
+	root, _ = root.LockTabs(SwitchToggle)
+	if root = on(t)(root.Insert(3, SplitH)); root.String() != "h[tab[1 *2] *3]" {
+		t.Fatalf("a window opened from a locked root landed in %s", root)
+	}
+}
+
+func TestAMoveOfALiftedGroupCarriesItWhole(t *testing.T) {
+	tree := lifted(t, split3(t))
+	moved, result := tree.MoveFocused(Left, CollapseEmptySplits)
+	if result != moveDone || moved.String() != "h[*v[2 *3] 1]" {
+		t.Fatalf("moving the lifted group gave %s (%d)", moved, result)
+	}
+	if g, ok := moved.LiftedGroup(); !ok || describe(g) != "v[2 *3]" {
+		t.Fatal("the moved group lost its focus")
+	}
+	if _, result := moved.MoveFocused(Left, CollapseEmptySplits); result != moveAtEdge {
+		t.Fatalf("moving the group off the edge gave %d", result)
+	}
+}

@@ -454,19 +454,31 @@ func (a MoveToWorkspaceAction) apply(s State, settings Settings) (State, []Effec
 	if err != nil {
 		return State{}, nil, err
 	}
-	win, ok := s.Focused()
-	if !ok {
+	if _, ok := s.Focused(); !ok {
 		return s, nil, nil
 	}
-	next, err := s.MoveToWorkspace(id, settings.Autotile)
+	var next State
+	if _, g := s.lifted(); g != nil {
+		next, err = s.moveFocusedNode(id)
+	} else {
+		next, err = s.MoveToWorkspace(id, settings.Autotile)
+	}
 	if err != nil || !a.Follow {
 		return next, nil, err
 	}
-	next, err = next.FocusWindow(win)
+	next, err = next.SwitchWorkspace(id)
 	return next, nil, err
 }
 
 func (KillAction) apply(s State, _ Settings) (State, []Effect, error) {
+	if _, g := s.lifted(); g != nil {
+		ids := appendWindows(nil, g)
+		effects := make([]Effect, len(ids))
+		for i, id := range ids {
+			effects[i] = CloseWindowAction{ID: id}
+		}
+		return s, effects, nil
+	}
 	id, ok := s.Focused()
 	if !ok {
 		return s, nil, nil
@@ -494,21 +506,7 @@ func (a ExecAction) apply(s State, _ Settings) (State, []Effect, error) {
 }
 
 func (a MakeGroupAction) apply(s State, _ Settings) (State, []Effect, error) {
-	w := s.activeWorkspace()
-	if w == nil {
-		return s, nil, nil
-	}
-	id, ok := w.Tree.Focused()
-	if !ok {
-		return s, nil, nil
-	}
-	tree, err := w.Tree.Wrap(id, a.Layout, a.Ephemeral)
-	if err != nil {
-		return State{}, nil, err
-	}
-	s = s.clone()
-	s.activeWorkspace().Tree = tree
-	return s, nil, nil
+	return s.withFocusedTree(func(t Tree) (Tree, bool) { return t.WrapFocused(a.Layout, a.Ephemeral) }), nil, nil
 }
 
 func Dispatch(s State, a Action, settings Settings) (State, []Effect, error) {
@@ -867,6 +865,46 @@ var Actions = []ActionSpec{
 			}
 			return MakeGroupAction{Layout: l, Ephemeral: len(args) == 2}, nil
 		},
+	},
+	{
+		Name: "changegroup", Args: "<h|v|tab|toggletab|opposite>",
+		Summary: "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back.",
+		parse:   parseChangeGroup,
+	},
+	{
+		Name: "focustab", Args: "<prev|next|n> [wrap]",
+		Summary: "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap.",
+		parse:   parseFocusTab,
+	},
+	{
+		Name:    "focusparent",
+		Summary: "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside.",
+		parse:   bare(FocusParentAction{}),
+	},
+	{
+		Name:    "focuschild",
+		Summary: "Undo one focusparent, down toward the focused window.",
+		parse:   bare(FocusChildAction{}),
+	},
+	{
+		Name: "swap", Args: "<left|right|up|down>",
+		Summary: "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size.",
+		parse:   directional(func(d Direction) Action { return SwapAction{Dir: d} }),
+	},
+	{
+		Name:    "moveout",
+		Summary: "Lift the focused window or group out of its group, placing it after that group in the one around it.",
+		parse:   bare(MoveOutAction{}),
+	},
+	{
+		Name: "equalize", Args: "[all]",
+		Summary: "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree.",
+		parse:   parseEqualize,
+	},
+	{
+		Name: "locktab", Args: "[toggle|on|off]",
+		Summary: "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told.",
+		parse:   parseLockTab,
 	},
 	{
 		Name: "submap", Args: "<name|reset>",

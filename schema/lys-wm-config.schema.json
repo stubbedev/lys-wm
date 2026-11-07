@@ -233,6 +233,43 @@
                 "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
               },
               {
+                "name": "changegroup",
+                "args": "<h|v|tab|toggletab|opposite>",
+                "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+              },
+              {
+                "name": "focustab",
+                "args": "<prev|next|n> [wrap]",
+                "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+              },
+              {
+                "name": "focusparent",
+                "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+              },
+              {
+                "name": "focuschild",
+                "summary": "Undo one focusparent, down toward the focused window."
+              },
+              {
+                "name": "swap",
+                "args": "<left|right|up|down>",
+                "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+              },
+              {
+                "name": "moveout",
+                "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+              },
+              {
+                "name": "equalize",
+                "args": "[all]",
+                "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+              },
+              {
+                "name": "locktab",
+                "args": "[toggle|on|off]",
+                "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+              },
+              {
                 "name": "submap",
                 "args": "<name|reset>",
                 "summary": "Switch binds to the named submap, or back to the default ones."
@@ -796,6 +833,43 @@
                     "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
                   },
                   {
+                    "name": "changegroup",
+                    "args": "<h|v|tab|toggletab|opposite>",
+                    "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                  },
+                  {
+                    "name": "focustab",
+                    "args": "<prev|next|n> [wrap]",
+                    "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                  },
+                  {
+                    "name": "focusparent",
+                    "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                  },
+                  {
+                    "name": "focuschild",
+                    "summary": "Undo one focusparent, down toward the focused window."
+                  },
+                  {
+                    "name": "swap",
+                    "args": "<left|right|up|down>",
+                    "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                  },
+                  {
+                    "name": "moveout",
+                    "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                  },
+                  {
+                    "name": "equalize",
+                    "args": "[all]",
+                    "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                  },
+                  {
+                    "name": "locktab",
+                    "args": "[toggle|on|off]",
+                    "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                  },
+                  {
                     "name": "submap",
                     "args": "<name|reset>",
                     "summary": "Switch binds to the named submap, or back to the default ones."
@@ -1000,6 +1074,43 @@
                     "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
                   },
                   {
+                    "name": "changegroup",
+                    "args": "<h|v|tab|toggletab|opposite>",
+                    "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                  },
+                  {
+                    "name": "focustab",
+                    "args": "<prev|next|n> [wrap]",
+                    "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                  },
+                  {
+                    "name": "focusparent",
+                    "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                  },
+                  {
+                    "name": "focuschild",
+                    "summary": "Undo one focusparent, down toward the focused window."
+                  },
+                  {
+                    "name": "swap",
+                    "args": "<left|right|up|down>",
+                    "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                  },
+                  {
+                    "name": "moveout",
+                    "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                  },
+                  {
+                    "name": "equalize",
+                    "args": "[all]",
+                    "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                  },
+                  {
+                    "name": "locktab",
+                    "args": "[toggle|on|off]",
+                    "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
+                  },
+                  {
                     "name": "submap",
                     "args": "<name|reset>",
                     "summary": "Switch binds to the named submap, or back to the default ones."
@@ -1202,6 +1313,43 @@
                     "name": "makegroup",
                     "args": "<h|v|tab> [ephemeral]",
                     "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                  },
+                  {
+                    "name": "changegroup",
+                    "args": "<h|v|tab|toggletab|opposite>",
+                    "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                  },
+                  {
+                    "name": "focustab",
+                    "args": "<prev|next|n> [wrap]",
+                    "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                  },
+                  {
+                    "name": "focusparent",
+                    "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                  },
+                  {
+                    "name": "focuschild",
+                    "summary": "Undo one focusparent, down toward the focused window."
+                  },
+                  {
+                    "name": "swap",
+                    "args": "<left|right|up|down>",
+                    "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                  },
+                  {
+                    "name": "moveout",
+                    "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                  },
+                  {
+                    "name": "equalize",
+                    "args": "[all]",
+                    "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                  },
+                  {
+                    "name": "locktab",
+                    "args": "[toggle|on|off]",
+                    "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
                   },
                   {
                     "name": "submap",
@@ -2135,6 +2283,43 @@
                   "name": "makegroup",
                   "args": "<h|v|tab> [ephemeral]",
                   "summary": "Wrap the focused window in a new group; an ephemeral group dissolves when one window is left."
+                },
+                {
+                  "name": "changegroup",
+                  "args": "<h|v|tab|toggletab|opposite>",
+                  "summary": "Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back."
+                },
+                {
+                  "name": "focustab",
+                  "args": "<prev|next|n> [wrap]",
+                  "summary": "Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap."
+                },
+                {
+                  "name": "focusparent",
+                  "summary": "Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside."
+                },
+                {
+                  "name": "focuschild",
+                  "summary": "Undo one focusparent, down toward the focused window."
+                },
+                {
+                  "name": "swap",
+                  "args": "<left|right|up|down>",
+                  "summary": "Exchange the focused window or group with its neighbour in that direction; each slot keeps its size."
+                },
+                {
+                  "name": "moveout",
+                  "summary": "Lift the focused window or group out of its group, placing it after that group in the one around it."
+                },
+                {
+                  "name": "equalize",
+                  "args": "[all]",
+                  "summary": "Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree."
+                },
+                {
+                  "name": "locktab",
+                  "args": "[toggle|on|off]",
+                  "summary": "Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told."
                 },
                 {
                   "name": "submap",

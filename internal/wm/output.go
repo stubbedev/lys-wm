@@ -49,13 +49,19 @@ func splitAlong(d Direction) Layout {
 }
 
 func (t Tree) InsertEdge(id WindowID, d Direction, area image.Rectangle) (Tree, error) {
-	if t.root == nil {
-		return t.Insert(id, rootLayout(area))
-	}
 	if t.Contains(id) {
 		return Tree{}, fmt.Errorf("wm: insert window %d at the %s edge: already in the tree", id, d)
 	}
 	t = t.clone()
+	t.insertEdge(Window{ID: id}, d, area)
+	return t, nil
+}
+
+func (t *Tree) insertEdge(n Node, d Direction, area image.Rectangle) {
+	if t.root == nil {
+		t.attach(n, rootLayout(area))
+		return
+	}
 	want := splitAlong(d)
 	switch {
 	case t.root.Layout == want:
@@ -68,8 +74,8 @@ func (t Tree) InsertEdge(id WindowID, d Direction, area image.Rectangle) (Tree, 
 	if !d.forward() {
 		at = len(t.root.Children)
 	}
-	t.root.insert(at, Window{ID: id})
-	return t.Focus(id)
+	t.root.insert(at, n)
+	t.focusNode(n)
 }
 
 func rehomed(r, from, to image.Rectangle) image.Rectangle {
@@ -133,28 +139,6 @@ func (s State) SwapWorkspaces(a, b string) (State, error) {
 	s.rehome(wb, a)
 	oa.Active, ob.Active = wb.ID, wa.ID
 	s.gatherPinned()
-	return s, nil
-}
-
-func (s State) moveToOutputEdge(win WindowID, output string, d Direction) (State, error) {
-	s = s.clone()
-	from := s.windowWorkspace(win)
-	if from == nil {
-		return State{}, fmt.Errorf("move window %d to %s: %w", win, output, ErrUnknownWindow)
-	}
-	o := s.output(output)
-	to := s.workspace(o.Active)
-	if err := from.remove(win); err != nil {
-		return State{}, err
-	}
-	tree, err := to.Tree.InsertEdge(win, d, o.Area)
-	if err != nil {
-		return State{}, err
-	}
-	to.Tree, to.floatFocus = tree, false
-	to.record()
-	s.focused = output
-	s.vacated(from.ID)
 	return s, nil
 }
 

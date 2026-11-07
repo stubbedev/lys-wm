@@ -30,6 +30,14 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `global` | `<app_id>:<id>` | Press the global shortcut an application registered, and release it with the bind. |
 | `exec` | `<command>` | Run a shell command with sh -c. |
 | `makegroup` | `<h\|v\|tab> [ephemeral]` | Wrap the focused window in a new group; an ephemeral group dissolves when one window is left. |
+| `changegroup` | `<h\|v\|tab\|toggletab\|opposite>` | Change the layout of the focused group, or of the group around the focused window, keeping its ratios. toggletab switches between tabs and the split it had before, h for a group made as tabs; opposite turns h into v and back. |
+| `focustab` | `<prev\|next\|n> [wrap]` | Show the previous, next or n-th tab of the nearest tab group around the focused window; prev and next stop at the ends unless wrap. |
+| `focusparent` |  | Focus the group around the focused window or group, drawn with the active border, so move, swap, moveout, kill, togglefloating and movetoworkspace act on all of it; keyboard input still goes to the window inside. |
+| `focuschild` |  | Undo one focusparent, down toward the focused window. |
+| `swap` | `<left\|right\|up\|down>` | Exchange the focused window or group with its neighbour in that direction; each slot keeps its size. |
+| `moveout` |  | Lift the focused window or group out of its group, placing it after that group in the one around it. |
+| `equalize` | `[all]` | Give the children of the focused group, or of the group around the focused window, equal shares again; all does so for the whole tree. |
+| `locktab` | `[toggle\|on\|off]` | Lock the nearest tab group around the focused window: new windows open beside it instead of in it, and move and swap neither enter nor leave it, though its tabs still reorder. toggle unless told. |
 | `submap` | `<name\|reset>` | Switch binds to the named submap, or back to the default ones. |
 | `togglefloating` |  | Float the focused window centred at half the output, or tile it again. |
 | `fullscreen` | `[toggle\|on\|off] [fake]` | Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile. |

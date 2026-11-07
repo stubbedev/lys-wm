@@ -643,6 +643,7 @@ func (s State) Arrange(sp Spacing) Arrangement {
 
 func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 	all.reset()
+	_, all.lifted = s.lifted()
 	for i := range s.workspaces {
 		w := &s.workspaces[i]
 		from := len(all.Windows)
@@ -709,7 +710,7 @@ func (c Cover) rect(o *Output, sp Spacing) image.Rectangle {
 
 func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spacing) {
 	covered := w.Cover.ID != 0
-	from, bars := len(all.Windows), len(all.TabBars)
+	from, bars, rings := len(all.Windows), len(all.TabBars), len(all.Rings)
 	w.Tree.arrangeInto(all, o.Area, sp)
 	kept := all.Windows[:from]
 	for _, p := range all.Windows[from:] {
@@ -722,10 +723,13 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 	}
 	all.Windows = kept
 	if covered {
-		all.TabBars = all.TabBars[:bars]
+		all.TabBars, all.Rings = all.TabBars[:bars], all.Rings[:rings]
 	}
 	for i := bars; i < len(all.TabBars); i++ {
 		all.TabBars[i].Workspace, all.TabBars[i].Shown = w.ID, shown
+	}
+	for i := rings; i < len(all.Rings); i++ {
+		all.Rings[i].Workspace, all.Rings[i].Shown = w.ID, shown
 	}
 	for _, f := range w.Floating {
 		if f.ID != w.Cover.ID {

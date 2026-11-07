@@ -244,6 +244,7 @@ type Compositor struct {
 	inheritTimeout     time.Duration
 	outputResources    []*sw.WlOutput
 	tabBars            []wm.TabBar
+	rings              []wm.GroupRing
 	binds              binds.Map
 	submap             string
 	held               []uint32

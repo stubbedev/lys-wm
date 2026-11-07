@@ -112,7 +112,7 @@ func stillStalled(stalled, dragging, stale bool) bool {
 func sameArrangement(a, b wm.Arrangement) bool {
 	return slices.Equal(a.Windows, b.Windows) && slices.EqualFunc(a.TabBars, b.TabBars, func(x, y wm.TabBar) bool {
 		return x.Rect == y.Rect && x.Active == y.Active && slices.Equal(x.Tabs, y.Tabs)
-	})
+	}) && slices.Equal(a.Rings, b.Rings)
 }
 
 func (c *Compositor) awaits(w *window, p wm.Placement, wanted want) bool {

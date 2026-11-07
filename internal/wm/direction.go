@@ -36,7 +36,7 @@ func along(l Layout, d Direction) bool {
 	return !d.vertical()
 }
 
-func (t Tree) breakout(groups []*Group, idx []int, d Direction) int {
+func breakout(groups []*Group, idx []int, d Direction) int {
 	for level, g := range slices.Backward(groups) {
 		i := idx[level]
 		atEdge := (d.forward() && i == len(g.Children)-1) || (!d.forward() && i == 0)
@@ -59,15 +59,28 @@ func (t Tree) Neighbor(id WindowID, d Direction) (WindowID, bool, error) {
 	if !ok {
 		return 0, false, fmt.Errorf("look %s of window %d: %w", d, id, ErrUnknownWindow)
 	}
-	level := t.breakout(groups, idx, d)
+	n, found := neighbourAt(groups, idx, d)
+	return n, found, nil
+}
+
+func (t Tree) NeighborOfFocus(d Direction) (WindowID, bool) {
+	groups, idx := t.focusPath()
+	return neighbourAt(groups, idx, d)
+}
+
+func neighbourAt(groups []*Group, idx []int, d Direction) (WindowID, bool) {
+	level := breakout(groups, idx, d)
 	if level < 0 {
-		return 0, false, nil
+		return 0, false
 	}
-	n := groups[level].Children[step(idx[level], d)].Node
+	return entered(groups[level].Children[step(idx[level], d)].Node, d), true
+}
+
+func entered(n Node, d Direction) WindowID {
 	for {
 		switch v := n.(type) {
 		case Window:
-			return v.ID, true, nil
+			return v.ID
 		case *Group:
 			switch {
 			case v.Layout == Tabbed:
@@ -118,6 +131,28 @@ func (t *Tree) collapseAt(g *Group, policy CollapsePolicy) {
 	}
 }
 
+type moveResult uint8
+
+const (
+	moveDone moveResult = iota + 1
+	moveAtEdge
+	moveBlocked
+)
+
+func leavesLocked(groups []*Group, level int) bool {
+	for _, g := range groups[level+1:] {
+		if g.Locked {
+			return true
+		}
+	}
+	return false
+}
+
+func opaque(n Node) bool {
+	g, isGroup := n.(*Group)
+	return !isGroup || g.Locked
+}
+
 func (t Tree) Move(id WindowID, d Direction, policy CollapsePolicy) (Tree, bool, error) {
 	original := t
 	t = t.clone()
@@ -125,30 +160,54 @@ func (t Tree) Move(id WindowID, d Direction, policy CollapsePolicy) (Tree, bool,
 	if !ok {
 		return Tree{}, false, fmt.Errorf("move window %d %s: %w", id, d, ErrUnknownWindow)
 	}
-	level := t.breakout(groups, idx, d)
-	if level < 0 {
+	if t.moveAt(groups, idx, d, policy) != moveDone {
 		return original, false, nil
+	}
+	return t, true, nil
+}
+
+func (t Tree) MoveFocused(d Direction, policy CollapsePolicy) (Tree, moveResult) {
+	original := t
+	t = t.clone()
+	groups, idx := t.focusPath()
+	if r := t.moveAt(groups, idx, d, policy); r != moveDone {
+		return original, r
+	}
+	return t, moveDone
+}
+
+func (t *Tree) moveAt(groups []*Group, idx []int, d Direction, policy CollapsePolicy) moveResult {
+	if len(groups) == 0 {
+		return moveBlocked
+	}
+	level := breakout(groups, idx, d)
+	if leavesLocked(groups, level) {
+		return moveBlocked
+	}
+	if level < 0 {
+		return moveAtEdge
 	}
 	leaf := len(groups) - 1
 	parent := groups[leaf]
+	node := parent.Children[idx[leaf]].Node
 	g, j := groups[level], step(idx[level], d)
 	var target *Group
 	var at int
-	switch n := g.Children[j].Node.(type) {
-	case Window:
+	if neighbour := g.Children[j].Node; opaque(neighbour) {
 		if level == leaf {
 			i := idx[leaf]
 			g.Children[i], g.Children[j] = g.Children[j], g.Children[i]
 			g.Focus = j
 			t.collapseAt(g, policy)
-			return t, true, nil
+			t.focusNode(node)
+			return moveDone
 		}
 		target, at = g, j
 		if !d.forward() {
 			at = j + 1
 		}
-	case *Group:
-		target = n
+	} else {
+		target, _ = neighbour.(*Group)
 		for {
 			c, after := target.Focus, true
 			if along(target.Layout, d) {
@@ -157,7 +216,7 @@ func (t Tree) Move(id WindowID, d Direction, policy CollapsePolicy) (Tree, bool,
 					c, after = len(target.Children)-1, true
 				}
 			}
-			if _, isWindow := target.Children[c].Node.(Window); isWindow {
+			if opaque(target.Children[c].Node) {
 				at = c
 				if after {
 					at = c + 1
@@ -168,15 +227,15 @@ func (t Tree) Move(id WindowID, d Direction, policy CollapsePolicy) (Tree, bool,
 		}
 	}
 	if len(parent.Children) == 1 && leaf > 0 && target == groups[leaf-1] {
-		target.Children[idx[leaf-1]].Node = Window{ID: id}
+		target.Children[idx[leaf-1]].Node = node
 	} else {
 		parent.remove(idx[leaf])
-		target.insert(at, Window{ID: id})
+		target.insert(at, node)
 		t.collapseAt(parent, CollapseInvalid)
 		t.collapseAt(target, policy)
 	}
-	moved, err := t.Focus(id)
-	return moved, true, err
+	t.focusNode(node)
+	return moveDone
 }
 
 type neighbourOutput struct {
@@ -261,10 +320,7 @@ func (s State) FocusDirection(d Direction) (State, error) {
 		if id, ok := w.focused(); ok {
 			next, found := s.nearest(id, d)
 			if w.floatingIndex(id) < 0 {
-				var err error
-				if next, found, err = w.Tree.Neighbor(id, d); err != nil {
-					return State{}, err
-				}
+				next, found = w.Tree.NeighborOfFocus(d)
 			}
 			if found {
 				return s.FocusWindow(next)
@@ -280,23 +336,19 @@ func (s State) FocusDirection(d Direction) (State, error) {
 
 func (s State) MoveDirection(d Direction, policy CollapsePolicy) (State, error) {
 	w := s.activeWorkspace()
-	if w == nil {
+	if w == nil || !w.treeFocused() {
 		return s, nil
 	}
-	id, ok := w.focused()
-	if !ok || w.floatingIndex(id) >= 0 {
+	tree, result := w.Tree.MoveFocused(d, policy)
+	switch result {
+	case moveBlocked:
 		return s, nil
-	}
-	tree, moved, err := w.Tree.Move(id, d, policy)
-	if err != nil {
-		return State{}, err
-	}
-	if !moved {
+	case moveAtEdge:
 		name, ok := s.outputToward(w.Output, d)
 		if !ok {
 			return s, nil
 		}
-		return s.moveToOutputEdge(id, name, d)
+		return s.moveFocusedToOutputEdge(name, d)
 	}
 	s = s.clone()
 	active := s.activeWorkspace()
@@ -375,7 +427,7 @@ func (t Tree) Resize(id WindowID, area image.Rectangle, d Direction, delta int) 
 	if root == nil {
 		return t, false, nil
 	}
-	return Tree{root: root}, true, nil
+	return Tree{root: root, lift: t.lift}, true, nil
 }
 
 func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) (next *Group, settled bool) {
