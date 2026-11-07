@@ -29,6 +29,7 @@ const (
 	drmDeviceFormat = "lys-wm-drm-device"
 	regexFormat     = "regex"
 	actionFormat    = "lys-wm-action"
+	chordFormat     = "lys-wm-chord"
 )
 
 type schemaNode struct {
@@ -227,6 +228,8 @@ func annotations() map[string]annotation {
 		"rules[].content":                  {enum: slices.Sorted(maps.Keys(contentTypes))},
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
+		"binds[].chord":                    formatAnn(chordFormat),
+		"submaps.*[].chord":                formatAnn(chordFormat),
 		"binds[].action":                   actionAnn,
 		"submaps.*[].action":               actionAnn,
 		"gestures.swipe[].action":          actionAnn,

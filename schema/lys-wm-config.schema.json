@@ -227,6 +227,11 @@
                 "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
               },
               {
+                "name": "showdesktop",
+                "args": "[toggle|on|off] [all]",
+                "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+              },
+              {
                 "name": "pin",
                 "args": "[toggle|on|off]",
                 "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -257,7 +262,8 @@
             ]
           },
           "chord": {
-            "type": "string"
+            "type": "string",
+            "format": "lys-wm-chord"
           },
           "flags": {
             "type": "array",
@@ -765,6 +771,11 @@
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
                   },
                   {
+                    "name": "showdesktop",
+                    "args": "[toggle|on|off] [all]",
+                    "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                  },
+                  {
                     "name": "pin",
                     "args": "[toggle|on|off]",
                     "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -939,6 +950,11 @@
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
                   },
                   {
+                    "name": "showdesktop",
+                    "args": "[toggle|on|off] [all]",
+                    "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                  },
+                  {
                     "name": "pin",
                     "args": "[toggle|on|off]",
                     "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -1111,6 +1127,11 @@
                     "name": "fullscreen",
                     "args": "[toggle|on|off] [fake]",
                     "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
+                  },
+                  {
+                    "name": "showdesktop",
+                    "args": "[toggle|on|off] [all]",
+                    "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
                   },
                   {
                     "name": "pin",
@@ -1768,6 +1789,11 @@
                   "summary": "Make the focused window cover its output, above the top layer, or end that; toggle unless told. With fake the window stays where it is and is only told it is fullscreen, so a video player in a tile fills the tile."
                 },
                 {
+                  "name": "showdesktop",
+                  "args": "[toggle|on|off] [all]",
+                  "summary": "Slide the windows of the output under the pointer, or of every output with all, toward their nearest edges until only a sliver of each shows, to reach the desktop. Nothing is resized and the layout stays; keyboard focus leaves the windows. A click on a sliver, a window opening or being activated there, a workspace switch or focusing a window ends it, as does the action again. toggle unless told."
+                },
+                {
                   "name": "pin",
                   "args": "[toggle|on|off]",
                   "summary": "Keep the focused window on screen through workspace switches of its output, floating above the workspace's other floating windows; a tiled window floats first. toggle unless told; moving it to a workspace or tiling it unpins it."
@@ -1798,7 +1824,8 @@
               ]
             },
             "chord": {
-              "type": "string"
+              "type": "string",
+              "format": "lys-wm-chord"
             },
             "flags": {
               "type": "array",

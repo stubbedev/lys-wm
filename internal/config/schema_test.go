@@ -176,7 +176,7 @@ var formatValues = map[string]struct{ accepted, refused []string }{
 func TestEveryPublishedFormatIsWhatTheParserAccepts(t *testing.T) {
 	for _, path := range slices.Sorted(maps.Keys(annotations())) {
 		format := annotations()[path].format
-		if format == "" || format == colorFormat || format == actionFormat {
+		if format == "" || format == colorFormat || format == actionFormat || format == chordFormat {
 			continue
 		}
 		values, ok := formatValues[format]
@@ -431,5 +431,22 @@ func TestTheActionFormatListsEveryActionTheParserKnows(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("binds:\n  - {chord: SUPER + Q, action: frobnicate}\n")); err == nil {
 		t.Error("an action the list does not hold was accepted")
+	}
+}
+
+func TestTheChordFormatIsWhatABindsChordTakes(t *testing.T) {
+	var root map[string]any
+	if err := json.Unmarshal(Schema(), &root); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"binds[].chord", "submaps.*[].chord"} {
+		if got := schemaAt(t, root, path)["format"]; got != chordFormat {
+			t.Errorf("%s: format %v, want %s", path, got, chordFormat)
+		}
+	}
+	for _, chord := range []string{"SUPER + SHIFT + K", "CTRL + ALT + Delete", "SUPER + mouse:272", "XF86AudioRaiseVolume"} {
+		if _, err := Parse("t.yaml", fmt.Appendf(nil, "binds:\n  - {chord: %q, action: kill}\n", chord)); err != nil {
+			t.Errorf("%q: %v", chord, err)
+		}
 	}
 }
