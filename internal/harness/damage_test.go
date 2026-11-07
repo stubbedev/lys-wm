@@ -35,8 +35,8 @@ func presentCount(h *Harness) uint64 {
 
 func settle(t testing.TB, h *Harness) {
 	t.Helper()
-	h.Eventually("labels and cursors loaded and the output at rest", func(b *headless.Backend, c *compositor.Compositor) bool {
-		return !c.LabelsPending() && !c.CursorsLoading() && atRest(b, c)
+	h.Eventually("labels and cursors loaded, no transaction held and the output at rest", func(b *headless.Backend, c *compositor.Compositor) bool {
+		return !c.LabelsPending() && !c.CursorsLoading() && !c.Holding() && atRest(b, c)
 	})
 }
 
