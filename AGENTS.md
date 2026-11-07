@@ -38,6 +38,8 @@ ones: `nix build .#checks.x86_64-linux.vm-seat` runs them as DRM master in a VM
 on virtio-gpu and vkms (cursor, overlay planes), counting every atomic request,
 reading the planes back from the kernel and tracing the damage clips it
 holds. They skip unless `LYS_WM_SEAT=1`, which is never set beside a session.
+`nix build .#vm-pace-drm` plays `lys-wm-pace -backend drm` on vkms's vblanks in
+a VM, on llvmpipe, so its late frames are about the latch, not the GPU.
 
 After changes to Xwayland, X11 window management or scaling, run the real X
 applications too. `nix build .#checks.x86_64-linux.vm-xwayland-apps` drives

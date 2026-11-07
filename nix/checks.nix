@@ -28,6 +28,10 @@
       };
   in {
     legacyPackages.vm-steam = xwaylandApp "steam";
+    legacyPackages.vm-pace-drm = import ./pace-drm.nix {
+      inherit pkgs module;
+      inherit (self'.packages) lys-wm;
+    };
     checks = {
       vm = vm {
         name = "lys-wm-drm";
