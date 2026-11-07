@@ -719,6 +719,13 @@ planes commit at once, no frame is timed against an aimed vblank, and
 animations sample at the clock instead of a predicted vblank. Presentation
 feedback reports refresh 0 to `wp_presentation` version 1, which cannot say
 otherwise, and the mode's interval, the fastest the output goes, to version 2.
+A cursor move commits at once on a VRR desktop, where the cursor is the
+content, but not while one surface fills the output (#373): each commit starts a
+refresh, so a 1000 Hz mouse would drive the panel instead of the game. The
+compositor states that frame hint through `backend.FrameFilling`, and the cursor
+rides the next frame's commit, committing on its own only when no frame came
+within the panel's longest frame, the period of the minimum refresh its EDID
+states (`edid.ParseVRR`), else of 24 Hz, as Hyprland's `cursor:min_refresh_rate`.
 wlr-output-management reports the state per head and turns it on or off as the
 rule would. Tested against fake KMS and the headless backend; nothing here has
 run on a VRR display.

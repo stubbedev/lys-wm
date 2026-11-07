@@ -1,9 +1,11 @@
 package drm
 
 import (
+	"image"
 	"testing"
 	"time"
 
+	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -102,5 +104,130 @@ func TestUnderAdaptiveSyncTheFrameClockKeepsNoFixedInterval(t *testing.T) {
 	}
 	if o.aimedAt != 0 {
 		t.Fatalf("under adaptive sync the frame aimed at vblank %v, want none", o.aimedAt)
+	}
+}
+
+func vrrEDID(minHz, maxHz byte) []byte {
+	b := make([]byte, 128)
+	copy(b, []byte{0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0})
+	b[8], b[9], b[18], b[19] = 0x10, 0x01, 1, 4
+	copy(b[54:], []byte{0, 0, 0, 0xfd, 0, minHz, maxHz, 30, 160, 60, 1, 0x0a})
+	sealBlock(b)
+	return b
+}
+
+type vrrCursorRun struct {
+	r                            *rig
+	o                            *Output
+	c                            *cursor
+	frames, cursorOnly           int
+	cursorAt                     []time.Duration
+	stalePlanes, immediateMisses int
+}
+
+func bootVRRCursor(t *testing.T) *vrrCursorRun {
+	t.Helper()
+	r := boot(t, func(d *fakeDevice) allocator {
+		d.vrr, d.asyncFlips, d.sinkEDID = true, true, vrrEDID(48, 144)
+		return &fakeAlloc{soft: soft.New()}
+	})
+	o := r.lit()
+	c := r.shownCursor(o, image.Pt(4, 6))
+	if err := o.SetAdaptiveSync(true); err != nil {
+		t.Fatal(err)
+	}
+	r.nextFrame(o)
+	if !o.vrrSent {
+		t.Fatal("adaptive sync did not reach the CRTC")
+	}
+	if want := time.Second / 48; o.vrrHold != want {
+		t.Fatalf("an EDID ranging 48-144 Hz holds the cursor %v, want %v", o.vrrHold, want)
+	}
+	r.pinned = o.lastFlip
+	r.dev.commits = nil
+	return &vrrCursorRun{r: r, o: o, c: c}
+}
+
+func (v *vrrCursorRun) play(ms int, frameEvery int) {
+	r, o, c := v.r, v.o, v.c
+	buffers := [2]*fakeBuffer{clientBuffer(7, fourcc.Linear), clientBuffer(8, fourcc.Linear)}
+	for tick := 1; tick <= ms; tick++ {
+		r.pinned += time.Millisecond
+		if o.flipping {
+			r.dev.flip(r.t, 10, uint32(tick))
+			r.until("the flip", func() bool { return !o.flipping })
+		}
+		n := len(r.dev.commits)
+		if frameEvery > 0 && tick%frameEvery == 0 {
+			if !r.scanout(o, buffers[tick/frameEvery%2], false) {
+				r.t.Fatalf("the game's frame at %d ms did not scan out", tick)
+			}
+			if c.onPlane != c.wanted() {
+				v.stalePlanes++
+			}
+		}
+		flipping := o.flipping
+		if err := c.MoveCursor(image.Pt(100+tick%500, 300)); err != nil {
+			r.t.Fatal(err)
+		}
+		if !flipping && !o.filled && !o.flipping {
+			v.immediateMisses++
+		}
+		if o.planesWaiting && r.pinned >= o.lastFlip+o.vrrHold {
+			if err := o.planesDue(); err != nil {
+				r.t.Fatal(err)
+			}
+		}
+		for _, cm := range r.dev.commits[n:] {
+			switch {
+			case cm.flags&kdrm.AtomicTestOnly != 0:
+			case hasPrimaryFB(cm):
+				v.frames++
+			default:
+				v.cursorOnly++
+				v.cursorAt = append(v.cursorAt, r.pinned)
+			}
+		}
+	}
+}
+
+func hasPrimaryFB(c commit) bool {
+	_, ok := c.values[[2]uint32{40, propFB}]
+	return ok
+}
+
+func TestUnderVRRAFullscreenGameCarriesTheCursorInItsFrames(t *testing.T) {
+	v := bootVRRCursor(t)
+	v.o.FillFrame(true)
+	v.play(2000, 20)
+	if v.cursorOnly != 0 {
+		t.Fatalf("a 50 Hz fullscreen game under VRR with 1000 cursor moves a second saw %d cursor-only commits, want 0", v.cursorOnly)
+	}
+	if v.frames != 100 || v.stalePlanes != 0 {
+		t.Fatalf("%d frames, %d of them without the latest cursor, want 100 frames all carrying it", v.frames, v.stalePlanes)
+	}
+}
+
+func TestUnderVRRAStalledFullscreenGameLetsTheCursorCommitOncePerMinimumRefresh(t *testing.T) {
+	v := bootVRRCursor(t)
+	v.o.FillFrame(true)
+	v.play(2000, 0)
+	hold := v.o.vrrHold
+	if len(v.cursorAt) < int(2*time.Second/(hold+2*time.Millisecond)) {
+		t.Fatalf("a stalled game saw %d cursor commits in 2 s, want one every %v", len(v.cursorAt), hold)
+	}
+	for i := 1; i < len(v.cursorAt); i++ {
+		if gap := v.cursorAt[i] - v.cursorAt[i-1]; gap < hold || gap > hold+2*time.Millisecond {
+			t.Fatalf("cursor commits %d and %d came %v apart, want between %v and %v", i-1, i, gap, hold, hold+2*time.Millisecond)
+		}
+	}
+}
+
+func TestUnderVRROnTheDesktopTheCursorCommitsAtOnce(t *testing.T) {
+	v := bootVRRCursor(t)
+	v.o.FillFrame(false)
+	v.play(2000, 0)
+	if v.cursorOnly != 2000 || v.immediateMisses != 0 {
+		t.Fatalf("2000 moves on a VRR desktop, each after the last flip, made %d cursor commits and %d waited, want each at once", v.cursorOnly, v.immediateMisses)
 	}
 }

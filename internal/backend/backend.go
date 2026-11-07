@@ -214,6 +214,10 @@ type FrameTearing interface {
 	TearFrame(tear bool)
 }
 
+type FrameFilling interface {
+	FillFrame(filled bool)
+}
+
 type AdaptiveSync interface {
 	AdaptiveSyncCapable() bool
 	AdaptiveSync() bool

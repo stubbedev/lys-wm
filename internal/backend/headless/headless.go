@@ -299,6 +299,7 @@ type Output struct {
 	queuedTorn     bool
 	torn           uint64
 	tearFrame      bool
+	filled         bool
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
@@ -693,6 +694,14 @@ func (o *Output) TearFrame(tear bool) {
 
 func (o *Output) TearsFrames() bool {
 	return o.tearFrame
+}
+
+func (o *Output) FillFrame(filled bool) {
+	o.filled = filled
+}
+
+func (o *Output) FillsFrame() bool {
+	return o.filled
 }
 
 func (o *Output) SetContentType(t wm.ContentType) {

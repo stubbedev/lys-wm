@@ -158,6 +158,7 @@ var (
 	_ backend.Scanner      = (*Output)(nil)
 	_ backend.Inheriting   = (*Output)(nil)
 	_ backend.FrameTearing = (*Output)(nil)
+	_ backend.FrameFilling = (*Output)(nil)
 )
 
 type Backend struct {
@@ -810,7 +811,7 @@ func (b *Backend) light(c kdrm.Connector, t *tiling) error {
 			return o.latch.Arm(after)
 		},
 	})
-	o.colorErr = errNoEDID
+	o.colorErr, o.vrrHold = errNoEDID, defaultVRRHold
 	if blob, ok := props["EDID"]; ok && blob.Value != 0 {
 		data, err := b.dev.Blob(uint32(blob.Value)) //nolint:gosec // property blob IDs are 32-bit
 		if err != nil {
@@ -819,7 +820,7 @@ func (b *Backend) light(c kdrm.Connector, t *tiling) error {
 		if info, err := edid.Parse(data, b.vendors); err != nil {
 			b.report(fmt.Errorf("drm: %s has an EDID lys-wm cannot read, so only its connector names it: %w", c.Name(), err))
 		} else {
-			o.identity = info
+			o.identity, o.vrrHold = info, b.vrrHold(c, data)
 		}
 		o.colorEDID, o.colorErr = edid.ParseHDR(data)
 	}
@@ -1064,6 +1065,8 @@ type Output struct {
 	contentDirty  bool
 	vrr           bool
 	vrrSent       bool
+	vrrHold       time.Duration
+	filled        bool
 	tearFrame     bool
 	commitLatch   *loop.Timer
 	late          *scanout
@@ -2185,6 +2188,9 @@ const planeFlags = uint32(kdrm.AtomicNonblock | kdrm.AtomicPageFlipEvent)
 
 func (o *Output) planesDue() error {
 	o.planesWaiting = false
+	if o.vrrSent {
+		return o.flushPlanes()
+	}
 	cursor, pending := o.pendingPlanes()
 	if !pending {
 		return nil
@@ -2198,7 +2204,7 @@ func (o *Output) flushPlanes() error {
 		return nil
 	}
 	if !o.color.dirty() {
-		if wait := o.planesWait(); wait > 0 {
+		if wait := o.cursorWait(); wait > 0 {
 			if o.planesWaiting {
 				return nil
 			}
