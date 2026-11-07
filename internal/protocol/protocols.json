@@ -28,7 +28,7 @@
     {
       "name": "lys-lib",
       "url": "https://raw.githubusercontent.com/stubbedev/lys-lib/{ref}/{path}",
-      "ref": "3b712d99de0e6ed983af4511165e39603ce35534"
+      "ref": "77bfdfd1098530fcb7c619c8f52171915ab53a66"
     },
     {
       "name": "hyprland",
@@ -341,6 +341,11 @@
       "package": "lysescape",
       "source": "lys-lib",
       "path": "wlr/lys-escape-v1.xml"
+    },
+    {
+      "package": "lysvirtualtouch",
+      "source": "lys-lib",
+      "path": "wlr/lys-virtual-touch-v1.xml"
     },
     {
       "package": "backgroundeffect",

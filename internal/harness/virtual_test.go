@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
+	clvt "github.com/stubbedev/lys-wm/internal/protocol/client/lysvirtualtouch"
 	cvk "github.com/stubbedev/lys-wm/internal/protocol/client/virtualkeyboard"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cvp "github.com/stubbedev/lys-wm/internal/protocol/client/wlrvirtualpointer"
@@ -173,5 +175,68 @@ func TestEveryKeyboardOfAClientSharesAKeysSerial(t *testing.T) {
 	r.c.DispatchUntil("the virtual key on both keyboards", func() bool { return len(a.serials) == 4 && len(b.serials) == 4 })
 	if !slices.Equal(a.serials, b.serials) {
 		t.Fatalf("one key event reached two keyboards of a client with serials %v and %v", a.serials, b.serials)
+	}
+}
+
+func TestVirtualTouchesLandInTheLayout(t *testing.T) {
+	t.Parallel()
+	r := startInput(t)
+	r.expect("kb_enter win", "enter win 80,50", "frame")
+	driver := testclient.Connect(t, r.h.Socket())
+	seat, _ := driver.Seat()
+	mgr, err := clvt.NewLysVirtualTouchManagerV1(driver.Display, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver.Bind(mgr)
+	vt, err := mgr.CreateVirtualTouch(seat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const point = 1<<30 + 3
+	if err := errors.Join(vt.Down(1, 3, 40, 50, 160, 100), vt.Frame(), vt.Motion(2, 3, 80, 25, 160, 100), vt.Frame(),
+		vt.Up(3, 3), vt.Frame(), vt.Motion(4, 3, 10, 10, 160, 100), vt.Up(5, 3), vt.Frame(), driver.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	r.expect(fmt.Sprint("down ", point, " win 40,50"), "touch_frame", fmt.Sprint("touch_motion ", point, " 80,25"), "touch_frame",
+		fmt.Sprint("up ", point), "touch_frame")
+	if err := errors.Join(vt.Down(6, 4, 20, 20, 160, 100), vt.Frame(), vt.Destroy(), driver.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	r.expect(fmt.Sprint("down ", point+1, " win 20,20"), "touch_frame", "cancel")
+}
+
+func TestVirtualTouchRefusesBadPoints(t *testing.T) {
+	t.Parallel()
+	r := startInput(t)
+	for _, tc := range []struct {
+		name string
+		send func(vt *clvt.LysVirtualTouchV1) error
+		code clvt.LysVirtualTouchV1Error
+	}{
+		{"a point down twice", func(vt *clvt.LysVirtualTouchV1) error {
+			return errors.Join(vt.Down(1, 1, 1, 1, 10, 10), vt.Down(2, 1, 2, 2, 10, 10))
+		}, clvt.LysVirtualTouchV1ErrorInvalidID},
+		{"an id past the block", func(vt *clvt.LysVirtualTouchV1) error { return vt.Down(1, 1<<16, 1, 1, 10, 10) }, clvt.LysVirtualTouchV1ErrorInvalidID},
+		{"an empty extent", func(vt *clvt.LysVirtualTouchV1) error { return vt.Down(1, 1, 0, 0, 0, 10) }, clvt.LysVirtualTouchV1ErrorInvalidExtent},
+		{"a position past its extent", func(vt *clvt.LysVirtualTouchV1) error { return vt.Down(1, 1, 11, 1, 10, 10) }, clvt.LysVirtualTouchV1ErrorInvalidExtent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := testclient.Connect(t, r.h.Socket())
+			seat, _ := c.Seat()
+			mgr, err := clvt.NewLysVirtualTouchManagerV1(c.Display, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Bind(mgr)
+			vt, err := mgr.CreateVirtualTouch(seat)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := errors.Join(tc.send(vt), c.Display.Flush()); err != nil {
+				t.Fatal(err)
+			}
+			c.ExpectProtocolError(uint32(tc.code))
+		})
 	}
 }

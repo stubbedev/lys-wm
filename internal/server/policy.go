@@ -146,6 +146,7 @@ var dropped = map[string][]string{
 	"zwp_tablet_tool_v2":                       {"set_cursor"},
 	"zwp_text_input_v1":                        {"reset", "invoke_action"},
 	"zwp_virtual_keyboard_v1":                  {"key", "modifiers"},
+	"lys_virtual_touch_v1":                     {"down", "motion", "up", "cancel", "frame"},
 	"ext_workspace_group_handle_v1":            {"create_workspace"},
 	"ext_image_copy_capture_session_v1":        {"create_frame"},
 	"ext_image_copy_capture_cursor_session_v1": {"get_capture_session"},

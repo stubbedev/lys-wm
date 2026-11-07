@@ -110,6 +110,16 @@ lys_escape_arm_v1.destroy = destructor
 lys_escape_manager_v1 = journal retire=
 lys_escape_manager_v1.destroy = destructor
 lys_escape_manager_v1.arm = create
+lys_virtual_touch_manager_v1 = journal retire=
+lys_virtual_touch_manager_v1.destroy = destructor
+lys_virtual_touch_manager_v1.create_virtual_touch = create
+lys_virtual_touch_v1 = journal retire=
+lys_virtual_touch_v1.down = dropped
+lys_virtual_touch_v1.motion = dropped
+lys_virtual_touch_v1.up = dropped
+lys_virtual_touch_v1.cancel = dropped
+lys_virtual_touch_v1.frame = dropped
+lys_virtual_touch_v1.destroy = destructor
 org_kde_kwin_server_decoration = journal retire=
 org_kde_kwin_server_decoration.release = destructor
 org_kde_kwin_server_decoration.request_mode = latest

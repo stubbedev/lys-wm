@@ -982,6 +982,19 @@ already saw go down is never taken, as its release is owed. Virtual keyboards
 take part, with the keysym read from their own keymap, compiled on the first
 press an arm could take.
 
+## Virtual touch
+
+`lys_virtual_touch_v1`, a private protocol pinned from lys-lib, gives a remote
+desktop (lys-shell's RemoteDesktop portal, for `NotifyTouch*` and an EIS
+client's `ei_touchscreen`) a touchscreen spanning the output layout, since no
+standard protocol injects touch. A position is a fraction of the layout's
+bounding box, as `zwlr_virtual_pointer_v1.motion_absolute` places the pointer,
+and the points go through the same path as a real touchscreen's. Each device
+numbers its points in a block of ids of its own, above the ids touchscreens
+use, so two never collide. A device adds the touch capability to the seat while
+it exists; destroying it, or its client going, cancels the points it left down.
+Sandboxed clients cannot bind it, and an upgrade in place drops its points.
+
 ## Focus grabs
 
 `hyprland_focus_grab_v1` (#313) works as an xdg popup grab does, over the

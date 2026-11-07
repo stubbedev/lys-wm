@@ -14,6 +14,7 @@ import (
 	shte "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandtoplevelexport"
 	sksi "github.com/stubbedev/lys-wm/internal/protocol/server/keyboardshortcutsinhibit"
 	sle "github.com/stubbedev/lys-wm/internal/protocol/server/lysescape"
+	slvt "github.com/stubbedev/lys-wm/internal/protocol/server/lysvirtualtouch"
 	svk "github.com/stubbedev/lys-wm/internal/protocol/server/virtualkeyboard"
 	swdc "github.com/stubbedev/lys-wm/internal/protocol/server/wlrdatacontrol"
 	swft "github.com/stubbedev/lys-wm/internal/protocol/server/wlrforeigntoplevel"
@@ -49,6 +50,7 @@ var privileged = []*wire.Interface{
 	sxh.XxHotkeyManagerV1Interface,
 	sksi.ZwpKeyboardShortcutsInhibitManagerV1Interface,
 	sle.LysEscapeManagerV1Interface,
+	slvt.LysVirtualTouchManagerV1Interface,
 	securitycontext.Interface,
 	gammacontrol.Interface,
 	ctmcontrol.Interface,
