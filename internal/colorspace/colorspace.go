@@ -382,7 +382,7 @@ func (d *Description) HDRContent() bool {
 }
 
 func (p Primaries) holds(c XY) bool {
-	side := func(a, b XY) float64 { return (b.X-a.X)*(c.Y-a.Y) - (b.Y-a.Y)*(c.X-a.X) }
+	side := func(a, b XY) float64 { return float64((b.X-a.X)*(c.Y-a.Y)) - float64((b.Y-a.Y)*(c.X-a.X)) }
 	const slack = 1e-3
 	s1, s2, s3 := side(p.R, p.G), side(p.G, p.B), side(p.B, p.R)
 	return s1 >= -slack && s2 >= -slack && s3 >= -slack || s1 <= slack && s2 <= slack && s3 <= slack

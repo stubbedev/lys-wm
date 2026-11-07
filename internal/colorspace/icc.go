@@ -207,9 +207,9 @@ func inverse(f lgpu.ColorFunc) lgpu.ColorFunc {
 	}
 	g, a, b, c, d, e, ff := float64(f.G), float64(f.A), float64(f.B), float64(f.C), float64(f.D), float64(f.E), float64(f.F)
 	ag := gomath.Pow(a, -g)
-	inv := lgpu.ColorFunc{Kind: lgpu.ColorCurve, G: float32(1 / g), A: float32(ag), B: float32(-e * ag), E: float32(-b / a), D: float32(gomath.Pow(a*d+b, g) + e)}
+	inv := lgpu.ColorFunc{Kind: lgpu.ColorCurve, G: float32(1 / g), A: float32(ag), B: float32(-e * ag), E: float32(-b / a), D: float32(gomath.Pow(float64(a*d)+b, g) + e)}
 	if c != 0 {
-		inv.C, inv.F, inv.D = float32(1/c), float32(-ff/c), float32(c*d+ff)
+		inv.C, inv.F, inv.D = float32(1/c), float32(-ff/c), float32(float64(c*d)+ff)
 	}
 	return inv
 }

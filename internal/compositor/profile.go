@@ -111,7 +111,7 @@ func mulMatrix(a, b backend.Matrix) backend.Matrix {
 	var m backend.Matrix
 	for r := range 3 {
 		for k := range 3 {
-			m[r*3+k] = a[r*3]*b[k] + a[r*3+1]*b[3+k] + a[r*3+2]*b[6+k]
+			m[r*3+k] = float64(a[r*3]*b[k]) + float64(a[r*3+1]*b[3+k]) + float64(a[r*3+2]*b[6+k])
 		}
 	}
 	return m
@@ -142,13 +142,13 @@ func composeGamma(encode []float64, client []uint16) []uint16 {
 }
 
 func sample(curve []uint16, x float64) uint16 {
-	pos := min(max(x, 0), 1) * float64(len(curve)-1)
+	pos := float64(min(max(x, 0), 1) * float64(len(curve)-1))
 	lo := int(pos)
 	if lo >= len(curve)-1 {
 		return curve[len(curve)-1]
 	}
 	f := pos - float64(lo)
-	return uint16(math.Round(float64(curve[lo])*(1-f) + float64(curve[lo+1])*f))
+	return uint16(math.Round(float64(float64(curve[lo])*(1-f)) + float64(float64(curve[lo+1])*f)))
 }
 
 type profileGamma struct {

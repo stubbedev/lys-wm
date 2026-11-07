@@ -147,7 +147,7 @@ func crossesLine(line, a0, a1, b0, b1 float64, lo, hi int) bool {
 		return false
 	}
 	t := (line - a0) / (a1 - a0)
-	along := int(math.Floor(b0 + t*(b1-b0)))
+	along := int(math.Floor(b0 + float64(t*(b1-b0))))
 	return along >= lo && along <= hi
 }
 
