@@ -8,6 +8,8 @@ Every keybind, every `gestures` entry with an `action` and `lys-wmctl dispatch` 
 | `move` | `<left\|right\|up\|down>` | Move the focused window, hy3 style; at the workspace edge nothing happens. |
 | `workspace` | `<n\|e+n\|e-n\|previous>` | Show workspace n, the n-th open workspace after or before the current one, or the one the output showed before it. |
 | `movetoworkspace` | `<n\|e+n\|e-n\|previous>` | Move the focused window to a workspace without following it. |
+| `scratchpad` | `<toggle <name>\|hide>` | Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output. |
+| `movetoscratchpad` | `<name>` | Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back. |
 | `kill` |  | Ask the focused window to close. |
 | `focuswindow` | `<id>` | Focus the window with this IPC ID, showing its workspace on its output and raising it, and its tab when grouped; a minimized window comes back. |
 | `minimize` | `[id]` | Hide the focused window, or the one with this IPC ID, with its dialogs; the rest of its workspace takes its space. |

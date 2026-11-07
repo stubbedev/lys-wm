@@ -35,6 +35,7 @@ const (
 	Snap
 	FadeSnap
 	Overview
+	Scratchpad
 	eventCount
 )
 
@@ -135,6 +136,7 @@ var events = [eventCount]struct {
 	Snap:            {name: "snap", parent: Windows, shape: Smooth},
 	FadeSnap:        {name: "fade_snap", parent: Fade, reduced: fades},
 	Overview:        {name: "overview", parent: Global, shape: overviewSpring},
+	Scratchpad:      {name: "scratchpad", parent: Global, styles: []StyleKind{SlideVert, FadeStyle, Popin}, style: Style{Kind: SlideVert}, reduced: crossFades},
 }
 
 func (e Event) String() string {

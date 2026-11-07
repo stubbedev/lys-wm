@@ -91,6 +91,7 @@ func (c *Compositor) frame(o *output.Output) error {
 		return err
 	}
 	c.finishSwitches(o, c.frameTime)
+	c.finishScratchSlides(o, c.frameTime)
 	c.settleGenies(c.frameTime)
 	c.settlePreview(c.frameTime)
 	if err := c.settleLockFade(c.frameTime); err != nil {
@@ -290,7 +291,7 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	pass.background = len(pass.ops)
 	for _, layer := range windowLayers {
 		for _, w := range c.stack {
-			if w.layer == layer {
+			if w.layer == layer && !w.scratch {
 				shown = c.drawWindow(pass, o, w, shown)
 			}
 		}
@@ -302,17 +303,18 @@ func (c *Compositor) drawDesktop(pass *frame, o *output.Output, shown []*surface
 	c.drawGooSwitch(pass, o)
 	c.drawClosing(pass, o, windowLevel)
 	for _, w := range c.stack {
-		if w.layer != wm.LayerFullscreen {
+		if w.layer != wm.LayerFullscreen && !w.scratch {
 			shown = c.drawWindowPopups(pass, o, w, shown)
 		}
 	}
 	shown = c.drawLayers(pass, o, aboveWindows, shown)
 	for _, w := range c.stack {
-		if w.layer == wm.LayerFullscreen {
+		if w.layer == wm.LayerFullscreen && !w.scratch {
 			shown = c.drawWindow(pass, o, w, shown)
 			shown = c.drawWindowPopups(pass, o, w, shown)
 		}
 	}
+	shown = c.drawScratchpad(pass, o, shown)
 	if err := c.evictLabels(o); err != nil {
 		return shown, err
 	}

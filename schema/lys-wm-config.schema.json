@@ -1010,6 +1010,24 @@
         "additionalProperties": false
       }
     },
+    "scratchpads": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "exec": {
+            "type": "string"
+          },
+          "hide_on_workspace_switch": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "submaps": {
       "type": "object",
       "additionalProperties": {

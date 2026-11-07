@@ -11,7 +11,7 @@ through `--socket`, then `LYS_WM_SOCKET`, then the only socket in
 lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
 lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see Upgrading in place
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | configproblems | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
 lys-wmctl output create 1920x1080@60 # add a virtual output; prints {"name":"VIRT-1"}
@@ -31,7 +31,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
 [Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
 takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` and `capture`
@@ -64,6 +64,14 @@ signal has `hdr: true`, so a config that asked for it can see that it got it. A 
 {"id":1,"output":"DP-1","windows":3,"visible":true,"focused":true}
 ```
 
+`scratchpads`: the [scratchpads](./config#scratchpads) that exist, which are the
+ones holding a window and the ones shown; `output` is the one each shows over
+or last showed over:
+
+```json
+{"name":"term","output":"DP-1","shown":true,"windows":1}
+```
+
 `windows`: a list of mapped windows, oldest first. `activewindow` is the
 focused one, or `null`:
 
@@ -82,6 +90,8 @@ from one `windows` request.
 Window IDs are never reused while lys-wm runs. For an X11 window, `app_id` is
 the class half of `WM_CLASS`, `title` is `_NET_WM_NAME` or else `WM_NAME`, and
 `pid` is `_NET_WM_PID`, or 0 when the client does not set it.
+A window in a scratchpad has `workspace` 0 and `scratchpad`, its name; other
+windows leave `scratchpad` out.
 `maximized` is true while the window fills the usable area (the `maximize`
 action or its own request); `client_fullscreen` while it is told it is
 fullscreen, which a window under `fullscreen on fake` is while it stays in its
@@ -199,6 +209,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `reducedmotion` | `reduced_motion` | A reload turned `animations.reduced_motion` on or off |
 | `configproblems` | `rejected`, `messages` | A load of the config left something out or was refused, or a later one fixed it |
 | `overview` | `open` | The overview opened or started closing. `open` is true from the moment it takes input, before its animation ends |
+| `scratchpad` | `name`, `output`, `shown`, `windows` | A scratchpad appeared, showed, hid, moved or changed its window count; one that went away comes with only its `name` |
 | `windowmenu` | `window`, `x`, `y` | A window asked for its window menu (`xdg_toplevel.show_window_menu`) in answer to a press; `x`, `y` are the point in layout coordinates, for a shell to draw the menu at |
 
 A watcher that falls 256 events behind is disconnected. Reconnect and

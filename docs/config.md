@@ -590,6 +590,7 @@ and how much attention they should draw:
 | `windows_out` | 900, 56 | 0.03% | 142 ms | `popin 94%` |
 | `windows_minimize` | 220, 30 | none | 326 ms | `genie` |
 | `workspaces` | 900, 60 | none | 159 ms | `slide` |
+| `scratchpad` | 900, 60 | none | 159 ms | `slidevert` |
 | `overview` | 300, 34 | none | 266 ms | |
 | `layers_in` | 800, 54 | none | 156 ms | `fade` |
 | `layers_out` | 900, 58 | none | 150 ms | `fade` |
@@ -617,6 +618,7 @@ The events:
 | `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | | fade |
 | `borderangle` | `global` | A gradient border's angle turning | `once` (the default): one full turn whenever the window gains or loses focus; `loop`: a full turn per `duration` for as long as the window is shown, which keeps its output drawing, but only the border | still |
 | `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out; `goo`: they cross-fade while each window of the old workspace flows into the nearest window of the new one as a liquid blob in its border colour | cross-fade |
+| `scratchpad` | `global` | A [scratchpad](#scratchpads) showing over an output or hiding: its windows, which take input once shown and none while they leave | `slidevert` (the default): down from the top edge and back up; `fade`; `popin <percent>` | cross-fade |
 | `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |
 | `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` | cross-fade |
 | `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` | cross-fade |
@@ -895,6 +897,31 @@ until it is unmaximized and goes back to its tile. `fullscreen on fake`
 leaves a window where it is and only tells it it is fullscreen, so a video
 player or browser fills its tile instead of the output; the window's own
 request to leave fullscreen ends it.
+
+## scratchpads
+
+```yaml
+scratchpads:
+  term: {exec: foot --app-id dropterm, size: 60%x50%}
+  music: {exec: spotify, hide_on_workspace_switch: false}
+```
+
+A scratchpad is a named set of windows, laid out like a workspace, that the
+`scratchpad toggle <name>` action shows over the focused output: above its
+workspace, fullscreen windows included, below `overlay` layer surfaces, with
+the workspace beneath dimmed by `decoration.dim_strength`, as `dim_around` does. Focus goes
+to the scratchpad's window while it shows and back when it hides; toggling it
+on another output moves it there. No `workspace` number reaches it;
+`movetoscratchpad <name>` puts the focused window in, `movetoworkspace` takes
+it out, and a scratchpad is kept while it holds a window.
+
+`exec` runs when the scratchpad is toggled while empty, and the window it opens
+lands in the scratchpad: by its activation token, or by being that command's
+process or one of its children. `size` is the share of the output's usable area
+the scratchpad takes, centred; without it the whole area. A workspace switch on
+its output hides it unless `hide_on_workspace_switch: false`. Focusing a window
+beneath it hides it too. The `scratchpad` animation event slides it in and out.
+Scratchpads need no entry here to be used; one without an entry has no `exec`.
 
 ## rules
 

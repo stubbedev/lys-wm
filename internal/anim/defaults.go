@@ -25,6 +25,7 @@ var (
 		Fade:            {Shape: fadeSpring},
 		FadeOut:         {Shape: closeSpring},
 		Workspaces:      {Shape: switchSpring},
+		Scratchpad:      {Shape: switchSpring},
 		LayersIn:        {Shape: layerInSpring, Style: &layerFade},
 		LayersOut:       {Shape: layerOutSpring, Style: &layerFade},
 		BorderAngle:     {Enabled: &off},

@@ -21,7 +21,7 @@ func TestAnExecDoesItsSyscallsOffTheLoop(t *testing.T) {
 		<-release
 		return "/bin/true", nil
 	}}
-	c.spawnWith("true", nil)
+	c.spawnWith("true", nil, func(int) {})
 	<-entered
 	ticks := 0
 	if err := l.Post(func() error {

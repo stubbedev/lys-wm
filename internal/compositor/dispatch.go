@@ -56,7 +56,9 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 	case wm.OverviewAction:
 		return c.overviewAction(e.Mode)
 	case wm.ExecAction:
-		return c.spawn(e.Command)
+		return c.spawn(e.Command, "")
+	case wm.ScratchpadExecAction:
+		return c.spawn(e.Command, e.Name)
 	case wm.GlobalAction:
 		return c.pressShortcut(e, trigger)
 	case wm.SubmapAction:
@@ -107,21 +109,25 @@ func (c *Compositor) withWindow(id wm.WindowID, f func(*window) error) error {
 	return f(w)
 }
 
-func (c *Compositor) spawn(command string) error {
-	token, err := c.mintToken(true)
+func (c *Compositor) spawn(command string, scratchpad wm.ScratchpadName) error {
+	token, err := c.mintLaunchToken(true, scratchpad)
 	if err != nil {
 		return fmt.Errorf("compositor: exec %q: %w", command, err)
 	}
-	c.spawnWith(command, append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path(), "XDG_ACTIVATION_TOKEN="+token, "DESKTOP_STARTUP_ID="+token))
+	c.spawnWith(command, append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path(), "XDG_ACTIVATION_TOKEN="+token, "DESKTOP_STARTUP_ID="+token), func(pid int) { c.spawned(token, pid) })
 	return nil
 }
 
-func (c *Compositor) spawnWith(command string, env []string) {
+func (c *Compositor) spawnWith(command string, env []string, started func(pid int)) {
 	stdout, stderr := os.Stdout, os.Stderr
 	c.execs.Run(func() {
 		cmd, err := c.startCommand(command, env, stdout, stderr)
 		if err == nil {
+			pid := cmd.Process.Pid
 			go c.reap(command, cmd)
+			if posted := c.loop.Post(func() error { started(pid); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
+				panic(fmt.Sprintf("compositor: hand a started exec back to the loop: %v", posted))
+			}
 			return
 		}
 		if posted := c.loop.Post(func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {

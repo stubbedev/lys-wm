@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"maps"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -200,7 +201,7 @@ func TestEmptyConfigIsTheDefaults(t *testing.T) {
 	if cfg.Animations != anim.MustResolve(anim.DefaultMotion()) {
 		t.Fatalf("animations %+v without config", cfg.Animations)
 	}
-	if cfg.Decor != compositor.DefaultDecor(compositor.DefaultAccent) || cfg.WM != compositor.DefaultSettings() || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
+	if cfg.Decor != compositor.DefaultDecor(compositor.DefaultAccent) || !reflect.DeepEqual(cfg.WM, compositor.DefaultSettings()) || cfg.RepeatRate != 50 || cfg.RepeatDelay != 300 {
 		t.Fatalf("defaults %+v", cfg)
 	}
 }
@@ -212,7 +213,7 @@ func TestUnknownKeysWarnAndTheRestOfTheFileApplies(t *testing.T) {
 		"rules:\n  - {app_id: a, floating: true}\n":                           "t.yaml:2: rules[0].floating: unknown key",
 		"animations:\n  curves:\n    a: {bezier: [0, 0, 1, 1], tension: 2}\n": "t.yaml:3: animations.curves.a.tension: unknown key",
 		"animations:\n  events:\n    border: {curve: linear}\n":               "t.yaml:3: animations.events.border: unknown event",
-		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, borderangle, windows_minimize, zoom, snap, fade_snap, overview)",
+		"animations:\n  events:\n    window: {curve: linear}\n":               "t.yaml:3: animations.events.window: unknown event (known: global, windows, windows_move, windows_in, windows_out, fade, fade_in, fade_out, workspaces, layers, layers_in, layers_out, fade_switch, fade_dim, fade_shadow, borderangle, windows_minimize, zoom, snap, fade_snap, overview, scratchpad)",
 		"borders:\n  active: {colors: [red, blue], angel: 4}\n":               "t.yaml:2: borders.active.angel: unknown key",
 		"input:\n  touchpad:\n    tapping: true\n":                            "t.yaml:3: input.touchpad.tapping: unknown key (known: accel_profile, accel_speed,",
 		"input:\n  devices:\n    mouse:\n      speed: 1\n":                    "t.yaml:4: input.devices.mouse.speed: unknown key",
@@ -956,5 +957,22 @@ func TestPowerSaverFrameRate(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("power_saver_frame_rate: -1\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:1: power_saver_frame_rate:") {
 		t.Errorf("a negative rate was not refused: %v", err)
+	}
+}
+
+func TestScratchpads(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("scratchpads:\n  term: {exec: foot --app-id dropterm, size: 60%x50%}\n  notes: {hide_on_workspace_switch: false}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[wm.ScratchpadName]wm.ScratchpadSpec{
+		"term":  {Exec: "foot --app-id dropterm", Size: wm.ScratchSize{W: 60, H: 50}},
+		"notes": {Stays: true},
+	}
+	if !reflect.DeepEqual(c.WM.Scratchpads, want) {
+		t.Errorf("scratchpads %+v, want %+v", c.WM.Scratchpads, want)
+	}
+	if _, err := Parse("t.yaml", []byte("scratchpads:\n  term: {size: 60x50}\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: scratchpads.term.size:") {
+		t.Errorf("size 60x50 was not refused: %v", err)
 	}
 }

@@ -32,6 +32,7 @@ type savedWorkspace struct {
 	FloatFocus bool        `json:"float_focus,omitempty"`
 	Home       string      `json:"home,omitempty"`
 	History    []WindowID  `json:"history,omitempty"`
+	Scratch    *Scratchpad `json:"scratchpad,omitempty"`
 }
 
 type savedOutput struct {
@@ -40,6 +41,7 @@ type savedOutput struct {
 	Area     image.Rectangle `json:"area"`
 	Active   WorkspaceID     `json:"active"`
 	Previous WorkspaceID     `json:"previous"`
+	Scratch  WorkspaceID     `json:"scratch,omitempty"`
 }
 
 type savedLimit struct {
@@ -50,6 +52,7 @@ type savedLimit struct {
 type savedState struct {
 	Outputs    []savedOutput          `json:"outputs"`
 	Workspaces []savedWorkspace       `json:"workspaces"`
+	Scratch    []savedWorkspace       `json:"scratchpads,omitempty"`
 	Focused    string                 `json:"focused"`
 	Remembered map[string]WorkspaceID `json:"remembered,omitempty"`
 	Limits     []savedLimit           `json:"limits,omitempty"`
@@ -99,20 +102,13 @@ func loadGroup(g *savedGroup) (*Group, error) {
 func (s State) Save() ([]byte, error) {
 	saved := savedState{Focused: s.focused, Remembered: s.remembered}
 	for _, o := range s.outputs {
-		saved.Outputs = append(saved.Outputs, savedOutput{Name: o.Name, Full: o.Full, Area: o.Area, Active: o.Active, Previous: o.previous})
+		saved.Outputs = append(saved.Outputs, savedOutput{Name: o.Name, Full: o.Full, Area: o.Area, Active: o.Active, Previous: o.previous, Scratch: o.Scratch})
 	}
 	for _, w := range s.workspaces {
-		sw := savedWorkspace{
-			ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Floating: w.Floating, Minimized: w.Minimized,
-			FloatFocus: w.floatFocus, Home: w.home, History: w.history,
-		}
-		switch w.Cover.Mode {
-		case ModeFullscreen:
-			sw.Fullscreen = w.Cover.ID
-		case ModeMaximized:
-			sw.Maximized = w.Cover.ID
-		}
-		saved.Workspaces = append(saved.Workspaces, sw)
+		saved.Workspaces = append(saved.Workspaces, saveWorkspace(w))
+	}
+	for _, w := range s.scratch {
+		saved.Scratch = append(saved.Scratch, saveWorkspace(w))
 	}
 	for id := range s.fake {
 		saved.Fake = append(saved.Fake, id)
@@ -134,17 +130,14 @@ func LoadState(data []byte) (State, error) {
 		s.remembered = map[string]WorkspaceID{}
 	}
 	for _, o := range saved.Outputs {
-		s.outputs = append(s.outputs, Output{Name: o.Name, Full: o.Full, Area: o.Area, Active: o.Active, previous: o.Previous})
+		s.outputs = append(s.outputs, Output{Name: o.Name, Full: o.Full, Area: o.Area, Active: o.Active, previous: o.Previous, Scratch: o.Scratch})
 	}
-	for _, w := range saved.Workspaces {
-		root, err := loadGroup(w.Tree)
-		if err != nil {
-			return State{}, err
-		}
-		s.workspaces = append(s.workspaces, Workspace{
-			ID: w.ID, Output: w.Output, Tree: Tree{root: root}, Floating: w.Floating, Minimized: w.Minimized,
-			Cover: savedCover(w), floatFocus: w.FloatFocus, home: w.Home, history: w.History,
-		})
+	var err error
+	if s.workspaces, err = loadWorkspaces(saved.Workspaces); err != nil {
+		return State{}, err
+	}
+	if s.scratch, err = loadWorkspaces(saved.Scratch); err != nil {
+		return State{}, err
 	}
 	for _, l := range saved.Limits {
 		s.limits[l.ID] = l.Limits
@@ -160,8 +153,7 @@ func LoadState(data []byte) (State, error) {
 
 func (s State) Windows() []WindowID {
 	var out []WindowID
-	for i := range s.workspaces {
-		w := &s.workspaces[i]
+	for _, w := range slices.Concat(s.workspaces, s.scratch) {
 		out = append(out, w.Tree.Windows()...)
 		for _, f := range w.Floating {
 			out = append(out, f.ID)
@@ -181,4 +173,41 @@ func savedCover(w savedWorkspace) Cover {
 		return Cover{ID: w.Maximized, Mode: ModeMaximized}
 	}
 	return Cover{}
+}
+
+func saveWorkspace(w Workspace) savedWorkspace {
+	sw := savedWorkspace{
+		ID: w.ID, Output: w.Output, Tree: saveGroup(w.Tree.root), Floating: w.Floating, Minimized: w.Minimized,
+		FloatFocus: w.floatFocus, Home: w.home, History: w.history,
+	}
+	if w.Scratch.Name != "" {
+		sp := w.Scratch
+		sw.Scratch = &sp
+	}
+	switch w.Cover.Mode {
+	case ModeFullscreen:
+		sw.Fullscreen = w.Cover.ID
+	case ModeMaximized:
+		sw.Maximized = w.Cover.ID
+	}
+	return sw
+}
+
+func loadWorkspaces(saved []savedWorkspace) ([]Workspace, error) {
+	out := make([]Workspace, 0, len(saved))
+	for _, w := range saved {
+		root, err := loadGroup(w.Tree)
+		if err != nil {
+			return nil, err
+		}
+		ws := Workspace{
+			ID: w.ID, Output: w.Output, Tree: Tree{root: root}, Floating: w.Floating, Minimized: w.Minimized,
+			Cover: savedCover(w), floatFocus: w.FloatFocus, home: w.Home, history: w.History,
+		}
+		if w.Scratch != nil {
+			ws.Scratch = *w.Scratch
+		}
+		out = append(out, ws)
+	}
+	return out, nil
 }

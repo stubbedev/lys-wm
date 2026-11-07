@@ -67,6 +67,14 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Focused: visible && w.Output == focusedOutput,
 		})
 	}
+	for _, w := range s.Scratchpads() {
+		snap.Scratchpads = append(snap.Scratchpads, ipc.Scratchpad{
+			Name:    w.Scratch.Name,
+			Output:  w.Output,
+			Shown:   s.Shown(w),
+			Windows: len(w.Tree.Windows()) + len(w.Floating) + len(w.Minimized),
+		})
+	}
 	focused, hasFocus := s.Focused()
 	stack := c.stacking()
 	for _, w := range c.windows {
@@ -75,6 +83,9 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			continue
 		}
 		ws, _ := s.Workspace(id)
+		if ws.Scratch.Name != "" {
+			id = 0
+		}
 		contentType, contentSource := c.contentOf(w.top.Surface())
 		snap.Windows = append(snap.Windows, ipc.Window{
 			ID:            w.id,
@@ -82,6 +93,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Title:         w.top.Title(),
 			PID:           w.top.pid(),
 			Workspace:     id,
+			Scratchpad:    ws.Scratch.Name,
 			Output:        ws.Output,
 			Rect:          ipc.RectOf(w.goal),
 			Floating:      s.Floats(w.id),
@@ -171,11 +183,13 @@ func (c *Compositor) stacking() map[wm.WindowID]int {
 	order := map[wm.WindowID]int{}
 	for _, o := range c.outputs {
 		n := 0
-		for _, layer := range stackLayers {
-			for _, w := range slices.Backward(c.stack) {
-				if w.layer == layer && w.visible && !w.minimized && w.output == o {
-					order[w.id] = n
-					n++
+		for _, scratch := range [...]bool{true, false} {
+			for _, layer := range stackLayers {
+				for _, w := range slices.Backward(c.stack) {
+					if w.scratch == scratch && w.layer == layer && w.visible && !w.minimized && w.output == o {
+						order[w.id] = n
+						n++
+					}
 				}
 			}
 		}

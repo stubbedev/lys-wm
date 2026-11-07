@@ -34,6 +34,7 @@ const (
 	KindWatch          Kind = "watch"
 	KindIcon           Kind = "icon"
 	KindOverview       Kind = "overview"
+	KindScratchpads    Kind = "scratchpads"
 	KindConfigProblems Kind = "configproblems"
 	KindUpgrade        Kind = "upgrade"
 	KindCreateOutput   Kind = "createoutput"
@@ -41,7 +42,7 @@ const (
 	KindCapture        Kind = "capture"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -221,26 +222,34 @@ type Workspace struct {
 	Focused bool           `json:"focused"`
 }
 
+type Scratchpad struct {
+	Name    wm.ScratchpadName `json:"name"`
+	Output  string            `json:"output"`
+	Shown   bool              `json:"shown"`
+	Windows int               `json:"windows"`
+}
+
 type Window struct {
-	ID            wm.WindowID      `json:"id"`
-	AppID         string           `json:"app_id"`
-	Title         string           `json:"title"`
-	PID           int32            `json:"pid"`
-	Workspace     wm.WorkspaceID   `json:"workspace"`
-	Output        string           `json:"output"`
-	Rect          Rect             `json:"rect"`
-	Floating      bool             `json:"floating"`
-	Fullscreen    bool             `json:"fullscreen"`
-	Maximized     bool             `json:"maximized"`
-	ClientFull    bool             `json:"client_fullscreen"`
-	Minimized     bool             `json:"minimized"`
-	Urgent        bool             `json:"urgent"`
-	Unresponsive  bool             `json:"unresponsive"`
-	Focused       bool             `json:"focused"`
-	ContentType   wm.ContentType   `json:"content_type"`
-	ContentSource wm.ContentSource `json:"content_source"`
-	Icon          *Icon            `json:"icon"`
-	Stack         *int             `json:"stack,omitempty"`
+	ID            wm.WindowID       `json:"id"`
+	AppID         string            `json:"app_id"`
+	Title         string            `json:"title"`
+	PID           int32             `json:"pid"`
+	Workspace     wm.WorkspaceID    `json:"workspace"`
+	Scratchpad    wm.ScratchpadName `json:"scratchpad,omitempty"`
+	Output        string            `json:"output"`
+	Rect          Rect              `json:"rect"`
+	Floating      bool              `json:"floating"`
+	Fullscreen    bool              `json:"fullscreen"`
+	Maximized     bool              `json:"maximized"`
+	ClientFull    bool              `json:"client_fullscreen"`
+	Minimized     bool              `json:"minimized"`
+	Urgent        bool              `json:"urgent"`
+	Unresponsive  bool              `json:"unresponsive"`
+	Focused       bool              `json:"focused"`
+	ContentType   wm.ContentType    `json:"content_type"`
+	ContentSource wm.ContentSource  `json:"content_source"`
+	Icon          *Icon             `json:"icon"`
+	Stack         *int              `json:"stack,omitempty"`
 }
 
 type Icon struct {
@@ -276,6 +285,7 @@ type Locks struct {
 type Snapshot struct {
 	Outputs        []Output
 	Workspaces     []Workspace
+	Scratchpads    []Scratchpad
 	Windows        []Window
 	Submap         string
 	Layout         Layout
@@ -322,6 +332,8 @@ func (s Snapshot) answer(k Kind) any {
 		return s.ReducedMotion
 	case KindOverview:
 		return s.Overview
+	case KindScratchpads:
+		return nonNil(s.Scratchpads)
 	case KindConfigProblems:
 		return ConfigProblems{Rejected: s.ConfigProblems.Rejected, Messages: nonNil(s.ConfigProblems.Messages)}
 	}

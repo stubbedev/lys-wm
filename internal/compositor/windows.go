@@ -40,6 +40,7 @@ type window struct {
 	firstShown    bool
 	framesUnshown int
 	look          focusLook
+	scratch       bool
 	looked        bool
 	border        Border
 	borderAngle   anim.Tween[float64]
@@ -280,7 +281,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized
+		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}
@@ -289,6 +290,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 		}
 	}
 	c.trackSwitches(now)
+	c.trackScratchpads(now)
 	c.stateChanged()
 	return err
 }
@@ -325,7 +327,7 @@ func (c *Compositor) Animating(o *output.Output) bool {
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
 		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
-	}) || c.overviewAnimating(o, now) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || c.lockFading(now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
+	}) || c.overviewAnimating(o, now) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.scratchSlideOf[o] != nil || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.previewMoves(o, now) || c.lockFading(now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})
 }
@@ -384,10 +386,10 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
 	} else {
 		s, err = c.wm.MapWindow(id, c.settings.Autotile)
 	}
-	if ws, ok := c.launchWorkspace(t); ok && err == nil {
-		s, err = s.MoveWindowToWorkspace(id, ws, c.settings.Autotile)
-	}
 	if err != nil {
+		return s, err
+	}
+	if s, err = c.launched(s, t, id); err != nil {
 		return s, err
 	}
 	if s, err = s.Opened(id, c.settings.NewOverCover); err != nil {
@@ -531,7 +533,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 		}
 	}
 	c.windows = append(c.windows, w)
-	c.dropClaims(t)
+	c.consumeLaunch(t)
 	return c.update(s, nil)
 }
 

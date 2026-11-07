@@ -345,6 +345,8 @@ type Compositor struct {
 	reuploads          uint64
 	shmSyncReads       uint64
 	switches           map[*output.Output]*workspaceSwitch
+	scratchSlideOf     map[*output.Output]*workspaceSwitch
+	shownScratch       map[string]wm.WorkspaceID
 	drawnSwitch        *workspaceSwitch
 	gooFrom, gooTo     []*window
 	gestures           Gestures
@@ -446,6 +448,8 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		stops:          map[stopsKey]render.Texture{},
 		switches:       map[*output.Output]*workspaceSwitch{},
 		shownWorkspace: map[string]wm.WorkspaceID{},
+		scratchSlideOf: map[*output.Output]*workspaceSwitch{},
+		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},
 		scenes:         map[*output.Output]*scene{},
 		dropped:        map[*output.Output]int{},

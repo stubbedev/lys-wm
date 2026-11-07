@@ -114,34 +114,41 @@ func (p *parser) unknownKeys(n *yaml.Node, t reflect.Type, path string) {
 }
 
 type rawConfig struct {
-	ColorManagement bool                     `yaml:"color_management"`
-	ClientHotkeys   bool                     `yaml:"client_hotkeys"`
-	HiddenFrameRate *At[int]                 `yaml:"hidden_frame_rate"`
-	PowerSaverRate  *At[int]                 `yaml:"power_saver_frame_rate"`
-	HoldOpening     bool                     `yaml:"hold_opening"`
-	Outputs         []At[rawOutput]          `yaml:"outputs"`
-	Input           rawInput                 `yaml:"input"`
-	Palette         map[string]At[string]    `yaml:"palette"`
-	Borders         rawBorders               `yaml:"borders"`
-	Gaps            rawGaps                  `yaml:"gaps"`
-	Decoration      rawDecoration            `yaml:"decoration"`
-	DragPreview     rawDragPreview           `yaml:"drag_preview"`
-	Animations      rawAnimations            `yaml:"animations"`
-	Tabs            rawTabs                  `yaml:"tabs"`
-	Overview        rawOverview              `yaml:"overview"`
-	Autotile        rawAutotile              `yaml:"autotile"`
-	Binds           []At[rawBind]            `yaml:"binds"`
-	Submaps         map[string][]At[rawBind] `yaml:"submaps"`
-	Rules           []At[rawRule]            `yaml:"rules"`
-	Env             map[string]At[string]    `yaml:"env"`
-	Autostart       []At[string]             `yaml:"autostart"`
-	Xwayland        rawXwayland              `yaml:"xwayland"`
-	GPU             *At[string]              `yaml:"gpu"`
-	Tearing         bool                     `yaml:"tearing"`
-	LidSuspend      *bool                    `yaml:"lid_suspend"`
-	Gestures        rawGestures              `yaml:"gestures"`
-	Focus           rawFocus                 `yaml:"focus"`
-	Fullscreen      rawFullscreen            `yaml:"fullscreen"`
+	ColorManagement bool                         `yaml:"color_management"`
+	ClientHotkeys   bool                         `yaml:"client_hotkeys"`
+	HiddenFrameRate *At[int]                     `yaml:"hidden_frame_rate"`
+	PowerSaverRate  *At[int]                     `yaml:"power_saver_frame_rate"`
+	HoldOpening     bool                         `yaml:"hold_opening"`
+	Outputs         []At[rawOutput]              `yaml:"outputs"`
+	Input           rawInput                     `yaml:"input"`
+	Palette         map[string]At[string]        `yaml:"palette"`
+	Borders         rawBorders                   `yaml:"borders"`
+	Gaps            rawGaps                      `yaml:"gaps"`
+	Decoration      rawDecoration                `yaml:"decoration"`
+	DragPreview     rawDragPreview               `yaml:"drag_preview"`
+	Animations      rawAnimations                `yaml:"animations"`
+	Tabs            rawTabs                      `yaml:"tabs"`
+	Overview        rawOverview                  `yaml:"overview"`
+	Autotile        rawAutotile                  `yaml:"autotile"`
+	Binds           []At[rawBind]                `yaml:"binds"`
+	Submaps         map[string][]At[rawBind]     `yaml:"submaps"`
+	Rules           []At[rawRule]                `yaml:"rules"`
+	Env             map[string]At[string]        `yaml:"env"`
+	Autostart       []At[string]                 `yaml:"autostart"`
+	Xwayland        rawXwayland                  `yaml:"xwayland"`
+	GPU             *At[string]                  `yaml:"gpu"`
+	Tearing         bool                         `yaml:"tearing"`
+	LidSuspend      *bool                        `yaml:"lid_suspend"`
+	Gestures        rawGestures                  `yaml:"gestures"`
+	Focus           rawFocus                     `yaml:"focus"`
+	Fullscreen      rawFullscreen                `yaml:"fullscreen"`
+	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
+}
+
+type rawScratchpad struct {
+	Exec                  *At[string] `yaml:"exec"`
+	Size                  *At[string] `yaml:"size"`
+	HideOnWorkspaceSwitch *bool       `yaml:"hide_on_workspace_switch"`
 }
 
 type rawFullscreen struct {
@@ -895,6 +902,40 @@ func (p *parser) gaps(r rawGaps, def wm.Gaps) wm.Gaps {
 	return g
 }
 
+func parsePercentPair(s string) (image.Point, bool) {
+	w, h, ok := strings.Cut(s, "x")
+	percent := func(v string) (int, bool) {
+		n, err := strconv.Atoi(strings.TrimSuffix(v, "%"))
+		return n, err == nil && strings.HasSuffix(v, "%") && n > 0 && n <= 100
+	}
+	x, okX := percent(w)
+	y, okY := percent(h)
+	return image.Pt(x, y), ok && okX && okY
+}
+
+func (p *parser) scratchpads(raw map[string]At[rawScratchpad]) map[wm.ScratchpadName]wm.ScratchpadSpec {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[wm.ScratchpadName]wm.ScratchpadSpec, len(raw))
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
+		r, key := raw[name].V, "scratchpads."+name
+		spec := wm.ScratchpadSpec{Stays: r.HideOnWorkspaceSwitch != nil && !*r.HideOnWorkspaceSwitch}
+		if r.Exec != nil {
+			spec.Exec = r.Exec.V
+		}
+		if r.Size != nil {
+			size, ok := parsePercentPair(r.Size.V)
+			if !ok {
+				p.fail(r.Size.Line, key+".size", "%q is not <width>%%x<height>%% with each from 1%% to 100%%", r.Size.V)
+			}
+			spec.Size = wm.ScratchSize{W: size.X, H: size.Y}
+		}
+		out[wm.ScratchpadName(name)] = spec
+	}
+	return out
+}
+
 func parsePair(s string) (image.Point, bool) {
 	if len(s) < 3 {
 		return image.Point{}, false
@@ -1419,6 +1460,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	if v := choice(p, raw.Fullscreen.NewWindow, "fullscreen.new_window", coverPolicies); v != nil {
 		cfg.WM.NewOverCover = *v
 	}
+	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
 	cfg.Animations = p.animations(raw.Animations, look.Motion)
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
 	again := &parser{layered: l, palette: p.palette}

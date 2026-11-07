@@ -82,6 +82,7 @@ type Settings struct {
 	Gaps         Gaps
 	OnActivate   ActivatePolicy
 	NewOverCover CoverPolicy
+	Scratchpads  map[ScratchpadName]ScratchpadSpec
 }
 
 type WorkspaceTarget interface {
@@ -609,6 +610,16 @@ var Actions = []ActionSpec{
 		Name: "movetoworkspace", Args: "<n|e+n|e-n|previous>",
 		Summary: "Move the focused window to a workspace without following it.",
 		parse:   workspaced(func(w WorkspaceTarget) Action { return MoveToWorkspaceAction{Target: w} }),
+	},
+	{
+		Name: "scratchpad", Args: "<toggle <name>|hide>",
+		Summary: "Show the named scratchpad over the focused output, above its workspace and dimming it, or hide it when it shows there; one shown elsewhere moves here. A scratchpad holds windows like a workspace that no number reaches. Toggling one that is empty runs its `exec` from `scratchpads`, and the window that opens lands in it. hide hides the one over the focused output.",
+		parse:   parseScratchpad,
+	},
+	{
+		Name: "movetoscratchpad", Args: "<name>",
+		Summary: "Move the focused window into the named scratchpad; it hides with the scratchpad unless that shows on its output. movetoworkspace brings it back.",
+		parse:   parseMoveToScratchpad,
 	},
 	{
 		Name:    "kill",

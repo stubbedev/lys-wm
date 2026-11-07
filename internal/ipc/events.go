@@ -105,6 +105,9 @@ type (
 	ConfigProblemsEvent struct {
 		ConfigProblems
 	}
+	ScratchpadEvent struct {
+		Scratchpad
+	}
 	WindowMenuEvent struct {
 		Window wm.WindowID `json:"window"`
 		X      int         `json:"x"`
@@ -136,6 +139,7 @@ func (DispatchEvent) Name() string       { return "dispatch" }
 func (OverviewEvent) Name() string       { return "overview" }
 func (ConfigProblemsEvent) Name() string { return "configproblems" }
 func (WindowMenuEvent) Name() string     { return "windowmenu" }
+func (ScratchpadEvent) Name() string     { return "scratchpad" }
 
 func Encode(e Event) ([]byte, error) {
 	body, err := json.Marshal(e)
@@ -247,6 +251,7 @@ func Diff(prev, next Snapshot) []Event {
 		}
 		out = append(out, e)
 	}
+	out = appendScratchpadEvents(out, prev.Scratchpads, next.Scratchpads)
 	if prev.Submap != next.Submap {
 		out = append(out, SubmapEvent{Submap: next.Submap})
 	}
@@ -270,4 +275,18 @@ func Diff(prev, next Snapshot) []Event {
 
 func sameStack(a, b *int) bool {
 	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func appendScratchpadEvents(out []Event, prev, next []Scratchpad) []Event {
+	for _, n := range next {
+		if i := slices.IndexFunc(prev, func(p Scratchpad) bool { return p.Name == n.Name }); i < 0 || prev[i] != n {
+			out = append(out, ScratchpadEvent{n})
+		}
+	}
+	for _, p := range prev {
+		if !slices.ContainsFunc(next, func(n Scratchpad) bool { return n.Name == p.Name }) {
+			out = append(out, ScratchpadEvent{Scratchpad{Name: p.Name}})
+		}
+	}
+	return out
 }

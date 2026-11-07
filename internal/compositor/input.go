@@ -578,8 +578,17 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 	if s, local := c.hitLayers(o, overlay, p); s != nil {
 		return s, local, nil
 	}
+	for _, layer := range slices.Backward(scratchLayers) {
+		for _, w := range slices.Backward(c.stack) {
+			if w.scratch && w.visible && w.layer == layer {
+				if s, local := c.hitWindow(w, p); s != nil {
+					return s, local, w
+				}
+			}
+		}
+	}
 	for _, w := range slices.Backward(c.stack) {
-		if w.layer == wm.LayerFullscreen {
+		if w.layer == wm.LayerFullscreen && !w.scratch {
 			if s, local := c.hitWindow(w, p); s != nil {
 				return s, local, w
 			}
@@ -589,7 +598,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 		return s, local, nil
 	}
 	for _, w := range slices.Backward(c.stack) {
-		if w.layer != wm.LayerFullscreen {
+		if w.layer != wm.LayerFullscreen && !w.scratch {
 			if s, local := hitPopups(c.popups(w), p); s != nil {
 				return s, local, w
 			}
@@ -597,7 +606,7 @@ func (c *Compositor) surfaceAt(p point) (*surface.Surface, point, *window) {
 	}
 	for _, layer := range slices.Backward(windowLayers) {
 		for _, w := range slices.Backward(c.stack) {
-			if w.layer != layer || !w.visible {
+			if w.layer != layer || !w.visible || w.scratch {
 				continue
 			}
 			if s, local := hitTree(w.top.Surface(), c.windowOrigin(w), p); s != nil {

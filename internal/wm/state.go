@@ -15,6 +15,7 @@ type Output struct {
 	Full     image.Rectangle
 	Area     image.Rectangle
 	Active   WorkspaceID
+	Scratch  WorkspaceID
 	previous WorkspaceID
 }
 
@@ -30,6 +31,7 @@ type Workspace struct {
 	Floating   []Floating
 	Minimized  []Minimized
 	Cover      Cover
+	Scratch    Scratchpad
 	floatFocus bool
 	home       string
 	history    []WindowID
@@ -118,6 +120,7 @@ func (w *Workspace) record() {
 type State struct {
 	outputs    []Output
 	workspaces []Workspace
+	scratch    []Workspace
 	focused    string
 	remembered map[string]WorkspaceID
 	limits     map[WindowID]Limits
@@ -140,16 +143,27 @@ func (s State) clone() State {
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
-		w.history = slices.Clone(w.history)
-		w.Floating = slices.Clone(w.Floating)
-		w.Minimized = slices.Clone(w.Minimized)
-		c.workspaces[i] = w
+		c.workspaces[i] = w.deepCopy()
+	}
+	if len(s.scratch) > 0 {
+		c.scratch = make([]Workspace, len(s.scratch))
+		for i, w := range s.scratch {
+			c.scratch[i] = w.deepCopy()
+		}
 	}
 	return c
 }
 
+func (w Workspace) deepCopy() Workspace {
+	w.history = slices.Clone(w.history)
+	w.Floating = slices.Clone(w.Floating)
+	w.Minimized = slices.Clone(w.Minimized)
+	return w
+}
+
 func (s State) sharingWorkspaces() State {
 	s.workspaces = slices.Clone(s.workspaces)
+	s.scratch = slices.Clone(s.scratch)
 	return s
 }
 
@@ -174,8 +188,14 @@ func (s State) ActiveOn(output string) (WorkspaceID, bool) {
 }
 
 func (s State) Shown(w Workspace) bool {
-	id, ok := s.ActiveOn(w.Output)
-	return ok && id == w.ID
+	o := s.output(w.Output)
+	if o == nil {
+		return false
+	}
+	if w.Scratch.Name != "" {
+		return o.Scratch == w.ID
+	}
+	return o.Active == w.ID
 }
 
 func (s *State) output(name string) *Output {
@@ -188,9 +208,13 @@ func (s *State) output(name string) *Output {
 }
 
 func (s *State) workspace(id WorkspaceID) *Workspace {
-	for i := range s.workspaces {
-		if s.workspaces[i].ID == id {
-			return &s.workspaces[i]
+	all := s.workspaces
+	if id < 0 {
+		all = s.scratch
+	}
+	for i := range all {
+		if all[i].ID == id {
+			return &all[i]
 		}
 	}
 	return nil
@@ -208,6 +232,11 @@ func (s *State) windowWorkspace(id WindowID) *Workspace {
 	for i := range s.workspaces {
 		if s.workspaces[i].contains(id) {
 			return &s.workspaces[i]
+		}
+	}
+	for i := range s.scratch {
+		if s.scratch[i].contains(id) {
+			return &s.scratch[i]
 		}
 	}
 	return nil
@@ -232,6 +261,10 @@ func (s *State) dropIfIdle(id WorkspaceID) {
 	if w == nil || !w.empty() || s.Shown(*w) {
 		return
 	}
+	if id < 0 {
+		s.scratch = slices.DeleteFunc(s.scratch, func(x Workspace) bool { return x.ID == id })
+		return
+	}
 	s.workspaces = slices.DeleteFunc(s.workspaces, func(x Workspace) bool { return x.ID == id })
 }
 
@@ -241,9 +274,16 @@ func (s *State) activate(id WorkspaceID) {
 	if o == nil {
 		return
 	}
+	s.focused = o.Name
+	if w.Scratch.Name != "" {
+		s.showScratch(o, id)
+		return
+	}
 	prev := o.Active
 	o.Active = id
-	s.focused = o.Name
+	if sp := s.workspace(o.Scratch); sp != nil && (prev == id || !sp.Scratch.Stays) {
+		s.hideScratch(o)
+	}
 	if prev != id {
 		o.previous = prev
 		s.dropIfIdle(prev)
@@ -260,6 +300,11 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 		w := &s.workspaces[i]
 		if w.home == name || w.Output == "" {
 			w.Output, w.home = name, ""
+		}
+	}
+	for i := range s.scratch {
+		if s.scratch[i].Output == "" {
+			s.scratch[i].Output = name
 		}
 	}
 	o := s.output(name)
@@ -326,6 +371,12 @@ func (s State) RemoveOutput(name string) (State, error) {
 		}
 		w.Output = s.focused
 	}
+	for i := range s.scratch {
+		if s.scratch[i].Output == name {
+			s.scratch[i].Output = s.focused
+		}
+	}
+	s.scratch = slices.DeleteFunc(s.scratch, func(w Workspace) bool { return w.empty() && !s.Shown(w) })
 	if s.focused != "" {
 		s.dropIdleOn(s.focused)
 	}
@@ -363,6 +414,9 @@ func (s State) activeWorkspace() *Workspace {
 	o := s.output(s.focused)
 	if o == nil {
 		return nil
+	}
+	if w := s.workspace(o.Scratch); w != nil && !w.empty() {
+		return w
 	}
 	return s.workspace(o.Active)
 }
@@ -419,7 +473,7 @@ func (s State) UnmapWindow(id WindowID) (State, error) {
 	}
 	delete(s.limits, id)
 	delete(s.fake, id)
-	s.dropIfIdle(w.ID)
+	s.vacated(w.ID)
 	return s, nil
 }
 
@@ -524,7 +578,21 @@ func (s State) MoveToWorkspace(id WorkspaceID, at Autotile) (State, error) {
 }
 
 func (s State) MoveWindowToWorkspace(win WindowID, id WorkspaceID, at Autotile) (State, error) {
-	if id < 1 {
+	w := s.windowWorkspace(win)
+	if w == nil {
+		return State{}, fmt.Errorf("move window %d to workspace %d: %w", win, id, ErrUnknownWindow)
+	}
+	from := w.ID
+	next, err := s.moveWindow(win, id, at)
+	if err != nil || from == id {
+		return next, err
+	}
+	next.vacated(from)
+	return next, nil
+}
+
+func (s State) moveWindow(win WindowID, id WorkspaceID, at Autotile) (State, error) {
+	if id == 0 || id < 0 && s.workspace(id) == nil {
 		return State{}, fmt.Errorf("move window %d to workspace %d: %w", win, id, ErrInvalidWorkspace)
 	}
 	if s.windowWorkspace(win) == nil {
@@ -602,6 +670,9 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 		}
 		placeWorkspace(all, w, o, o.Active == w.ID, sp)
 		all.inWorkspace(from, w.ID)
+	}
+	for i := range s.scratch {
+		s.placeScratchpad(all, &s.scratch[i], sp)
 	}
 	if len(s.fake) == 0 {
 		return
