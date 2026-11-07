@@ -767,30 +767,38 @@ func (r *rig) until(what string, done func() bool) {
 
 func (r *rig) runUntil(what string, done func() bool) error {
 	r.t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	met, err := loopUntil(r.l, done)
+	if err != nil {
+		return err
+	}
+	if !met {
+		r.t.Fatalf("waited %v for %s: %d commits, %d presents, reports %v, log %v", loopWait, what, len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
+	}
+	return nil
+}
+
+const loopWait = 10 * time.Second
+
+func loopUntil(l *loop.Loop, done func() bool) (bool, error) {
+	deadline := time.Now().Add(loopWait)
 	met := false
 	var check *loop.Timer
-	check, err := r.l.AddTimer(func() error {
+	check, err := l.AddTimer(func() error {
 		if met = done(); met || time.Now().After(deadline) {
-			r.l.Stop()
+			l.Stop()
 			return nil
 		}
 		return check.Arm(time.Millisecond)
 	})
 	if err != nil {
-		r.t.Fatal(err)
+		return false, err
 	}
 	defer check.Remove()
 	if err := check.Arm(time.Millisecond); err != nil {
-		r.t.Fatal(err)
+		return false, err
 	}
-	if err := r.l.Run(); err != nil {
-		return err
-	}
-	if !met {
-		r.t.Fatalf("waited 10 s for %s: %d commits, %d presents, reports %v, log %v", what, len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
-	}
-	return nil
+	err = l.Run()
+	return met, err
 }
 
 func TestTheRigTakesTheAnswerAConditionGaveOnce(t *testing.T) {

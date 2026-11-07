@@ -154,6 +154,18 @@ func udmabuf(size image.Point, modifier fourcc.Modifier) (m memory, err error) {
 	}, nil
 }
 
+func UDMABUF(size image.Point, paint Painter) (gpu.DMABUF, func() error, error) {
+	m, err := udmabuf(size, fourcc.Linear)
+	if err != nil {
+		return gpu.DMABUF{}, nil, err
+	}
+	if err := m.mapped.paint(paint); err != nil {
+		return gpu.DMABUF{}, nil, errors.Join(fmt.Errorf("testclient: paint a udmabuf: %w", err), m.close())
+	}
+	d := gpu.DMABUF{Size: size, Format: m.format, Modifier: m.modifier, Planes: []gpu.Plane{{FD: m.fd, Stride: uint32(m.stride)}}} //nolint:gosec // test buffers are small
+	return d, m.close, nil
+}
+
 func (c *Client) gpuStack(fb feedback.Feedback) *gles.Stack {
 	c.t.Helper()
 	if c.stack != nil {

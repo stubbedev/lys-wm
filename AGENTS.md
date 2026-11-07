@@ -33,6 +33,12 @@ frame rate, and plays every animation under `lys-wm-pace`
 per-frame counts pass `cmd/lys-wm-pace/baseline.json`. No gate judges time: a
 loaded machine passes the same.
 
+What only a kernel driver can answer, the DRM tests named `OnASeat` ask real
+ones: `nix build .#checks.x86_64-linux.vm-seat` runs them as DRM master in a VM
+on virtio-gpu and vkms (cursor, overlay planes), counting every atomic request,
+reading the planes back from the kernel and tracing the damage clips it
+holds. They skip unless `LYS_WM_SEAT=1`, which is never set beside a session.
+
 After changes to Xwayland, X11 window management or scaling, run the real X
 applications too. `nix build .#checks.x86_64-linux.vm-xwayland-apps` drives
 IntelliJ IDEA through its first run, dialogs, completion and floating windows

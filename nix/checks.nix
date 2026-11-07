@@ -99,6 +99,10 @@
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-upgrade = import ./upgrade.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};
+      vm-seat = import ./seat.nix {
+        inherit pkgs;
+        inherit (self'.packages) lys-wm;
+      };
       vm-lid = import ./lid.nix {inherit pkgs module;};
       vm-splash-handover = import ./splash-handover.nix {inherit pkgs module;};
       vm-xwayland = import ./xwayland.nix {inherit pkgs module;};
