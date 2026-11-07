@@ -1420,7 +1420,7 @@ func (o *Output) powerOff() error {
 	}
 	o.off, o.flipping, o.offDue, o.offBusy, o.busy = true, false, false, false, nil
 	o.clock.Cancel()
-	return o.dropScanouts()
+	return o.freeBuffers()
 }
 
 func (o *Output) powerOffAfterFlip() {
@@ -1610,6 +1610,13 @@ func (o *Output) BeginFrame() (backend.Frame, error) {
 		return backend.Frame{}, fmt.Errorf("drm: frame on disabled %s", o.Name())
 	case o.drawing != nil:
 		return backend.Frame{}, backend.Broken("drm: %s already has a frame in progress", o.Name())
+	}
+	if len(o.buffers) == 0 {
+		buffers, err := o.allocateBuffers(modeOf(o.mode).Size, o.layout)
+		if err != nil {
+			return backend.Frame{}, fmt.Errorf("drm: buffers for %s to draw in once it is powered on again: %w", o.Name(), err)
+		}
+		o.buffers = buffers
 	}
 	i := slices.IndexFunc(o.buffers, func(s *scanout) bool { return s != o.front && s != o.queued })
 	if i < 0 && o.flipping {

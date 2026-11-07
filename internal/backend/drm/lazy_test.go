@@ -107,3 +107,49 @@ func TestARenderCapableSecondaryThatRefusesTheLinearBufferBlits(t *testing.T) {
 		t.Fatalf("reports %v, want the fallback named once", r.reports)
 	}
 }
+
+func TestAPoweredOffSecondaryClosesItsRenderStackAndOpensItForItsNextFrame(t *testing.T) {
+	world := &blitWorld{memory: map[int]*soft.Buffer{}}
+	primary := fakeStack(world, "primary", true)
+	opened, closed := 0, 0
+	var lazy *lazyBlit
+	stack := func(dev *fakeDevice) *blitAllocator {
+		local := fakeStack(world, "local", true)
+		local.dev, local.closeGPU = dev, func() error { closed++; return nil }
+		return &blitAllocator{primary: primary, local: local}
+	}
+	r := boot(t, func(dev *fakeDevice) allocator {
+		var err error
+		lazy, err = newLazyBlit(stack(dev), func() (*blitAllocator, error) {
+			opened++
+			return stack(dev), nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return lazy
+	})
+	o := r.b.Outputs()[0]
+	r.drawRed(o)
+	r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
+	r.until("the first flip", func() bool { return !o.flipping })
+	state := o.State()
+	state.Power = backend.PoweredOff
+	if err := o.Commit(state); err != nil {
+		t.Fatal(err)
+	}
+	if lazy.blit != nil || closed != 2 {
+		t.Fatalf("a powered-off output keeps the render stack open: %d closed", closed)
+	}
+	state.Power = backend.PoweredOn
+	if err := o.Commit(state); err != nil {
+		t.Fatal(err)
+	}
+	if lazy.blit != nil || opened != 1 {
+		t.Fatalf("powering on opened %d stacks before any frame", opened-1)
+	}
+	r.drawRed(o)
+	if lazy.blit == nil || opened != 2 || !o.flipping {
+		t.Fatalf("the first frame after power-on: %d stacks opened, flipping %v", opened, o.flipping)
+	}
+}

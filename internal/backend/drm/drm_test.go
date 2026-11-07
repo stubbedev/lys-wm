@@ -1166,8 +1166,8 @@ func TestPowerAndWake(t *testing.T) {
 		t.Fatal(err)
 	}
 	off := r.dev.commits[len(r.dev.commits)-1]
-	if off.flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || off.values[[2]uint32{10, propActive}] != 0 || o.State().Power != backend.PoweredOff || len(o.buffers) == 0 {
-		t.Fatalf("power off commit %+v, state %+v", off, o.State())
+	if off.flags != kdrm.AtomicAllowModeset|kdrm.AtomicNonblock || off.values[[2]uint32{10, propActive}] != 0 || o.State().Power != backend.PoweredOff || len(o.buffers) != 0 || r.alloc.freed != buffersPerOut {
+		t.Fatalf("power off commit %+v, state %+v, %d buffers kept, %d freed", off, o.State(), len(o.buffers), r.alloc.freed)
 	}
 	before := len(r.dev.commits)
 	if err := o.ScheduleFrame(); err != nil {
@@ -1185,8 +1185,8 @@ func TestPowerAndWake(t *testing.T) {
 		return r.dev.commits[len(r.dev.commits)-1].values[[2]uint32{10, propActive}] == 1
 	})
 	on := r.dev.commits[len(r.dev.commits)-1]
-	if on.flags&kdrm.AtomicAllowModeset == 0 || on.values[[2]uint32{10, propActive}] != 1 || o.State().Power == backend.PoweredOff {
-		t.Fatalf("power on commit %+v", on)
+	if on.flags&kdrm.AtomicAllowModeset == 0 || on.values[[2]uint32{10, propActive}] != 1 || o.State().Power == backend.PoweredOff || len(o.buffers) != buffersPerOut {
+		t.Fatalf("power on commit %+v with %d buffers", on, len(o.buffers))
 	}
 	r.dev.flip(t, 10, 5)
 	r.until("the flip", func() bool { return !o.flipping })
