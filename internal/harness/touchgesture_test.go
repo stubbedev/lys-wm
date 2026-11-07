@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -255,5 +256,75 @@ func TestAWindowWithTouchGesturesOffKeepsEveryTouch(t *testing.T) {
 			return fmt.Errorf("the edge swipe moved the overview to %v over a window that keeps its touches", p)
 		}
 		return nil
+	})
+}
+
+func touchWindowRig(t *testing.T, drive binds.Drive) (*Harness, *fingers) {
+	t.Helper()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		cfg.Decor = compositor.PlainDecor()
+		cfg.Decor.BorderWidth = 0
+		cfg.Gestures.Touch = []binds.GestureBind{{Kind: backend.Swipe, Fingers: 3, Direction: binds.SwipeAny, Drive: drive}}
+	}, tall)
+	c := testclient.Connect(t, h.Socket())
+	left := c.Window("left", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("left to map", left.Mapped)
+	right := c.Window("right", testclient.Fill(0xff, 0, 0))
+	c.DispatchUntil("right to map", right.Mapped)
+	h.Eventually("left on the left, right on the right", both(showing(20, 20, swipeRed), showing(140, 20, swipeBlue)))
+	return h, &fingers{h: h, at: time.Hour}
+}
+
+func windowRects(h *Harness) map[string]ipc.Rect {
+	out := map[string]ipc.Rect{}
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		for _, w := range c.Snapshot().Windows {
+			out[w.Title] = w.Rect
+		}
+		return nil
+	})
+	return out
+}
+
+func TestThreeFingersOnTheScreenMoveTheWindowUnderThemIntoTheTree(t *testing.T) {
+	t.Parallel()
+	h, f := touchWindowRig(t, binds.DriveMove)
+	ids, ys := []int32{1, 2, 3}, []float64{0.3, 0.5, 0.7}
+	for i, id := range ids {
+		f.down(id, 0.125, ys[i])
+	}
+	for _, x := range []float64{0.25, 0.5, 0.75, 0.875} {
+		f.move(8*time.Millisecond, ids, []float64{x, x, x}, ys)
+	}
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if !c.Dragging() {
+			return errors.New("three fingers bound to drive move started no move")
+		}
+		return nil
+	})
+	f.up(ids...)
+	h.Eventually("the windows swapped in the tree", both(showing(20, 20, swipeBlue), showing(140, 20, swipeRed), func(_ *headless.Backend, c *compositor.Compositor) bool {
+		return !c.Dragging()
+	}))
+}
+
+func TestThreeFingersOnTheScreenResizeTheWindowUnderThem(t *testing.T) {
+	t.Parallel()
+	h, f := touchWindowRig(t, binds.DriveResize)
+	before := windowRects(h)
+	ids, ys := []int32{1, 2, 3}, []float64{0.3, 0.5, 0.7}
+	for i, id := range ids {
+		f.down(id, 0.4, ys[i])
+	}
+	for _, x := range []float64{0.45, 0.5, 0.55, 0.6} {
+		f.move(8*time.Millisecond, ids, []float64{x, x, x}, ys)
+	}
+	f.up(ids...)
+	h.Eventually("the left window wider by the fingers' travel", func(_ *headless.Backend, c *compositor.Compositor) bool {
+		after := map[string]ipc.Rect{}
+		for _, w := range c.Snapshot().Windows {
+			after[w.Title] = w.Rect
+		}
+		return !c.Dragging() && after["left"].Width > before["left"].Width+16 && after["right"].X > before["right"].X
 	})
 }
