@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/capture"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	clch "github.com/stubbedev/lys-wm/internal/protocol/client/lyscapturehint"
@@ -163,5 +165,44 @@ func TestContentCommitsOfABlockedWindowWakeNoScreencast(t *testing.T) {
 	h.Eventually("the commits drawn on the output", func(b *headless.Backend, _ *compositor.Compositor) bool { return b.Outputs()[0].Presents() > before })
 	if err := c.Display.Roundtrip(); err != nil || f.ready {
 		t.Fatalf("a blocked window's commits produced a cast frame (%v)", err)
+	}
+}
+
+func TestLysLibScreenshotsShowABlockedWindowAndScreencastsMaskIt(t *testing.T) {
+	t.Parallel()
+	r := startBlockRig(t, wm.BlockScreencast, false)
+	c, err := capture.ConnectTo(r.h.Socket())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	o := c.Outputs()[0]
+	tls, err := c.Toplevels()
+	if err != nil || len(tls) != 1 {
+		t.Fatalf("toplevels %+v, %v", tls, err)
+	}
+	for _, tc := range []struct {
+		name string
+		take func(capture.Options) (*capture.Frame, error)
+		at   image.Point
+	}{
+		{"screencopy", func(opts capture.Options) (*capture.Frame, error) { return c.CaptureOutput(o, opts) }, image.Pt(20, 50)},
+		{"output session", func(opts capture.Options) (*capture.Frame, error) { return c.CaptureOutputOnce(o, opts) }, image.Pt(20, 50)},
+		{"window session", func(opts capture.Options) (*capture.Frame, error) { return c.CaptureToplevel(tls[0], opts) }, image.Pt(80, 50)},
+	} {
+		for intent, want := range map[capture.Intent][3]byte{capture.Screenshot: shown, capture.Screencast: masked} {
+			f, err := tc.take(capture.Options{Intent: intent})
+			if err != nil {
+				t.Fatalf("%s, intent %d: %v", tc.name, intent, err)
+			}
+			img, err := f.Image()
+			if err != nil {
+				t.Fatal(err)
+			}
+			px := img.RGBAAt(tc.at.X, tc.at.Y)
+			if got := [3]byte{px.R, px.G, px.B}; got != want {
+				t.Errorf("%s, intent %d shows %v, want %v", tc.name, intent, got, want)
+			}
+		}
 	}
 }
