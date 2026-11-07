@@ -529,3 +529,55 @@ func TestAMoveOfALiftedGroupCarriesItWhole(t *testing.T) {
 		t.Fatalf("moving the group off the edge gave %d", result)
 	}
 }
+
+func TestAGroupKeepsItsIDWhileItsMembersChange(t *testing.T) {
+	tree := build(t, 1, 2)
+	root, ok := tree.MembershipOf(1)
+	if !ok || root.Layout != SplitH || root.Index != 0 || root.Group == 0 {
+		t.Fatalf("window 1 in %+v, %v", root, ok)
+	}
+	tree = on(t)(tree.Wrap(2, Tabbed, false))
+	tree = on(t)(tree.Insert(3, SplitH))
+	tabs, _ := tree.MembershipOf(3)
+	if tabs.Layout != Tabbed || tabs.Index != 1 || tabs.Group == root.Group {
+		t.Fatalf("window 3 inserted beside 2 in its tab group: %+v in %s", tabs, tree)
+	}
+	tree = on(t)(tree.Insert(4, SplitH))
+	tree = on(t)(tree.Remove(2))
+	if got, _ := tree.MembershipOf(4); got.Group != tabs.Group || got.Index != 1 {
+		t.Fatalf("window 4 after its sibling left: %+v, want group %d index 1 in %s", got, tabs.Group, tree)
+	}
+	if got, _ := tree.MembershipOf(1); got != root {
+		t.Fatalf("window 1 moved to %+v, from %+v", got, root)
+	}
+	tree = on(t)(tree.Wrap(1, SplitV, false))
+	if got, _ := tree.MembershipOf(1); got.Group == root.Group || got.Group == tabs.Group {
+		t.Fatalf("a new group reused ID %d", got.Group)
+	}
+}
+
+func TestGroupIDsSurviveSavingAndStayUnique(t *testing.T) {
+	tree := on(t)(build(t, 1, 2).Wrap(2, Tabbed, false))
+	before, _ := tree.MembershipOf(2)
+	loaded, err := loadTree(saveGroup(tree.root), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := loaded.MembershipOf(2); got != before {
+		t.Fatalf("window 2 in %+v after loading, %+v before", got, before)
+	}
+	loaded = on(t)(loaded.Wrap(1, SplitV, false))
+	root, _ := tree.MembershipOf(1)
+	if got, _ := loaded.MembershipOf(1); got.Group == before.Group || got.Group == root.Group {
+		t.Fatalf("a group made after loading reused ID %d", got.Group)
+	}
+	saved := saveGroup(tree.root)
+	saved.ID = 0
+	unnumbered, err := loadTree(saved, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := unnumbered.MembershipOf(1); a.Group == 0 || a.Group == before.Group {
+		t.Fatalf("a group saved without an ID loaded as %d", a.Group)
+	}
+}

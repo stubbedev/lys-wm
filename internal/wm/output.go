@@ -68,7 +68,9 @@ func (t *Tree) insertEdge(n Node, d Direction, area image.Rectangle) {
 	case len(t.root.Children) == 1 && t.root.Layout.split():
 		t.root.Layout = want
 	default:
-		t.root = &Group{Layout: want, Children: []Child{{Node: t.root, Ratio: 1}}}
+		root := t.newGroup(want)
+		root.Children = []Child{{Node: t.root, Ratio: 1}}
+		t.root = root
 	}
 	at := 0
 	if !d.forward() {

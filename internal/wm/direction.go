@@ -433,7 +433,7 @@ func (t Tree) Resize(id WindowID, area image.Rectangle, d Direction, delta int) 
 	if root == nil {
 		return t, false, nil
 	}
-	return Tree{root: root, lift: t.lift}, true, nil
+	return Tree{root: root, lift: t.lift, minted: t.minted}, true, nil
 }
 
 func (g *Group) resized(id WindowID, r image.Rectangle, d Direction, delta int) (next *Group, settled bool) {

@@ -75,7 +75,10 @@ type Child struct {
 	Ratio float64
 }
 
+type GroupID uint32
+
 type Group struct {
+	id        GroupID
 	Layout    Layout
 	Children  []Child
 	Focus     int
@@ -118,8 +121,29 @@ func (g *Group) remove(i int) {
 }
 
 type Tree struct {
-	root *Group
-	lift int
+	root   *Group
+	lift   int
+	minted GroupID
+}
+
+func (t *Tree) newGroup(l Layout) *Group {
+	t.minted++
+	return &Group{id: t.minted, Layout: l}
+}
+
+type Membership struct {
+	Group  GroupID
+	Layout Layout
+	Index  int
+}
+
+func (t Tree) MembershipOf(id WindowID) (Membership, bool) {
+	groups, idx, ok := t.path(id)
+	if !ok {
+		return Membership{}, false
+	}
+	g := groups[len(groups)-1]
+	return Membership{Group: g.id, Layout: g.Layout, Index: idx[len(idx)-1]}, true
 }
 
 var ErrUnknownWindow = errors.New("wm: unknown window")
@@ -137,7 +161,7 @@ func (t Tree) clone() Tree {
 		return t
 	}
 	g, _ := t.root.clone().(*Group)
-	return Tree{root: g, lift: t.lift}
+	return Tree{root: g, lift: t.lift, minted: t.minted}
 }
 
 func (t Tree) Windows() []WindowID {
@@ -241,7 +265,7 @@ func (t Tree) Insert(id WindowID, rootLayout Layout) (Tree, error) {
 
 func (t *Tree) insertNode(n Node, rootLayout Layout) {
 	if t.root == nil {
-		t.root = &Group{Layout: rootLayout}
+		t.root = t.newGroup(rootLayout)
 		t.root.insert(0, n)
 		return
 	}
@@ -252,7 +276,9 @@ func (t *Tree) insertNode(n Node, rootLayout Layout) {
 		k--
 	}
 	if k < 0 {
-		t.root = &Group{Layout: rootLayout, Children: []Child{{Node: t.root, Ratio: 1}}}
+		root := t.newGroup(rootLayout)
+		root.Children = []Child{{Node: t.root, Ratio: 1}}
+		t.root = root
 		t.root.insert(1, n)
 		return
 	}
@@ -314,7 +340,7 @@ func (t Tree) Wrap(id WindowID, layout Layout, ephemeral bool) (Tree, error) {
 }
 
 func (t *Tree) wrapAt(groups []*Group, idx []int, layout Layout, ephemeral bool) {
-	g := &Group{Layout: layout}
+	g := t.newGroup(layout)
 	if ephemeral {
 		g.ephemeral = ephemeralStaged
 	}

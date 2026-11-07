@@ -16,6 +16,7 @@ type savedNode struct {
 }
 
 type savedGroup struct {
+	ID        GroupID     `json:"id,omitempty"`
 	Layout    Layout      `json:"layout"`
 	Children  []savedNode `json:"children"`
 	Focus     int         `json:"focus"`
@@ -68,7 +69,7 @@ func saveGroup(g *Group) *savedGroup {
 	if g == nil {
 		return nil
 	}
-	out := &savedGroup{Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, Children: make([]savedNode, len(g.Children))}
+	out := &savedGroup{ID: g.id, Layout: g.Layout, Focus: g.Focus, Ephemeral: uint8(g.ephemeral), Locked: g.Locked, Untabbed: g.untabbed, Children: make([]savedNode, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch n := ch.Node.(type) {
@@ -81,16 +82,43 @@ func saveGroup(g *Group) *savedGroup {
 	return out
 }
 
-func loadGroup(g *savedGroup) (*Group, error) {
+func loadTree(g *savedGroup, lift int) (Tree, error) {
+	t := Tree{lift: lift}
+	root, err := t.loadGroup(g)
+	if err != nil {
+		return Tree{}, err
+	}
+	t.root = root
+	t.mintMissing(root)
+	return t, nil
+}
+
+func (t *Tree) mintMissing(g *Group) {
+	if g == nil {
+		return
+	}
+	if g.id == 0 {
+		t.minted++
+		g.id = t.minted
+	}
+	for _, ch := range g.Children {
+		if sub, ok := ch.Node.(*Group); ok {
+			t.mintMissing(sub)
+		}
+	}
+}
+
+func (t *Tree) loadGroup(g *savedGroup) (*Group, error) {
 	if g == nil {
 		return nil, nil
 	}
-	out := &Group{Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, Children: make([]Child, len(g.Children))}
+	t.minted = max(t.minted, g.ID)
+	out := &Group{id: g.ID, Layout: g.Layout, Focus: g.Focus, ephemeral: ephemerality(g.Ephemeral), Locked: g.Locked, untabbed: g.Untabbed, Children: make([]Child, len(g.Children))}
 	for i, ch := range g.Children {
 		out.Children[i].Ratio = ch.Ratio
 		switch {
 		case ch.Group != nil:
-			sub, err := loadGroup(ch.Group)
+			sub, err := t.loadGroup(ch.Group)
 			if err != nil {
 				return nil, err
 			}
@@ -208,12 +236,12 @@ func saveWorkspace(w Workspace) savedWorkspace {
 func loadWorkspaces(saved []savedWorkspace) ([]Workspace, error) {
 	out := make([]Workspace, 0, len(saved))
 	for _, w := range saved {
-		root, err := loadGroup(w.Tree)
+		tree, err := loadTree(w.Tree, w.Lift)
 		if err != nil {
 			return nil, err
 		}
 		ws := Workspace{
-			ID: w.ID, Output: w.Output, Tree: Tree{root: root, lift: w.Lift}, Floating: w.Floating, Minimized: w.Minimized,
+			ID: w.ID, Output: w.Output, Tree: tree, Floating: w.Floating, Minimized: w.Minimized,
 			Cover: savedCover(w), floatFocus: w.FloatFocus, home: w.Home, history: w.History,
 		}
 		if w.Scratch != nil {
