@@ -259,6 +259,7 @@ func (c *Compositor) rasterLabelLater(o *output.Output, key labelKey) {
 
 func (c *Compositor) labelRastered(job labelJob, pix []byte, err error) error {
 	delete(c.labelsPending, job)
+	c.landed++
 	cache := c.labels[job.o]
 	if cache == nil {
 		return nil
@@ -280,6 +281,10 @@ func (c *Compositor) labelRastered(job labelJob, pix []byte, err error) error {
 
 func (c *Compositor) LabelsPending() bool {
 	return len(c.labelsPending) > 0
+}
+
+func (c *Compositor) Landed() uint64 {
+	return c.landed
 }
 
 func rasterLabel(font *gtext.Typeface, key labelKey, pad int) ([]byte, error) {

@@ -132,6 +132,7 @@ func (c *Compositor) loadCursorLater(key cursorKey) {
 		return err
 	}, func(err error) error {
 		delete(c.cursorsLoading, key)
+		c.landed++
 		if err != nil {
 			c.report(fmt.Errorf("compositor: cursor %q at %dpx: %w", key.name, key.px, err))
 		}

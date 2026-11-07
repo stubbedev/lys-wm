@@ -261,25 +261,59 @@ func (h *Harness) assertGolden(name string) {
 
 const loadedFrameTries = 20
 
+type loads struct {
+	pending bool
+	landed  uint64
+}
+
+func (h *Harness) loads() loads {
+	h.t.Helper()
+	var l loads
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		l = loads{c.LabelsPending() || c.CursorsLoading(), c.Landed()}
+		return nil
+	})
+	return l
+}
+
+func drewEverything(before, after loads) bool {
+	return !before.pending && after == before
+}
+
 func (h *Harness) renderedLoaded() *soft.Buffer {
 	h.t.Helper()
-	loading := func(_ *headless.Backend, c *compositor.Compositor) bool {
-		return c.LabelsPending() || c.CursorsLoading()
-	}
 	for range loadedFrameTries {
-		h.Eventually("labels and cursors loaded", func(b *headless.Backend, c *compositor.Compositor) bool { return !loading(b, c) })
-		frame := h.Rendered(0)
-		stillLoaded := true
-		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
-			stillLoaded = !loading(b, c)
-			return nil
+		h.Eventually("labels and cursors loaded", func(_ *headless.Backend, c *compositor.Compositor) bool {
+			return !c.LabelsPending() && !c.CursorsLoading()
 		})
-		if stillLoaded {
+		before := h.loads()
+		frame := h.Rendered(0)
+		if drewEverything(before, h.loads()) {
 			return frame
 		}
 	}
 	h.t.Fatalf("harness: every one of %d frames asked for a label or cursor it did not have", loadedFrameTries)
 	return nil
+}
+
+func TestAGoldenFrameIsOneThatAskedForNothingItLacked(t *testing.T) {
+	idle := loads{landed: 3}
+	for _, c := range []struct {
+		name          string
+		before, after loads
+		want          bool
+	}{
+		{"nothing asked for and nothing landed", idle, idle, true},
+		{"a label the frame asked for is still loading", idle, loads{pending: true, landed: 3}, false},
+		{"a label the frame asked for landed before the check", idle, loads{landed: 4}, false},
+		{"a load was running before the frame", loads{pending: true, landed: 3}, loads{pending: true, landed: 3}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := drewEverything(c.before, c.after); got != c.want {
+				t.Fatalf("drewEverything(%+v, %+v) = %v, want %v", c.before, c.after, got, c.want)
+			}
+		})
+	}
 }
 
 func onEachConfiguredRenderer(t *testing.T, test func(t *testing.T, start gpuStarter)) {

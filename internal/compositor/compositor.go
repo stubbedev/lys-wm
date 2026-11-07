@@ -288,6 +288,7 @@ type Compositor struct {
 	cursorsLoading  map[cursorKey]struct{}
 	labelWork       loop.Serial
 	labelsPending   map[labelJob]struct{}
+	landed          uint64
 	labelSlots      map[*output.Output]map[labelSlot]labelKey
 	loadedConfig    func() error
 	reloading       int
