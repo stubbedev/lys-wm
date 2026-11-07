@@ -1996,6 +1996,7 @@ func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
 	}
 	o := r.b.Outputs()[0]
 	cp, _ := o.CursorPlane()
+	r.pinned = o.lastFlip + modeOf(o.mode).Interval() - backend.PlaneLead
 	if err := errors.Join(cp.MoveCursor(image.Pt(31, 20)), cp.MoveCursor(image.Pt(32, 20))); err != nil {
 		t.Fatal(err)
 	}
