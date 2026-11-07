@@ -38,6 +38,11 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   watch                        print events as JSON lines until lys-wm exits
   icon <window> <size>         print a window's icon buffer closest to size pixels
                                as JSON, the PNG base64-encoded
+  output create [--name <name>] [--scale <s>] <width>x<height>[@<hz>]
+                               add a virtual output, at 60 Hz without @<hz>, and
+                               print its name as JSON
+  output remove <name>         remove a virtual output; its workspaces move as
+                               when a monitor is unplugged
 
 The socket is --socket, else $LYS_WM_SOCKET, else the only socket in
 $XDG_RUNTIME_DIR/lys-wm. The exit status is 3 when no lys-wm answers there,
@@ -83,6 +88,8 @@ func parseArgs(args []string) (ipc.Request, error) {
 		return parseIcon(rest)
 	case kind == ipc.KindUpgrade:
 		return parseUpgrade(rest)
+	case cmd == "output":
+		return parseOutput(rest)
 	case cmd == "reload":
 		req = ipc.Request{Request: ipc.KindDispatch, Action: wm.ReloadAction{}.String()}
 	case slices.Contains(queries, kind):
@@ -94,6 +101,51 @@ func parseArgs(args []string) (ipc.Request, error) {
 		return ipc.Request{}, fmt.Errorf("%w: %s takes no arguments", errUsage, cmd)
 	}
 	return req, nil
+}
+
+const defaultRefreshMHz = 60000
+
+func parseOutput(args []string) (ipc.Request, error) {
+	if len(args) == 0 {
+		return ipc.Request{}, fmt.Errorf("%w: output takes create or remove", errUsage)
+	}
+	switch verb, rest := args[0], args[1:]; verb {
+	case "create":
+		return parseCreateOutput(rest)
+	case "remove":
+		if len(rest) != 1 {
+			return ipc.Request{}, fmt.Errorf("%w: output remove takes the name of a virtual output", errUsage)
+		}
+		return ipc.Request{Request: ipc.KindRemoveOutput, Name: rest[0]}, nil
+	default:
+		return ipc.Request{}, fmt.Errorf("%w: output takes create or remove, not %q", errUsage, verb)
+	}
+}
+
+func parseCreateOutput(args []string) (ipc.Request, error) {
+	flags := flag.NewFlagSet("output create", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	name := flags.String("name", "", "")
+	scale := flags.Float64("scale", 0, "")
+	if err := flags.Parse(args); err != nil {
+		return ipc.Request{}, fmt.Errorf("%w: output create: %w", errUsage, err)
+	}
+	if flags.NArg() != 1 {
+		return ipc.Request{}, fmt.Errorf("%w: output create takes one <width>x<height>[@<hz>]", errUsage)
+	}
+	scaled := false
+	flags.Visit(func(f *flag.Flag) { scaled = scaled || f.Name == "scale" })
+	if scaled && !(*scale > 0) {
+		return ipc.Request{}, fmt.Errorf("%w: output create: scale %g is not above 0", errUsage, *scale)
+	}
+	m, err := ipc.ParseMode(flags.Arg(0))
+	if err != nil {
+		return ipc.Request{}, fmt.Errorf("%w: output create: %w", errUsage, err)
+	}
+	if m.RefreshMHz == 0 {
+		m.RefreshMHz = defaultRefreshMHz
+	}
+	return ipc.Request{Request: ipc.KindCreateOutput, Name: *name, Mode: &m, Scale: *scale}, nil
 }
 
 func parseUpgrade(args []string) (ipc.Request, error) {
@@ -191,7 +243,7 @@ func run(args []string, getenv func(string) string, out, warnings io.Writer) err
 	if req.Action == (wm.ReloadAction{}).String() {
 		return printWarnings(path, warnings)
 	}
-	if req.Request == ipc.KindDispatch {
+	if req.Request == ipc.KindDispatch || req.Request == ipc.KindRemoveOutput {
 		return nil
 	}
 	if result == nil {

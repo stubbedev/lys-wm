@@ -89,6 +89,9 @@ func (c *Compositor) Busy() string {
 }
 
 func (c *Compositor) HandoverState(t *handover.FDs, skip func(*server.Client) bool) (*HandoverState, error) {
+	if err := c.refuseVirtualHandover(); err != nil {
+		return nil, err
+	}
 	st, kept, err := c.display.Snapshot(t, skip)
 	if err != nil {
 		return nil, err

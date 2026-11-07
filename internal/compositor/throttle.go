@@ -50,7 +50,7 @@ func (c *Compositor) drawnOn(o *output.Output, s *surface.Surface) bool {
 
 func (c *Compositor) drawnAnywhere(s *surface.Surface) bool {
 	for _, o := range c.outputs {
-		if c.Powered(o) && c.drawnOn(o, s) {
+		if c.drawing(o) && c.drawnOn(o, s) {
 			return true
 		}
 	}

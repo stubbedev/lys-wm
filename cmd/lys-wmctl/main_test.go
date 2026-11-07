@@ -42,7 +42,11 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
-type handler struct{ dispatched []wm.Action }
+type handler struct {
+	dispatched []wm.Action
+	created    []ipc.OutputSpec
+	removed    []string
+}
 
 func (h *handler) Snapshot() ipc.Snapshot {
 	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize", ConfigProblems: ipc.ConfigProblems{Messages: []string{"c.yaml:3: colour: unknown key"}}}
@@ -59,6 +63,16 @@ func (h *handler) Dispatch(a wm.Action) error {
 
 func (h *handler) Icon(wm.WindowID, int) (*image.RGBA, int, error) {
 	return nil, 0, errors.New("no icons")
+}
+
+func (h *handler) CreateOutput(spec ipc.OutputSpec) (ipc.CreatedOutput, error) {
+	h.created = append(h.created, spec)
+	return ipc.CreatedOutput{Name: "VIRT-1"}, nil
+}
+
+func (h *handler) RemoveOutput(name string) error {
+	h.removed = append(h.removed, name)
+	return nil
 }
 
 func TestRunAgainstASocket(t *testing.T) {
@@ -157,5 +171,62 @@ func TestAnyOtherFailureIsNotReportedAsNotRunning(t *testing.T) {
 	_, err := parseArgs([]string{"teleport"})
 	if code := exitCode(err); code != exitFailed {
 		t.Fatalf("a usage error: status %d", code)
+	}
+}
+
+func TestOutputCreateAndRemove(t *testing.T) {
+	for args, want := range map[string]ipc.Request{
+		"output create 1920x1080":                             {Request: ipc.KindCreateOutput, Mode: &ipc.Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}},
+		"output create --name tablet --scale 2 2560x1600@120": {Request: ipc.KindCreateOutput, Name: "tablet", Scale: 2, Mode: &ipc.Mode{Width: 2560, Height: 1600, RefreshMHz: 120000}},
+		"output remove VIRT-1":                                {Request: ipc.KindRemoveOutput, Name: "VIRT-1"},
+	} {
+		got, err := parseArgs(strings.Fields(args))
+		if err != nil || got.Request != want.Request || got.Name != want.Name || got.Scale != want.Scale || (got.Mode == nil) != (want.Mode == nil) || got.Mode != nil && *got.Mode != *want.Mode {
+			t.Errorf("%q: %+v (mode %v), %v; want %+v (mode %v)", args, got, got.Mode, err, want, want.Mode)
+		}
+	}
+	for _, args := range []string{"output", "output list", "output create", "output create 1920", "output create 1920x1080@0", "output create --scale 0 800x600", "output create --scale -1 800x600", "output create 800x600 600x800", "output create --frobnicate 800x600", "output remove", "output remove VIRT-1 VIRT-2"} {
+		if _, err := parseArgs(strings.Fields(args)); !errors.Is(err, errUsage) {
+			t.Errorf("%q: %v", args, err)
+		}
+	}
+
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &handler{}
+	path := filepath.Join(testenv.SocketDir(t), "lys-wm", "wayland-1.sock")
+	s, err := ipc.Listen(l, path, h, func(err error) { t.Error(err) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- l.Run() }()
+	defer func() {
+		_ = l.Post(func() error {
+			l.Stop()
+			return nil
+		})
+		if err := errors.Join(<-done, s.Close(), l.Close()); err != nil {
+			t.Error(err)
+		}
+	}()
+	var out bytes.Buffer
+	if err := run([]string{"--socket", path, "output", "create", "800x600@30"}, nil, &out, io.Discard); err != nil || out.String() != "{\n  \"name\": \"VIRT-1\"\n}\n" {
+		t.Fatalf("output create printed %q, %v", out.String(), err)
+	}
+	out.Reset()
+	if err := run([]string{"--socket", path, "output", "remove", "VIRT-1"}, nil, &out, io.Discard); err != nil || out.Len() != 0 {
+		t.Fatalf("output remove printed %q, %v", out.String(), err)
+	}
+	if err := l.Post(func() error {
+		want := ipc.OutputSpec{Size: image.Pt(800, 600), RefreshMHz: 30000}
+		if len(h.created) != 1 || h.created[0] != want || len(h.removed) != 1 || h.removed[0] != "VIRT-1" {
+			t.Errorf("created %+v, removed %v", h.created, h.removed)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

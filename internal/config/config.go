@@ -913,14 +913,12 @@ func (p *parser) mode(a *At[string], key string) compositor.ModePolicy {
 	case "highres":
 		return compositor.HighResMode{}
 	}
-	size, rate, hasRate := strings.Cut(a.V, "@")
-	dims, ok := parsePair(size)
-	hz, err := strconv.ParseFloat(rate, 64)
-	if !ok || dims.X <= 0 || dims.Y <= 0 || (hasRate && (err != nil || !(hz > 0 && hz*1000 <= math.MaxInt32))) {
+	m, err := ipc.ParseMode(a.V)
+	if err != nil {
 		p.fail(a.Line, key, "%q is not preferred, highres or <width>x<height>[@<hz>]", a.V)
 		return nil
 	}
-	return compositor.ExactMode{Size: dims, RefreshMHz: int32(math.Round(hz * 1000))}
+	return compositor.ExactMode{Size: image.Pt(m.Width, m.Height), RefreshMHz: m.RefreshMHz}
 }
 
 const (

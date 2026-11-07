@@ -65,7 +65,11 @@ func (c *Compositor) configuredRule(b backend.Output) OutputRule {
 	if rule, ok := c.outputOverrides[b.Name()]; ok {
 		return rule
 	}
-	return c.outputRules.For(b)
+	rule := c.outputRules.For(b)
+	if s := c.virtualScale(b); s != 0 {
+		rule.Scale = s
+	}
+	return rule
 }
 
 func (c *Compositor) outputRule(b backend.Output) OutputRule {

@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"errors"
+	"image"
 	"slices"
 	"strings"
 	"testing"
@@ -25,19 +26,33 @@ func TestParseRequest(t *testing.T) {
 			t.Fatalf("%s parsed to %+v, %v", kind, r, err)
 		}
 	}
+	if r, err := parseRequest([]byte(`{"request":"createoutput","mode":{"width":800,"height":600,"refresh_mhz":30000}}`)); err != nil || r.output != (OutputSpec{Size: image.Pt(800, 600), RefreshMHz: 30000}) {
+		t.Fatalf("createoutput parsed to %+v, %v", r, err)
+	}
+	if r, err := parseRequest([]byte(`{"request":"removeoutput","name":"VIRT-2"}`)); err != nil || r.output.Name != "VIRT-2" {
+		t.Fatalf("removeoutput parsed to %+v, %v", r, err)
+	}
 	for text, want := range map[string]string{
-		`{"request":"submap","action":"resize"}`:   "only dispatch takes an action",
-		`{"request":"teleport"}`:                   `unknown request "teleport" (known: version, outputs,`,
-		`{"request":"windows","action":"kill"}`:    "only dispatch takes an action",
-		`{"request":"dispatch"}`:                   "only dispatch takes an action",
-		`{"request":"dispatch","action":"fly up"}`: `unknown action "fly"`,
-		`{"request":"windows","verbose":true}`:     `unknown field "verbose"`,
-		`{"request":"icon","window":7}`:            "only icon takes a window and a size",
-		`{"request":"icon","window":7,"size":-1}`:  "only icon takes a window and a size",
-		`{"request":"icon","size":32}`:             "only icon takes a window and a size",
-		`{"request":"windows","window":7}`:         "only icon takes a window and a size",
-		`{"request":"windows","size":7}`:           "only icon takes a window and a size",
-		`not json`:                                 "invalid character",
+		`{"request":"submap","action":"resize"}`:                                         "only dispatch takes an action",
+		`{"request":"teleport"}`:                                                         `unknown request "teleport" (known: version, outputs,`,
+		`{"request":"windows","action":"kill"}`:                                          "only dispatch takes an action",
+		`{"request":"dispatch"}`:                                                         "only dispatch takes an action",
+		`{"request":"dispatch","action":"fly up"}`:                                       `unknown action "fly"`,
+		`{"request":"windows","verbose":true}`:                                           `unknown field "verbose"`,
+		`{"request":"icon","window":7}`:                                                  "only icon takes a window and a size",
+		`{"request":"icon","window":7,"size":-1}`:                                        "only icon takes a window and a size",
+		`{"request":"icon","size":32}`:                                                   "only icon takes a window and a size",
+		`{"request":"windows","window":7}`:                                               "only icon takes a window and a size",
+		`{"request":"windows","size":7}`:                                                 "only icon takes a window and a size",
+		`{"request":"createoutput"}`:                                                     "createoutput needs a mode",
+		`{"request":"createoutput","mode":{"width":800,"height":600}}`:                   "createoutput needs a mode",
+		`{"request":"createoutput","mode":{"width":0,"height":600,"refresh_mhz":60000}}`: "createoutput needs a mode",
+		`{"request":"createoutput","mode":{"width":800,"height":600,"refresh_mhz":60000},"scale":-1}`: "scale -1 is negative",
+		`{"request":"removeoutput"}`:                                          "removeoutput takes the name",
+		`{"request":"removeoutput","name":"VIRT-1","scale":2}`:                "removeoutput takes the name",
+		`{"request":"outputs","name":"VIRT-1"}`:                               "only createoutput and removeoutput take a name",
+		`{"request":"outputs","mode":{"width":1,"height":1,"refresh_mhz":1}}`: "only createoutput and removeoutput take a name",
+		`not json`: "invalid character",
 	} {
 		_, err := parseRequest([]byte(text))
 		if !errors.Is(err, ErrBadRequest) || !strings.Contains(err.Error(), want) {
@@ -192,6 +207,23 @@ func TestAWindowChangingOutputAloneSendsItsRect(t *testing.T) {
 	for _, e := range Diff(Snapshot{Windows: []Window{w}}, Snapshot{Windows: []Window{focused}}) {
 		if e.Name() == "rect" || e.Name() == "appid" {
 			t.Errorf("a focus change sent %s", e.Name())
+		}
+	}
+}
+
+func TestParseMode(t *testing.T) {
+	for text, want := range map[string]Mode{
+		"1920x1080":         {Width: 1920, Height: 1080},
+		"2560x1440@143.912": {Width: 2560, Height: 1440, RefreshMHz: 143912},
+		"800x600@60":        {Width: 800, Height: 600, RefreshMHz: 60000},
+	} {
+		if got, err := ParseMode(text); err != nil || got != want {
+			t.Errorf("%s parsed to %+v, %v", text, got, err)
+		}
+	}
+	for _, text := range []string{"", "1920", "1920x", "x1080", "0x1080", "1920x-1", "1920x1080@", "1920x1080@0", "1920x1080@fast", "1920x1080@3000000"} {
+		if got, err := ParseMode(text); err == nil {
+			t.Errorf("%q parsed to %+v", text, got)
 		}
 	}
 }

@@ -243,6 +243,7 @@ type Compositor struct {
 	seatConfig         seat.Config
 	outputRules        OutputRules
 	disabled           []backend.Output
+	virtualOutputs     []virtualOutput
 	hooks              Hooks
 	ipcEvents          IPCEvents
 	changed            func()
@@ -659,7 +660,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 }
 
 func (c *Compositor) Close() error {
-	errs := []error{c.landInFlight(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.dropShaders()}
+	errs := []error{c.landInFlight(), c.closeVirtualOutputs(), c.dropOverview(), c.endReads(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.dropShaders()}
 	for _, sc := range c.scenes {
 		errs = append(errs, sc.dropImage())
 	}
@@ -717,6 +718,10 @@ func (c *Compositor) scheduleAll() error {
 }
 
 func (c *Compositor) schedule(o *output.Output) error {
+	if !c.demanded(o) {
+		c.sceneOf(o).invalidate()
+		return nil
+	}
 	c.hintAnimationStart(o)
 	if err := o.Backend().ScheduleFrame(); err != nil {
 		return fmt.Errorf("compositor: schedule a frame on %s: %w", o.Backend().Name(), err)

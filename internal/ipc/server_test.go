@@ -27,6 +27,21 @@ type fake struct {
 	icons      map[wm.WindowID]*image.RGBA
 	server     *Server
 	snapshots  int
+	created    []OutputSpec
+	removed    []string
+}
+
+func (f *fake) CreateOutput(spec OutputSpec) (CreatedOutput, error) {
+	f.created = append(f.created, spec)
+	return CreatedOutput{Name: spec.Name}, nil
+}
+
+func (f *fake) RemoveOutput(name string) error {
+	if name != "VIRT-1" {
+		return fmt.Errorf("no virtual output %s", name)
+	}
+	f.removed = append(f.removed, name)
+	return nil
 }
 
 func (f *fake) Icon(id wm.WindowID, _ int) (*image.RGBA, int, error) {
@@ -417,4 +432,25 @@ func TestAWakeupWithoutAChangeBuildsNoSnapshot(t *testing.T) {
 	if got := count() - before; got != 1 {
 		t.Fatalf("%d snapshots after one change, want 1", got)
 	}
+}
+
+func TestOutputsAreCreatedAndRemovedOnTheLoop(t *testing.T) {
+	r := start(t)
+	got, err := Do(r.path, Request{Request: KindCreateOutput, Name: "VIRT-1", Mode: &Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}, Scale: 1.5})
+	var o CreatedOutput
+	if err != nil || json.Unmarshal(got, &o) != nil || o.Name != "VIRT-1" {
+		t.Fatalf("createoutput gave %s, %v", got, err)
+	}
+	if got, err := Do(r.path, Request{Request: KindRemoveOutput, Name: "VIRT-1"}); err != nil || got != nil {
+		t.Fatalf("removeoutput gave %s, %v", got, err)
+	}
+	if _, err := Do(r.path, Request{Request: KindRemoveOutput, Name: "DP-1"}); err == nil || err.Error() != "lys-wm: no virtual output DP-1" {
+		t.Fatalf("removing an output that is not virtual: %v", err)
+	}
+	r.do(func(f *fake) {
+		want := OutputSpec{Name: "VIRT-1", Size: image.Pt(1920, 1080), RefreshMHz: 60000, Scale: 1.5}
+		if len(f.created) != 1 || f.created[0] != want || len(f.removed) != 1 {
+			t.Errorf("created %+v, removed %v", f.created, f.removed)
+		}
+	})
 }

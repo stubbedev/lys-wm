@@ -58,7 +58,7 @@ func (c *Compositor) nextFlip(s *surface.Surface) (time.Duration, bool) {
 	found := false
 	for _, o := range c.outputs {
 		last := c.sceneOf(o).last
-		if !c.Powered(o) || last.Time == 0 || !slices.Contains(c.shown[o], s) {
+		if !c.drawing(o) || last.Time == 0 || !slices.Contains(c.shown[o], s) {
 			continue
 		}
 		if flip := last.Time + last.Refresh; !found || flip < next {

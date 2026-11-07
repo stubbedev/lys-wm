@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -34,9 +36,11 @@ const (
 	KindOverview       Kind = "overview"
 	KindConfigProblems Kind = "configproblems"
 	KindUpgrade        Kind = "upgrade"
+	KindCreateOutput   Kind = "createoutput"
+	KindRemoveOutput   Kind = "removeoutput"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput}
 
 type Request struct {
 	Request Kind        `json:"request"`
@@ -45,6 +49,20 @@ type Request struct {
 	Size    int         `json:"size,omitempty"`
 	Binary  string      `json:"binary,omitempty"`
 	DropX11 bool        `json:"drop_x11,omitempty"`
+	Name    string      `json:"name,omitempty"`
+	Mode    *Mode       `json:"mode,omitempty"`
+	Scale   float64     `json:"scale,omitempty"`
+}
+
+type OutputSpec struct {
+	Name       string
+	Size       image.Point
+	RefreshMHz int32
+	Scale      float64
+}
+
+type CreatedOutput struct {
+	Name string `json:"name"`
 }
 
 type UpgradeResult struct {
@@ -73,6 +91,7 @@ type request struct {
 	icon    iconRequest
 	binary  string
 	dropX11 bool
+	output  OutputSpec
 }
 
 func parseRequest(line []byte) (request, error) {
@@ -95,7 +114,11 @@ func parseRequest(line []byte) (request, error) {
 	if (raw.Request == KindUpgrade) != (raw.Binary != "") {
 		return request{}, fmt.Errorf("%w: only upgrade takes a binary, and it needs one", ErrBadRequest)
 	}
-	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}, binary: raw.Binary, dropX11: raw.DropX11}
+	output, err := parseOutput(raw)
+	if err != nil {
+		return request{}, err
+	}
+	r := request{kind: raw.Request, icon: iconRequest{window: raw.Window, size: raw.Size}, binary: raw.Binary, dropX11: raw.DropX11, output: output}
 	if raw.Request == KindDispatch {
 		a, err := wm.ParseAction(raw.Action)
 		if err != nil {
@@ -104,6 +127,49 @@ func parseRequest(line []byte) (request, error) {
 		r.action = a
 	}
 	return r, nil
+}
+
+func parseOutput(raw Request) (OutputSpec, error) {
+	switch raw.Request {
+	case KindCreateOutput:
+		m := raw.Mode
+		if m == nil || m.Width <= 0 || m.Height <= 0 || m.RefreshMHz <= 0 {
+			return OutputSpec{}, fmt.Errorf("%w: createoutput needs a mode with a width, a height and a refresh_mhz above 0", ErrBadRequest)
+		}
+		if raw.Scale < 0 {
+			return OutputSpec{}, fmt.Errorf("%w: createoutput's scale %g is negative", ErrBadRequest, raw.Scale)
+		}
+		return OutputSpec{Name: raw.Name, Size: image.Pt(m.Width, m.Height), RefreshMHz: m.RefreshMHz, Scale: raw.Scale}, nil
+	case KindRemoveOutput:
+		if raw.Name == "" || raw.Mode != nil || raw.Scale != 0 {
+			return OutputSpec{}, fmt.Errorf("%w: removeoutput takes the name of the output and nothing else", ErrBadRequest)
+		}
+		return OutputSpec{Name: raw.Name}, nil
+	}
+	if raw.Name != "" || raw.Mode != nil || raw.Scale != 0 {
+		return OutputSpec{}, fmt.Errorf("%w: only createoutput and removeoutput take a name, and only createoutput a mode and a scale", ErrBadRequest)
+	}
+	return OutputSpec{}, nil
+}
+
+func ParseMode(s string) (Mode, error) {
+	size, rate, hasRate := strings.Cut(s, "@")
+	w, h, ok := strings.Cut(size, "x")
+	width, errW := strconv.Atoi(w)
+	height, errH := strconv.Atoi(h)
+	if !ok || errW != nil || errH != nil || width <= 0 || height <= 0 {
+		return Mode{}, fmt.Errorf("ipc: mode %q is not <width>x<height>[@<hz>]", s)
+	}
+	m := Mode{Width: width, Height: height}
+	if !hasRate {
+		return m, nil
+	}
+	hz, err := strconv.ParseFloat(rate, 64)
+	if err != nil || !(hz > 0 && hz*1000 <= math.MaxInt32) {
+		return Mode{}, fmt.Errorf("ipc: mode %q has no refresh rate in hertz above 0 after the @", s)
+	}
+	m.RefreshMHz = int32(math.Round(hz * 1000))
+	return m, nil
 }
 
 func kindList() string {

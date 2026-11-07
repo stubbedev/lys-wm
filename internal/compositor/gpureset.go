@@ -42,7 +42,7 @@ func (c *Compositor) Reuploads() uint64 {
 }
 
 func (c *Compositor) rebuildGPU() error {
-	errs := []error{c.reupload(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs()}
+	errs := []error{c.reupload(), c.dropDecor(), c.dropAllClosing(), c.dropLockSnapshots(), c.dropBlurs(), c.renewVirtualOutputs()}
 	for _, sc := range c.scenes {
 		sc.invalidate()
 		errs = append(errs, sc.dropImage(), sc.dropWorking())

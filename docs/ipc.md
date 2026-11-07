@@ -14,6 +14,8 @@ lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see
 lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | configproblems | version
 lys-wmctl watch                    # events as JSON lines, until lys-wm exits
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
+lys-wmctl output create 1920x1080@60 # add a virtual output; prints {"name":"VIRT-1"}
+lys-wmctl output remove VIRT-1      # remove it again
 ```
 
 Queries print JSON. A failed request prints the error and exits 1.
@@ -31,7 +33,8 @@ then the server closes it:
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
 `activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `configproblems`, `dispatch` (which needs `action`), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
-[Upgrading in place](./guide/upgrade)) and `watch`. Unknown
+[Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
+takes `name` and `scale`), `removeoutput` (which needs `name`) and `watch`. Unknown
 requests and fields are errors. The response always has `version`, which is
 1 until the protocol changes incompatibly; it then has either `error` or, for
 queries, `result`. A client should refuse to talk to a version it does not
@@ -129,6 +132,39 @@ icon buffer; an icon given only by name is resolved through the icon theme by
 the client.
 
 `version`: the number 1.
+
+### Virtual outputs
+
+`createoutput` adds an output that exists only in memory, for a stream to
+another device or a screencast at a size of its own:
+
+```json
+{"request":"createoutput","mode":{"width":1920,"height":1080,"refresh_mhz":60000},"scale":1.5,"name":"tablet"}
+{"version":1,"result":{"name":"tablet"}}
+```
+
+`mode` is required, every field above 0, the edges up to 16384 pixels and
+the rate up to 1000 Hz; it is the output's only mode.
+`name` defaults to the lowest free `VIRT-<n>` and must not be taken by
+another output. Without `scale`, the [output rules](./config#outputs) decide
+it as for any output; a given `scale` beats the rules.
+The output is placed, gets workspaces, and shows in `outputs`, `wl_output`,
+`xdg_output`, wlr-output-management and ext-workspace like a monitor, and the
+output rules (position, scale, disabled) match its name.
+
+It renders offscreen on the GPU that renders the session, paced by its own
+clock at the mode's refresh rate, and only while a capture
+(ext-image-copy-capture, wlr-screencopy, the screencast portal) has a
+session or a frame on it. The rest of the time it renders nothing, and its
+windows get their frame callbacks at
+[`hidden_frame_rate`](./config#hidden_frame_rate), so an output
+nobody watches costs no GPU work.
+
+`removeoutput` takes it away again, by `name`, and answers no result: its
+workspaces and windows move to the remaining outputs, as when a monitor is
+unplugged, and its captures stop. Only virtual outputs can be removed. They
+last until removed or until lys-wm exits, and an [upgrade](./guide/upgrade)
+is refused while any exists.
 
 ## Events
 

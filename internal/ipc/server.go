@@ -43,6 +43,8 @@ type Handler interface {
 	DispatchPrepared(a wm.Action, loaded func() error) error
 	PrepareDispatch(a wm.Action) func() error
 	Icon(w wm.WindowID, size int) (*image.RGBA, int, error)
+	CreateOutput(spec OutputSpec) (CreatedOutput, error)
+	RemoveOutput(name string) error
 }
 
 type Upgrader func(binary string, dropX11 bool, conn *os.File, done func(UpgradeResult, error))
@@ -366,8 +368,13 @@ func (s *Server) serve(conn *net.UnixConn) {
 		loaded = s.handler.PrepareDispatch(req.action)
 	}
 	result, err := onLoop(s, func() (any, error) {
-		if req.kind == KindDispatch {
+		switch req.kind {
+		case KindDispatch:
 			return nil, s.handler.DispatchPrepared(req.action, loaded)
+		case KindCreateOutput:
+			return s.handler.CreateOutput(req.output)
+		case KindRemoveOutput:
+			return nil, s.handler.RemoveOutput(req.output.Name)
 		}
 		return s.handler.Snapshot().answer(req.kind), nil
 	})
