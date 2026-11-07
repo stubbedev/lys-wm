@@ -478,3 +478,29 @@ func NewLostRead(size image.Point) *LostRead {
 func (*LostRead) Wait() error                 { return nil }
 func (l *LostRead) Map() ([]byte, int, error) { return l.Pix, l.Stride, nil }
 func (*LostRead) Release() error              { return nil }
+
+func (t Transform) Unit(x, y float64) (float64, float64) {
+	return t.fpoint(x, y, image.Pt(1, 1))
+}
+
+var transformNames = [...]string{Normal: "normal", Rotate90: "90", Rotate180: "180", Rotate270: "270", Flipped: "flipped", Flipped90: "flipped-90", Flipped180: "flipped-180", Flipped270: "flipped-270"}
+
+func TransformNames() []string {
+	return transformNames[:]
+}
+
+func (t Transform) String() string {
+	if int(t) < len(transformNames) {
+		return transformNames[t]
+	}
+	return fmt.Sprintf("Transform(%d)", uint8(t))
+}
+
+func ParseTransform(s string) (Transform, bool) {
+	for t, name := range transformNames {
+		if name == s {
+			return Transform(t), true
+		}
+	}
+	return 0, false
+}

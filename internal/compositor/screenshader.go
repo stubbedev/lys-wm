@@ -145,7 +145,7 @@ func (c *Compositor) renderShaded(o *output.Output, sc *scene, s *screenShader, 
 	if err := c.sceneImage(o, sc, bounds); err != nil {
 		return err
 	}
-	f, err := o.Backend().BeginFrame()
+	f, err := c.beginFrame(o, sc)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (c *Compositor) renderShaded(o *output.Output, sc *scene, s *screenShader, 
 		return c.schedule(o)
 	}
 	c.frames.Submit(o.Backend().Name())
-	if err := o.Backend().Present(whole); err != nil {
+	if err := c.present(o, sc, whole); err != nil {
 		return err
 	}
 	sc.presented()

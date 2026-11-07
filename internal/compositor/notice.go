@@ -60,7 +60,7 @@ func (c *Compositor) drawConfigNotice(pass *frame, o *output.Output) error {
 		return nil
 	}
 	s := o.Scale()
-	width := o.Backend().State().Mode.Size.X
+	width := o.PixelSize().X
 	height, px := s.ToDevice(noticeLineHeight), s.ToDevice(noticeTextPx)
 	for i, line := range c.configProblems.noticeLines() {
 		tex := c.label(o, labelKey{text: line, size: image.Pt(width, height), px: px, colors: noticeColors}, labelSlot{notice: i + 1})

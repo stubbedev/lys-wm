@@ -19,6 +19,9 @@ import (
 func (c *Compositor) Frame(b backend.Output) error {
 	o := c.output(b)
 	if o == nil {
+		if m := c.mirrorOf(b); m != nil {
+			return c.mirrorFrame(m)
+		}
 		return backend.Broken("compositor: frame on unknown output %s", b.Name())
 	}
 	if c.parked {
@@ -171,7 +174,7 @@ func (c *Compositor) render(o *output.Output) error {
 	if err := c.settleZoom(sc); err != nil {
 		return err
 	}
-	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	bounds := image.Rectangle{Max: o.PixelSize()}
 	shading := c.shading(o)
 	if err := sc.useShader(shading); err != nil {
 		return err
@@ -274,7 +277,7 @@ func (c *Compositor) render(o *output.Output) error {
 		sc.targetStale = false
 		sc.damage.Add(bounds)
 	}
-	f, err := o.Backend().BeginFrame()
+	f, err := c.beginFrame(o, sc)
 	if err != nil {
 		return err
 	}
@@ -284,7 +287,7 @@ func (c *Compositor) render(o *output.Output) error {
 		return err
 	}
 	c.frames.Submit(o.Backend().Name())
-	if err := o.Backend().Present(repaint); err != nil {
+	if err := c.present(o, sc, repaint); err != nil {
 		return err
 	}
 	sc.presented()

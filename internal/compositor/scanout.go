@@ -35,7 +35,7 @@ type filling struct {
 func (c *Compositor) showFrameHints(o *output.Output, sc *scene, bounds image.Rectangle, plain bool) (drawOp, bool) {
 	op, alone := drawOp{}, false
 	if plain {
-		op, alone = fills(sc.cur.ops[:sc.cur.cursorFrom], bounds)
+		op, alone = fills(sc.cur.ops[:sc.cur.cursorFrom], bounds, o.Transform().Invert())
 	}
 	c.showContentType(o, op.surface, alone)
 	if err := c.showAdaptiveSync(o, op.surface, alone); err != nil {
@@ -56,7 +56,7 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, op drawOp, alone bool)
 	if !ok || c.adopting != nil {
 		return false, nil
 	}
-	if alone && !colorspace.Passthrough(op.space, c.scanoutTarget(o)) {
+	if alone && (c.mirrored(o) || !colorspace.Passthrough(op.space, c.scanoutTarget(o))) {
 		op, alone = drawOp{}, false
 	}
 	if err := c.fill(o, op.surface, out); err != nil || !alone || sc.cur.cursorFrom != len(sc.cur.ops) {
@@ -72,7 +72,7 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, op drawOp, alone bool)
 	if !op.covers() || !slices.Contains(scanoutFormats, d.Format) {
 		return false, nil
 	}
-	shown, err := out.Scanout(b, d, backend.Placement{Src: op.src, Dst: op.dst}, c.imported[b].left, c.tears(op.surface))
+	shown, err := out.Scanout(b, d, backend.Placement{Src: op.src, Dst: o.Transform().Rect(op.dst, o.PixelSize())}, c.imported[b].left, c.tears(op.surface))
 	if err != nil || !shown {
 		return false, err
 	}
@@ -117,18 +117,18 @@ func (c *Compositor) scanoutTarget(o *output.Output) *colorspace.Target {
 	return colorspace.SDRTarget
 }
 
-func fills(ops []drawOp, bounds image.Rectangle) (drawOp, bool) {
+func fills(ops []drawOp, bounds image.Rectangle, t render.Transform) (drawOp, bool) {
 	switch {
-	case len(ops) == 1 && ops[0].dst == bounds && ops[0].plain():
+	case len(ops) == 1 && ops[0].dst == bounds && ops[0].plain(t):
 		return ops[0], true
-	case len(ops) == 2 && ops[0] == letterboxFill(bounds) && ops[1].dst.In(bounds) && ops[1].plain():
+	case len(ops) == 2 && ops[0] == letterboxFill(bounds) && ops[1].dst.In(bounds) && ops[1].plain(t):
 		return ops[1], true
 	}
 	return drawOp{}, false
 }
 
-func (op *drawOp) plain() bool {
-	return op.surface != nil && op.transform == render.Normal && op.alpha == 1
+func (op *drawOp) plain(t render.Transform) bool {
+	return op.surface != nil && op.transform == t && op.alpha == 1
 }
 
 func letterboxFill(bounds image.Rectangle) drawOp {

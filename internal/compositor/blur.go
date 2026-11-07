@@ -320,7 +320,7 @@ func (c *Compositor) drawBlur(pass *frame, o *output.Output, g glassDraw) {
 	for _, r := range g.shape {
 		under = under.Union(r)
 	}
-	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	bounds := image.Rectangle{Max: o.PixelSize()}
 	spec := c.blurSpec(o)
 	plain := spec
 	look := *g.look

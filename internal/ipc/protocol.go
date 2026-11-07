@@ -230,6 +230,8 @@ type Output struct {
 	ShaderError string         `json:"shader_error,omitempty"`
 	HDR         bool           `json:"hdr,omitempty"`
 	Zoom        float64        `json:"zoom,omitempty"`
+	Transform   string         `json:"transform,omitempty"`
+	MirrorOf    string         `json:"mirror_of,omitempty"`
 }
 
 type Workspace struct {

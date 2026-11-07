@@ -78,7 +78,7 @@ func (c *Compositor) dropGrain() error {
 }
 
 func (c *Compositor) drawGrain(pass *frame, o *output.Output, r image.Rectangle, origin image.Point, m render.Mask, alpha, strength float32) error {
-	tile, err := c.grainFor(o.Backend().State().Mode.Size)
+	tile, err := c.grainFor(o.PixelSize())
 	if err != nil {
 		return err
 	}

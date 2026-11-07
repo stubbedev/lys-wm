@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	swlr "github.com/stubbedev/lys-wm/internal/protocol/server/wlrlayershell"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -58,6 +59,19 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			ShaderError: shaderError,
 			HDR:         b.State().HDR.Active,
 			Zoom:        c.ipcZoom(o),
+			Transform:   ipcTransform(o.Transform()),
+		})
+	}
+	for _, m := range c.mirrors {
+		mode := m.out.State().Mode
+		snap.Outputs = append(snap.Outputs, ipc.Output{
+			Name:        m.out.Name(),
+			Description: m.out.Description(),
+			Scale:       1,
+			Mode:        ipc.Mode{Width: mode.Size.X, Height: mode.Size.Y, RefreshMHz: mode.RefreshMHz},
+			Powered:     m.out.State().Lit(),
+			Transform:   ipcTransform(m.transform),
+			MirrorOf:    c.mirrorName(m),
 		})
 	}
 	for _, w := range s.Workspaces() {
@@ -301,4 +315,11 @@ func (c *Compositor) showWindowMenu(w *window, t *shell.Toplevel, r shell.ShowWi
 	at := c.windowOrigin(w).global(point{float64(r.At.X), float64(r.At.Y)}).pixel()
 	c.ipcEvents.Announce(ipc.WindowMenuEvent{Window: w.id, X: at.X, Y: at.Y})
 	return nil
+}
+
+func ipcTransform(t render.Transform) string {
+	if t == render.Normal {
+		return ""
+	}
+	return t.String()
 }

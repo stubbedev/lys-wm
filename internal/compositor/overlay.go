@@ -96,7 +96,7 @@ func (c *Compositor) assignOverlays(o *output.Output, sc *scene, bounds image.Re
 	var want overlaysShown
 	n := 0
 	candidates := picks[:0:min(out.OverlayPlanes(), backend.MaxOverlayPlanes)]
-	if !shading && sc.zoom == nil && c.adopting == nil && c.hdr[o.Backend()] == nil {
+	if !shading && sc.zoom == nil && c.adopting == nil && c.hdr[o.Backend()] == nil && !c.composedApart(o) {
 		candidates = overlayCandidates(sc.cur.ops, sc.cur.cursorFrom, bounds, candidates)
 	}
 	for _, i := range candidates {

@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cwom "github.com/stubbedev/lys-wm/internal/protocol/client/wlroutputmanagement"
@@ -392,7 +393,6 @@ func TestOutputManagementRefusesWhatItCannotDo(t *testing.T) {
 		heads map[*omHead][]headSetting
 	}{
 		{"a mode the output lacks", everyHead(m, map[*omHead][]headSetting{first: {func(ch *cwom.ZwlrOutputConfigurationHeadV1) error { return ch.SetCustomMode(1024, 768, 0) }}})},
-		{"a rotation", everyHead(m, map[*omHead][]headSetting{first: {func(ch *cwom.ZwlrOutputConfigurationHeadV1) error { return ch.SetTransform(cw.WlOutputTransform90) }}})},
 		{"adaptive sync", everyHead(m, map[*omHead][]headSetting{first: {func(ch *cwom.ZwlrOutputConfigurationHeadV1) error {
 			return ch.SetAdaptiveSync(cwom.ZwlrOutputHeadV1AdaptiveSyncStateEnabled)
 		}}})},
@@ -485,5 +485,23 @@ func TestOutputManagementProtocolErrors(t *testing.T) {
 			}
 			c.ExpectProtocolError(tc.code)
 		})
+	}
+}
+
+func TestOutputManagementRotatesAnOutput(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	m := outputManager(t, c)
+	first := m.head("HEADLESS-1")
+	serial := m.serial
+	rotate := everyHead(m, map[*omHead][]headSetting{first: {func(ch *cwom.ZwlrOutputConfigurationHeadV1) error { return ch.SetTransform(cw.WlOutputTransform90) }}})
+	if r := configure(t, c, m, m.serial, true, rotate); !r.succeeded {
+		t.Fatalf("a rotation answered %+v", *r)
+	}
+	c.DispatchUntil("the rotated head", func() bool { return m.serial != serial && first.transform == cw.WlOutputTransform90 })
+	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	if outputs[0].Transform != "90" || outputs[0].Rect.Width != small.Size.Y || outputs[0].Rect.Height != small.Size.X {
+		t.Fatalf("after the rotation the output is %+v", outputs[0])
 	}
 }

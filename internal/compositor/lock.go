@@ -148,7 +148,7 @@ func (c *Compositor) LockReleasing() error {
 		if !c.outputLive(o) {
 			continue
 		}
-		bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+		bounds := image.Rectangle{Max: o.PixelSize()}
 		var f frame
 		c.drawLocked(&f, o, bounds, nil, 1)
 		tt, err := c.renderOffscreen(o, &f, bounds)

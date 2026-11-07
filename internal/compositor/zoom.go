@@ -74,7 +74,7 @@ func (c *Compositor) applyZoom(a wm.ZoomAction) error {
 
 func (c *Compositor) zoomOn(o *output.Output, sc *scene) *outputZoom {
 	if sc.zoom == nil {
-		bounds := o.Backend().State().Mode.Size
+		bounds := o.PixelSize()
 		sc.zoom = &outputZoom{level: anim.NewMotion(0), target: 1, told: 1, focus: [2]float64{float64(bounds.X) / 2, float64(bounds.Y) / 2}}
 		sc.invalidate()
 	}
@@ -238,7 +238,7 @@ func (c *Compositor) renderZoomed(o *output.Output, sc *scene, bounds image.Rect
 	if err := c.zoomScene(o, sc, bounds); err != nil {
 		return err
 	}
-	f, err := o.Backend().BeginFrame()
+	f, err := c.beginFrame(o, sc)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (c *Compositor) renderZoomed(o *output.Output, sc *scene, bounds image.Rect
 		o.Backend().AbortFrame()
 		return errors.Join(drawErr, err)
 	}
-	if err := o.Backend().Present(whole); err != nil {
+	if err := c.present(o, sc, whole); err != nil {
 		return err
 	}
 	sc.presented()
@@ -281,7 +281,7 @@ func (c *Compositor) touchPoint(p point) point {
 		return p
 	}
 	z := c.scenes[o].zoom
-	bounds := o.Backend().State().Mode.Size
+	bounds := o.PixelSize()
 	view := zoomView(bounds, z.focus, z.factor(c.clock()))
 	scale := o.Scale().Float()
 	local := p.sub(o.Position())

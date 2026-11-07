@@ -98,6 +98,7 @@ func (c *Compositor) arrange(o *output.Output) (layerChanges, error) {
 			}
 		}
 	}
+	usable = c.outputRule(o.Backend()).Reserved.inset(usable)
 	got.usable = usable != c.usable[o]
 	c.usable[o] = usable
 	return got, errors.Join(errs...)

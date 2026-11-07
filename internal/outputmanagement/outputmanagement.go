@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/output"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	swom "github.com/stubbedev/lys-wm/internal/protocol/server/wlroutputmanagement"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
@@ -25,6 +26,7 @@ type Head struct {
 	Mode         backend.Mode
 	Position     image.Point
 	Scale        output.Scale
+	Transform    render.Transform
 	AdaptiveSync bool
 }
 
@@ -39,6 +41,7 @@ type HeadConfig struct {
 	Mode         *ModeRequest
 	Position     *image.Point
 	Scale        *output.Scale
+	Transform    *render.Transform
 	AdaptiveSync *bool
 }
 
@@ -195,8 +198,8 @@ func (hb *headBinding) sendPlacement(now, before Head) error {
 	if now.Position != before.Position || !before.Enabled {
 		errs = append(errs, hb.res.SendPosition(int32(now.Position.X), int32(now.Position.Y))) //nolint:gosec // layout coordinates fit
 	}
-	if !before.Enabled {
-		errs = append(errs, hb.res.SendTransform(sw.WlOutputTransformNormal))
+	if now.Transform != before.Transform || !before.Enabled {
+		errs = append(errs, hb.res.SendTransform(sw.WlOutputTransform(now.Transform)))
 	}
 	if now.Scale != before.Scale {
 		errs = append(errs, hb.res.SendScale(scaleFixed(now.Scale)))
@@ -313,7 +316,7 @@ type configHead struct {
 	mode        *ModeRequest
 	position    *image.Point
 	scale       *output.Scale
-	transform   bool
+	transform   *render.Transform
 	adaptive    *bool
 	unsupported []string
 }
@@ -401,7 +404,7 @@ func (cfg *configuration) configure(apply bool) error {
 		if len(ch.unsupported) > 0 {
 			return fmt.Errorf("%w: %s asks for %v, which lys-wm does not support", ErrRefused, ch.head.out.Name(), ch.unsupported)
 		}
-		heads = append(heads, HeadConfig{Output: ch.head.out, Enabled: ch.enabled, Mode: ch.mode, Position: ch.position, Scale: ch.scale, AdaptiveSync: ch.adaptive})
+		heads = append(heads, HeadConfig{Output: ch.head.out, Enabled: ch.enabled, Mode: ch.mode, Position: ch.position, Scale: ch.scale, Transform: ch.transform, AdaptiveSync: ch.adaptive})
 	}
 	return cfg.b.m.ctl.Configure(heads, apply)
 }
@@ -446,16 +449,14 @@ func (ch *configHead) SetPosition(obj *swom.ZwlrOutputConfigurationHeadV1, x, y 
 }
 
 func (ch *configHead) SetTransform(obj *swom.ZwlrOutputConfigurationHeadV1, transform sw.WlOutputTransform) error {
-	if err := ch.once(obj, ch.transform, "transform"); err != nil {
+	if err := ch.once(obj, ch.transform != nil, "transform"); err != nil {
 		return err
 	}
-	ch.transform = true
 	if transform > sw.WlOutputTransformFlipped270 {
 		return obj.ProtocolError(swom.ZwlrOutputConfigurationHeadV1ErrorInvalidTransform, "transform %d", transform)
 	}
-	if transform != sw.WlOutputTransformNormal {
-		ch.unsupported = append(ch.unsupported, fmt.Sprintf("transform %d", transform))
-	}
+	t := render.Transform(transform)
+	ch.transform = &t
 	return nil
 }
 

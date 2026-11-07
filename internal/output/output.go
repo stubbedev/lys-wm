@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxo "github.com/stubbedev/lys-wm/internal/protocol/server/xdgoutput"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
@@ -101,19 +102,20 @@ type binding struct {
 }
 
 type Output struct {
-	m        *Manager
-	backend  backend.Output
-	global   *server.Global
-	position image.Point
-	scale    Scale
-	bindings []*binding
+	m         *Manager
+	backend   backend.Output
+	global    *server.Global
+	position  image.Point
+	scale     Scale
+	transform render.Transform
+	bindings  []*binding
 }
 
-func (m *Manager) Add(b backend.Output, position image.Point, scale Scale) (*Output, error) {
+func (m *Manager) Add(b backend.Output, position image.Point, scale Scale, transform render.Transform) (*Output, error) {
 	if scale == 0 {
 		return nil, fmt.Errorf("output: %s has scale 0", b.Name())
 	}
-	o := &Output{m: m, backend: b, position: position, scale: scale}
+	o := &Output{m: m, backend: b, position: position, scale: scale, transform: transform}
 	var err error
 	if o.global, err = m.display.AddGlobal(sw.WlOutputInterface, outputVersion, o.bind); err != nil {
 		return nil, err
@@ -183,8 +185,16 @@ func (o *Output) Position() image.Point {
 	return o.position
 }
 
+func (o *Output) Transform() render.Transform {
+	return o.transform
+}
+
+func (o *Output) PixelSize() image.Point {
+	return o.transform.Size(o.backend.State().Mode.Size)
+}
+
 func (o *Output) LogicalSize() image.Point {
-	size := o.backend.State().Mode.Size
+	size := o.PixelSize()
 	return image.Pt(o.scale.ToLogical(size.X), o.scale.ToLogical(size.Y))
 }
 
@@ -198,7 +208,7 @@ func (o *Output) XPosition() image.Point {
 
 func (o *Output) XRect() image.Rectangle {
 	at := o.XPosition()
-	return image.Rectangle{Min: at, Max: at.Add(o.backend.State().Mode.Size)}
+	return image.Rectangle{Min: at, Max: at.Add(o.PixelSize())}
 }
 
 func (o *Output) Resources(c *server.Client) []*sw.WlOutput {
@@ -227,12 +237,12 @@ func (m *Manager) rescaled(before Scale, done *Output) error {
 	return m.resend(func(o *Output) bool { return o != done })
 }
 
-func (o *Output) Update(position image.Point, scale Scale) error {
+func (o *Output) Update(position image.Point, scale Scale, transform render.Transform) error {
 	if scale == 0 {
 		return fmt.Errorf("output: %s has scale 0", o.backend.Name())
 	}
 	before := o.m.xScale()
-	o.position, o.scale = position, scale
+	o.position, o.scale, o.transform = position, scale, transform
 	return errors.Join(o.Changed(), o.m.rescaled(before, o))
 }
 
@@ -285,7 +295,7 @@ func (o *Output) send(b *binding) error {
 	if err != nil {
 		return err
 	}
-	if err := b.wl.SendGeometry(v32[0], v32[1], v32[2], v32[3], sw.WlOutputSubpixelUnknown, "unknown", o.backend.Name(), sw.WlOutputTransformNormal); err != nil {
+	if err := b.wl.SendGeometry(v32[0], v32[1], v32[2], v32[3], sw.WlOutputSubpixelUnknown, "unknown", o.backend.Name(), sw.WlOutputTransform(o.transform)); err != nil {
 		return err
 	}
 	flags := sw.WlOutputModeCurrent

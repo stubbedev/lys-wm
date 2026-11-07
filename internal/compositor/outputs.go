@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/colorspace"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/outputmanagement"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -30,6 +31,13 @@ type OutputRule struct {
 	ICC           *colorspace.Description
 	ICCPath       string
 	HotCorners    *HotCornerSet
+	Transform     render.Transform
+	Mirror        *wm.OutputMatch
+	Reserved      Insets
+}
+
+type Insets struct {
+	Top, Right, Bottom, Left int
 }
 
 const refreshToleranceMHz = 1000
@@ -233,7 +241,7 @@ func (c *Compositor) relayout() error {
 			right += o.LogicalSize().X
 		}
 		if o.Position() != at {
-			errs = append(errs, o.Update(at, o.Scale()))
+			errs = append(errs, o.Update(at, o.Scale(), o.Transform()))
 		}
 	}
 	return errors.Join(append(errs, c.shell.ReconfigureLock(), c.confirmLock(), c.outputConfig.Changed())...)
@@ -270,11 +278,14 @@ func (c *Compositor) OutputAdded(b backend.Output) error {
 		c.disabled = append(c.disabled, b)
 		return c.outputConfig.Changed()
 	}
+	if rule.Mirror != nil {
+		return c.addMirror(b, rule)
+	}
 	return c.enable(b, rule)
 }
 
 func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
-	o, err := c.layout.Add(b, image.Point{}, rule.scale())
+	o, err := c.layout.Add(b, image.Point{}, rule.scale(), rule.Transform)
 	if err != nil {
 		return err
 	}
@@ -303,6 +314,9 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 
 func (c *Compositor) OutputRemoved(b backend.Output) error {
 	c.stateChanged()
+	if m := c.mirrorOf(b); m != nil {
+		return c.dropMirror(m)
+	}
 	if i := slices.Index(c.disabled, b); i >= 0 {
 		c.disabled = slices.Delete(c.disabled, i, i+1)
 		err := c.outputConfig.Changed()
@@ -369,7 +383,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	c.wm = s
 	c.syncWorkspaceRules()
 	c.stateChanged()
-	errs = append(errs, c.relayout(), c.syncAreas(), c.fifo.Latched(nil))
+	errs = append(errs, c.relayout(), c.syncAreas(), c.fifo.Latched(nil), c.scheduleMirrorsOf(o))
 	return errors.Join(errs...)
 }
 
@@ -378,7 +392,7 @@ func (c *Compositor) Heads() []outputmanagement.Head {
 	for _, o := range c.outputs {
 		b := o.Backend()
 		as, ok := b.(backend.AdaptiveSync)
-		heads = append(heads, outputmanagement.Head{Output: b, Enabled: true, Mode: b.State().Mode, Position: o.Position(), Scale: o.Scale(), AdaptiveSync: ok && as.AdaptiveSync()})
+		heads = append(heads, outputmanagement.Head{Output: b, Enabled: true, Mode: b.State().Mode, Position: o.Position(), Scale: o.Scale(), Transform: o.Transform(), AdaptiveSync: ok && as.AdaptiveSync()})
 	}
 	for _, b := range c.disabled {
 		heads = append(heads, outputmanagement.Head{Output: b})
@@ -406,6 +420,9 @@ func (c *Compositor) Configure(heads []outputmanagement.HeadConfig, apply bool) 
 		}
 		if h.Scale != nil {
 			rule.Scale = *h.Scale
+		}
+		if h.Transform != nil {
+			rule.Transform = *h.Transform
 		}
 		if h.AdaptiveSync != nil {
 			rule.VRR = VRROff
@@ -471,7 +488,7 @@ func (c *Compositor) SetOutputScale(b backend.Output, scale output.Scale) error 
 	if err != nil {
 		return err
 	}
-	if err := o.Update(o.Position(), scale); err != nil {
+	if err := o.Update(o.Position(), scale, o.Transform()); err != nil {
 		return err
 	}
 	return c.outputResized(o)
@@ -491,13 +508,21 @@ func (c *Compositor) applyOutputRules() error {
 			errs = append(errs, c.disable(o))
 			continue
 		}
+		if rule.Mirror != nil {
+			errs = append(errs, c.disable(o))
+			if _, _, err := c.commitOutput(b, rule); err != nil {
+				errs = append(errs, err)
+			}
+			errs = append(errs, c.addMirror(b, rule))
+			continue
+		}
 		changed, recolored, err := c.commitOutput(b, rule)
 		if err != nil {
 			errs = append(errs, err)
 		}
 		switch {
-		case changed || o.Scale() != rule.scale():
-			errs = append(errs, o.Update(o.Position(), rule.scale()), c.outputResized(o))
+		case changed || o.Scale() != rule.scale() || o.Transform() != rule.Transform:
+			errs = append(errs, o.Update(o.Position(), rule.scale(), rule.Transform), c.outputResized(o))
 		case recolored && c.colorManager != nil:
 			errs = append(errs, c.colorManager.OutputDone(o))
 		}
@@ -512,8 +537,21 @@ func (c *Compositor) applyOutputRules() error {
 			continue
 		}
 		c.disabled = slices.DeleteFunc(c.disabled, func(x backend.Output) bool { return x == b })
+		if rule.Mirror != nil {
+			errs = append(errs, c.addMirror(b, rule))
+			continue
+		}
 		errs = append(errs, c.enable(b, rule))
 	}
+	errs = append(errs, c.applyMirrorRules())
 	errs = append(errs, c.relayout(), c.syncAreas())
 	return errors.Join(errs...)
+}
+
+func (i Insets) inset(r image.Rectangle) image.Rectangle {
+	out := image.Rect(r.Min.X+i.Left, r.Min.Y+i.Top, r.Max.X-i.Right, r.Max.Y-i.Bottom)
+	if out.Empty() {
+		return image.Rectangle{Min: r.Min, Max: r.Min}
+	}
+	return out
 }

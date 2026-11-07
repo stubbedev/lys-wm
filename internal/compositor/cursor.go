@@ -279,7 +279,7 @@ func (c *Compositor) placeCursor(o *output.Output) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if c.shading(o) != nil || c.zoomed(o) {
+	if c.shading(o) != nil || c.zoomed(o) || c.composedApart(o) {
 		return false, hw.hide()
 	}
 	ops := &c.cursorOps

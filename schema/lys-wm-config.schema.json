@@ -5098,11 +5098,20 @@
           "match": {
             "type": "string"
           },
+          "mirror": {
+            "type": "string"
+          },
           "mode": {
             "type": "string"
           },
           "position": {
             "type": "string"
+          },
+          "reserved": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
           },
           "scale": {
             "type": "number"
@@ -5112,6 +5121,19 @@
           },
           "shader": {
             "type": "string"
+          },
+          "transform": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "90",
+              "180",
+              "270",
+              "flipped",
+              "flipped-90",
+              "flipped-180",
+              "flipped-270"
+            ]
           },
           "vrr": {
             "type": "string",

@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/output"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
+	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -139,30 +140,41 @@ func (c *Compositor) clampToOutputs(p point) point {
 	return best
 }
 
-func (c *Compositor) absoluteArea(o backend.Output) (image.Rectangle, bool) {
+type screenArea struct {
+	rect      image.Rectangle
+	transform render.Transform
+}
+
+func areaOf(o *output.Output) screenArea {
+	return screenArea{rect: o.Logical(), transform: o.Transform()}
+}
+
+func (c *Compositor) absoluteArea(o backend.Output) (screenArea, bool) {
 	if o == nil {
-		return c.layoutBounds(), len(c.outputs) > 0
+		return screenArea{rect: c.layoutBounds()}, len(c.outputs) > 0
 	}
 	out := c.output(o)
 	if out == nil {
-		return image.Rectangle{}, false
+		return screenArea{}, false
 	}
-	return out.Logical(), true
+	return areaOf(out), true
 }
 
-func (c *Compositor) deviceArea(d backend.Device, o backend.Output) (image.Rectangle, bool) {
+func (c *Compositor) deviceArea(d backend.Device, o backend.Output) (screenArea, bool) {
 	m, mapped := c.deviceOutputs[d.Name()]
 	if o != nil || !mapped {
 		return c.absoluteArea(o)
 	}
 	out := c.outputMatching(m)
 	if out == nil {
-		return image.Rectangle{}, false
+		return screenArea{}, false
 	}
-	return out.Logical(), true
+	return areaOf(out), true
 }
 
-func (c *Compositor) inArea(area image.Rectangle, x, y float64) point {
+func (c *Compositor) inArea(within screenArea, x, y float64) point {
+	x, y = within.transform.Invert().Unit(x, y)
+	area := within.rect
 	p := denormalize(area, x, y)
 	p.X = math.Min(math.Max(p.X, float64(area.Min.X)), float64(area.Max.X)-1)
 	p.Y = math.Min(math.Max(p.Y, float64(area.Min.Y)), float64(area.Max.Y)-1)
@@ -451,7 +463,7 @@ func (c *Compositor) touchDown(d backend.Device, e backend.TouchDown) error {
 	p := c.touchPoint(c.inArea(area, e.X, e.Y))
 	if c.touchGesture.claimed {
 		c.touches[e.ID] = touchAt{area: area, at: p}
-		c.touchGestureAdd(e.ID, area, p, nil)
+		c.touchGestureAdd(e.ID, area.rect, p, nil)
 		return nil
 	}
 	s, local, w := c.surfaceAt(p)
@@ -467,7 +479,7 @@ func (c *Compositor) touchDown(d backend.Device, e backend.TouchDown) error {
 	if s != nil {
 		err = c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
 	}
-	c.touchGestureAdd(e.ID, area, p, w)
+	c.touchGestureAdd(e.ID, area.rect, p, w)
 	return err
 }
 

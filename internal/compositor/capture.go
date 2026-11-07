@@ -357,7 +357,7 @@ func (c *Compositor) inWindow(w *window, s *surface.Surface) bool {
 }
 
 func (c *Compositor) captureRegion(o *output.Output, logical image.Rectangle) image.Rectangle {
-	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	bounds := image.Rectangle{Max: o.PixelSize()}
 	if logical == (image.Rectangle{}) {
 		return bounds
 	}

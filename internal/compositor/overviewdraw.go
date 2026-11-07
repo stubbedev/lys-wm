@@ -102,7 +102,7 @@ func (c *Compositor) drawOverviewBackdrop(pass *frame, o *output.Output, in floa
 	if in <= 0 {
 		return
 	}
-	bounds := image.Rectangle{Max: o.Backend().State().Mode.Size}
+	bounds := image.Rectangle{Max: o.PixelSize()}
 	if c.overviewStyle.Blur {
 		c.drawBlur(pass, o, glassDraw{shape: c.sceneOf(o).blurs.one(bounds), extent: bounds, alpha: in, look: &overviewGlass, mica: true})
 	}
@@ -290,7 +290,7 @@ func thumbStep(i int, size, screen image.Point) (image.Point, bool) {
 }
 
 func (c *Compositor) thumbFilter(o *output.Output, v *overviewView, size image.Point) error {
-	screen := o.Backend().State().Mode.Size
+	screen := o.PixelSize()
 	n, same := 0, true
 	for {
 		at, ok := thumbStep(n, size, screen)
@@ -447,7 +447,7 @@ func (c *Compositor) drawOverviewLabel(pass *frame, o *output.Output, text strin
 	if icon != nil {
 		w += h
 	}
-	screen := o.Backend().State().Mode.Size
+	screen := o.PixelSize()
 	w = min(w, screen.X/2)
 	tex := c.label(o, labelKey{text: text, icon: icon, theme: c.icons, size: image.Pt(w, h), px: px, colors: c.decor.Tab.Active}, labelSlot{})
 	if tex == nil {

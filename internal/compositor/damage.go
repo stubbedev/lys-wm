@@ -531,6 +531,9 @@ type scene struct {
 	blurScratch region.Set
 	cursorOnly  bool
 	debug       debugDamage
+	composed    render.TextureTarget
+	real        backend.Frame
+	blit        render.Region
 }
 
 func newScene() *scene {

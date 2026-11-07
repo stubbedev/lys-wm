@@ -2,7 +2,6 @@ package compositor
 
 import (
 	"errors"
-	"image"
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -65,7 +64,7 @@ func (pointerInput) at(c *Compositor) point { return c.cursor }
 func (t touchInput) at(c *Compositor) point { return c.touches[t.id].at }
 
 type touchAt struct {
-	area image.Rectangle
+	area screenArea
 	at   point
 }
 

@@ -254,6 +254,9 @@ type rawOutput struct {
 	Shader        *At[string]           `yaml:"shader"`
 	ICC           *At[string]           `yaml:"icc"`
 	HotCorners    *At[rawOutputCorners] `yaml:"hot_corners"`
+	Transform     *At[string]           `yaml:"transform"`
+	Mirror        *At[string]           `yaml:"mirror"`
+	Reserved      *At[[]int]            `yaml:"reserved"`
 }
 
 type rawCursor struct {
@@ -1249,6 +1252,29 @@ func (p *parser) output(i int, at At[rawOutput], corners compositor.HotCornerSet
 	}
 	if r.Mode != nil {
 		rule.Mode = p.mode(r.Mode, key+".mode")
+	}
+	if r.Transform != nil {
+		t, ok := render.ParseTransform(r.Transform.V)
+		if !ok {
+			p.fail(r.Transform.Line, key+".transform", "%q is not one of %s", r.Transform.V, strings.Join(render.TransformNames(), ", "))
+		}
+		rule.Transform = t
+	}
+	if r.Mirror != nil {
+		if r.Mirror.V == "" || r.Mirror.V == outputFallback {
+			p.fail(r.Mirror.Line, key+".mirror", "needs a connector name or desc:<description> of the output to show")
+		} else {
+			m := outputMatch(r.Mirror.V)
+			rule.Mirror = &m
+		}
+	}
+	if r.Reserved != nil {
+		v := r.Reserved.V
+		if len(v) != 4 || slices.ContainsFunc(v, func(n int) bool { return n < 0 }) {
+			p.fail(r.Reserved.Line, key+".reserved", "needs four numbers of logical pixels, none below 0: top, right, bottom and left")
+		} else {
+			rule.Reserved = compositor.Insets{Top: v[0], Right: v[1], Bottom: v[2], Left: v[3]}
+		}
 	}
 	if r.Position != nil && r.Position.V != "auto" {
 		at, ok := parsePair(r.Position.V)

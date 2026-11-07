@@ -280,6 +280,7 @@ type Compositor struct {
 	disabled           []backend.Output
 	virtualOutputs     []virtualOutput
 	virtualConfig      []VirtualOutput
+	mirrors            []*mirror
 	powerSaver         bool
 	powerSaverRate     int
 	hooks              Hooks
@@ -848,7 +849,7 @@ func (c *Compositor) hintAnimationStart(o *output.Output) {
 	if !ok || c.sceneOf(o).animated || !c.animating(o, c.clock()) {
 		return
 	}
-	size := o.Backend().State().Mode.Size
+	size := o.PixelSize()
 	hint.ExpectFrameWork(size.X * size.Y)
 }
 

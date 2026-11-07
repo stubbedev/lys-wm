@@ -231,6 +231,7 @@ func annotations() map[string]annotation {
 		"rules[].tag":                      formatAnn(regexFormat),
 		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
 		"outputs[].hdr":                    {enum: slices.Sorted(maps.Keys(hdrPolicies)), booleans: true},
+		"outputs[].transform":              {enum: render.TransformNames()},
 		"focus.on_activate":                {enum: slices.Sorted(maps.Keys(focusActivations)), def: "focus"},
 		"focus.follows_mouse":              {enum: slices.Sorted(maps.Keys(followsMouse)), def: "loose"},
 		"focus.raise_on_hover":             {def: false},

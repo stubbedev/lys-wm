@@ -180,7 +180,7 @@ func serveOutput(t *testing.T) *outputRig {
 		t.Fatal(err)
 	}
 	r := &outputRig{globals: registry{}}
-	if r.o, err = m.Add(&fakeOutput{name: "FAKE-1", mode: backend.Mode{Size: image.Pt(300, 300), RefreshMHz: 60000}}, image.Pt(100, 0), 150); err != nil {
+	if r.o, err = m.Add(&fakeOutput{name: "FAKE-1", mode: backend.Mode{Size: image.Pt(300, 300), RefreshMHz: 60000}}, image.Pt(100, 0), 150, render.Normal); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -239,7 +239,7 @@ func TestXdgOutputDoneFollowsItsVersion(t *testing.T) {
 		t.Fatalf("xdg_output v2 events %v, want %v", xe.log, want)
 	}
 	r.on(func() {
-		if err := r.o.Update(image.Pt(0, 0), 300); err != nil {
+		if err := r.o.Update(image.Pt(0, 0), 300, render.Normal); err != nil {
 			t.Error(err)
 		}
 	})
@@ -265,7 +265,7 @@ func TestOutputAndXdgOutputEvents(t *testing.T) {
 		t.Fatalf("xdg_output events %v, want %v: logical 200x200 at 100,0 and no xdg done at version 3", xe.log, want)
 	}
 	on(func() {
-		if err := o.Update(image.Pt(0, 0), 300); err != nil {
+		if err := o.Update(image.Pt(0, 0), 300, render.Normal); err != nil {
 			t.Error(err)
 		}
 	})
@@ -295,11 +295,11 @@ func TestPhysicalClientsSeeOutputsInXSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hidpi, err := m.Add(&fakeOutput{name: "EDP-1", mode: backend.Mode{Size: image.Pt(2560, 1440), RefreshMHz: 60000}}, image.Pt(0, 0), 240)
+	hidpi, err := m.Add(&fakeOutput{name: "EDP-1", mode: backend.Mode{Size: image.Pt(2560, 1440), RefreshMHz: 60000}}, image.Pt(0, 0), 240, render.Normal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain, err := m.Add(&fakeOutput{name: "DP-1", mode: backend.Mode{Size: image.Pt(1920, 1080), RefreshMHz: 60000}}, image.Pt(1280, 0), 120)
+	plain, err := m.Add(&fakeOutput{name: "DP-1", mode: backend.Mode{Size: image.Pt(1920, 1080), RefreshMHz: 60000}}, image.Pt(1280, 0), 120, render.Normal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestPhysicalClientsSeeOutputsInXSpace(t *testing.T) {
 	if r, s := hidpi.view(nil); r != image.Rect(0, 0, 2560, 1440) || s != Unit {
 		t.Fatalf("a physical client sees the HiDPI output as %v at scale %d", r, s)
 	}
-	if err := hidpi.Update(image.Pt(0, 0), 120); err != nil {
+	if err := hidpi.Update(image.Pt(0, 0), 120, render.Normal); err != nil {
 		t.Fatal(err)
 	}
 	if plain.XRect() != image.Rect(1280, 0, 3200, 1080) {
