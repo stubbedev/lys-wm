@@ -65,7 +65,7 @@ type overviewCarried struct {
 }
 
 type overviewView struct {
-	filtering *overviewThumb
+	redraw    *overviewThumb
 	output    *output.Output
 	workspace wm.WorkspaceID
 	items     []*overviewItem
@@ -109,25 +109,15 @@ type overviewThumb struct {
 	version  uint64
 	dirty    bool
 	next     time.Duration
-	touched  time.Duration
-	rough    bool
 }
 
-const (
-	thumbShare   = 4
-	thumbMaxWait = 500 * time.Millisecond
-	thumbQuiet   = 250 * time.Millisecond
-)
+const thumbShare = 4
 
-func (t *overviewThumb) calm(settled bool, now time.Duration) bool {
-	return settled && now-t.touched >= thumbQuiet
-}
-
-func (t *overviewThumb) due(size image.Point, settled bool, now time.Duration) bool {
+func (t *overviewThumb) due(size image.Point, now time.Duration) bool {
 	if t.target == nil || t.target.Size() != size {
 		return true
 	}
-	return (t.dirty || t.rough && t.calm(settled, now)) && now >= t.next
+	return t.dirty && now >= t.next
 }
 
 func (c *Compositor) overviewHolds() bool {
@@ -188,11 +178,14 @@ func (c *Compositor) prepareFirstFrame() error {
 			continue
 		}
 		errs = append(errs, c.drawOverviewSelection(&c.overview.scratch, o, v, 1, 1))
+		if !c.overview.progress.Done(c.frameTime) {
+			continue
+		}
 		for _, t := range v.spaces {
 			if t.id != v.workspace || t.target != nil || t.rect.Empty() {
 				continue
 			}
-			if err := c.refreshThumb(o, v, t, t.calm(c.overview.progress.Done(c.frameTime), c.frameTime)); err != nil {
+			if err := c.refreshThumb(o, v, t); err != nil {
 				errs = append(errs, fmt.Errorf("the first thumbnail of workspace %d: %w", t.id, err))
 			}
 		}
@@ -639,7 +632,7 @@ func (c *Compositor) overviewCommitted(root *surface.Surface) {
 		inThumbnails := e != nil && e.output == o && !isOverlay(e.surface)
 		for _, t := range v.spaces {
 			if inThumbnails || slices.ContainsFunc(t.members, func(m thumbMember) bool { return m.w.top.Surface() == root }) {
-				t.dirty, t.touched = true, c.clock()
+				t.dirty = true
 			}
 		}
 	}
@@ -671,7 +664,7 @@ func (c *Compositor) overviewAnimating(o *output.Output, now time.Duration) bool
 		return false
 	}
 	return slices.ContainsFunc(v.items, func(it *overviewItem) bool { return !it.slot.Done(now) }) ||
-		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty || t.rough })
+		ov.progress.At(now) > 0 && slices.ContainsFunc(v.spaces, func(t *overviewThumb) bool { return t.dirty })
 }
 
 func placedIn(r, from, to image.Rectangle) image.Rectangle {
@@ -801,13 +794,13 @@ func (c *Compositor) ClosingAt(now time.Duration) image.Point {
 	return r.Min.Add(r.Size().Div(2))
 }
 
-func (c *Compositor) OverviewThumbsRough() bool {
+func (c *Compositor) OverviewThumbsStale() bool {
 	if c.overview == nil {
 		return false
 	}
 	for _, v := range c.overview.views {
 		for _, t := range v.spaces {
-			if t.dirty || t.rough {
+			if t.dirty {
 				return true
 			}
 		}

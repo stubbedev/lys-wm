@@ -181,16 +181,16 @@
         "uploads_per_frame": 2
       },
       "overview-10-open": {
-        "allocs_per_frame": 140,
+        "allocs_per_frame": 175,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 200,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 10,
+        "filter_passes_per_frame": 13,
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 13,
+        "render_passes_per_frame": 17,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 4,
+        "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
       "overview-30-close": {
@@ -207,7 +207,7 @@
         "uploads_per_frame": 2
       },
       "overview-30-open": {
-        "allocs_per_frame": 140,
+        "allocs_per_frame": 177,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 497,
         "file_io_per_frame": 2,
@@ -216,7 +216,7 @@
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 4,
+        "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
       },
       "overview-scrub-10-follow-close": {
@@ -233,14 +233,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-follow-open": {
-        "allocs_per_frame": 34,
+        "allocs_per_frame": 175,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 170,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -259,16 +259,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-release-open": {
-        "allocs_per_frame": 140,
+        "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 155,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-close": {
@@ -285,14 +285,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-open": {
-        "allocs_per_frame": 34,
+        "allocs_per_frame": 177,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 422,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -311,16 +311,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-release-open": {
-        "allocs_per_frame": 140,
+        "allocs_per_frame": 34,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 363,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "resize-grow": {
@@ -627,7 +627,7 @@
         "uploads_per_frame": 2
       },
       "overview-10-open": {
-        "allocs_per_frame": 138,
+        "allocs_per_frame": 172,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 188,
         "file_io_per_frame": 2,
@@ -653,7 +653,7 @@
         "uploads_per_frame": 2
       },
       "overview-30-open": {
-        "allocs_per_frame": 138,
+        "allocs_per_frame": 175,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 483,
         "file_io_per_frame": 2,
@@ -679,14 +679,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-follow-open": {
-        "allocs_per_frame": 32,
+        "allocs_per_frame": 172,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 155,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -705,16 +705,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-release-open": {
-        "allocs_per_frame": 138,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 140,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-close": {
@@ -731,14 +731,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-open": {
-        "allocs_per_frame": 32,
+        "allocs_per_frame": 175,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 402,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 4
@@ -757,16 +757,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-release-open": {
-        "allocs_per_frame": 138,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 357,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "resize-grow": {
@@ -1073,16 +1073,16 @@
         "uploads_per_frame": 2
       },
       "overview-10-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 121,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 213,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 10,
+        "filter_passes_per_frame": 13,
         "filter_passes_per_run": 13,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 13,
+        "render_passes_per_frame": 17,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 4,
+        "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
       "overview-30-close": {
@@ -1099,7 +1099,7 @@
         "uploads_per_frame": 2
       },
       "overview-30-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 120,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 506,
         "file_io_per_frame": 2,
@@ -1108,7 +1108,7 @@
         "gpu_waits_per_frame": 0,
         "render_passes_per_frame": 7,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 4,
+        "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
       },
       "overview-scrub-10-follow-close": {
@@ -1125,14 +1125,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-follow-open": {
-        "allocs_per_frame": 40,
+        "allocs_per_frame": 121,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 170,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1151,16 +1151,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-release-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 155,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-close": {
@@ -1177,14 +1177,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-open": {
-        "allocs_per_frame": 36,
+        "allocs_per_frame": 120,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 422,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1203,16 +1203,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-release-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 363,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "resize-grow": {
@@ -1519,7 +1519,7 @@
         "uploads_per_frame": 2
       },
       "overview-10-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 122,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 183,
         "file_io_per_frame": 2,
@@ -1545,7 +1545,7 @@
         "uploads_per_frame": 2
       },
       "overview-30-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 124,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 483,
         "file_io_per_frame": 2,
@@ -1571,14 +1571,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-follow-open": {
-        "allocs_per_frame": 40,
+        "allocs_per_frame": 118,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 153,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1597,16 +1597,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-10-release-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 140,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-close": {
@@ -1623,14 +1623,14 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-follow-open": {
-        "allocs_per_frame": 40,
+        "allocs_per_frame": 124,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 416,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 2,
-        "filter_passes_per_run": 2,
+        "filter_passes_per_frame": 5,
+        "filter_passes_per_run": 5,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 4,
+        "render_passes_per_frame": 7,
         "submits_per_frame": 1,
         "thumb_draws_per_settle": 3,
         "uploads_per_frame": 3
@@ -1649,16 +1649,16 @@
         "uploads_per_frame": 2
       },
       "overview-scrub-30-release-open": {
-        "allocs_per_frame": 95,
+        "allocs_per_frame": 32,
         "damage_rects_per_frame": 32,
         "draws_per_frame": 357,
         "file_io_per_frame": 2,
-        "filter_passes_per_frame": 5,
-        "filter_passes_per_run": 5,
+        "filter_passes_per_frame": 2,
+        "filter_passes_per_run": 2,
         "gpu_waits_per_frame": 0,
-        "render_passes_per_frame": 7,
+        "render_passes_per_frame": 3,
         "submits_per_frame": 1,
-        "thumb_draws_per_settle": 3,
+        "thumb_draws_per_settle": 2,
         "uploads_per_frame": 2
       },
       "resize-grow": {

@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"bytes"
 	"errors"
 	"image"
 	"math"
@@ -678,7 +677,7 @@ func TestThumbnailsRedrawOnlyWhenTheirWindowsDamage(t *testing.T) {
 		return n
 	}
 	h.Eventually("both thumbnails drawn and filtered, one a frame", func(_ *headless.Backend, comp *compositor.Compositor) bool {
-		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsRough()
+		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsStale()
 	})
 	first := count()
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
@@ -1800,55 +1799,8 @@ func TestAThumbnailDrawnOnEnteringAnOverviewAtRestIsAlreadyFiltered(t *testing.T
 		if err := comp.Dispatch(action); err != nil {
 			return err
 		}
-		if comp.OverviewThumbsRough() {
+		if comp.OverviewThumbsStale() {
 			t.Error("entering an overview that does not animate left an unfiltered thumbnail on screen")
-		}
-		return nil
-	})
-}
-
-func TestAThumbnailIsFilteredAfterTheFrameThatFoundItCalm(t *testing.T) {
-	h := StartGLES(t, func(*compositor.Config) {}, overviewMode)
-	c := testclient.Connect(t, h.Socket())
-	black := c.Window("black", testclient.Fill(0, 0, 0))
-	c.DispatchUntil("black to map", black.Mapped)
-	black.Stop()
-	white := c.Window("white", testclient.Fill(0xff, 0xff, 0xff))
-	c.DispatchUntil("white to map", white.Mapped)
-	white.Stop()
-	h.Rendered(0)
-	h.dispatch("overview show")
-	h.Rendered(0)
-	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
-		comp.DirtyOverviewThumbs()
-		return nil
-	})
-	h.Eventually("the thumbnail redrawn while its windows were moving", func(_ *headless.Backend, comp *compositor.Compositor) bool {
-		return comp.OverviewThumbsRough()
-	})
-	time.Sleep(300 * time.Millisecond)
-	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
-		o := b.Outputs()[0]
-		before, err := o.Primary()
-		if err != nil {
-			return err
-		}
-		for comp.OverviewThumbsRough() {
-			if err := comp.Frame(o); err != nil {
-				return err
-			}
-			if comp.OverviewThumbsRough() {
-				if before, err = o.Primary(); err != nil {
-					return err
-				}
-			}
-		}
-		shown, err := o.Primary()
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(shown.Pix, before.Pix) {
-			t.Error("the frame that found the thumbnail calm already showed it filtered")
 		}
 		return nil
 	})
@@ -1866,7 +1818,7 @@ func tallBar() testclient.LayerSpec {
 
 func thumbnailsShow(strip []image.Rectangle, want ...[3]byte) func(*headless.Backend, *compositor.Compositor) bool {
 	return func(b *headless.Backend, comp *compositor.Compositor) bool {
-		if comp.OverviewProgress(comp.Now()) < 1 || comp.OverviewThumbsRough() {
+		if comp.OverviewProgress(comp.Now()) < 1 || comp.OverviewThumbsStale() {
 			return false
 		}
 		px := snapshot(b.Outputs()[0])
@@ -1927,7 +1879,7 @@ func TestThumbnailsShowATopBarAndItsCommits(t *testing.T) {
 					return false
 				}
 			}
-			return !comp.OverviewThumbsRough()
+			return !comp.OverviewThumbsStale()
 		})
 	})
 }
@@ -1965,7 +1917,7 @@ func TestABarCommittingNoDamageRedrawsNoThumbnail(t *testing.T) {
 	h.dispatch("overview show")
 	h.Rendered(0)
 	h.Eventually("both thumbnails drawn and filtered", func(_ *headless.Backend, comp *compositor.Compositor) bool {
-		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsRough()
+		return comp.OverviewThumbRedraws() >= 2 && !comp.OverviewThumbsStale()
 	})
 	redraws := func() uint64 {
 		var n uint64
@@ -2026,7 +1978,7 @@ func TestTheStripIsGlassOverTheBlurredLayers(t *testing.T) {
 		thumb := plan.Strip[0]
 		mid := centre(thumb).Y
 		h.Eventually("the overview at rest", func(_ *headless.Backend, comp *compositor.Compositor) bool {
-			return comp.OverviewProgress(comp.Now()) >= 1 && !comp.OverviewThumbsRough()
+			return comp.OverviewProgress(comp.Now()) >= 1 && !comp.OverviewThumbsStale()
 		})
 		px := h.Rendered(0)
 		backdrop := pixel(px, 2, overviewMode.Size.Y-2)

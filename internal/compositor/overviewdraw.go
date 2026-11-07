@@ -60,9 +60,7 @@ func (c *Compositor) drawOverview(pass *frame, o *output.Output, v *overviewView
 	}
 	c.drawOverviewPane(pass, o, v, p, in)
 	shown = c.drawOverviewEntries(pass, o, v, p, shown)
-	if err := c.drawOverviewStrip(pass, o, v, p, in); err != nil {
-		return shown, err
-	}
+	c.drawOverviewStrip(pass, o, v, p, in)
 	c.drawClosing(pass, o, windowLevel)
 	if in > 0 {
 		for _, t := range v.spaces {
@@ -200,29 +198,18 @@ func (c *Compositor) drawOverviewPane(pass *frame, o *output.Output, v *overview
 	c.drawOverviewGlass(pass, o, deviceRect(o, pane), deviceLength(o, overviewRadius+overviewTrayPad), in)
 }
 
-func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overviewView, p float64, in float32) error {
+func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overviewView, p float64, in float32) {
 	if in <= 0 {
-		return nil
+		return
 	}
 	slide := func(r image.Rectangle) image.Rectangle { return stripSlide(o, r, p) }
 	radius := deviceLength(o, overviewRadius)
-	redrawn := false
-	settled := c.overview.progress.Done(c.frameTime)
 	for _, t := range v.spaces {
 		if t.rect.Empty() {
 			continue
 		}
-		size := deviceRect(o, t.rect).Size()
-		if !redrawn && t.due(size, settled, c.frameTime) {
-			redrawn = true
-			switch calm := t.calm(settled, c.frameTime); {
-			case calm && t.target != nil && t.target.Size() == size:
-				v.filtering = t
-			default:
-				if err := c.refreshThumb(o, v, t, calm); err != nil {
-					return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
-				}
-			}
+		if v.redraw == nil && t.due(deviceRect(o, t.rect).Size(), c.frameTime) {
+			v.redraw = t
 		}
 		dst := deviceRect(o, slide(t.rect))
 		if t.version == 0 {
@@ -240,7 +227,7 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 		}
 	}
 	if v.plus.Empty() {
-		return nil
+		return
 	}
 	dst := deviceRect(o, slide(v.plus))
 	c.drawOverviewGlass(pass, o, dst, radius, in)
@@ -250,7 +237,6 @@ func (c *Compositor) drawOverviewStrip(pass *frame, o *output.Output, v *overvie
 	ink := scaleColor(c.decor.Tab.Inactive.Text, in)
 	pass.FillRect(image.Rect(mid.X-span/2, mid.Y-arm/2, mid.X+span/2, mid.Y-arm/2+arm), ink)
 	pass.FillRect(image.Rect(mid.X-arm/2, mid.Y-span/2, mid.X-arm/2+arm, mid.Y+span/2), ink)
-	return nil
 }
 
 func (c *Compositor) overviewInk(strength, in float32) render.Color {
@@ -276,20 +262,20 @@ func (c *Compositor) drawOverviewRing(pass *frame, o *output.Output, r image.Rec
 	c.paintBorder(pass, c.decor.ActiveBorder, outer, inner, ring, a, 0)
 }
 
-func (c *Compositor) filterThumb(o *output.Output) error {
+func (c *Compositor) redrawThumb(o *output.Output) error {
 	if c.overview == nil {
 		return nil
 	}
 	v := c.overview.views[o]
-	if v == nil || v.filtering == nil {
+	if v == nil || v.redraw == nil {
 		return nil
 	}
-	t := v.filtering
-	v.filtering = nil
+	t := v.redraw
+	v.redraw = nil
 	if !slices.Contains(v.spaces, t) {
 		return nil
 	}
-	if err := c.refreshThumb(o, v, t, true); err != nil {
+	if err := c.refreshThumb(o, v, t); err != nil {
 		return fmt.Errorf("the thumbnail of workspace %d: %w", t.id, err)
 	}
 	return c.schedule(o)
@@ -340,18 +326,19 @@ func (c *Compositor) drawThumbMembers(f *frame, o *output.Output, members []thum
 	return shown
 }
 
-func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb, filtered bool) error {
+func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overviewThumb) error {
 	started := c.clock()
 	size := deviceRect(o, t.rect).Size()
-	if t.target == nil || t.target.Size() != size {
-		if t.target != nil {
-			if err := c.releaseTarget(t.target); err != nil {
-				return err
-			}
+	if t.target != nil && t.target.Size() != size {
+		err := c.releaseTarget(t.target)
+		t.target, t.version = nil, 0
+		if err != nil {
+			return err
 		}
+	}
+	if t.target == nil {
 		target, err := c.newSceneTarget(o, size)
 		if err != nil {
-			t.target = nil
 			return err
 		}
 		t.target = target
@@ -367,14 +354,12 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 		c.drawTree(f, o, e.surface.Surface(), flat(e.bounds().Min), nil)
 	}
 	t.surfaces = c.drawThumbMembers(f, o, t.members, true, shown)
-	draw, chain := t.target, []render.TextureTarget(nil)
-	if filtered {
-		if err := c.thumbFilter(o, v, size); err != nil {
-			return err
-		}
-		if chain = v.filter; len(chain) > 0 {
-			draw = chain[0]
-		}
+	if err := c.thumbFilter(o, v, size); err != nil {
+		return err
+	}
+	draw, chain := t.target, v.filter
+	if len(chain) > 0 {
+		draw = chain[0]
 	}
 	f.remap(0, bounds, image.Rectangle{Max: draw.Size()})
 	region := c.overview.region[:]
@@ -405,8 +390,8 @@ func (c *Compositor) refreshThumb(o *output.Output, v *overviewView, t *overview
 		}
 	}
 	c.jellyGen++
-	t.version, t.dirty, t.rough = c.jellyGen, false, !filtered
-	t.next = c.frameTime + min(thumbShare*(c.clock()-started), thumbMaxWait)
+	t.version, t.dirty = c.jellyGen, false
+	t.next = c.frameTime + thumbShare*(c.clock()-started)
 	c.tallied.thumbs++
 	return nil
 }

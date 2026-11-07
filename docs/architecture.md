@@ -574,9 +574,13 @@ thumbnail redraws only when a window in it or one of those layers commits damage
 it is one op in the frame. A redraw draws the workspace at full size and
 halves it with the blur chains' Kawase step down to the thumbnail, the one filter
 every renderer has, because a straight draw at a seventh of the size turns fine
-lines into moire on all of them. That costs a full-size draw per redraw, so an output
-redraws one thumbnail a frame, and a thumbnail waits four times its last redraw, at
-most half a second, before the next. A bar that commits often dirties all of its
+lines into moire on all of them. Every redraw takes that path, the first and every
+one after a commit, so a clock ticking in a thumbnail never swaps the filtered image
+for a straight one. That costs a full-size draw per redraw, so an output redraws one
+thumbnail a frame, after the frame that found it stale so that frame shows the old
+image instead of waiting on the new, and a thumbnail waits four times its last
+redraw before the next, which holds redraws to a fifth of the loop however slow the
+renderer. A bar that commits often dirties all of its
 output's thumbnails and they take turns within those limits; an idle one costs nothing. All windows blur over one shared chain of the
 layers below them while it is open, since their own chains would redraw whenever
 any window moved.

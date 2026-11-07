@@ -81,7 +81,7 @@ func (c *Compositor) frame(o *output.Output) error {
 	if err := c.render(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
-	if err := c.filterThumb(o); err != nil {
+	if err := c.redrawThumb(o); err != nil {
 		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
 	}
 	if err := c.finishClosing(o, c.frameTime); err != nil {
