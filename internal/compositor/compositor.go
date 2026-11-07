@@ -401,6 +401,7 @@ type Compositor struct {
 	gestures           Gestures
 	hotCorners         HotCorners
 	hot                hotCornerState
+	hold               dragHold
 	gesture            gestureInput
 	shownWorkspace     map[string]wm.WorkspaceID
 	shaders            map[string]*screenShader
@@ -430,6 +431,9 @@ func validate(cfg Config) (binds.Map, error) {
 	}
 	if !(cfg.Gestures.Distance > 0) {
 		return binds.Map{}, fmt.Errorf("compositor: gesture distance %v is not positive", cfg.Gestures.Distance)
+	}
+	if s := cfg.Decor.DragPreview.Switch; s.Width < 1 || s.Frames < 1 {
+		return binds.Map{}, fmt.Errorf("compositor: drag switch width %d and frames %d must both be at least 1", s.Width, s.Frames)
 	}
 	if !(cfg.HotCorners.Pressure > 0) {
 		return binds.Map{}, fmt.Errorf("compositor: hot corner pressure %v is not positive", cfg.HotCorners.Pressure)

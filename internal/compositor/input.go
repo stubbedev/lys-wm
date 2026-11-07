@@ -437,7 +437,7 @@ func (c *Compositor) touchMotion(e backend.TouchMotion) error {
 	c.touches[e.ID] = t
 	if c.draggedBy(touchInput{e.ID}) {
 		c.markDragged()
-		return c.scheduleAll()
+		return errors.Join(c.trackDragHold(), c.scheduleAll())
 	}
 	if c.touchDrag(e.ID) {
 		return errors.Join(c.dragMotion(e.Time), c.scheduleAll())
@@ -511,7 +511,7 @@ func (c *Compositor) moveCursor(at time.Duration, next point) error {
 func (c *Compositor) pointerMoved(at time.Duration) error {
 	if c.interaction != nil {
 		c.markDragged()
-		return c.scheduleAll()
+		return errors.Join(c.trackDragHold(), c.scheduleAll())
 	}
 	if c.picking != nil {
 		return c.cursorMoved()

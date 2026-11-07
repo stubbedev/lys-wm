@@ -93,6 +93,7 @@ func (c *Compositor) DragEnded(d *data.Drag) error {
 		return nil
 	}
 	c.drag = nil
+	c.dropDragHold()
 	return errors.Join(c.refreshPointer(), c.seat.PointerFrame(), c.scheduleAll())
 }
 
@@ -121,8 +122,13 @@ func (c *Compositor) touchDragging() bool {
 }
 
 func (c *Compositor) dragMotion(at time.Duration) error {
-	s, local, _ := c.surfaceAt(c.drag.by.at(c))
-	return c.drag.Motion(s, local.X, local.Y, at)
+	p := c.drag.by.at(c)
+	s, local, _ := c.surfaceAt(p)
+	err := errors.Join(c.drag.Motion(s, local.X, local.Y, at), c.trackDragHold())
+	if c.overviewHolds() {
+		err = errors.Join(err, c.overviewMoved(p))
+	}
+	return err
 }
 
 func (c *Compositor) drawDragIcon(pass *frame, o *output.Output, shown []*surface.Surface) []*surface.Surface {

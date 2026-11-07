@@ -236,7 +236,7 @@ func TestAHotCornerFiresDuringADataDeviceDrag(t *testing.T) {
 	})
 }
 
-func TestPointerMotionAwayFromHotCornersScansNothingAndAllocatesNothing(t *testing.T) {
+func TestPointerMotionAwayFromHotCornersAndDragsDoesNoEdgeWorkAndAllocatesNothing(t *testing.T) {
 	r := inputOn(t, start(t, setup{open: softBackend, configure: func(cfg *compositor.Config) {
 		for k := range compositor.CornerCount {
 			withHotCorner(t, k, "overview toggle", 0)(cfg)
@@ -254,12 +254,15 @@ func TestPointerMotionAwayFromHotCornersScansNothingAndAllocatesNothing(t *testi
 		for range 20 {
 			cycle()
 		}
-		scans := comp.HotCornerScans()
+		scans, looks := comp.HotCornerScans(), comp.DragHoldLooks()
 		if n := allocsPerRun(100, func() {}, cycle); n != 0 {
 			t.Errorf("pointer motion away from the corners allocated %d times a cycle", n)
 		}
 		if got := comp.HotCornerScans(); got != scans {
 			t.Errorf("pointer motion away from the corners scanned for a corner %d times", got-scans)
+		}
+		if got := comp.DragHoldLooks(); got != looks {
+			t.Errorf("pointer motion outside a drag looked for an edge, tab or tile %d times", got-looks)
 		}
 		return nil
 	})

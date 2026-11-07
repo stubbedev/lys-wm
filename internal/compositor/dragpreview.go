@@ -19,6 +19,7 @@ type DragPreview struct {
 	Blur         bool
 	SnapDistance int
 	SnapWindows  bool
+	Switch       DragSwitch
 }
 
 type dragPreview struct {

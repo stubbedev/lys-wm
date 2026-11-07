@@ -580,7 +580,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, p.Variable, seq, sc.feedbackKind(s, kind, p.Idle)))
 	}
 	if p.Idle {
-		return errs
+		return errors.Join(errs, c.heldFrame(o))
 	}
-	return errors.Join(errs, c.timing.Presented())
+	return errors.Join(errs, c.timing.Presented(), c.heldFrame(o))
 }

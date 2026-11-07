@@ -44,6 +44,23 @@ func TestNeighbourStaysOnTheOutputAndDoesNotWrap(t *testing.T) {
 	}
 }
 
+func TestAnEdgeWorkspaceIsTheNeighbourOrTheNextUnusedNumberAhead(t *testing.T) {
+	s := swipeState(t, 1, 3, 4)
+	for _, tc := range []struct {
+		id      WorkspaceID
+		forward bool
+		want    WorkspaceID
+	}{{1, true, 3}, {3, false, 1}, {4, true, 5}, {1, false, 0}} {
+		got, ok := s.EdgeWorkspace("A", tc.id, tc.forward)
+		if got != tc.want || ok != (tc.want != 0) {
+			t.Errorf("from %d forward %v: %d %v, want %d", tc.id, tc.forward, got, ok, tc.want)
+		}
+	}
+	if got, _ := swipeState(t, 1, 2).EdgeWorkspace("B", 2, true); got != 3 {
+		t.Errorf("ahead of 2 with 1 and 2 taken: %d, want 3", got)
+	}
+}
+
 func TestSwipeTracksLinearlyBetweenWorkspaces(t *testing.T) {
 	s := swipeState(t, 1, 2, 3)
 	got := s.SwipeWorkspace("A", 2, 0.25, 0.25)

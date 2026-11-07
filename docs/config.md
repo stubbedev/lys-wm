@@ -535,6 +535,7 @@ drag_preview:
   blur: false
   snap_distance: 16
   snap_windows: false
+  drag_switch: {width: 4, frames: 30}
 ```
 
 While a window is dragged with `movewindow`, a translucent rounded rectangle with a
@@ -562,6 +563,17 @@ The rectangle moves on the [`snap` event](#animations) and fades on `fade_snap`.
 | `blur` | `false`: blur what is behind the rectangle with `decoration.blur`'s `size`, `passes` and look |
 | `snap_distance` | 16: logical pixels |
 | `snap_windows` | `false`. On, a dragged floating window also snaps to the other floating windows of its workspace: flush beside one, `gaps.inner` apart, or aligned with its edge, when within `snap_distance`. `place restore` takes a window snapped at an edge back to where the drag began |
+| `drag_switch.width` | 4: logical pixels from an output edge that has no neighbouring output |
+| `drag_switch.frames` | 30: presented frames, counted on the output's frame clock rather than the wall clock, that a drag must be held in place before it acts |
+
+A `movewindow` drag or a client's drag and drop (Wayland or X11) held within
+`drag_switch.width` of an output edge with no neighbouring output for
+`drag_switch.frames` frames shows the previous or next workspace of that output,
+along the axis the `workspaces` animation slides on: left and right, or top and
+bottom for `slidevert`. Ahead of the last workspace it opens the next unused number.
+A dragged window travels to the new workspace; held longer, it keeps going. During a
+client's drag, holding over a background tab of a tab group for as long raises that
+tab, so the drop can land in it.
 
 It costs nothing outside a drag.
 
@@ -860,8 +872,11 @@ it closes. Binds with modifiers still run.
 | `Shift + Left`, `Shift + Right` | Move the ringed window and its dialogs to the workspace numbered one below or above, and stay open |
 | Touch | As the pointer, with the first finger |
 
-A session lock closes it at once and it will not open under one, or during a
-client's drag and drop.
+A session lock closes it at once and it will not open under one. It opens during a
+client's drag and drop, from a hot corner, a gesture or a bind: holding the drag over
+a workspace thumbnail for `drag_preview.drag_switch.frames` shows that workspace, and
+over a window for as long closes the overview and focuses the window, with the
+pointer at the same place in it, so the drop lands there.
 
 ## tabs
 

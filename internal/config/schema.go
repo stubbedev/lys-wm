@@ -191,6 +191,8 @@ func annotations() map[string]annotation {
 		"drag_preview.blur":                {def: d.DragPreview.Blur},
 		"drag_preview.snap_distance":       atLeastAnn(1, d.DragPreview.SnapDistance),
 		"drag_preview.snap_windows":        {def: d.DragPreview.SnapWindows},
+		"drag_preview.drag_switch.width":   atLeastAnn(1, d.DragPreview.Switch.Width),
+		"drag_preview.drag_switch.frames":  atLeastAnn(1, d.DragPreview.Switch.Frames),
 		"floating.step":                    atLeastAnn(1, s.FloatStep),
 		"animations.enabled":               {def: true},
 		"animations.reduced_motion":        {def: false},

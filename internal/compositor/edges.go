@@ -78,3 +78,21 @@ func (c *Compositor) sharedEdges(o *output.Output) wm.SharedEdges {
 	}
 	return shared
 }
+
+func (c *Compositor) freeEdgesNear(o *output.Output, at image.Point, width int) wm.Edges {
+	r, shared := o.Logical(), c.sharedEdges(o)
+	var near wm.Edges
+	if !shared.Left && at.X < r.Min.X+width {
+		near |= wm.EdgeLeft
+	}
+	if !shared.Right && at.X >= r.Max.X-width {
+		near |= wm.EdgeRight
+	}
+	if !shared.Top && at.Y < r.Min.Y+width {
+		near |= wm.EdgeTop
+	}
+	if !shared.Bottom && at.Y >= r.Max.Y-width {
+		near |= wm.EdgeBottom
+	}
+	return near
+}

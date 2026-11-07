@@ -448,11 +448,17 @@ type rawDecoration struct {
 }
 
 type rawDragPreview struct {
-	Enabled      *bool        `yaml:"enabled"`
-	Opacity      *At[float64] `yaml:"opacity"`
-	Blur         *bool        `yaml:"blur"`
-	SnapDistance *At[int]     `yaml:"snap_distance"`
-	SnapWindows  *bool        `yaml:"snap_windows"`
+	Enabled      *bool         `yaml:"enabled"`
+	Opacity      *At[float64]  `yaml:"opacity"`
+	Blur         *bool         `yaml:"blur"`
+	SnapDistance *At[int]      `yaml:"snap_distance"`
+	SnapWindows  *bool         `yaml:"snap_windows"`
+	Switch       rawDragSwitch `yaml:"drag_switch"`
+}
+
+type rawDragSwitch struct {
+	Width  *At[int] `yaml:"width"`
+	Frames *At[int] `yaml:"frames"`
 }
 
 type rawBlur struct {
@@ -976,6 +982,8 @@ func (p *parser) dragPreview(r rawDragPreview, def compositor.DragPreview) compo
 	if r.SnapWindows != nil {
 		out.SnapWindows = *r.SnapWindows
 	}
+	out.Switch.Width = p.positive(r.Switch.Width, "drag_preview.drag_switch.width", def.Switch.Width)
+	out.Switch.Frames = p.positive(r.Switch.Frames, "drag_preview.drag_switch.frames", def.Switch.Frames)
 	return out
 }
 

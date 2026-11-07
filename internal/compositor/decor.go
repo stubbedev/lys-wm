@@ -85,7 +85,7 @@ func PlainDecor() Decor {
 			Inactive: TabColors{Background: surface0, Text: textFg},
 			Urgent:   TabColors{Background: red, Text: crust},
 		},
-		DragPreview: DragPreview{Enabled: true, Opacity: 0.25, SnapDistance: 16},
+		DragPreview: DragPreview{Enabled: true, Opacity: 0.25, SnapDistance: 16, Switch: DragSwitch{Width: 4, Frames: 30}},
 	}
 }
 
@@ -552,12 +552,10 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) {
 			continue
 		}
 		from := len(pass.ops)
-		strip := image.Rect(bar.Rect.Min.X, bar.Rect.Min.Y, bar.Rect.Max.X, bar.Rect.Min.Y+min(c.decor.Tab.Height, bar.Rect.Dy()))
+		strip := c.tabStrip(bar)
 		var corners render.Mask
 		if c.decor.Rounding > 0 {
 			if c.tabsJoin() {
-				border := c.decor.BorderWidth
-				strip.Min.X, strip.Min.Y, strip.Max.X = strip.Min.X+border, strip.Min.Y+border, strip.Max.X-border
 				clip := deviceRect(o, strip)
 				clip.Max.Y += o.Scale().ToDevice(c.decor.Rounding)
 				corners.Keep = render.RoundRect{Rect: clip, Radius: deviceLength(o, c.decor.Rounding)}
@@ -567,9 +565,7 @@ func (c *Compositor) drawTabBars(pass *frame, o *output.Output) {
 		}
 		n := len(bar.Tabs)
 		for tab, id := range bar.Tabs {
-			x0 := strip.Min.X + strip.Dx()*tab/n
-			x1 := strip.Min.X + strip.Dx()*(tab+1)/n
-			dst := o.Scale().Rect(image.Rect(x0, strip.Min.Y, x1, strip.Max.Y).Sub(o.Position()))
+			dst := o.Scale().Rect(tabSlot(strip, tab, n).Sub(o.Position()))
 			if dst.Empty() {
 				continue
 			}
@@ -616,4 +612,34 @@ func (c *Compositor) dropLabels(o *output.Output) error {
 	delete(c.labels, o)
 	delete(c.labelSlots, o)
 	return errors.Join(errs...)
+}
+
+func (c *Compositor) tabStrip(bar *wm.TabBar) image.Rectangle {
+	strip := image.Rect(bar.Rect.Min.X, bar.Rect.Min.Y, bar.Rect.Max.X, bar.Rect.Min.Y+min(c.decor.Tab.Height, bar.Rect.Dy()))
+	if c.tabsJoin() {
+		border := c.decor.BorderWidth
+		strip.Min.X, strip.Min.Y, strip.Max.X = strip.Min.X+border, strip.Min.Y+border, strip.Max.X-border
+	}
+	return strip
+}
+
+func tabSlot(strip image.Rectangle, tab, n int) image.Rectangle {
+	return image.Rect(strip.Min.X+strip.Dx()*tab/n, strip.Min.Y, strip.Min.X+strip.Dx()*(tab+1)/n, strip.Max.Y)
+}
+
+func (c *Compositor) backgroundTabAt(at image.Point) (wm.WindowID, bool) {
+	for i := range c.tabBars {
+		bar := &c.tabBars[i]
+		strip := c.tabStrip(bar)
+		if !bar.Shown || !at.In(strip) {
+			continue
+		}
+		n := len(bar.Tabs)
+		for tab, id := range bar.Tabs {
+			if tab != bar.Active && at.In(tabSlot(strip, tab, n)) {
+				return id, true
+			}
+		}
+	}
+	return 0, false
 }

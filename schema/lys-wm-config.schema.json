@@ -644,6 +644,22 @@
           "type": "boolean",
           "default": false
         },
+        "drag_switch": {
+          "type": "object",
+          "properties": {
+            "frames": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 30
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 4
+            }
+          },
+          "additionalProperties": false
+        },
         "enabled": {
           "type": "boolean",
           "default": true

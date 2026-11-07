@@ -152,7 +152,7 @@ func (c *Compositor) takeOverviewInput() error {
 }
 
 func (c *Compositor) canOpenOverview() bool {
-	return !c.shell.Locked() && c.drag == nil
+	return !c.shell.Locked()
 }
 
 func (c *Compositor) openOverview() error {

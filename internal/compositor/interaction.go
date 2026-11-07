@@ -178,6 +178,7 @@ func (c *Compositor) endDrag() error {
 		}
 	}
 	c.interaction = nil
+	c.dropDragHold()
 	if c.lagging {
 		if err := c.reconcile(); err != nil {
 			return fmt.Errorf("compositor: end the drag of window %d: %w", it.w.id, err)

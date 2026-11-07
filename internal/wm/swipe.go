@@ -30,6 +30,17 @@ func (s State) Neighbour(output string, id WorkspaceID, forward bool) (Workspace
 	return found, found != 0
 }
 
+func (s State) EdgeWorkspace(output string, id WorkspaceID, forward bool) (WorkspaceID, bool) {
+	if next, ok := s.Neighbour(output, id, forward); ok || !forward {
+		return next, ok
+	}
+	next := id + 1
+	for s.workspace(next) != nil {
+		next++
+	}
+	return next, true
+}
+
 func (s State) SwipeWorkspace(output string, from WorkspaceID, at, delta float64) WorkspaceSwipe {
 	sw := WorkspaceSwipe{From: from}
 	target := at + delta

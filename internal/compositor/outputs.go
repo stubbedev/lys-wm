@@ -319,6 +319,9 @@ func (c *Compositor) OutputRemoved(b backend.Output) error {
 }
 
 func (c *Compositor) disable(o *output.Output) error {
+	if c.hold.target.o == o {
+		c.dropDragHold()
+	}
 	b := o.Backend()
 	c.outputs = slices.DeleteFunc(c.outputs, func(x *output.Output) bool { return x == o })
 	delete(c.shown, o)
