@@ -338,6 +338,11 @@
       "path": "staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml"
     },
     {
+      "package": "xdgtopleveldrag",
+      "source": "wayland-protocols",
+      "path": "staging/xdg-toplevel-drag/xdg-toplevel-drag-v1.xml"
+    },
+    {
       "package": "lysescape",
       "source": "lys-lib",
       "path": "wlr/lys-escape-v1.xml"
