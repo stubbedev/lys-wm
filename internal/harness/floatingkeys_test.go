@@ -43,6 +43,7 @@ func TestADraggedFloatingWindowSnapsFlushBesideAnother(t *testing.T) {
 			c := testclient.Connect(t, h.Socket())
 			anchor := c.Window("anchor", testclient.Fill(0, 0xff, 0))
 			c.DispatchUntil("the anchor to map", anchor.Mapped)
+			h.ctl("focuswindow " + idOf(h, "anchor"))
 			h.ctl("place left")
 			c.DispatchUntil("the anchor on the left half", func() bool { return anchor.Logical == image.Pt(78, 100) })
 			holdDrag(t, h, image.Pt(80, 50), image.Pt(125, 50))
