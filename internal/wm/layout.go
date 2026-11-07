@@ -16,6 +16,7 @@ type Placement struct {
 	Fake      bool
 	Scratch   bool
 	Pinned    bool
+	Look      WorkspaceLook
 }
 
 func (p Placement) Told() PlacementLayer {

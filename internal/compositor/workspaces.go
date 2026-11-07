@@ -175,8 +175,11 @@ func (c *Compositor) syncWorkspaceManager(m *wsManager) error {
 			}
 			sp = &wsSpace{resource: res, state: ^sew.ExtWorkspaceHandleV1State(0)}
 			m.spaces[w.ID] = sp
-			name := strconv.Itoa(int(w.ID))
-			sent(errors.Join(res.SendID(name), res.SendName(name),
+			id, name := strconv.Itoa(int(w.ID)), c.wm.WorkspaceName(w.ID)
+			if name == "" {
+				name = id
+			}
+			sent(errors.Join(res.SendID(id), res.SendName(name),
 				res.SendCoordinates(binary.LittleEndian.AppendUint32(nil, uint32(w.ID))), //nolint:gosec // workspace ids are small positive numbers
 				res.SendCapabilities(sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesActivate|sew.ExtWorkspaceHandleV1WorkspaceCapabilitiesAssign)))
 		}

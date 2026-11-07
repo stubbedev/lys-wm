@@ -64,6 +64,8 @@ signal has `hdr: true`, so a config that asked for it can see that it got it. A 
 {"id":1,"output":"DP-1","windows":3,"visible":true,"focused":true}
 ```
 
+A workspace a rule names also has `name`.
+
 `scratchpads`: the [scratchpads](./config#scratchpads) that exist, which are the
 ones holding a window and the ones shown; `output` is the one each shows over
 or last showed over:

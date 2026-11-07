@@ -126,6 +126,7 @@ type State struct {
 	limits     map[WindowID]Limits
 	fake       map[WindowID]struct{}
 	pinned     map[WindowID]struct{}
+	wsRules    []WorkspaceRule
 }
 
 var (
@@ -142,6 +143,7 @@ func (s State) clone() State {
 		limits:     maps.Clone(s.limits),
 		fake:       maps.Clone(s.fake),
 		pinned:     maps.Clone(s.pinned),
+		wsRules:    s.wsRules,
 	}
 	maps.Copy(c.remembered, s.remembered)
 	for i, w := range s.workspaces {
@@ -245,6 +247,9 @@ func (s *State) windowWorkspace(id WindowID) *Workspace {
 }
 
 func (s *State) create(id WorkspaceID, output string) *Workspace {
+	if bound := s.boundOutput(id); bound != "" {
+		output = bound
+	}
 	s.workspaces = append(s.workspaces, Workspace{ID: id, Output: output})
 	slices.SortFunc(s.workspaces, func(a, b Workspace) int { return int(a.ID) - int(b.ID) })
 	return s.workspace(id)
@@ -260,7 +265,7 @@ func (s *State) firstUnused() WorkspaceID {
 
 func (s *State) dropIfIdle(id WorkspaceID) {
 	w := s.workspace(id)
-	if w == nil || !w.empty() || s.Shown(*w) {
+	if w == nil || !w.empty() || s.Shown(*w) || s.persistent(id) {
 		return
 	}
 	if id < 0 {
@@ -305,6 +310,7 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 			w.Output, w.home = name, ""
 		}
 	}
+	s.bindTo(name)
 	for i := range s.scratch {
 		if s.scratch[i].Output == "" {
 			s.scratch[i].Output = name
@@ -318,6 +324,7 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 	} else {
 		o.Active = s.create(s.firstUnused(), name).ID
 	}
+	s.showDefault(o)
 	delete(s.remembered, name)
 	for _, other := range s.outputs {
 		if other.Name != name {
@@ -649,8 +656,21 @@ func (s State) ArrangeInto(all *Arranger, sp Spacing) {
 			all.inWorkspace(from, w.ID)
 			continue
 		}
-		placeWorkspace(all, w, o, o.Active == w.ID, sp)
+		wsp := sp
+		var look WorkspaceLook
+		if len(s.wsRules) > 0 {
+			look = s.lookFor(w)
+			if look.Gaps != nil {
+				wsp.Gaps = *look.Gaps
+			}
+		}
+		placeWorkspace(all, w, o, o.Active == w.ID, wsp)
 		all.inWorkspace(from, w.ID)
+		if look != (WorkspaceLook{}) {
+			for j := from; j < len(all.Windows); j++ {
+				all.Windows[j].Look = look
+			}
+		}
 	}
 	for i := range s.scratch {
 		s.placeScratchpad(all, &s.scratch[i], sp)

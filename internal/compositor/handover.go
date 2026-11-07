@@ -163,6 +163,7 @@ func (c *Compositor) FinishAdoption() error {
 	if err != nil {
 		return err
 	}
+	s = s.WithWorkspaceRules(c.resolvedWorkspaceRules())
 	restored := c.display.RestoredClients()
 	for _, p := range a.windows {
 		if restored[p.Client].Gone() && slices.Contains(s.Windows(), p.ID) {

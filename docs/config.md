@@ -931,6 +931,30 @@ screenshot tool that does not declare its captures sees blocked surfaces
 masked. Sandboxed clients cannot declare. The surfaces draw normally on the
 screen, and changes inside a blocked window do not wake a screencast.
 
+## workspaces
+
+```yaml
+workspaces:
+  - {id: 1, output: "desc:LG Electronics 27GL850", default: true, persistent: true}
+  - {id: 9, name: chat, output: eDP-1, on_created_empty: vesktop}
+  - {match: single_tiled, gaps: {inner: 0, outer: 0}, borders: {width: 0}, rounding: 0}
+```
+
+A rule with `id` shapes one workspace; a rule with `match` (`single_tiled`: one
+tiled window and nothing else, `fullscreen`, or `any`) applies its look to every
+workspace it matches, after the `id` rules' and in order.
+
+| Key | Value |
+| --- | --- |
+| `output` | A connector name or `desc:<description prefix>`: the workspace is created on that output and returns to it whenever it is connected, and `workspace <n>` from another output shows it there and moves focus to it |
+| `default` | `true`: the output shows this workspace first. Needs `output` |
+| `persistent` | `true`: the workspace exists from startup and is never dropped, so bars and `lys-wmctl workspaces` list it empty |
+| `name` | Shown by ext-workspace and IPC, and accepted by `workspace <name>` and `movetoworkspace <name>`; starts with a letter |
+| `on_created_empty` | A command run each time the workspace is shown empty; the window it opens lands on the workspace |
+| `gaps`, `borders.width`, `rounding`, `shadow` | The workspace's look in place of `gaps`, `borders.width`, `decoration.rounding` and `decoration.shadow.enabled`; a window rule's still wins |
+
+A `match` rule takes only the look keys.
+
 ## scratchpads
 
 ```yaml

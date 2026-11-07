@@ -88,6 +88,7 @@ type Config struct {
 	HoldOpening     bool
 	Animations      anim.Table
 	LayerRules      []wm.LayerRule
+	WorkspaceRules  []WorkspaceRule
 	Gestures        Gestures
 	Overview        OverviewStyle
 	Slower          map[render.Speed]Effects
@@ -345,6 +346,8 @@ type Compositor struct {
 	jellyGen           uint64
 	genieStrips        []anim.GenieStrip
 	layerRules         []wm.LayerRule
+	workspaceRules     []WorkspaceRule
+	shownEmpty         map[wm.WorkspaceID]bool
 	maskedOps          []drawOp
 	alphaShapes        map[*surface.Surface]bufferShape
 	blockedScratch     []image.Rectangle
@@ -437,7 +440,8 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	c.colorManagement = cfg.ColorManagement
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
-	c.animations, c.clock, c.layerRules = cfg.Animations, cfg.Clock, cfg.LayerRules
+	c.animations, c.clock, c.layerRules, c.workspaceRules = cfg.Animations, cfg.Clock, cfg.LayerRules, cfg.WorkspaceRules
+	c.syncWorkspaceRules()
 	c.gestures = cfg.Gestures
 	c.hidden.every = cfg.HiddenFrame
 	c.powerSaverRate = cfg.PowerSaverRate
@@ -468,6 +472,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		shownWorkspace: map[string]wm.WorkspaceID{},
 		scratchSlideOf: map[*output.Output]*workspaceSwitch{},
 		peeks:          map[*output.Output]*peek{},
+		shownEmpty:     map[wm.WorkspaceID]bool{},
 		alphaShapes:    map[*surface.Surface]bufferShape{},
 		shownScratch:   map[string]wm.WorkspaceID{},
 		shaders:        map[string]*screenShader{},

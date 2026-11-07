@@ -61,6 +61,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		visible := s.Shown(w)
 		snap.Workspaces = append(snap.Workspaces, ipc.Workspace{
 			ID:      w.ID,
+			Name:    s.WorkspaceName(w.ID),
 			Output:  w.Output,
 			Windows: len(w.Tree.Windows()) + len(w.Floating) + len(w.Minimized),
 			Visible: visible,

@@ -233,6 +233,15 @@ if it was dropped, so repeating it toggles between the two. Outputs are
 known by name: unplugging one moves its workspaces to the focused output,
 and plugging it back returns them and shows the one it was showing.
 
+Workspace rules (#351) live in the state, resolved by the compositor to
+connector names whenever outputs come or go: a workspace a rule binds to an
+output is created on it and returns to it whenever it is connected, a
+`default` one is what that output shows first, a `persistent` one is never
+dropped, and a name is a second way to address it. Selector rules
+(`single_tiled`, `fullscreen`, `any`) give a workspace its own gaps, border
+width, rounding and shadow at arrange time; each placement carries the look of
+its workspace, so a window's frame and size change in the same transaction.
+
 ### Animations
 
 `internal/anim` (#223) is pure like `wm`: bézier easings, springs solved in

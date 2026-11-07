@@ -568,8 +568,20 @@ func parseWorkspace(s string) (WorkspaceTarget, bool) {
 		}
 		return RelativeWorkspace(n), true
 	}
-	n, err := strconv.Atoi(s)
-	return WorkspaceID(n), err == nil && n >= 1
+	if n, err := strconv.Atoi(s); err == nil {
+		return WorkspaceID(n), n >= 1
+	}
+	return WorkspaceName(s), ValidWorkspaceName(s)
+}
+
+func ValidWorkspaceName(s string) bool {
+	for i, r := range s {
+		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+		if !letter && (i == 0 || ((r < '0' || r > '9') && r != '-' && r != '_')) {
+			return false
+		}
+	}
+	return s != ""
 }
 
 func ParseLayout(s string) (Layout, bool) {
@@ -596,7 +608,7 @@ func directional(build func(Direction) Action) func(ActionSpec, []string, string
 	}
 }
 
-const workspaceTargets = "<n|e+n|e-n|m+n|m-n|empty|previous>"
+const workspaceTargets = "<n|name|e+n|e-n|m+n|m-n|empty|previous>"
 
 func workspaceArg(spec ActionSpec, arg string) (WorkspaceTarget, error) {
 	w, ok := parseWorkspace(arg)
@@ -667,7 +679,7 @@ var Actions = []ActionSpec{
 	},
 	{
 		Name: "workspace", Args: workspaceTargets,
-		Summary: "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it.",
+		Summary: "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it.",
 		parse:   parseWorkspaceAction,
 	},
 	{

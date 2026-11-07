@@ -150,6 +150,7 @@ type rawConfig struct {
 	Scratchpads     map[string]At[rawScratchpad] `yaml:"scratchpads"`
 	ShowDesktop     rawShowDesktop               `yaml:"showdesktop"`
 	LayerRules      []At[rawLayerRule]           `yaml:"layer_rules"`
+	Workspaces      []At[rawWorkspaceRule]       `yaml:"workspaces"`
 }
 
 type rawLayerRule struct {
@@ -162,6 +163,24 @@ type rawLayerRule struct {
 	Rounding           *At[int]         `yaml:"rounding"`
 	Opacity            *At[float64]     `yaml:"opacity"`
 	DimAround          bool             `yaml:"dim_around"`
+}
+
+type rawWorkspaceRule struct {
+	ID             *At[int]             `yaml:"id"`
+	Match          *At[string]          `yaml:"match"`
+	Name           *At[string]          `yaml:"name"`
+	Output         *At[string]          `yaml:"output"`
+	Default        bool                 `yaml:"default"`
+	Persistent     bool                 `yaml:"persistent"`
+	OnCreatedEmpty *At[string]          `yaml:"on_created_empty"`
+	Gaps           *rawGaps             `yaml:"gaps"`
+	Borders        *rawWorkspaceBorders `yaml:"borders"`
+	Rounding       *At[int]             `yaml:"rounding"`
+	Shadow         *bool                `yaml:"shadow"`
+}
+
+type rawWorkspaceBorders struct {
+	Width *At[int] `yaml:"width"`
 }
 
 type rawShowDesktop struct {
@@ -551,6 +570,7 @@ type Config struct {
 	LidSuspend      bool
 	Animations      anim.Table
 	LayerRules      []wm.LayerRule
+	WorkspaceRules  []compositor.WorkspaceRule
 	Gestures        compositor.Gestures
 	Overview        compositor.OverviewStyle
 	Slower          map[render.Speed]compositor.Effects
@@ -974,8 +994,8 @@ func (p *parser) micaPasses(a *At[int]) int {
 	return v
 }
 
-func (p *parser) gaps(r rawGaps, def wm.Gaps) wm.Gaps {
-	g := wm.Gaps{Inner: p.nonNegative(r.Inner, "gaps.inner", def.Inner), Outer: def.Outer}
+func (p *parser) gaps(r rawGaps, key string, def wm.Gaps) wm.Gaps {
+	g := wm.Gaps{Inner: p.nonNegative(r.Inner, key+".inner", def.Inner), Outer: def.Outer}
 	if r.Outer == nil {
 		return g
 	}
@@ -984,7 +1004,7 @@ func (p *parser) gaps(r rawGaps, def wm.Gaps) wm.Gaps {
 		v = sides{v[0], v[0], v[0], v[0]}
 	}
 	if len(v) != 4 || slices.Min(v) < 0 {
-		p.fail(r.Outer.Line, "gaps.outer", "%v is not zero or more, or a list of four such numbers (top, right, bottom, left)", r.Outer.V)
+		p.fail(r.Outer.Line, key+".outer", "%v is not zero or more, or a list of four such numbers (top, right, bottom, left)", r.Outer.V)
 		return g
 	}
 	g.Outer = wm.Insets{Top: v[0], Right: v[1], Bottom: v[2], Left: v[3]}
@@ -1561,7 +1581,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
-	cfg.WM.Gaps = p.gaps(raw.Gaps, cfg.WM.Gaps)
+	cfg.WM.Gaps = p.gaps(raw.Gaps, "gaps", cfg.WM.Gaps)
 	if v := choice(p, raw.Focus.OnActivate, "focus.on_activate", focusActivations); v != nil {
 		cfg.WM.OnActivate = *v
 	}
@@ -1570,6 +1590,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	}
 	cfg.WM.Scratchpads = p.scratchpads(raw.Scratchpads)
 	cfg.LayerRules = p.layerRules(raw.LayerRules)
+	cfg.WorkspaceRules = p.workspaceRules(raw.Workspaces, cfg.WM.Gaps)
 	if v := raw.ShowDesktop.Peek; v != nil {
 		if v.V < 1 || v.V > 50 {
 			p.fail(v.Line, "showdesktop.peek", "%d is not a percentage from 1 to 50", v.V)
@@ -1676,7 +1697,7 @@ func (c Config) Compositor(keymap *xkb.Keymap, font *gtext.Typeface) (compositor
 	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
 	cfg.PowerSaverRate = c.PowerSaverRate
 	cfg.Animations, cfg.Slower = c.Animations, c.Slower
-	cfg.LayerRules = c.LayerRules
+	cfg.LayerRules, cfg.WorkspaceRules = c.LayerRules, c.WorkspaceRules
 	cfg.Gestures = c.Gestures
 	if cfg.Gestures.Binds, err = binds.ResolveGestures(c.Gestures.Binds, keymap); err != nil {
 		return compositor.Config{}, err
@@ -1885,4 +1906,72 @@ func blursAnyLayer(rules []At[rawLayerRule]) bool {
 
 var removedKeys = map[string]string{
 	"decoration.blur.layers": "removed; blur a layer surface with layer_rules: [{namespace: ^name$, blur: true}]",
+}
+
+var workspaceSelectors = map[string]wm.WorkspaceSelector{"any": wm.SelectAny, "single_tiled": wm.SelectSingleTiled, "fullscreen": wm.SelectFullscreen}
+
+func (p *parser) workspaceRules(raw []At[rawWorkspaceRule], globalGaps wm.Gaps) []compositor.WorkspaceRule {
+	out := make([]compositor.WorkspaceRule, 0, len(raw))
+	names := map[string]bool{}
+	for i, at := range raw {
+		r, key := at.V, fmt.Sprintf("workspaces[%d]", i)
+		var rule compositor.WorkspaceRule
+		switch {
+		case (r.ID == nil) == (r.Match == nil):
+			p.fail(at.Line, key, "needs exactly one of id and match")
+			continue
+		case r.Match != nil:
+			sel := choice(p, r.Match, key+".match", workspaceSelectors)
+			if sel == nil {
+				continue
+			}
+			rule.Select = *sel
+			if r.Name != nil || r.Output != nil || r.Default || r.Persistent || r.OnCreatedEmpty != nil {
+				p.fail(at.Line, key, "a match rule takes only gaps, borders, rounding and shadow")
+				continue
+			}
+		default:
+			if r.ID.V < 1 {
+				p.fail(r.ID.Line, key+".id", "%d is not a workspace number", r.ID.V)
+				continue
+			}
+			rule.ID = wm.WorkspaceID(r.ID.V)
+		}
+		if r.Name != nil {
+			switch _, err := strconv.Atoi(r.Name.V); {
+			case err == nil || !wm.ValidWorkspaceName(r.Name.V) || r.Name.V == "previous" || r.Name.V == "empty":
+				p.fail(r.Name.Line, key+".name", "%q is not a name: start with a letter, then letters, digits, - or _", r.Name.V)
+			case names[r.Name.V]:
+				p.fail(r.Name.Line, key+".name", "%q names a second workspace", r.Name.V)
+			}
+			names[r.Name.V] = true
+			rule.Name = r.Name.V
+		}
+		if r.Output != nil {
+			m := outputMatch(r.Output.V)
+			rule.Bind = &m
+		}
+		if r.Default && r.Output == nil {
+			p.fail(at.Line, key+".default", "needs output, the output that shows it first")
+		}
+		rule.Default, rule.Persistent = r.Default, r.Persistent
+		if r.OnCreatedEmpty != nil {
+			rule.OnCreatedEmpty = r.OnCreatedEmpty.V
+		}
+		if r.Gaps != nil {
+			g := p.gaps(*r.Gaps, key+".gaps", globalGaps)
+			rule.Look.Gaps = &g
+		}
+		if r.Borders != nil && r.Borders.Width != nil {
+			width := p.nonNegative(r.Borders.Width, key+".borders.width", 0)
+			rule.Look.BorderWidth = &width
+		}
+		if r.Rounding != nil {
+			rounding := p.nonNegative(r.Rounding, key+".rounding", 0)
+			rule.Look.Rounding = &rounding
+		}
+		rule.Look.Shadow = r.Shadow
+		out = append(out, rule)
+	}
+	return out
 }

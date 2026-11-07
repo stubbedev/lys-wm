@@ -56,13 +56,13 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 	case wm.OverviewAction:
 		return c.overviewAction(e.Mode)
 	case wm.ExecAction:
-		return c.spawn(e.Command, "")
+		return c.spawn(e.Command, c.shownTarget())
 	case wm.SetPropAction:
 		return c.withWindow(e.ID, func(w *window) error { return c.setProp(w, e.Key, e.Value) })
 	case wm.ShowDesktopAction:
 		return c.showDesktop(e)
 	case wm.ScratchpadExecAction:
-		return c.spawn(e.Command, e.Name)
+		return c.spawn(e.Command, launchTarget{scratchpad: e.Name})
 	case wm.GlobalAction:
 		return c.pressShortcut(e, trigger)
 	case wm.SubmapAction:
@@ -113,8 +113,8 @@ func (c *Compositor) withWindow(id wm.WindowID, f func(*window) error) error {
 	return f(w)
 }
 
-func (c *Compositor) spawn(command string, scratchpad wm.ScratchpadName) error {
-	token, err := c.mintLaunchToken(true, scratchpad)
+func (c *Compositor) spawn(command string, target launchTarget) error {
+	token, err := c.mintLaunchToken(true, target)
 	if err != nil {
 		return fmt.Errorf("compositor: exec %q: %w", command, err)
 	}

@@ -292,6 +292,7 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 	if _, err := c.arrange(o); err != nil {
 		return err
 	}
+	c.syncWorkspaceRules()
 	if err := c.update(c.wm.AddOutput(b.Name(), o.Logical(), c.usable[o].Add(o.Position()))); err != nil {
 		return err
 	}
@@ -361,6 +362,7 @@ func (c *Compositor) disable(o *output.Output) error {
 		return errors.Join(append(errs, err)...)
 	}
 	c.wm = s
+	c.syncWorkspaceRules()
 	c.stateChanged()
 	errs = append(errs, c.relayout(), c.syncAreas(), c.fifo.Latched(nil))
 	return errors.Join(errs...)

@@ -216,6 +216,7 @@ type Output struct {
 
 type Workspace struct {
 	ID      wm.WorkspaceID `json:"id"`
+	Name    string         `json:"name,omitempty"`
 	Output  string         `json:"output"`
 	Windows int            `json:"windows"`
 	Visible bool           `json:"visible"`

@@ -1151,3 +1151,36 @@ func TestAnOutputsICCProfile(t *testing.T) {
 		t.Errorf("the unreadable profile was not named in a warning: %v", cfg.Warnings)
 	}
 }
+
+func TestWorkspaceRules(t *testing.T) {
+	c, err := Parse("t.yaml", []byte(`workspaces:
+  - {id: 1, output: "desc:LG Electronics 27GL850", default: true, persistent: true}
+  - {id: 9, name: chat, output: eDP-1, on_created_empty: vesktop}
+  - {match: single_tiled, gaps: {inner: 0, outer: 0}, borders: {width: 0}, rounding: 0}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := c.WorkspaceRules
+	if len(r) != 3 || r[0].ID != 1 || r[0].Bind == nil || *r[0].Bind != (wm.OutputMatch{Description: "LG Electronics 27GL850"}) || !r[0].Default || !r[0].Persistent {
+		t.Fatalf("rule 0: %+v", r)
+	}
+	if r[1].Name != "chat" || r[1].OnCreatedEmpty != "vesktop" || *r[1].Bind != (wm.OutputMatch{Name: "eDP-1"}) {
+		t.Errorf("rule 1: %+v", r[1])
+	}
+	if r[2].Select != wm.SelectSingleTiled || r[2].Look.Gaps == nil || *r[2].Look.Gaps != (wm.Gaps{}) || *r[2].Look.BorderWidth != 0 || *r[2].Look.Rounding != 0 {
+		t.Errorf("rule 2: %+v", r[2])
+	}
+	for text, want := range map[string]string{
+		"workspaces:\n  - {name: x}\n":                              "t.yaml:2: workspaces[0]:",
+		"workspaces:\n  - {match: all}\n":                           "t.yaml:2: workspaces[0].match:",
+		"workspaces:\n  - {match: any, name: x}\n":                  "t.yaml:2: workspaces[0]:",
+		"workspaces:\n  - {id: 2, name: \"2\"}\n":                   "t.yaml:2: workspaces[0].name:",
+		"workspaces:\n  - {id: 2, default: true}\n":                 "t.yaml:2: workspaces[0].default:",
+		"workspaces:\n  - {id: 2, name: a}\n  - {id: 3, name: a}\n": "t.yaml:3: workspaces[1].name:",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", text, err, want)
+		}
+	}
+}

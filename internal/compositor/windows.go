@@ -42,6 +42,7 @@ type window struct {
 	look          focusLook
 	scratch       bool
 	pinned        bool
+	wsLook        wm.WorkspaceLook
 	looked        bool
 	border        render.Border
 	borderAngle   anim.Tween[float64]
@@ -279,7 +280,7 @@ func (c *Compositor) reconcile() error {
 }
 
 func (c *Compositor) publish() error {
-	return errors.Join(c.syncOverview(c.clock()), c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions(), c.updateInhibition())
+	return errors.Join(c.syncOverview(c.clock()), c.refocus(), c.refreshPointer(), c.scheduleAll(), c.syncForeign(), c.syncWorkspaces(), c.syncCaptureSessions(), c.updateInhibition(), c.runOnCreatedEmpty())
 }
 
 func errUnknownWindow(id wm.WindowID) error {
@@ -296,7 +297,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			continue
 		}
 		c.stack = append(c.stack, w)
-		rect := content(p.Rect, p.Layer, c.borderWidth(w))
+		rect := content(p.Rect, p.Layer, c.frameBorder(c.decision(w), p.Look))
 		moved := rect != w.rect
 		switch {
 		case c.overview != nil:
@@ -306,7 +307,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned
+		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned, w.wsLook = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned, p.Look
 		if o := c.outputAtRect(p.Rect); o != nil {
 			w.output = o
 		}

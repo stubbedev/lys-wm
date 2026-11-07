@@ -12,26 +12,29 @@ import (
 )
 
 func (c *Compositor) borderWidthOf(d *wm.Decision) int {
-	if d.BorderWidth != nil {
-		return *d.BorderWidth
-	}
-	return c.decor.BorderWidth
+	return c.frameBorder(d, wm.WorkspaceLook{})
 }
 
 func (c *Compositor) borderWidth(w *window) int {
-	return c.borderWidthOf(c.decision(w))
+	return c.frameBorder(c.decision(w), w.wsLook)
 }
 
 func (c *Compositor) rounding(w *window) int {
-	if r := c.decision(w).Rounding; r != nil {
-		return *r
+	switch {
+	case c.decision(w).Rounding != nil:
+		return *c.decision(w).Rounding
+	case w.wsLook.Rounding != nil:
+		return *w.wsLook.Rounding
 	}
 	return c.decor.Rounding
 }
 
 func (c *Compositor) shadowed(w *window) bool {
-	if s := c.decision(w).Shadow; s != nil {
-		return *s && c.decor.Shadow.Enabled
+	switch {
+	case c.decision(w).Shadow != nil:
+		return *c.decision(w).Shadow && c.decor.Shadow.Enabled
+	case w.wsLook.Shadow != nil:
+		return *w.wsLook.Shadow && c.decor.Shadow.Enabled
 	}
 	return c.decor.Shadow.Enabled
 }

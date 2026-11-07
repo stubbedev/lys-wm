@@ -119,12 +119,12 @@
               },
               {
                 "name": "workspace",
-                "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
-                "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
               },
               {
                 "name": "movetoworkspace",
-                "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
                 "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
               },
               {
@@ -682,12 +682,12 @@
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
-                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
                     "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
                   },
                   {
@@ -886,12 +886,12 @@
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
-                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
                     "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
                   },
                   {
@@ -1090,12 +1090,12 @@
                   },
                   {
                     "name": "workspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
-                    "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                    "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                   },
                   {
                     "name": "movetoworkspace",
-                    "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                    "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
                     "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
                   },
                   {
@@ -2023,12 +2023,12 @@
                 },
                 {
                   "name": "workspace",
-                  "args": "<n|e+n|e-n|m+n|m-n|empty|previous>",
-                  "summary": "Show workspace n; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
+                  "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous>",
+                  "summary": "Show workspace n, or the one a workspace rule names, on its bound output when a rule binds it; the n-th open workspace after or before the current one, of every output (e) or of the focused output (m); the lowest free number, opened on the focused output (empty); or the one the output showed before it."
                 },
                 {
                   "name": "movetoworkspace",
-                  "args": "<n|e+n|e-n|m+n|m-n|empty|previous> [follow]",
+                  "args": "<n|name|e+n|e-n|m+n|m-n|empty|previous> [follow]",
                   "summary": "Move the focused window to a workspace, chosen as for workspace; with follow, show that workspace with the window focused, in one switch."
                 },
                 {
@@ -2288,6 +2288,73 @@
     "tearing": {
       "type": "boolean",
       "default": false
+    },
+    "workspaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "borders": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "gaps": {
+            "type": "object",
+            "properties": {
+              "inner": {
+                "type": "integer"
+              },
+              "outer": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "id": {
+            "type": "integer"
+          },
+          "match": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_created_empty": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "persistent": {
+            "type": "boolean"
+          },
+          "rounding": {
+            "type": "integer"
+          },
+          "shadow": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
     },
     "xwayland": {
       "type": "object",

@@ -45,19 +45,28 @@ func (c *Compositor) keyboardClient() *server.Client {
 }
 
 func (c *Compositor) mintToken(granted bool) (string, error) {
-	return c.mintLaunchToken(granted, "")
+	return c.mintLaunchToken(granted, c.shownTarget())
 }
 
-func (c *Compositor) mintLaunchToken(granted bool, scratchpad wm.ScratchpadName) (string, error) {
+type launchTarget struct {
+	workspace  wm.WorkspaceID
+	scratchpad wm.ScratchpadName
+}
+
+func (c *Compositor) shownTarget() launchTarget {
+	workspace, _ := c.wm.ActiveOn(c.wm.FocusedOutput())
+	return launchTarget{workspace: workspace}
+}
+
+func (c *Compositor) mintLaunchToken(granted bool, target launchTarget) (string, error) {
 	value, err := shell.NewHandle()
 	if err != nil {
 		return "", fmt.Errorf("compositor: mint an activation token: %w", err)
 	}
-	workspace, _ := c.wm.ActiveOn(c.wm.FocusedOutput())
 	if len(c.tokens) == liveTokens {
 		c.tokens = slices.Delete(c.tokens, 0, 1)
 	}
-	c.tokens = append(c.tokens, activationToken{value: value, granted: granted, focus: c.keyboardClient(), workspace: workspace, scratchpad: scratchpad})
+	c.tokens = append(c.tokens, activationToken{value: value, granted: granted, focus: c.keyboardClient(), workspace: target.workspace, scratchpad: target.scratchpad})
 	return value, nil
 }
 
