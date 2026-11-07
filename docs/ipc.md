@@ -140,6 +140,8 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `close` | `window` (its ID) | A window unmapped |
 | `move` | `window`, `workspace` | A window moved to another workspace |
 | `title` | `window`, `title` | A window changed its title |
+| `appid` | `window`, `app_id` | A window changed its app ID |
+| `rect` | `window`, `output`, `rect` | A window moved, resized or went to another output; `rect` is as in `windows` |
 | `icon` | `window`, `icon` | A window set or cleared its icon |
 | `urgent` | `window`, `urgent` | A window asked for attention, or got it |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |

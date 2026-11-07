@@ -410,3 +410,30 @@ func TestWindowsReportTheirStackingOrder(t *testing.T) {
 	}
 	expectEvent(t, lines, fmt.Sprintf(`{"event":"stack","window":%d,"stack":0}`, ids["float a"]))
 }
+
+func TestAnAppIDChangeAndARetileAreEvents(t *testing.T) {
+	t.Parallel()
+	h := Start(t, desktop)
+	c := testclient.Connect(t, h.Socket())
+	a := c.Window("a", quadrants)
+	c.DispatchUntil("a to map", a.Mapped)
+	id := query[[]ipc.Window](h, ipc.KindWindows)[0].ID
+	lines := h.watch()
+	if err := errors.Join(a.Toplevel.SetAppID("org.example.Renamed"), c.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	expectEvent(t, lines, fmt.Sprintf(`{"event":"appid","window":%d,"app_id":"org.example.Renamed"}`, id))
+	b := c.Window("b", quadrants)
+	c.DispatchUntil("b to map", b.Mapped)
+	var halved ipc.Window
+	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+		if w.ID == id {
+			halved = w
+		}
+	}
+	line, err := ipc.Encode(ipc.RectEvent{Window: id, Output: halved.Output, Rect: halved.Rect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectEvent(t, lines, strings.TrimSpace(string(line)))
+}

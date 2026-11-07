@@ -46,6 +46,15 @@ type (
 		Window wm.WindowID `json:"window"`
 		Title  string      `json:"title"`
 	}
+	AppIDEvent struct {
+		Window wm.WindowID `json:"window"`
+		AppID  string      `json:"app_id"`
+	}
+	RectEvent struct {
+		Window wm.WindowID `json:"window"`
+		Output string      `json:"output"`
+		Rect   Rect        `json:"rect"`
+	}
 	IconEvent struct {
 		Window wm.WindowID `json:"window"`
 		Icon   *Icon       `json:"icon"`
@@ -99,6 +108,8 @@ func (OpenEvent) Name() string           { return "open" }
 func (CloseEvent) Name() string          { return "close" }
 func (MoveEvent) Name() string           { return "move" }
 func (TitleEvent) Name() string          { return "title" }
+func (AppIDEvent) Name() string          { return "appid" }
+func (RectEvent) Name() string           { return "rect" }
 func (IconEvent) Name() string           { return "icon" }
 func (UrgentEvent) Name() string         { return "urgent" }
 func (MinimizedEvent) Name() string      { return "minimized" }
@@ -188,6 +199,12 @@ func Diff(prev, next Snapshot) []Event {
 		}
 		if p.Title != w.Title {
 			out = append(out, TitleEvent{Window: w.ID, Title: w.Title})
+		}
+		if p.AppID != w.AppID {
+			out = append(out, AppIDEvent{Window: w.ID, AppID: w.AppID})
+		}
+		if p.Rect != w.Rect || p.Output != w.Output {
+			out = append(out, RectEvent{Window: w.ID, Output: w.Output, Rect: w.Rect})
 		}
 		if p.Icon.serial() != w.Icon.serial() {
 			out = append(out, IconEvent{Window: w.ID, Icon: w.Icon})

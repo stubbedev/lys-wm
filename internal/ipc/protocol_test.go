@@ -92,6 +92,7 @@ func TestDiff(t *testing.T) {
 	a2, b2 := a, b
 	a2.Focused, a2.Title, a2.Workspace = false, "a!", 3
 	b2.Urgent = true
+	b2.AppID, b2.Rect = "footclient", Rect{X: 100, Y: 4, Width: 50, Height: 40}
 	b2.Icon = &Icon{Serial: 4, Name: "foot", Sizes: []int{16, 32}}
 	c := Window{ID: 3, AppID: "mpv", Workspace: 3, Output: "HDMI-A-1", Focused: true}
 	next.Windows = []Window{b2, a2, c}
@@ -104,6 +105,8 @@ func TestDiff(t *testing.T) {
 		`{"event":"output","change":"changed","output":{"name":"DP-1","description":"","rect":{"x":0,"y":0,"width":100,"height":50},"scale":2,"mode":{"width":0,"height":0,"refresh_mhz":0},"workspace":1,"focused":false,"powered":false}}`,
 		`{"event":"workspace","output":"HDMI-A-1","workspace":3}`,
 		`{"event":"focusedoutput","output":"HDMI-A-1"}`,
+		`{"event":"appid","window":2,"app_id":"footclient"}`,
+		`{"event":"rect","window":2,"output":"HDMI-A-1","rect":{"x":100,"y":4,"width":50,"height":40}}`,
 		`{"event":"icon","window":2,"icon":{"serial":4,"name":"foot","sizes":[16,32]}}`,
 		`{"event":"urgent","window":2,"urgent":true}`,
 		`{"event":"move","window":1,"workspace":3}`,
@@ -172,5 +175,22 @@ func TestAWindowsStackChangeIsAnEvent(t *testing.T) {
 	want := []string{`{"event":"stack","window":2,"stack":0}`, `{"event":"stack","window":3,"stack":null}`}
 	if got := names(Diff(prev, next)); !slices.Equal(got, want) {
 		t.Fatalf("diff\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))
+	}
+}
+
+func TestAWindowChangingOutputAloneSendsItsRect(t *testing.T) {
+	w := Window{ID: 4, AppID: "foot", Output: "DP-1", Rect: Rect{X: 10, Y: 10, Width: 20, Height: 20}}
+	moved := w
+	moved.Output = "HDMI-A-1"
+	want := []string{`{"event":"rect","window":4,"output":"HDMI-A-1","rect":{"x":10,"y":10,"width":20,"height":20}}`}
+	if got := names(Diff(Snapshot{Windows: []Window{w}}, Snapshot{Windows: []Window{moved}})); !slices.Equal(got, want) {
+		t.Fatalf("diff\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))
+	}
+	focused := w
+	focused.Focused = true
+	for _, e := range Diff(Snapshot{Windows: []Window{w}}, Snapshot{Windows: []Window{focused}}) {
+		if e.Name() == "rect" || e.Name() == "appid" {
+			t.Errorf("a focus change sent %s", e.Name())
+		}
 	}
 }
