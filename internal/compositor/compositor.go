@@ -250,6 +250,7 @@ type Compositor struct {
 	nextWindow      wm.WindowID
 	active          *window
 	consumed        []uint32
+	tokens          []activationToken
 	layers          []*layer
 	data            *data.Manager
 	drag            *dragging

@@ -17,7 +17,7 @@ import (
 
 const foreignVersion = 1
 
-func randomHandle() (string, error) {
+func NewHandle() (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", fmt.Errorf("shell: generate a handle: %w", err)
@@ -62,7 +62,7 @@ type imported struct {
 }
 
 func (sh *Shell) export(xs *XdgSurface) (*export, error) {
-	handle, err := randomHandle()
+	handle, err := NewHandle()
 	if err != nil {
 		return nil, err
 	}

@@ -199,6 +199,8 @@ func annotations() map[string]annotation {
 		"rules[].title":                    formatAnn(regexFormat),
 		"rules[].tag":                      formatAnn(regexFormat),
 		"outputs[].vrr":                    {enum: slices.Sorted(maps.Keys(vrrPolicies))},
+		"focus.on_activate":                {enum: slices.Sorted(maps.Keys(focusActivations)), def: "focus"},
+		"rules[].on_activate":              {enum: slices.Sorted(maps.Keys(activations))},
 		"binds[].flags[]":                  bindFlags,
 		"submaps.*[].flags[]":              bindFlags,
 	}

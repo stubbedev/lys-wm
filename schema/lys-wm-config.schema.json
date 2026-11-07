@@ -424,6 +424,20 @@
         "type": "string"
       }
     },
+    "focus": {
+      "type": "object",
+      "properties": {
+        "on_activate": {
+          "type": "string",
+          "enum": [
+            "focus",
+            "urgent"
+          ],
+          "default": "focus"
+        }
+      },
+      "additionalProperties": false
+    },
     "gaps": {
       "type": "object",
       "properties": {
@@ -924,6 +938,14 @@
           },
           "mica": {
             "type": "boolean"
+          },
+          "on_activate": {
+            "type": "string",
+            "enum": [
+              "focus",
+              "ignore",
+              "urgent"
+            ]
           },
           "opacity": {
             "type": "number"

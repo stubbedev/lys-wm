@@ -869,3 +869,25 @@ func TestAnOutputRuleNamesItsAdaptiveSyncPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestActivationPolicies(t *testing.T) {
+	c, err := Parse("t.yaml", []byte("focus:\n  on_activate: urgent\nrules:\n  - {app_id: ^firefox$, on_activate: ignore}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WM.OnActivate != wm.ActivateUrgent {
+		t.Errorf("focus.on_activate: urgent gave %d", c.WM.OnActivate)
+	}
+	if d := wm.Decide(c.Rules, "firefox", ""); d.OnActivate == nil || *d.OnActivate != wm.ActivateIgnore {
+		t.Errorf("a rule's on_activate: ignore gave %v", d.OnActivate)
+	}
+	if d := wm.Decide(c.Rules, "foot", ""); d.OnActivate != nil {
+		t.Errorf("a window no rule names got on_activate %d", *d.OnActivate)
+	}
+	if c, err := Parse("t.yaml", nil); err != nil || c.WM.OnActivate != wm.ActivateFocus {
+		t.Errorf("no focus key: %d, %v; want focus", c.WM.OnActivate, err)
+	}
+	if _, err := Parse("t.yaml", []byte("focus:\n  on_activate: ignore\n")); err == nil || !strings.Contains(err.Error(), "t.yaml:2: focus.on_activate:") {
+		t.Errorf("focus.on_activate: ignore was not refused: %v", err)
+	}
+}

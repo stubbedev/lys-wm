@@ -1,28 +1,19 @@
 package shell
 
 import (
-	"fmt"
-	"slices"
-
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxa "github.com/stubbedev/lys-wm/internal/protocol/server/xdgactivation"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
-const (
-	activationVersion = 1
-	liveTokens        = 64
-)
+const activationVersion = 1
 
-type Activate struct{}
+type Activate struct {
+	Token string
+}
 
 func (Activate) isRequest() {}
-
-type token struct {
-	value   string
-	granted bool
-}
 
 func (sh *Shell) bindActivation(c *server.Client, id wire.ObjectID, version uint32) error {
 	_, err := sxa.NewXdgActivationV1(c, id, version, activation{sh, c})
@@ -43,21 +34,11 @@ func (a activation) GetActivationToken(*sxa.XdgActivationV1, *sxa.XdgActivationT
 }
 
 func (a activation) Activate(_ *sxa.XdgActivationV1, value string, wl *sw.WlSurface) error {
-	sh := a.sh
-	i := slices.IndexFunc(sh.tokens, func(t token) bool { return t.value == value })
-	if i < 0 {
-		return nil
-	}
-	t := sh.tokens[i]
-	sh.tokens = slices.Delete(sh.tokens, i, i+1)
-	if !t.granted {
-		return nil
-	}
 	top, err := toplevelOf(wl)
 	if err != nil || top == nil {
 		return err
 	}
-	return top.request(Activate{})
+	return top.request(Activate{Token: value})
 }
 
 type tokenRequest struct {
@@ -85,16 +66,11 @@ func (r *tokenRequest) Commit(obj *sxa.XdgActivationTokenV1) error {
 		return obj.ProtocolError(sxa.XdgActivationTokenV1ErrorAlreadyUsed, "the token was already committed")
 	}
 	r.committed = true
-	value, err := randomHandle()
+	value, err := r.sh.listener.MintActivationToken(r.c, r.serial)
 	if err != nil {
-		return fmt.Errorf("shell: activation token: %w", err)
+		return err
 	}
-	t := token{value: value, granted: r.sh.listener.UserActive(r.c, r.serial)}
-	if len(r.sh.tokens) == liveTokens {
-		r.sh.tokens = slices.Delete(r.sh.tokens, 0, 1)
-	}
-	r.sh.tokens = append(r.sh.tokens, t)
-	return obj.SendDone(t.value)
+	return obj.SendDone(value)
 }
 
 func (*tokenRequest) Destroy(*sxa.XdgActivationTokenV1) error {

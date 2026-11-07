@@ -86,6 +86,7 @@ type Listener interface {
 	PopupMapped(p *Popup) error
 	PopupUnmapped(p *Popup) error
 	UserActive(c *server.Client, serial uint32) bool
+	MintActivationToken(c *server.Client, serial uint32) (string, error)
 	GrabChanged() error
 	LockChanged() error
 	LockReleasing() error
@@ -99,7 +100,6 @@ type Shell struct {
 	subRoles    map[*surface.Surface]string
 	pingTimeout time.Duration
 	grab        []*Popup
-	tokens      []token
 	lock        *SessionLock
 	locked      bool
 	exports     map[string]*export

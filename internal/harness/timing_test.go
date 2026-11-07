@@ -165,66 +165,6 @@ func requestToken(t *testing.T, c *testclient.Client, act *cxa.XdgActivationV1, 
 	return ev.token
 }
 
-func TestActivationMarksWindowsUrgent(t *testing.T) {
-	t.Parallel()
-	h := Start(t, small)
-	a := join(t, h, "a")
-	aAct, err := cxa.NewXdgActivationV1(a.c.Display, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.c.Bind(aAct)
-	b := join(t, h, "b")
-	bAct, err := cxa.NewXdgActivationV1(b.c.Display, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.c.Bind(bAct)
-	b.seen(t, "b focused", func() bool { return slices.Contains(b.in.Log, "kb_enter b") })
-	h.Eventually("a's bound over, with b under the pointer", landed)
-
-	urgent := func(name string) func(*headless.Backend, *compositor.Compositor) bool {
-		return func(_ *headless.Backend, c *compositor.Compositor) bool {
-			for _, tl := range c.Toplevels() {
-				if tl.Title() == name {
-					return c.Urgent(tl)
-				}
-			}
-			return false
-		}
-	}
-	stolen := requestToken(t, a.c, aAct, a.seat, 0)
-	if err := errors.Join(aAct.Activate(stolen, a.w.Surface), a.c.Display.Roundtrip()); err != nil {
-		t.Fatal(err)
-	}
-	h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
-		if urgent("a")(b, c) {
-			t.Error("a token from a client the user is not using marked a window urgent")
-		}
-		return nil
-	})
-	launched := requestToken(t, b.c, bAct, b.seat, 0)
-	if err := errors.Join(aAct.Activate(launched, a.w.Surface), a.c.Display.Flush()); err != nil {
-		t.Fatal(err)
-	}
-	h.Eventually("a urgent from the focused client's token", urgent("a"))
-	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
-		if c.Seat().Focus() != c.Toplevels()[1].Surface() {
-			t.Error("an activation stole the keyboard")
-		}
-		return nil
-	})
-	if err := errors.Join(aAct.Activate(launched, a.w.Surface), a.c.Display.Flush()); err != nil {
-		t.Fatal(err)
-	}
-	if err := errors.Join(b.w.Destroy(), b.c.Display.Flush()); err != nil {
-		t.Fatal(err)
-	}
-	entered := len(a.in.Log)
-	a.seen(t, "a focused once b is gone", func() bool { return slices.Contains(a.in.Log[entered:], "kb_enter a") })
-	h.Eventually("urgency cleared once a is focused", func(b *headless.Backend, c *compositor.Compositor) bool { return !urgent("a")(b, c) })
-}
-
 func TestActivationTokenCommittedTwice(t *testing.T) {
 	t.Parallel()
 	h := Start(t, small)

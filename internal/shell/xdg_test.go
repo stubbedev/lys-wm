@@ -96,6 +96,10 @@ func (r *recorder) PopupMapped(p *Popup) error {
 
 func (r *recorder) PopupUnmapped(*Popup) error { return r.note("popup unmapped") }
 
+func (*recorder) MintActivationToken(*server.Client, uint32) (string, error) {
+	return "token", nil
+}
+
 func (r *recorder) UserActive(_ *server.Client, serial uint32) bool {
 	return r.press != 0 && serial == r.press
 }

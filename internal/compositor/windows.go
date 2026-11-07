@@ -383,6 +383,9 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID) (wm.State, error) {
 	} else {
 		s, err = c.wm.MapWindow(id, c.settings.Autotile)
 	}
+	if ws, ok := c.launchWorkspace(t); ok && err == nil {
+		s, err = s.MoveWindowToWorkspace(id, ws, c.settings.Autotile)
+	}
 	if err != nil || !t.wantsFullscreen() {
 		return s, err
 	}
@@ -517,6 +520,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 		}
 	}
 	c.windows = append(c.windows, w)
+	c.dropClaims(t)
 	return c.update(s, nil)
 }
 
@@ -571,13 +575,14 @@ func (c *Compositor) markUrgent(w *window) error {
 }
 
 func (c *Compositor) ToplevelRequest(t *shell.Toplevel, r shell.Request) error {
+	if a, ok := r.(shell.Activate); ok {
+		return c.presentToken(t, a.Token)
+	}
 	w := c.windowOf(xdgToplevel{t})
 	if w == nil {
 		return nil
 	}
 	switch r := r.(type) {
-	case shell.Activate:
-		return c.markUrgent(w)
 	case shell.SetFullscreen:
 		return c.update(c.wm.SetFullscreen(w.id, r.On))
 	case shell.SetMaximized:

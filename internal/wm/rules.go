@@ -92,29 +92,39 @@ func (o LookOverride) then(later LookOverride) LookOverride {
 	return o
 }
 
+type ActivatePolicy uint8
+
+const (
+	ActivateFocus ActivatePolicy = iota
+	ActivateUrgent
+	ActivateIgnore
+)
+
 type Rule struct {
-	AppID     *regexp.Regexp
-	Title     *regexp.Regexp
-	Tag       *regexp.Regexp
-	Mode      RuleMode
-	Size      image.Point
-	Tearing   RuleTearing
-	Opacity   *float32
-	DimAround bool
-	Blur      *bool
-	Look      LookOverride
-	Mica      *bool
+	AppID      *regexp.Regexp
+	Title      *regexp.Regexp
+	Tag        *regexp.Regexp
+	Mode       RuleMode
+	Size       image.Point
+	Tearing    RuleTearing
+	Opacity    *float32
+	DimAround  bool
+	Blur       *bool
+	Look       LookOverride
+	Mica       *bool
+	OnActivate *ActivatePolicy
 }
 
 type Decision struct {
-	Mode      RuleMode
-	Size      image.Point
-	Tearing   RuleTearing
-	Opacity   *float32
-	DimAround bool
-	Blur      *bool
-	Look      LookOverride
-	Mica      *bool
+	Mode       RuleMode
+	Size       image.Point
+	Tearing    RuleTearing
+	Opacity    *float32
+	DimAround  bool
+	Blur       *bool
+	Look       LookOverride
+	Mica       *bool
+	OnActivate *ActivatePolicy
 }
 
 func (r Rule) matches(appID, title, tag string) bool {
@@ -150,6 +160,9 @@ func DecideTagged(rules []Rule, appID, title, tag string) Decision {
 		d.Look = d.Look.then(r.Look)
 		if r.Mica != nil {
 			d.Mica = r.Mica
+		}
+		if r.OnActivate != nil {
+			d.OnActivate = r.OnActivate
 		}
 	}
 	return d

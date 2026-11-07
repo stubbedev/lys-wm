@@ -139,6 +139,11 @@ type rawConfig struct {
 	Tearing         bool                  `yaml:"tearing"`
 	LidSuspend      *bool                 `yaml:"lid_suspend"`
 	Gestures        rawGestures           `yaml:"gestures"`
+	Focus           rawFocus              `yaml:"focus"`
+}
+
+type rawFocus struct {
+	OnActivate *At[string] `yaml:"on_activate"`
 }
 
 type rawXwayland struct {
@@ -372,18 +377,19 @@ type rawGesture struct {
 }
 
 type rawRule struct {
-	AppID     *At[string]  `yaml:"app_id"`
-	Title     *At[string]  `yaml:"title"`
-	Tag       *At[string]  `yaml:"tag"`
-	Float     bool         `yaml:"float"`
-	Tile      bool         `yaml:"tile"`
-	Size      *At[string]  `yaml:"size"`
-	Tearing   *bool        `yaml:"tearing"`
-	Opacity   *At[float64] `yaml:"opacity"`
-	DimAround bool         `yaml:"dim_around"`
-	Blur      *bool        `yaml:"blur"`
-	BlurLook  rawLook      `yaml:"blur_look"`
-	Mica      *bool        `yaml:"mica"`
+	AppID      *At[string]  `yaml:"app_id"`
+	Title      *At[string]  `yaml:"title"`
+	Tag        *At[string]  `yaml:"tag"`
+	Float      bool         `yaml:"float"`
+	Tile       bool         `yaml:"tile"`
+	Size       *At[string]  `yaml:"size"`
+	Tearing    *bool        `yaml:"tearing"`
+	Opacity    *At[float64] `yaml:"opacity"`
+	DimAround  bool         `yaml:"dim_around"`
+	Blur       *bool        `yaml:"blur"`
+	BlurLook   rawLook      `yaml:"blur_look"`
+	Mica       *bool        `yaml:"mica"`
+	OnActivate *At[string]  `yaml:"on_activate"`
 }
 
 type Error struct {
@@ -990,10 +996,12 @@ func (p *parser) shaderPath(a At[string], key string) string {
 }
 
 var (
-	clickMethods  = map[string]session.ClickMethod{"none": session.ClickNone, "button_areas": session.ClickButtonAreas, "clickfinger": session.ClickFinger}
-	scrollMethods = map[string]session.ScrollMethod{"none": session.ScrollNone, "two_finger": session.ScrollTwoFinger, "edge": session.ScrollEdge, "on_button_down": session.ScrollOnButtonDown}
-	accelProfiles = map[string]session.AccelProfile{"flat": session.AccelFlat, "adaptive": session.AccelAdaptive}
-	vrrPolicies   = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
+	clickMethods     = map[string]session.ClickMethod{"none": session.ClickNone, "button_areas": session.ClickButtonAreas, "clickfinger": session.ClickFinger}
+	scrollMethods    = map[string]session.ScrollMethod{"none": session.ScrollNone, "two_finger": session.ScrollTwoFinger, "edge": session.ScrollEdge, "on_button_down": session.ScrollOnButtonDown}
+	accelProfiles    = map[string]session.AccelProfile{"flat": session.AccelFlat, "adaptive": session.AccelAdaptive}
+	vrrPolicies      = map[string]compositor.VRRPolicy{"off": compositor.VRROff, "on": compositor.VRROn, "fullscreen": compositor.VRRFullscreen}
+	activations      = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent, "ignore": wm.ActivateIgnore}
+	focusActivations = map[string]wm.ActivatePolicy{"focus": wm.ActivateFocus, "urgent": wm.ActivateUrgent}
 )
 
 func choice[T any](p *parser, a *At[string], key string, names map[string]T) *T {
@@ -1237,6 +1245,7 @@ func (p *parser) rule(i int, at At[rawRule]) wm.Rule {
 	}
 	rule.DimAround, rule.Blur, rule.Mica = r.DimAround, r.Blur, r.Mica
 	rule.Look = p.look(r.BlurLook, key+".blur_look")
+	rule.OnActivate = choice(p, r.OnActivate, key+".on_activate", activations)
 	if v := p.between(r.Opacity, key+".opacity", 0, 1, false); v != nil {
 		o := float32(*v)
 		rule.Opacity = &o
@@ -1357,6 +1366,9 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 	at.MinTrigger = p.nonNegative(raw.Autotile.MinTrigger, "autotile.min_trigger", at.MinTrigger)
 	at.Divisor = p.positive(raw.Autotile.Divisor, "autotile.divisor", at.Divisor)
 	cfg.WM.Gaps = p.gaps(raw.Gaps, cfg.WM.Gaps)
+	if v := choice(p, raw.Focus.OnActivate, "focus.on_activate", focusActivations); v != nil {
+		cfg.WM.OnActivate = *v
+	}
 	cfg.Animations = p.animations(raw.Animations, look.Motion)
 	cfg.Slower = make(map[render.Speed]compositor.Effects, len(compositor.SlowerSpeeds))
 	again := &parser{layered: l, palette: p.palette}

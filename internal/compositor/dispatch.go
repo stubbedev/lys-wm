@@ -102,7 +102,11 @@ func (c *Compositor) withWindow(id wm.WindowID, f func(*window) error) error {
 }
 
 func (c *Compositor) spawn(command string) error {
-	c.spawnWith(command, append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path()))
+	token, err := c.mintToken(true)
+	if err != nil {
+		return fmt.Errorf("compositor: exec %q: %w", command, err)
+	}
+	c.spawnWith(command, append(os.Environ(), "WAYLAND_DISPLAY="+c.display.Path(), "XDG_ACTIVATION_TOKEN="+token, "DESKTOP_STARTUP_ID="+token))
 	return nil
 }
 

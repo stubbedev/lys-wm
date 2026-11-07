@@ -847,6 +847,27 @@ another application holds, is refused, and a bind added on reload takes the
 trigger back. Nothing fires while the session is locked or a window inhibits
 shortcuts. Sandboxed applications do not see the protocol.
 
+## focus
+
+```yaml
+focus:
+  on_activate: focus
+```
+
+A window that asks for focus through `xdg_activation_v1` comes forward when its
+token was minted from a key press, click or touch in the client that had the
+keyboard or pointer, and keyboard focus has not moved since: lys-wm focuses it
+and shows its workspace on its output, as clicking a link in a chat client
+brings the browser forward. Any other activation marks the window urgent.
+`on_activate: urgent` marks it urgent even then. `focus` is the default; the
+`on_activate` rule key overrides it per window.
+
+`exec` binds, `autostart` commands and `lys-wmctl dispatch exec` hand the
+command a token in `XDG_ACTIVATION_TOKEN` and `DESKTOP_STARTUP_ID`. A window
+that presents it before it first maps opens on the workspace that was shown
+when the command ran, if that workspace still exists, even after a switch to
+another one. lys-wm keeps the newest 64 tokens.
+
 ## rules
 
 ```yaml
@@ -869,8 +890,9 @@ window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens
 `opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
 `decoration`'s. `tearing: true` or
 `tearing: false` overrides what the window asks for through
-`wp_tearing_control_v1` (see [tearing](#tearing)). Later rules override
-earlier ones.
+`wp_tearing_control_v1` (see [tearing](#tearing)). `on_activate: focus`,
+`urgent` or `ignore` overrides [`focus.on_activate`](#focus) for the window;
+`ignore` drops its activations altogether. Later rules override earlier ones.
 
 X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
 `jetbrains-idea`). Without a rule, a window floats when it has a parent
