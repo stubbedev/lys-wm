@@ -39,6 +39,8 @@ const usage = `usage: lys-wmctl [--socket <path>] <command>
   version                      print the IPC protocol version
   layers                       print the mapped layer surfaces (bars, wallpapers) as JSON
   devices                      print the input devices as JSON
+  binds                        print the binds with their chords, actions, flags and
+                               descriptions as JSON
   pickwindow                   wait for a click on a window and print its ID, or null;
                                Escape cancels
   watch [--snapshot]           print events as JSON lines until lys-wm exits; with
@@ -77,7 +79,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow, ipc.KindBinds}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {

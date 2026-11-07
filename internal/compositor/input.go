@@ -262,6 +262,14 @@ func (c *Compositor) inputKey(device string, e backend.Key) error {
 }
 
 func (c *Compositor) acceptKey(device string, e backend.Key) error {
+	err := c.takeKey(device, e)
+	if e.Pressed {
+		return err
+	}
+	return errors.Join(err, c.modifiersReleased())
+}
+
+func (c *Compositor) takeKey(device string, e backend.Key) error {
 	if err := c.seat.UseKeyboard(device); err != nil {
 		return err
 	}
@@ -280,7 +288,7 @@ func (c *Compositor) acceptKey(device string, e backend.Key) error {
 			return err
 		}
 	}
-	if bound, err := c.bindKey(e.Code, e.Pressed); bound || err != nil {
+	if bound, err := c.bindKey(e.Code, e.Pressed, e.Time); bound || err != nil {
 		return err
 	}
 	if taken, err := c.takeEscape(e.Code, e.Pressed); taken || err != nil {
@@ -320,6 +328,9 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 		c.consumed = append(c.consumed, e.Button)
 		return c.pickAtCursor()
 	}
+	if !e.Pressed {
+		c.bindButton(e.Button, false, e.Time)
+	}
 	if i := slices.Index(c.consumed, e.Button); !e.Pressed && i >= 0 {
 		c.consumed = slices.Delete(c.consumed, i, i+1)
 		released := errors.Join(c.releaseShortcuts(binds.Button{Code: e.Button}), c.releaseHotkeys(binds.Button{Code: e.Button}))
@@ -335,9 +346,7 @@ func (c *Compositor) inputButton(e backend.PointerButton) error {
 		c.consumed = append(c.consumed, e.Button)
 		return c.dismissGrabs()
 	}
-	if b, ok := c.match(binds.Button{Code: e.Button}); e.Pressed && ok {
-		c.consumed = append(c.consumed, e.Button)
-		c.run(b.Action, binds.Button{Code: e.Button}, wm.FocusClick)
+	if e.Pressed && c.bindButton(e.Button, true, e.Time) {
 		return nil
 	}
 	if e.Pressed && c.hotkeysOpen() {
@@ -379,9 +388,11 @@ func (c *Compositor) inputAxis(e backend.PointerAxis) error {
 		if e.Value < 0 {
 			dir = binds.ScrollUp
 		}
-		if b, ok := c.match(binds.Scroll{Dir: dir}); ok {
-			c.run(b.Action, binds.Scroll{Dir: dir}, wm.FocusOther)
-			return nil
+		if b, i, ok := c.match(binds.Scroll{Dir: dir}); ok {
+			c.fire(b, i, e.Time, binds.Scroll{Dir: dir}, wm.FocusOther)
+			if !b.Flags.Pass {
+				return nil
+			}
 		}
 	}
 	a := seat.Axis{Orientation: sw.WlPointerAxisVerticalScroll, Source: sw.WlPointerAxisSource(e.Source), Value: e.Value, Value120: e.Value120}

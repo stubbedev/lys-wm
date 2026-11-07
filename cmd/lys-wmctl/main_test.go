@@ -35,6 +35,7 @@ func TestParseArgs(t *testing.T) {
 		"layers":                     {Request: ipc.KindLayers},
 		"devices":                    {Request: ipc.KindDevices},
 		"pickwindow":                 {Request: ipc.KindPickWindow},
+		"binds":                      {Request: ipc.KindBinds},
 		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
 	} {
 		if got, err := parseArgs(splitArgs(args)); err != nil || !reflect.DeepEqual(got, want) {
@@ -55,7 +56,7 @@ type handler struct {
 }
 
 func (h *handler) Snapshot() ipc.Snapshot {
-	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize", ConfigProblems: ipc.ConfigProblems{Messages: []string{"c.yaml:3: colour: unknown key"}}}
+	return ipc.Snapshot{Windows: []ipc.Window{{ID: 3, AppID: "foot", Focused: true}}, Submap: "resize", Binds: []ipc.Bind{{Chord: "SUPER", Action: "exec launcher", Description: "Open the launcher", Flags: []string{"release"}}}, ConfigProblems: ipc.ConfigProblems{Messages: []string{"c.yaml:3: colour: unknown key"}}}
 }
 
 func (h *handler) PrepareDispatch(wm.Action) func() error { return nil }
@@ -119,6 +120,10 @@ func TestRunAgainstASocket(t *testing.T) {
 	out.Reset()
 	if err := run([]string{"submap"}, getenv, &out, io.Discard); err != nil || out.String() != "\"resize\"\n" {
 		t.Fatalf("submap printed %q, %v", out.String(), err)
+	}
+	out.Reset()
+	if err := run([]string{"binds"}, getenv, &out, io.Discard); err != nil || !strings.Contains(out.String(), `"description": "Open the launcher"`) {
+		t.Fatalf("binds printed %q, %v", out.String(), err)
 	}
 	out.Reset()
 	var warnings bytes.Buffer

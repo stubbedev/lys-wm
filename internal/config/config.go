@@ -552,9 +552,12 @@ type rawAutotile struct {
 }
 
 type rawBind struct {
-	Chord  *At[string]  `yaml:"chord"`
-	Action *At[string]  `yaml:"action"`
-	Flags  []At[string] `yaml:"flags"`
+	Chord       *At[string]  `yaml:"chord"`
+	Action      *At[string]  `yaml:"action"`
+	Flags       []At[string] `yaml:"flags"`
+	Description *At[string]  `yaml:"description"`
+	LongPress   *At[int]     `yaml:"long_press"`
+	Cooldown    *At[int]     `yaml:"cooldown"`
 }
 
 type rawGestures struct {
@@ -648,6 +651,7 @@ type Bind struct {
 	Line   int
 	Action wm.Action
 	Flags  binds.Flags
+	Desc   string
 }
 
 type Config struct {
@@ -1510,14 +1514,14 @@ func (p *parser) bind(submap string, i int, at At[rawBind], submaps map[string][
 	}
 	b.Action = a
 	for _, f := range r.Flags {
-		switch f.V {
-		case "locked":
-			b.Flags.Locked = true
-		case "repeating":
-			b.Flags.Repeating = true
-		default:
-			p.fail(f.Line, key+".flags", "unknown flag %q (locked, repeating)", f.V)
+		if !b.Flags.Set(f.V) {
+			p.fail(f.Line, key+".flags", "unknown flag %q (%s)", f.V, strings.Join(binds.FlagNames(), ", "))
 		}
+	}
+	b.Flags.LongPress = time.Duration(p.positive(r.LongPress, key+".long_press", 0)) * time.Millisecond
+	b.Flags.Cooldown = time.Duration(p.positive(r.Cooldown, key+".cooldown", 0)) * time.Millisecond
+	if r.Description != nil {
+		b.Desc = r.Description.V
 	}
 	return b
 }
@@ -1904,7 +1908,13 @@ func (c Config) resolveBinds(r binds.Resolver) ([]binds.Bind, error) {
 			errs = append(errs, &Error{File: file, Line: line, Key: "chord", Err: err})
 			continue
 		}
-		out = append(out, binds.Bind{Submap: b.Submap, Chord: chord, Flags: b.Flags, Action: b.Action})
+		bind, err := binds.Bind{Submap: b.Submap, Chord: chord, Text: b.Chord, Description: b.Desc, Flags: b.Flags, Action: b.Action}.Normalized()
+		if err != nil {
+			file, line := c.where(b.Line)
+			errs = append(errs, &Error{File: file, Line: line, Key: "flags", Err: err})
+			continue
+		}
+		out = append(out, bind)
 		src = append(src, b)
 	}
 	for _, d := range binds.Duplicates(out) {

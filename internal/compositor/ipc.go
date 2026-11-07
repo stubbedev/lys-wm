@@ -125,6 +125,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 	}
 	snap.Layers = c.ipcLayers()
 	snap.Devices = c.ipcDevices()
+	snap.Binds = c.ipcBinds
 	return snap
 }
 

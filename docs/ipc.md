@@ -12,7 +12,7 @@ lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl batch "workspace 2" "exec foot" # several actions, in order and at once
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
 lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see Upgrading in place
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | layers | devices | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | layers | devices | binds | version
 lys-wmctl watch [--snapshot]       # events as JSON lines, until lys-wm exits; the state first with --snapshot
 lys-wmctl pickwindow               # click a window to print its ID; Escape cancels
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
@@ -33,7 +33,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `layers`, `devices`, `pickwindow`, `dispatch` (which needs `action` or `actions`, see [Batches](#batches)), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `layers`, `devices`, `binds`, `pickwindow`, `dispatch` (which needs `action` or `actions`, see [Batches](#batches)), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
 [Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
 takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` (which takes `snapshot`, see [Events](#events)) and `capture`
@@ -112,7 +112,7 @@ action or its own request); `client_fullscreen` while it is told it is
 fullscreen, which a window under `fullscreen on fake` is while it stays in its
 tile.
 `inhibits_shortcuts` is true while the window holds a
-`zwp_keyboard_shortcuts_inhibitor_v1` that is active, so only `locked` binds
+`zwp_keyboard_shortcuts_inhibitor_v1` that is active, so only `locked` and `inhibit_proof` binds
 run while it has the keyboard (a shortcut recorder, a virtual machine).
 A minimized window stays on its workspace, and in the workspace's `windows`
 count, with `minimized` true and the `rect` it comes back to when floating.
@@ -176,6 +176,12 @@ is `none`, `exclusive` or `on_demand`.
 `capabilities` lists `keyboard`, `pointer`, `touch`, `tablet` and
 `tablet_pad`, as the device has them; a keyboard also has `layout`, the
 seat's active layout group, which every keyboard shares.
+
+`binds`: every bind of the loaded config, in config order, as
+`{"submap":"","chord":"SUPER","action":"global shell:launcher","description":"Open the launcher","flags":["release"],"cooldown_ms":150}`.
+`chord` is as written in the config; `flags` lists `locked`, `repeating`,
+`release`, `pass` and `inhibit_proof` as set (a lone modifier always has
+`release`); `long_press_ms` and `cooldown_ms` appear when set.
 
 `pickwindow`: waits for the next click and answers with the ID of the window
 under it, or `null` over no window (a bar, the wallpaper). The cursor is a
@@ -263,7 +269,7 @@ profile off the loop.
 has an `event` field and the fields below. With `"snapshot":true` it first
 writes the current state as events: an `output` (`added`) and a `workspace`
 for each output, `focusedoutput`, an `open` for each window, `focus`, the
-scratchpads, a `layer` (`open`) for each layer surface and the submap,
+scratchpads, a `layer` (`open`) for each layer surface, the binds and the submap,
 layout and locks, then the live events. Both are taken in one pass of the
 loop, so a window that maps meanwhile is in one or the other, never in
 neither. Events that happen together
@@ -295,6 +301,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `stack` | `window`, `stack` (index or `null`) | A window's front-to-back index on its output changed, or it was shown or hidden |
 | `focus` | `window` (ID or `null`) | Keyboard focus moved to another window, or to none |
 | `submap` | `submap` (`""` for the default binds) | The bind submap changed |
+| `binds` | `binds` (as in the `binds` query) | A reload changed the binds |
 | `layout` | `layout` (`index`, `name`) | The keyboard layout group changed |
 | `locks` | `locks` (`caps`, `num`, `scroll`) | Caps, Num or Scroll Lock turned on or off |
 | `reducedmotion` | `reduced_motion` | A reload turned `animations.reduced_motion` on or off |

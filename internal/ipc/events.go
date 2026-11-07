@@ -142,6 +142,9 @@ type (
 	BellEvent struct {
 		Window *wm.WindowID `json:"window"`
 	}
+	BindsEvent struct {
+		Binds []Bind `json:"binds"`
+	}
 	WindowMenuEvent struct {
 		Window wm.WindowID `json:"window"`
 		X      int         `json:"x"`
@@ -180,6 +183,7 @@ func (ScratchpadEvent) Name() string     { return "scratchpad" }
 func (LayerEvent) Name() string          { return "layer" }
 func (GroupEvent) Name() string          { return "group" }
 func (BellEvent) Name() string           { return "bell" }
+func (BindsEvent) Name() string          { return "binds" }
 
 func Encode(e Event) ([]byte, error) {
 	return AppendEvent(nil, e)
@@ -320,6 +324,9 @@ func Diff(prev, next Snapshot) []Event {
 		if !slices.Contains(next.ShowDesktop, o) {
 			out = append(out, ShowDesktopEvent{Output: o})
 		}
+	}
+	if !sameBinds(prev.Binds, next.Binds) {
+		out = append(out, BindsEvent{Binds: nonNil(next.Binds)})
 	}
 	if prev.Submap != next.Submap {
 		out = append(out, SubmapEvent{Submap: next.Submap})

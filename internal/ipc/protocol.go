@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -43,9 +44,10 @@ const (
 	KindLayers         Kind = "layers"
 	KindDevices        Kind = "devices"
 	KindPickWindow     Kind = "pickwindow"
+	KindBinds          Kind = "binds"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture, KindLayers, KindDevices, KindPickWindow}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture, KindLayers, KindDevices, KindPickWindow, KindBinds}
 
 type Request struct {
 	Request  Kind        `json:"request"`
@@ -363,6 +365,7 @@ type Snapshot struct {
 	Windows        []Window
 	Layers         []Layer
 	Devices        []Device
+	Binds          []Bind
 	Submap         string
 	Layout         Layout
 	Locks          Locks
@@ -414,6 +417,8 @@ func (s Snapshot) answer(k Kind) any {
 		return nonNil(s.Layers)
 	case KindDevices:
 		return nonNil(s.Devices)
+	case KindBinds:
+		return nonNil(s.Binds)
 	case KindConfigProblems:
 		return ConfigProblems{Rejected: s.ConfigProblems.Rejected, Messages: nonNil(s.ConfigProblems.Messages)}
 	}
@@ -432,4 +437,28 @@ func batchError(n, i int, action string, err error) error {
 		return err
 	}
 	return fmt.Errorf("action %d (%s): %w", i, action, err)
+}
+
+type Bind struct {
+	Submap      string   `json:"submap"`
+	Chord       string   `json:"chord"`
+	Action      string   `json:"action"`
+	Description string   `json:"description"`
+	Flags       []string `json:"flags"`
+	LongPressMS int64    `json:"long_press_ms,omitempty"`
+	CooldownMS  int64    `json:"cooldown_ms,omitempty"`
+}
+
+func BindOf(b binds.Bind) Bind {
+	return Bind{
+		Submap: b.Submap, Chord: b.Text, Action: b.Action.String(), Description: b.Description, Flags: b.Flags.Names(),
+		LongPressMS: b.Flags.LongPress.Milliseconds(), CooldownMS: b.Flags.Cooldown.Milliseconds(),
+	}
+}
+
+func sameBinds(a, b []Bind) bool {
+	return slices.EqualFunc(a, b, func(x, y Bind) bool {
+		return x.Submap == y.Submap && x.Chord == y.Chord && x.Action == y.Action && x.Description == y.Description &&
+			x.LongPressMS == y.LongPressMS && x.CooldownMS == y.CooldownMS && slices.Equal(x.Flags, y.Flags)
+	})
 }

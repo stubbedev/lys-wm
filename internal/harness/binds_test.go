@@ -27,8 +27,8 @@ const (
 )
 
 type bindSpec struct {
-	submap, chord, action string
-	flags                 binds.Flags
+	submap, chord, action, description string
+	flags                              binds.Flags
 }
 
 func withBinds(t testing.TB, specs ...bindSpec) func(*compositor.Config) {
@@ -42,7 +42,7 @@ func withBinds(t testing.TB, specs ...bindSpec) func(*compositor.Config) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfg.Binds = append(cfg.Binds, binds.Bind{Submap: s.submap, Chord: chord, Action: a, Flags: s.flags})
+			cfg.Binds = append(cfg.Binds, binds.Bind{Submap: s.submap, Chord: chord, Text: s.chord, Description: s.description, Action: a, Flags: s.flags})
 		}
 	}
 }

@@ -39,6 +39,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/hyprlandsurface"
 	"github.com/stubbedev/lys-wm/internal/idle"
 	"github.com/stubbedev/lys-wm/internal/inputmethod"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/outputmanagement"
@@ -262,6 +263,10 @@ type Compositor struct {
 	binds              binds.Map
 	submap             string
 	held               []uint32
+	armed              armedBind
+	bindFired          []bindFire
+	ipcBinds           []ipc.Bind
+	modRelease         *modRelease
 	repeat             repeat
 	slow               slowKeys
 	report             func(error)
@@ -465,7 +470,8 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 		cfg.Decor, cfg.Animations, cfg.Overview = e.Decor, e.Animations, e.Overview
 	}
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
-	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
+	c.report, c.seatConfig, c.outputRules = cfg.Report, cfg.Seat, cfg.Outputs
+	c.adoptBinds(m)
 	c.virtualConfig = cfg.VirtualOutputs
 	c.deviceOutputs = cfg.DeviceOutputs
 	c.colorManagement = cfg.ColorManagement

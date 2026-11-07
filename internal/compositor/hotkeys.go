@@ -318,5 +318,5 @@ func (c *Compositor) watchTap(code uint32, pressed bool) error {
 }
 
 func (c *Compositor) interruptTap() {
-	c.hotkeys.tap = nil
+	c.hotkeys.tap, c.armed = nil, armedBind{}
 }

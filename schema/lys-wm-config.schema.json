@@ -347,15 +347,27 @@
             "type": "string",
             "format": "lys-wm-chord"
           },
+          "cooldown": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
           "flags": {
             "type": "array",
             "items": {
               "type": "string",
               "enum": [
                 "locked",
-                "repeating"
+                "repeating",
+                "release",
+                "pass",
+                "inhibit_proof"
               ]
             }
+          },
+          "long_press": {
+            "type": "integer"
           }
         },
         "additionalProperties": false
@@ -4846,15 +4858,27 @@
               "type": "string",
               "format": "lys-wm-chord"
             },
+            "cooldown": {
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            },
             "flags": {
               "type": "array",
               "items": {
                 "type": "string",
                 "enum": [
                   "locked",
-                  "repeating"
+                  "repeating",
+                  "release",
+                  "pass",
+                  "inhibit_proof"
                 ]
               }
+            },
+            "long_press": {
+              "type": "integer"
             }
           },
           "additionalProperties": false

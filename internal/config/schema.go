@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/seat"
@@ -95,7 +96,7 @@ func builtInPalette() map[string]string {
 	return out
 }
 
-var bindFlags = annotation{enum: []string{"locked", "repeating"}}
+var bindFlags = annotation{enum: binds.FlagNames()}
 
 var actionAnn = annotation{format: actionFormat, actions: true}
 

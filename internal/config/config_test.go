@@ -258,7 +258,7 @@ func TestARejectedFileAlsoNamesItsUnknownKeys(t *testing.T) {
 
 func TestErrorsNameFileLineAndKey(t *testing.T) {
 	cases := map[string]string{
-		"binds:\n  - chord: Q\n    acton: kill\n":                               "t.yaml:3: binds[0].acton: unknown key (known: action, chord, flags)",
+		"binds:\n  - chord: Q\n    acton: kill\n":                               "t.yaml:3: binds[0].acton: unknown key (known: action, chord, cooldown, description, flags, long_press)",
 		"tabs:\n  urgent:\n    fg: red\n":                                       "t.yaml:3: tabs.urgent.fg: unknown key (known: background, text)",
 		"env:\n  LYS_WM_SOCKET: /x\n":                                           "t.yaml:2: env.LYS_WM_SOCKET: is set by lys-wm",
 		"env:\n  A=B: c\n":                                                      "t.yaml:2: env.A=B: is not a valid environment variable",
@@ -1390,5 +1390,36 @@ func TestADeviceOutputParsesIntoAnOutputMatch(t *testing.T) {
 	}
 	if _, err := Parse("t.yaml", []byte("input:\n  devices:\n    x:\n      output: \"\"\n")); err == nil || !strings.Contains(err.Error(), `t.yaml:4: input.devices."x".output:`) {
 		t.Fatalf("an empty output: %v", err)
+	}
+}
+
+func TestBindFlagsDescriptionsAndModifierTaps(t *testing.T) {
+	cfg := compositorOf(t, `binds:
+  - {chord: SUPER, action: exec launcher, description: Open the launcher}
+  - {chord: SUPER + Q, action: kill, flags: [release, pass, inhibit_proof], long_press: 400, cooldown: 250}
+`)
+	if len(cfg.Binds) != 2 {
+		t.Fatalf("binds %+v", cfg.Binds)
+	}
+	tap, q := cfg.Binds[0], cfg.Binds[1]
+	if tap.Chord.Trigger != (binds.Tap{Modifier: binds.ModSuper}) || !tap.Flags.Release || tap.Description != "Open the launcher" || tap.Text != "SUPER" {
+		t.Errorf("a lone SUPER: %+v", tap)
+	}
+	if want := (binds.Flags{Release: true, Pass: true, InhibitProof: true, LongPress: 400 * time.Millisecond, Cooldown: 250 * time.Millisecond}); q.Flags != want {
+		t.Errorf("flags %+v, want %+v", q.Flags, want)
+	}
+	for text, want := range map[string]string{
+		"binds:\n  - {chord: Q, action: kill, flags: [sometimes]}\n":              "t.yaml:2: binds[0].flags:",
+		"binds:\n  - {chord: Q, action: kill, long_press: 0}\n":                   "t.yaml:2: binds[0].long_press:",
+		"binds:\n  - {chord: Q, action: kill, flags: [release, repeating]}\n":     "release cannot repeat",
+		"binds:\n  - {chord: SUPER + mouse_up, action: kill, flags: [release]}\n": "a scroll has no release",
+	} {
+		file, err := Parse("t.yaml", []byte(text))
+		if err == nil {
+			_, err = file.Compositor(xkb.Keymaps{Seat: testenv.Keymap(t)}, testenv.Font(t))
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", text, err, want)
+		}
 	}
 }

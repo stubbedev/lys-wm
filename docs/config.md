@@ -912,14 +912,50 @@ trigger is a keysym from the first layout (`Return`, `Q`, `bracketleft`,
 `XF86AudioRaiseVolume`), `mouse:<button code>` (`mouse:272` is the left
 button) or `mouse_up`/`mouse_down` for the scroll wheel.
 
-`flags` takes `locked` (the bind works while the session is locked) and
-`repeating` (the action repeats while the key is held, at the keyboard
-repeat rate).
+A modifier on its own is a trigger too: `chord: SUPER` (or `SUPER_L`,
+`SUPER_R`, `ALT_L` and the like, which mean the same as the modifier name)
+fires when the modifier goes down and up again with no other key, button or
+scroll in between, so tapping SUPER can open a launcher while `SUPER + 1`
+still switches workspaces. Such a bind always fires on release, and the
+modifier still reaches the focused window. Modifiers before it are held
+around the tap: `CTRL + ALT` fires on tapping ALT with CTRL down.
+
+```yaml
+binds:
+  - {chord: SUPER, action: global shell:launcher, description: Open the launcher}
+  - {chord: SUPER + Q, action: kill, flags: [release]}
+  - {chord: SUPER + L, action: exec lock, long_press: 600}
+  - {chord: XF86AudioPlay, action: exec playerctl play-pause, flags: [pass]}
+  - {chord: SUPER + mouse_down, action: workspace e+1, cooldown: 150}
+```
+
+`flags` takes:
+
+- `locked`: the bind works while the session is locked.
+- `repeating`: the action repeats while the key is held, at the keyboard
+  repeat rate.
+- `release`: the bind fires when its key or button comes up, and only if no
+  other key, button or scroll came in between.
+- `pass`: the focused window gets the key, button or scroll as well; without
+  it a bind takes its trigger for itself.
+- `inhibit_proof`: the bind still runs while a window inhibits shortcuts,
+  without working on the lock screen as `locked` does.
+
+`long_press: <ms>` fires on release, and only when the key or button was held
+at least that long, measured on the input events' own timestamps.
+`cooldown: <ms>` ignores the bind when it fired less than that long ago, by
+the same timestamps; a scroll wheel that sends a burst of steps switches one
+workspace instead of several. A bind that fires on release (`release`,
+`long_press` or a lone modifier) cannot repeat, and a scroll has no release.
+
+`description` says what the bind does, for a cheat sheet: `lys-wmctl binds`
+and the IPC `binds` query list every bind with its chord, action, flags and
+description.
 
 A focused window that inhibits shortcuts (virtual machines, remote desktop
-clients) receives every key, button and scroll itself; only `locked` binds
-still run, so give the bind that takes focus back from such a window the
-`locked` flag.
+clients) receives every key, button and scroll itself; only `locked` and
+`inhibit_proof` binds still run, so give the bind that takes focus back from
+such a window one of those flags.
 
 Actions are listed in [actions.md](actions.md).
 
