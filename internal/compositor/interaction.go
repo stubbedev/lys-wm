@@ -41,7 +41,10 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 	if w == nil {
 		return nil
 	}
-	at := c.cursor.pixel()
+	return c.startDrag(w, mode, buttonInput{button.Code}, dragEdges(w, c.cursor.pixel()))
+}
+
+func dragEdges(w *window, at image.Point) wm.Edges {
 	mid := w.tile.Min.Add(w.tile.Size().Div(2))
 	horizontal, vertical := wm.EdgeLeft, wm.EdgeTop
 	if at.X >= mid.X {
@@ -50,7 +53,7 @@ func (c *Compositor) beginDrag(mode wm.DragMode, trigger binds.Trigger) error {
 	if at.Y >= mid.Y {
 		vertical = wm.EdgeBottom
 	}
-	return c.startDrag(w, mode, buttonInput{button.Code}, horizontal|vertical)
+	return horizontal | vertical
 }
 
 func (c *Compositor) clientDrag(w *window, mode wm.DragMode, by dragInput, edges wm.Edges) error {

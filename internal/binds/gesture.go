@@ -21,6 +21,7 @@ const (
 	PinchIn
 	PinchOut
 	PinchBoth
+	SwipeAny
 )
 
 type Drive uint8
@@ -31,7 +32,33 @@ const (
 	DriveZoom
 	DriveOverview
 	DriveView
+	DriveMove
+	DriveResize
 )
+
+type Edge uint8
+
+const (
+	NoEdge Edge = iota
+	EdgeTop
+	EdgeBottom
+	EdgeLeft
+	EdgeRight
+)
+
+func (e Edge) Inward() GestureDirection {
+	switch e {
+	case EdgeTop:
+		return SwipeDown
+	case EdgeBottom:
+		return SwipeUp
+	case EdgeLeft:
+		return SwipeRight
+	case EdgeRight:
+		return SwipeLeft
+	}
+	return NoDirection
+}
 
 type GestureBind struct {
 	Kind      backend.Gesture
@@ -41,6 +68,7 @@ type GestureBind struct {
 	Action    wm.Action
 	Modifiers ModifierSet
 	Mods      uint32
+	Edge      Edge
 }
 
 func ResolveGestures(all []GestureBind, r Resolver) ([]GestureBind, error) {
@@ -77,12 +105,18 @@ func (d GestureDirection) covers(actual GestureDirection) bool {
 		return actual == SwipeUp || actual == SwipeDown || actual == SwipeVertical
 	case PinchBoth:
 		return actual == PinchIn || actual == PinchOut || actual == PinchBoth
+	case SwipeAny:
+		return actual >= SwipeLeft && actual <= SwipeVertical || actual == SwipeAny
 	}
 	return d == actual
 }
 
 func (b GestureBind) Overlaps(o GestureBind) bool {
-	return b.Kind == o.Kind && b.Fingers == o.Fingers && b.Modifiers == o.Modifiers && (b.Direction.covers(o.Direction) || o.Direction.covers(b.Direction))
+	return b.Kind == o.Kind && b.Fingers == o.Fingers && b.Modifiers == o.Modifiers && b.Edge == o.Edge && (b.Direction.covers(o.Direction) || o.Direction.covers(b.Direction))
+}
+
+func (d GestureDirection) Horizontal() bool {
+	return d == SwipeLeft || d == SwipeRight || d == SwipeHorizontal
 }
 
 func (b GestureBind) along(dx, dy float64) float64 {

@@ -253,6 +253,8 @@ func annotations() map[string]annotation {
 		"gestures.swipe[].action":          actionAnn,
 		"gestures.pinch[].action":          actionAnn,
 		"gestures.hold[].action":           actionAnn,
+		"gestures.touch[].action":          actionAnn,
+		"gestures.edge_width":              atLeastAnn(1, compositor.DefaultEdgeWidth),
 	}
 	for k := range compositor.CornerCount {
 		out["hot_corners."+k.String()+".action"] = actionAnn

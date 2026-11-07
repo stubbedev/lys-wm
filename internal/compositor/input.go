@@ -449,19 +449,26 @@ func (c *Compositor) touchDown(d backend.Device, e backend.TouchDown) error {
 		return nil
 	}
 	p := c.touchPoint(c.inArea(area, e.X, e.Y))
-	s, local, _ := c.surfaceAt(p)
+	if c.touchGesture.claimed {
+		c.touches[e.ID] = touchAt{area: area, at: p}
+		c.touchGestureAdd(e.ID, area, p, nil)
+		return nil
+	}
+	s, local, w := c.surfaceAt(p)
 	if c.outsideGrab(s) {
 		return c.dismissGrabs()
 	}
-	if s == nil {
-		if c.overviewHolds() {
-			c.touches[e.ID] = touchAt{area: area, at: p}
-			return c.overviewPressed(0, e.ID, true, p)
-		}
-		return nil
+	if s == nil && c.overviewHolds() {
+		c.touches[e.ID] = touchAt{area: area, at: p}
+		return c.overviewPressed(0, e.ID, true, p)
 	}
 	c.touches[e.ID] = touchAt{area: area, at: p}
-	return c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
+	var err error
+	if s != nil {
+		err = c.seat.TouchDown(e.Time, e.ID, s, local.X, local.Y)
+	}
+	c.touchGestureAdd(e.ID, area, p, w)
+	return err
 }
 
 func (c *Compositor) touchMotion(e backend.TouchMotion) error {
@@ -480,6 +487,9 @@ func (c *Compositor) touchMotion(e backend.TouchMotion) error {
 	}
 	if c.overviewTouching(e.ID) {
 		return c.overviewMoved(t.at)
+	}
+	if taken, err := c.touchGestureMoved(e.ID, e.Time); taken || err != nil {
+		return err
 	}
 	s := c.seat.TouchSurface(e.ID)
 	if s == nil {
@@ -511,11 +521,17 @@ func (c *Compositor) touchUp(e backend.TouchUp) error {
 		return err
 	}
 	delete(c.touches, e.ID)
+	if taken, err := c.touchGestureUp(e.ID, e.Time); taken || err != nil {
+		return err
+	}
 	return c.seat.TouchUp(e.Time, e.ID)
 }
 
 func (c *Compositor) touchCancel() error {
 	var err error
+	if c.touchGesture.n > 0 {
+		err = c.endTouchGesture(c.clock(), true)
+	}
 	if c.overviewHolds() {
 		c.abandonOverviewPress()
 		err = c.scheduleAll()

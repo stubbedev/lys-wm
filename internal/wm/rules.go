@@ -203,6 +203,7 @@ type Props struct {
 	ScrollFactor                 *float64
 	MinSize, MaxSize             image.Point
 	KeepAspect                   *bool
+	TouchGestures                *bool
 	BlockOutFrom                 BlockFrom
 }
 
@@ -226,6 +227,7 @@ func (p Props) merged(r Props) Props {
 		p.MaxSize = r.MaxSize
 	}
 	p.KeepAspect = pick(p.KeepAspect, r.KeepAspect)
+	p.TouchGestures = pick(p.TouchGestures, r.TouchGestures)
 	if r.BlockOutFrom != BlockNone {
 		p.BlockOutFrom = r.BlockOutFrom
 	}

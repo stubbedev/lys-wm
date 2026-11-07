@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -142,7 +143,7 @@ func (c *Compositor) takeOverviewInput() error {
 	}
 	errs = append(errs, c.dismissGrabs(), c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame())
 	if len(c.touches) > 0 {
-		clear(c.touches)
+		maps.DeleteFunc(c.touches, func(id int32, _ touchAt) bool { return !c.touchGesture.holds(id) })
 		errs = append(errs, c.seat.TouchCancel())
 	}
 	errs = append(errs, c.refocus())

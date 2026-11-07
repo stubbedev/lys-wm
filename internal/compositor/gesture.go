@@ -11,17 +11,22 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-const DefaultGestureDistance = 400
+const (
+	DefaultGestureDistance = 400
+	DefaultEdgeWidth       = 16
+)
 
 type Gestures struct {
-	Binds    []binds.GestureBind
-	Distance float64
-	Natural  bool
-	Devices  map[string]bool
+	Binds     []binds.GestureBind
+	Touch     []binds.GestureBind
+	Distance  float64
+	EdgeWidth int
+	Natural   bool
+	Devices   map[string]bool
 }
 
 func DefaultGestures() Gestures {
-	return Gestures{Binds: DefaultGestureBinds(anim.Style{Kind: anim.Slide}), Distance: DefaultGestureDistance, Natural: true}
+	return Gestures{Binds: DefaultGestureBinds(anim.Style{Kind: anim.Slide}), Distance: DefaultGestureDistance, EdgeWidth: DefaultEdgeWidth, Natural: true}
 }
 
 func DefaultGestureBinds(workspaces anim.Style) []binds.GestureBind {
@@ -57,6 +62,7 @@ type gestureInput struct {
 	held       *workspaceSwitch
 	heldOn     *output.Output
 	overview   bool
+	dragAt     point
 }
 
 func (c *Compositor) gestureBegin(d backend.Device, e backend.GestureBegin) error {
@@ -97,7 +103,9 @@ func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
 		released = c.releaseHeld(at)
 	}
 	if step.Claimed {
-		claimed = c.claimGesture(step.Bind, at)
+		g := &c.gesture
+		g.dragAt = c.cursor
+		g.drive, claimed = c.claimGesture(step.Bind, at, gestureSource{o: c.outputAt(c.cursor), at: c.cursor, natural: g.natural, by: swipeInput{}}, &g.workspaces)
 	}
 	if step.Fire {
 		c.run(step.Bind.Action, nil, wm.FocusOther)
@@ -105,26 +113,75 @@ func (c *Compositor) gestureStep(step binds.Step, at time.Duration) error {
 	return errors.Join(cancelled, released, claimed)
 }
 
-func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration) error {
-	g := &c.gesture
+type gestureSource struct {
+	o       *output.Output
+	at      point
+	natural bool
+	by      dragInput
+}
+
+func (c *Compositor) claimGesture(b binds.GestureBind, at time.Duration, src gestureSource, slot *workspaceDrive) (driven, error) {
 	switch {
 	case b.Drive == binds.DriveWorkspaces && !c.overviewHolds():
-		g.drive = c.driveWorkspaces(at)
-		return nil
+		return c.driveWorkspaces(at, src, slot), nil
 	case b.Drive == binds.DriveView && !c.overviewHolds():
-		g.drive = c.driveView()
-		return c.releaseHeld(at)
+		return c.driveView(), c.releaseHeld(at)
 	case b.Drive == binds.DriveZoom:
-		g.drive = c.driveZoom()
-		return c.releaseHeld(at)
+		return c.driveZoom(), c.releaseHeld(at)
 	case b.Drive == binds.DriveOverview:
-		g.overview = false
+		c.gesture.overview = false
 		err := c.releaseHeld(at)
 		drive, opened := c.driveOverview(b, at)
-		g.drive = drive
-		return errors.Join(err, opened)
+		return drive, errors.Join(err, opened)
+	case b.Drive == binds.DriveMove:
+		drive, err := c.driveWindow(wm.DragMove, src)
+		return drive, errors.Join(err, c.releaseHeld(at))
+	case b.Drive == binds.DriveResize:
+		drive, err := c.driveWindow(wm.DragResize, src)
+		return drive, errors.Join(err, c.releaseHeld(at))
 	}
-	return c.releaseHeld(at)
+	return nil, c.releaseHeld(at)
+}
+
+type swipeInput struct{}
+
+func (swipeInput) at(c *Compositor) point { return c.gesture.dragAt }
+
+type windowDrive struct {
+	c  *Compositor
+	by dragInput
+}
+
+func (c *Compositor) driveWindow(mode wm.DragMode, src gestureSource) (driven, error) {
+	if c.interaction != nil || c.drag != nil {
+		return nil, nil
+	}
+	if err := c.landInFlight(); err != nil {
+		return nil, err
+	}
+	_, _, w := c.surfaceAt(src.at)
+	if w == nil {
+		return nil, nil
+	}
+	if err := c.startDrag(w, mode, src.by, dragEdges(w, src.at.pixel())); err != nil || c.interaction == nil {
+		return nil, err
+	}
+	return &windowDrive{c: c, by: src.by}, nil
+}
+
+func (d *windowDrive) moved(float64, time.Duration) error {
+	if !d.c.draggedBy(d.by) {
+		return nil
+	}
+	d.c.markDragged()
+	return d.c.scheduleAll()
+}
+
+func (d *windowDrive) released(time.Duration, bool) error {
+	if !d.c.draggedBy(d.by) {
+		return nil
+	}
+	return d.c.endDrag()
 }
 
 func (c *Compositor) releaseHeld(at time.Duration) error {
@@ -152,10 +209,15 @@ func (c *Compositor) swipeUpdate(e *backend.SwipeUpdate) error {
 		return c.seat.SwipeUpdate(e.Time, e.DX, e.DY)
 	}
 	err := c.gestureStep(step, e.Time)
-	if c.gesture.drive == nil || step.Travel == 0 {
+	g := &c.gesture
+	_, window := g.drive.(*windowDrive)
+	if window {
+		g.dragAt = point{g.dragAt.X + e.DX, g.dragAt.Y + e.DY}
+	}
+	if g.drive == nil || (step.Travel == 0 && !window) {
 		return err
 	}
-	return errors.Join(err, c.gesture.drive.moved(step.Travel/c.gestures.Distance, e.Time))
+	return errors.Join(err, g.drive.moved(step.Travel/c.gestures.Distance, e.Time))
 }
 
 func (c *Compositor) pinchUpdate(e *backend.PinchUpdate) error {
@@ -199,17 +261,18 @@ func (c *Compositor) endDrive() error {
 }
 
 type workspaceDrive struct {
-	c  *Compositor
-	o  *output.Output
-	sw *workspaceSwitch
+	c       *Compositor
+	o       *output.Output
+	sw      *workspaceSwitch
+	natural bool
 }
 
-func (c *Compositor) driveWorkspaces(at time.Duration) driven {
+func (c *Compositor) driveWorkspaces(at time.Duration, src gestureSource, slot *workspaceDrive) driven {
 	g := &c.gesture
 	sw, o := g.held, g.heldOn
 	g.held, g.heldOn = nil, nil
 	if o == nil {
-		if o = c.outputAt(c.cursor); o == nil {
+		if o = src.o; o == nil {
 			return nil
 		}
 	}
@@ -223,8 +286,8 @@ func (c *Compositor) driveWorkspaces(at time.Duration) driven {
 		sw.pos.Track(0, at)
 		c.switches[o] = sw
 	}
-	g.workspaces = workspaceDrive{c: c, o: o, sw: sw}
-	return &g.workspaces
+	*slot = workspaceDrive{c: c, o: o, sw: sw, natural: src.natural}
+	return slot
 }
 
 func (d *workspaceDrive) live() bool {
@@ -235,7 +298,7 @@ func (d *workspaceDrive) moved(delta float64, at time.Duration) error {
 	if !d.live() || d.c.shell.Locked() {
 		return nil
 	}
-	if d.c.gesture.natural {
+	if d.natural {
 		delta = -delta
 	}
 	sw, name := d.sw, d.o.Backend().Name()

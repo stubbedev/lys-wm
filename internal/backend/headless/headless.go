@@ -1018,6 +1018,18 @@ func (t *Touch) Motion(id int32, x, y float64) error {
 	return t.backend.emit(t, backend.TouchMotion{Time: now(), ID: id, X: x, Y: y})
 }
 
+func (t *Touch) DownAt(at time.Duration, id int32, o backend.Output, x, y float64) error {
+	return t.backend.emit(t, backend.TouchDown{Time: at, ID: id, Output: o, X: x, Y: y})
+}
+
+func (t *Touch) MotionAt(at time.Duration, id int32, x, y float64) error {
+	return t.backend.emit(t, backend.TouchMotion{Time: at, ID: id, X: x, Y: y})
+}
+
+func (t *Touch) UpAt(at time.Duration, id int32) error {
+	return t.backend.emit(t, backend.TouchUp{Time: at, ID: id})
+}
+
 func (t *Touch) Up(id int32) error {
 	return t.backend.emit(t, backend.TouchUp{Time: now(), ID: id})
 }

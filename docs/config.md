@@ -742,7 +742,7 @@ is drawn where it belongs at once.
 
 ## gestures
 
-Touchpad swipes, pinches and holds can drive lys-wm. A gesture nothing here
+Touchpad swipes, pinches and holds, and [touchscreen](#touchscreens) swipes, can drive lys-wm. A gesture nothing here
 claims goes to the window under the pointer, as `zwp_pointer_gestures_v1`.
 
 ```yaml
@@ -763,10 +763,10 @@ gestures:
 | `swipe` | Default: three fingers `horizontal` drive `workspaces` and `vertical` drive `overview`, or `vertical` drive `workspaces` and nothing drives `overview` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
 | `pinch`, `hold` | Default: none. The built-in config binds SUPER and a two-finger pinch to `drive: zoom` |
 | `fingers` | How many; at least 3 for a swipe, since two are scrolling, 2 for a pinch and 1 for a hold |
-| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal` or `vertical`. Pinch: `in`, `out` or `both`. A hold has none |
+| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal`, `vertical`, or `any` for `move` and `resize`. Pinch: `in`, `out` or `both`. A hold has none |
 | `modifiers` | Keys to hold, as in a chord: `SUPER + CTRL`. A gesture with modifiers is taken only while exactly those are held, ahead of one without, which matches whatever is held. Optional |
 | `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
-| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `overview`, swipes only, takes `up`, `down` or `vertical`; `zoom`, pinches only, takes `both` |
+| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `overview`, swipes only, takes `up`, `down` or `vertical`; `view`, swipes only, takes `horizontal`; `move` and `resize`, swipes only, take `any`; `zoom`, pinches only, takes `both` |
 | `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
 
 Two entries for the same finger count that could match the same movement are an
@@ -813,9 +813,45 @@ nearest column edge, on `windows_move`, and that column takes focus.
 pinch's scale, from the moment the fingers land: the client sees nothing of the
 gesture, and the level follows the fingers without animating, from 1 to 16.
 
+`drive: move` and `drive: resize` take the direction `any`: once the swipe is
+claimed, the window under the pointer (or under the fingers, on a touchscreen)
+moves or resizes with the fingers, as `movewindow` and `resizewindow` do with
+the mouse, and drops into the layout where the fingers lift.
+
 The fingers move the content unless `natural_scroll` is `false`, read from
 `input.devices` for that device and then `input.touchpad`. Left unset it counts as
 on for gestures, whatever libinput's default for scrolling is.
+
+### Touchscreens
+
+`touch` binds swipes on a touchscreen:
+
+```yaml
+gestures:
+  edge_width: 16
+  touch:
+    - {edge: bottom, drive: overview}
+    - {fingers: 3, direction: horizontal, drive: workspaces}
+    - {fingers: 3, direction: any, drive: move}
+```
+
+| Key | Value |
+| --- | --- |
+| `edge` | `top`, `bottom`, `left` or `right`: one finger that lands within `edge_width` of that edge of its output and swipes in from it. It has no `direction`; it goes in from its edge |
+| `fingers` | Instead of `edge`: that many fingers anywhere, at least 3, up to 10, since fewer pan and zoom in windows. It takes a `direction` as a touchpad swipe does |
+| `action`, `drive` | As for touchpad swipes; `zoom` is for pinches only |
+| `edge_width` | Pixels from an output's edge where an `edge` swipe starts. Default 16 |
+
+Every touch reaches the window under it the moment it lands, with no delay, so a
+finger that never makes a bound swipe stays the window's. Once the fingers travel
+about 12 pixels in a bound direction, lys-wm claims them: the windows holding them
+get `wl_touch.cancel` and see nothing more of that touch, and fingers that land
+while the swipe goes on join it. `drive: workspaces` and `drive: overview` follow
+the fingers the way they follow a touchpad, the content under the fingers, with
+the output's width or height as the whole way instead of `distance`, and settle
+by the fingers' velocity on release. A window with the rule key
+`touch_gestures: false` keeps every touch that starts on it, for drawing
+programs and others that handle several fingers themselves.
 
 ## hot_corners
 
@@ -1357,6 +1393,7 @@ state changes, never on a plain frame:
 | `scroll_factor` | Multiplies the window's scroll events, above 0 and below 100 |
 | `min_size`, `max_size` | `<w>x<h>` in pixels: lys-wm configures the window no smaller or larger |
 | `keep_aspect` | `true`: resizing the floating window keeps its aspect ratio |
+| `touch_gestures` | `false`: touches that start on the window stay with it; no [touch gesture](#touchscreens) claims them |
 | `block_out_from` | `screencast`: the window shows as a black shape in screen shares and other continuous captures, but in screenshots; `capture`: in every capture |
 
 Example: `{is_captured: true, border: {active: red}}` shows which window a

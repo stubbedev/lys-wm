@@ -93,7 +93,12 @@ func StartInherited(t *testing.T, configure func(*compositor.Config), modes ...b
 
 func StartUntraced(t *testing.T, modes ...backend.Mode) *Harness {
 	t.Helper()
-	return start(t, setup{open: softBackend, configure: func(*compositor.Config) {}}, modes...)
+	return StartUntracedWith(t, func(*compositor.Config) {}, modes...)
+}
+
+func StartUntracedWith(t *testing.T, configure func(*compositor.Config), modes ...backend.Mode) *Harness {
+	t.Helper()
+	return start(t, setup{open: softBackend, configure: configure}, modes...)
 }
 
 func glesBackend(l *loop.Loop) (*headless.Backend, error) {

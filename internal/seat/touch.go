@@ -18,8 +18,9 @@ type touchPoint struct {
 }
 
 type touchState struct {
-	points []touchPoint
-	framed []*server.Client
+	points    []touchPoint
+	framed    []*server.Client
+	cancelled []*server.Client
 }
 
 func (s *Seat) TouchSurface(id int32) *surface.Surface {
@@ -130,6 +131,29 @@ func (s *Seat) TouchCancel() error {
 	}
 	s.touch.points = nil
 	return s.touchClients((*sw.WlTouch).SendCancel)
+}
+
+// CancelTouches sends wl_touch.cancel to the clients holding any of ids, which
+// ends every touch point those clients hold.
+func (s *Seat) CancelTouches(ids []int32) error {
+	t := &s.touch
+	t.cancelled = t.cancelled[:0]
+	for _, p := range t.points {
+		if slices.Contains(ids, p.id) && !slices.Contains(t.cancelled, p.surface.Client()) {
+			t.cancelled = append(t.cancelled, p.surface.Client())
+		}
+	}
+	t.points = slices.DeleteFunc(t.points, func(p touchPoint) bool { return slices.Contains(t.cancelled, p.surface.Client()) })
+	t.framed = slices.DeleteFunc(t.framed, func(c *server.Client) bool { return slices.Contains(t.cancelled, c) })
+	var errs error
+	for _, c := range t.cancelled {
+		if r := s.lookup(c); r != nil {
+			for _, wt := range r.touches {
+				errs = errors.Join(errs, wt.SendCancel())
+			}
+		}
+	}
+	return errs
 }
 
 func (r seatRequests) GetTouch(obj *sw.WlSeat, t *sw.WlTouch) (sw.WlTouchHandler, error) {

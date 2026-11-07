@@ -1454,3 +1454,50 @@ func TestLayoutScrollAndWorkspaceLayoutsParse(t *testing.T) {
 		}
 	}
 }
+
+func TestTouchGesturesParseIntoEdgeAndFingerBinds(t *testing.T) {
+	cfg, err := Parse("t.yaml", []byte(`gestures:
+  edge_width: 24
+  swipe:
+    - {fingers: 3, direction: any, drive: move}
+  touch:
+    - {edge: bottom, drive: overview}
+    - {edge: left, action: "workspace prev"}
+    - {fingers: 3, direction: horizontal, drive: workspaces}
+    - {fingers: 4, direction: any, drive: resize}
+rules:
+  - {app_id: krita, touch_gestures: false}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := cfg.Gestures
+	if g.EdgeWidth != 24 || len(g.Touch) != 4 || len(g.Binds) != 1 || g.Binds[0].Drive != binds.DriveMove || g.Binds[0].Direction != binds.SwipeAny {
+		t.Fatalf("gestures %+v", g)
+	}
+	if b := g.Touch[0]; b.Edge != binds.EdgeBottom || b.Fingers != 1 || b.Direction != binds.SwipeUp || b.Drive != binds.DriveOverview {
+		t.Errorf("bottom edge %+v", b)
+	}
+	if b := g.Touch[1]; b.Edge != binds.EdgeLeft || b.Direction != binds.SwipeRight || b.Action == nil {
+		t.Errorf("left edge %+v", b)
+	}
+	if b := g.Touch[3]; b.Fingers != 4 || b.Drive != binds.DriveResize {
+		t.Errorf("four fingers %+v", b)
+	}
+	if v := cfg.Rules[0].TouchGestures; v == nil || *v {
+		t.Errorf("touch_gestures rule %v", v)
+	}
+	for text, want := range map[string]string{
+		"gestures:\n  touch:\n    - {edge: left, drive: workspaces}\n":                            "workspaces goes both ways",
+		"gestures:\n  touch:\n    - {edge: left, direction: up, action: kill}\n":                  "an edge swipe goes in from its edge",
+		"gestures:\n  touch:\n    - {fingers: 2, direction: up, action: kill}\n":                  "at least 3 fingers",
+		"gestures:\n  touch:\n    - {edge: top, fingers: 3, action: kill}\n":                      "exactly one of edge and fingers",
+		"gestures:\n  touch:\n    - {fingers: 3, direction: up, drive: move}\n":                   "takes the direction any",
+		"gestures:\n  swipe:\n    - {fingers: 3, direction: any, action: kill}\n":                 "any only drives move or resize",
+		"gestures:\n  touch:\n    - {edge: top, action: kill}\n    - {edge: top, action: kill}\n": "overlaps an earlier touch swipe",
+	} {
+		if _, err := Parse("t.yaml", []byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", text, err, want)
+		}
+	}
+}

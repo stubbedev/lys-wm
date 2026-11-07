@@ -417,6 +417,7 @@ type Compositor struct {
 	hot                hotCornerState
 	hold               dragHold
 	gesture            gestureInput
+	touchGesture       touchGesture
 	shownWorkspace     map[string]wm.WorkspaceID
 	shaders            map[string]*screenShader
 	configProblems     ConfigProblems

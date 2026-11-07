@@ -587,10 +587,20 @@ type rawBind struct {
 }
 
 type rawGestures struct {
-	Swipe    []At[rawGesture] `yaml:"swipe"`
-	Pinch    []At[rawGesture] `yaml:"pinch"`
-	Hold     []At[rawGesture] `yaml:"hold"`
-	Distance *At[float64]     `yaml:"distance"`
+	Swipe     []At[rawGesture]      `yaml:"swipe"`
+	Pinch     []At[rawGesture]      `yaml:"pinch"`
+	Hold      []At[rawGesture]      `yaml:"hold"`
+	Touch     []At[rawTouchGesture] `yaml:"touch"`
+	Distance  *At[float64]          `yaml:"distance"`
+	EdgeWidth *At[int]              `yaml:"edge_width"`
+}
+
+type rawTouchGesture struct {
+	Edge      *At[string] `yaml:"edge"`
+	Fingers   *At[int]    `yaml:"fingers"`
+	Direction *At[string] `yaml:"direction"`
+	Action    *At[string] `yaml:"action"`
+	Drive     *At[string] `yaml:"drive"`
 }
 
 type rawGesture struct {
@@ -620,40 +630,41 @@ func (m rawMatch) empty() bool {
 }
 
 type rawRule struct {
-	rawMatch     `yaml:",inline"`
-	Exclude      *At[rawMatch]    `yaml:"exclude"`
-	Workspace    *At[string]      `yaml:"workspace"`
-	Output       *At[string]      `yaml:"output"`
-	Focus        *bool            `yaml:"focus"`
-	Fullscreen   *bool            `yaml:"fullscreen"`
-	Maximized    *bool            `yaml:"maximized"`
-	Position     *At[string]      `yaml:"position"`
-	Group        *At[string]      `yaml:"group"`
-	Suppress     []At[string]     `yaml:"suppress"`
-	Pin          *bool            `yaml:"pin"`
-	Border       *rawRuleBorder   `yaml:"border"`
-	Rounding     *At[int]         `yaml:"rounding"`
-	Shadow       *bool            `yaml:"shadow"`
-	DimInactive  *bool            `yaml:"dim_inactive"`
-	Animation    *At[rawRuleAnim] `yaml:"animation"`
-	IdleInhibit  *At[string]      `yaml:"idle_inhibit"`
-	VRR          *bool            `yaml:"vrr"`
-	ScrollFactor *At[float64]     `yaml:"scroll_factor"`
-	MinSize      *At[string]      `yaml:"min_size"`
-	MaxSize      *At[string]      `yaml:"max_size"`
-	KeepAspect   *bool            `yaml:"keep_aspect"`
-	BlockOutFrom *At[string]      `yaml:"block_out_from"`
-	Float        bool             `yaml:"float"`
-	Tile         bool             `yaml:"tile"`
-	Size         *At[string]      `yaml:"size"`
-	Tearing      *bool            `yaml:"tearing"`
-	Opacity      *At[float64]     `yaml:"opacity"`
-	DimAround    bool             `yaml:"dim_around"`
-	Blur         *bool            `yaml:"blur"`
-	BlurLook     rawLook          `yaml:"blur_look"`
-	Mica         *bool            `yaml:"mica"`
-	OnActivate   *At[string]      `yaml:"on_activate"`
-	Content      *At[string]      `yaml:"content"`
+	rawMatch      `yaml:",inline"`
+	Exclude       *At[rawMatch]    `yaml:"exclude"`
+	Workspace     *At[string]      `yaml:"workspace"`
+	Output        *At[string]      `yaml:"output"`
+	Focus         *bool            `yaml:"focus"`
+	Fullscreen    *bool            `yaml:"fullscreen"`
+	Maximized     *bool            `yaml:"maximized"`
+	Position      *At[string]      `yaml:"position"`
+	Group         *At[string]      `yaml:"group"`
+	Suppress      []At[string]     `yaml:"suppress"`
+	Pin           *bool            `yaml:"pin"`
+	Border        *rawRuleBorder   `yaml:"border"`
+	Rounding      *At[int]         `yaml:"rounding"`
+	Shadow        *bool            `yaml:"shadow"`
+	DimInactive   *bool            `yaml:"dim_inactive"`
+	Animation     *At[rawRuleAnim] `yaml:"animation"`
+	IdleInhibit   *At[string]      `yaml:"idle_inhibit"`
+	VRR           *bool            `yaml:"vrr"`
+	ScrollFactor  *At[float64]     `yaml:"scroll_factor"`
+	MinSize       *At[string]      `yaml:"min_size"`
+	MaxSize       *At[string]      `yaml:"max_size"`
+	KeepAspect    *bool            `yaml:"keep_aspect"`
+	TouchGestures *bool            `yaml:"touch_gestures"`
+	BlockOutFrom  *At[string]      `yaml:"block_out_from"`
+	Float         bool             `yaml:"float"`
+	Tile          bool             `yaml:"tile"`
+	Size          *At[string]      `yaml:"size"`
+	Tearing       *bool            `yaml:"tearing"`
+	Opacity       *At[float64]     `yaml:"opacity"`
+	DimAround     bool             `yaml:"dim_around"`
+	Blur          *bool            `yaml:"blur"`
+	BlurLook      rawLook          `yaml:"blur_look"`
+	Mica          *bool            `yaml:"mica"`
+	OnActivate    *At[string]      `yaml:"on_activate"`
+	Content       *At[string]      `yaml:"content"`
 }
 
 type Error struct {
@@ -1556,14 +1567,20 @@ func (p *parser) bind(submap string, i int, at At[rawBind], submaps map[string][
 	return b
 }
 
+const minTouchFingers = 3
+
 var swipeDirections = map[string]binds.GestureDirection{
 	"left": binds.SwipeLeft, "right": binds.SwipeRight, "up": binds.SwipeUp, "down": binds.SwipeDown,
 	"horizontal": binds.SwipeHorizontal, "vertical": binds.SwipeVertical,
+	"any": binds.SwipeAny,
 }
 
 var pinchDirections = map[string]binds.GestureDirection{"in": binds.PinchIn, "out": binds.PinchOut, "both": binds.PinchBoth}
 
-var gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview, "view": binds.DriveView}
+var (
+	gestureDrives = map[string]binds.Drive{"workspaces": binds.DriveWorkspaces, "zoom": binds.DriveZoom, "overview": binds.DriveOverview, "view": binds.DriveView, "move": binds.DriveMove, "resize": binds.DriveResize}
+	touchEdges    = map[string]binds.Edge{"top": binds.EdgeTop, "bottom": binds.EdgeBottom, "left": binds.EdgeLeft, "right": binds.EdgeRight}
+)
 
 func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, at At[rawGesture], directions map[string]binds.GestureDirection) (binds.GestureBind, bool) {
 	r := at.V
@@ -1589,30 +1606,47 @@ func (p *parser) gesture(kind backend.Gesture, name string, minFingers, i int, a
 			b.Direction = *d
 		}
 	}
-	switch {
-	case (r.Action == nil) == (r.Drive == nil):
-		p.fail(at.Line, key, "takes exactly one of action and drive")
-	case r.Drive != nil:
-		if d := choice(p, r.Drive, key+".drive", gestureDrives); d != nil {
-			b.Drive = *d
-		}
-		if b.Drive == binds.DriveZoom {
-			if kind != backend.Pinch || b.Direction != binds.PinchBoth {
-				p.fail(r.Drive.Line, key+".drive", "only a pinch can drive zoom, and it goes both ways, so it takes the direction both")
-			}
-		} else if kind != backend.Swipe {
-			p.fail(r.Drive.Line, key+".drive", "only a swipe can drive something")
-		} else if b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical {
-			p.fail(r.Drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
-		} else if b.Drive == binds.DriveView && b.Direction != binds.SwipeHorizontal {
-			p.fail(r.Drive.Line, key+".drive", "view scrolls sideways, so it takes the direction horizontal")
-		} else if b.Drive == binds.DriveOverview && b.Direction != binds.SwipeVertical && b.Direction != binds.SwipeUp && b.Direction != binds.SwipeDown {
-			p.fail(r.Drive.Line, key+".drive", "overview takes the direction up, down or vertical")
-		}
-	default:
-		b.Action = p.nonDragAction(*r.Action, key+".action")
-	}
+	p.gestureTarget(&b, r.Action, r.Drive, at.Line, key)
 	return b, len(p.errs) == failures
+}
+
+func (p *parser) gestureTarget(b *binds.GestureBind, action, drive *At[string], line int, key string) {
+	switch {
+	case (action == nil) == (drive == nil):
+		p.fail(line, key, "takes exactly one of action and drive")
+		return
+	case action != nil:
+		if b.Direction == binds.SwipeAny {
+			p.fail(action.Line, key+".direction", "any only drives move or resize")
+		}
+		b.Action = p.nonDragAction(*action, key+".action")
+		return
+	}
+	d := choice(p, drive, key+".drive", gestureDrives)
+	if d == nil {
+		return
+	}
+	b.Drive = *d
+	switch {
+	case b.Drive == binds.DriveZoom:
+		if b.Kind != backend.Pinch || b.Direction != binds.PinchBoth {
+			p.fail(drive.Line, key+".drive", "only a pinch can drive zoom, and it goes both ways, so it takes the direction both")
+		}
+	case b.Kind != backend.Swipe:
+		p.fail(drive.Line, key+".drive", "only a swipe can drive something")
+	case b.Drive == binds.DriveMove || b.Drive == binds.DriveResize:
+		if b.Direction != binds.SwipeAny {
+			p.fail(drive.Line, key+".drive", "a window follows the fingers every way, so %s takes the direction any", drive.V)
+		}
+	case b.Direction == binds.SwipeAny:
+		p.fail(drive.Line, key+".direction", "any only drives move or resize")
+	case b.Drive == binds.DriveWorkspaces && b.Direction != binds.SwipeHorizontal && b.Direction != binds.SwipeVertical:
+		p.fail(drive.Line, key+".drive", "workspaces goes both ways, so it takes the direction horizontal or vertical")
+	case b.Drive == binds.DriveView && b.Direction != binds.SwipeHorizontal:
+		p.fail(drive.Line, key+".drive", "view scrolls sideways, so it takes the direction horizontal")
+	case b.Drive == binds.DriveOverview && b.Direction != binds.SwipeVertical && b.Direction != binds.SwipeUp && b.Direction != binds.SwipeDown:
+		p.fail(drive.Line, key+".drive", "overview takes the direction up, down or vertical")
+	}
 }
 
 func (p *parser) gestures(r rawGestures, input rawInput, workspaces anim.Style) compositor.Gestures {
@@ -1659,7 +1693,51 @@ func (p *parser) gestures(r rawGestures, input rawInput, workspaces anim.Style) 
 			g.Binds = append(g.Binds, b)
 		}
 	}
+	g.EdgeWidth = p.positive(r.EdgeWidth, "gestures.edge_width", g.EdgeWidth)
+	for i, raw := range r.Touch {
+		b, ok := p.touchGesture(i, raw)
+		if !ok {
+			continue
+		}
+		if slices.ContainsFunc(g.Touch, b.Overlaps) {
+			p.fail(raw.Line, fmt.Sprintf("gestures.touch[%d]", i), "overlaps an earlier touch swipe")
+			continue
+		}
+		g.Touch = append(g.Touch, b)
+	}
 	return g
+}
+
+func (p *parser) touchGesture(i int, at At[rawTouchGesture]) (binds.GestureBind, bool) {
+	r := at.V
+	key := fmt.Sprintf("gestures.touch[%d]", i)
+	failures := len(p.errs)
+	b := binds.GestureBind{Kind: backend.Swipe}
+	switch {
+	case (r.Edge == nil) == (r.Fingers == nil):
+		p.fail(at.Line, key, "takes exactly one of edge and fingers")
+	case r.Edge != nil:
+		if r.Direction != nil {
+			p.fail(r.Direction.Line, key+".direction", "an edge swipe goes in from its edge")
+		}
+		if e := choice(p, r.Edge, key+".edge", touchEdges); e != nil {
+			b.Edge, b.Fingers, b.Direction = *e, 1, e.Inward()
+		}
+	case r.Fingers.V < minTouchFingers:
+		p.fail(r.Fingers.Line, key+".fingers", "%d is not a touch swipe; it takes at least %d fingers, since fewer pan and zoom in windows", r.Fingers.V, minTouchFingers)
+	case r.Direction == nil:
+		p.fail(at.Line, key+".direction", "is missing")
+	default:
+		b.Fingers = uint32(min(r.Fingers.V, compositor.MaxGestureTouches))
+		if r.Fingers.V > compositor.MaxGestureTouches {
+			p.fail(r.Fingers.Line, key+".fingers", "%d is more fingers than the %d lys-wm follows", r.Fingers.V, compositor.MaxGestureTouches)
+		}
+		if d := choice(p, r.Direction, key+".direction", swipeDirections); d != nil {
+			b.Direction = *d
+		}
+	}
+	p.gestureTarget(&b, r.Action, r.Drive, at.Line, key)
+	return b, len(p.errs) == failures
 }
 
 func (p *parser) regexp(a *At[string], key string) *regexp.Regexp {
@@ -2111,6 +2189,7 @@ func (p *parser) props(r rawRule, key string) wm.Props {
 		props.Rounding = &rounding
 	}
 	props.Shadow, props.DimInactive, props.VRR, props.KeepAspect = r.Shadow, r.DimInactive, r.VRR, r.KeepAspect
+	props.TouchGestures = r.TouchGestures
 	props.Animation = p.animation(r.Animation, key)
 	if v := choice(p, r.IdleInhibit, key+".idle_inhibit", idleInhibits); v != nil {
 		props.IdleInhibit = *v
