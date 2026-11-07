@@ -253,6 +253,31 @@ rules say, and their workspaces move to the other outputs; opening the lid
 brings the panel back under its rule. libinput turns off the internal keyboard
 and touchpad while the lid is closed.
 
+## virtual_outputs
+
+Outputs that exist only in memory, made when lys-wm starts and kept across
+reloads, for streaming a second screen to a tablet or another PC (Sunshine,
+wayvnc, RustDesk) or a screencast at a size of its own:
+
+```yaml
+virtual_outputs:
+  - name: tablet
+    mode: 2048x1536
+```
+
+| Key | Value |
+| --- | --- |
+| `name` | The output's name, which [`outputs`](#outputs) rules match like a connector's. Required, and unique |
+| `mode` | `<width>x<height>` or `<width>x<height>@<hz>`, 60 Hz without a rate. Required |
+
+They behave as those `lys-wmctl output create` makes ([Virtual
+outputs](./ipc#virtual-outputs)): placed like a monitor, rendering only while
+something captures them. A reload adds the new ones, removes those it no
+longer lists, and makes again one whose mode changed; `output remove`
+refuses them. A name another output already has is reported and skipped. An
+[upgrade](./guide/upgrade) closes them and the new binary makes them again
+from its config.
+
 ## input.keyboard
 
 | Key | Value |

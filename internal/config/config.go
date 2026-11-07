@@ -127,6 +127,7 @@ type rawConfig struct {
 	PowerSaverRate  *At[int]                     `yaml:"power_saver_frame_rate"`
 	HoldOpening     bool                         `yaml:"hold_opening"`
 	Outputs         []At[rawOutput]              `yaml:"outputs"`
+	VirtualOutputs  []At[rawVirtualOutput]       `yaml:"virtual_outputs"`
 	Input           rawInput                     `yaml:"input"`
 	Palette         map[string]At[string]        `yaml:"palette"`
 	Borders         rawBorders                   `yaml:"borders"`
@@ -222,6 +223,11 @@ type rawFocus struct {
 type rawXwayland struct {
 	Enabled     *bool `yaml:"enabled"`
 	ZeroScaling *bool `yaml:"zero_scaling"`
+}
+
+type rawVirtualOutput struct {
+	Name *At[string] `yaml:"name"`
+	Mode *At[string] `yaml:"mode"`
 }
 
 type rawOutput struct {
@@ -656,6 +662,7 @@ type Config struct {
 	NumLock         bool
 	Input           session.InputConfig
 	Outputs         compositor.OutputRules
+	VirtualOutputs  []compositor.VirtualOutput
 	ColorManagement bool
 	ClientHotkeys   bool
 	HiddenFrame     time.Duration
@@ -1826,6 +1833,7 @@ func ParseLayers(accent render.Color, layers ...Layer) (Config, error) {
 		}
 		fallback, cfg.Outputs.Fallback = true, rule
 	}
+	cfg.VirtualOutputs = p.virtualOutputs(raw.VirtualOutputs)
 	for i, b := range raw.Binds {
 		cfg.Binds = append(cfg.Binds, p.bind("", i, b, raw.Submaps))
 	}
@@ -1901,6 +1909,7 @@ func (c Config) Compositor(keymaps xkb.Keymaps, font *gtext.Typeface) (composito
 	cfg.Seat.StickyKeys, cfg.Seat.SlowKeys = c.StickyKeys, c.SlowKeys
 	cfg.Seat.NumLock, cfg.Seat.Devices = c.NumLock, keymaps.Devices
 	cfg.WM, cfg.Binds, cfg.Decor, cfg.Rules, cfg.Outputs, cfg.Tearing = c.WM, b, c.Decor, c.Rules, c.Outputs, c.Tearing
+	cfg.VirtualOutputs = c.VirtualOutputs
 	cfg.ColorManagement = c.ColorManagement
 	cfg.ClientHotkeys = c.ClientHotkeys
 	cfg.HiddenFrame, cfg.HoldOpening = c.HiddenFrame, c.HoldOpening
@@ -2262,4 +2271,35 @@ func (p *parser) outputCorners(a *At[rawOutputCorners], key string, global compo
 		set = p.cornerSet(a.V.rawCornerSet, key, global)
 	}
 	return &set
+}
+
+const defaultVirtualRefreshMHz = 60000
+
+func (p *parser) virtualOutputs(raw []At[rawVirtualOutput]) []compositor.VirtualOutput {
+	out := make([]compositor.VirtualOutput, 0, len(raw))
+	for i, at := range raw {
+		key := fmt.Sprintf("virtual_outputs[%d]", i)
+		v := at.V
+		switch {
+		case v.Name == nil || v.Name.V == "":
+			p.fail(at.Line, key+".name", "is missing; give the output a name, such as VIRT-1")
+			continue
+		case v.Mode == nil:
+			p.fail(at.Line, key+".mode", "is missing; give <width>x<height>[@<hz>]")
+			continue
+		case slices.ContainsFunc(out, func(o compositor.VirtualOutput) bool { return o.Name == v.Name.V }):
+			p.fail(v.Name.Line, key+".name", "%q names an earlier virtual output too", v.Name.V)
+			continue
+		}
+		m, err := ipc.ParseMode(v.Mode.V)
+		if err != nil {
+			p.fail(v.Mode.Line, key+".mode", "%q is not <width>x<height>[@<hz>]", v.Mode.V)
+			continue
+		}
+		if m.RefreshMHz == 0 {
+			m.RefreshMHz = defaultVirtualRefreshMHz
+		}
+		out = append(out, compositor.VirtualOutput{Name: v.Name.V, Size: image.Pt(m.Width, m.Height), RefreshMHz: m.RefreshMHz})
+	}
+	return out
 }

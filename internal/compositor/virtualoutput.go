@@ -3,6 +3,7 @@ package compositor
 import (
 	"errors"
 	"fmt"
+	"image"
 	"slices"
 	"strconv"
 
@@ -15,8 +16,15 @@ import (
 const virtualOutputPrefix = "VIRT-"
 
 type virtualOutput struct {
-	out   *virtual.Output
-	scale output.Scale
+	out        *virtual.Output
+	scale      output.Scale
+	configured bool
+}
+
+type VirtualOutput struct {
+	Name       string
+	Size       image.Point
+	RefreshMHz int32
 }
 
 func (c *Compositor) CreateOutput(spec ipc.OutputSpec) (ipc.CreatedOutput, error) {
@@ -35,15 +43,22 @@ func (c *Compositor) CreateOutput(spec ipc.OutputSpec) (ipc.CreatedOutput, error
 	case c.outputNamed(name):
 		return ipc.CreatedOutput{}, fmt.Errorf("compositor: create output %s: an output of that name exists", name)
 	}
-	o, err := virtual.New(c.loop, c.renderer, c, name, backend.Mode{Size: spec.Size, RefreshMHz: spec.RefreshMHz})
-	if err != nil {
-		return ipc.CreatedOutput{}, fmt.Errorf("compositor: create output %s: %w", name, err)
-	}
-	c.virtualOutputs = append(c.virtualOutputs, virtualOutput{out: o, scale: scale})
-	if err := c.OutputAdded(o); err != nil {
-		return ipc.CreatedOutput{}, errors.Join(fmt.Errorf("compositor: create output %s: %w", name, err), c.RemoveOutput(name))
+	if err := c.addVirtual(VirtualOutput{Name: name, Size: spec.Size, RefreshMHz: spec.RefreshMHz}, scale, false); err != nil {
+		return ipc.CreatedOutput{}, err
 	}
 	return ipc.CreatedOutput{Name: name}, nil
+}
+
+func (c *Compositor) addVirtual(v VirtualOutput, scale output.Scale, configured bool) error {
+	o, err := virtual.New(c.loop, c.renderer, c, v.Name, backend.Mode{Size: v.Size, RefreshMHz: v.RefreshMHz})
+	if err != nil {
+		return fmt.Errorf("compositor: create output %s: %w", v.Name, err)
+	}
+	c.virtualOutputs = append(c.virtualOutputs, virtualOutput{out: o, scale: scale, configured: configured})
+	if err := c.OutputAdded(o); err != nil {
+		return errors.Join(fmt.Errorf("compositor: create output %s: %w", v.Name, err), c.dropVirtual(v.Name))
+	}
+	return nil
 }
 
 func (c *Compositor) RemoveOutput(name string) error {
@@ -54,9 +69,42 @@ func (c *Compositor) RemoveOutput(name string) error {
 		}
 		return fmt.Errorf("compositor: remove output %s: no output of that name", name)
 	}
+	if c.virtualOutputs[i].configured {
+		return fmt.Errorf("compositor: remove output %s: the config's virtual_outputs keeps it; remove it there", name)
+	}
+	return c.dropVirtual(name)
+}
+
+func (c *Compositor) dropVirtual(name string) error {
+	i := slices.IndexFunc(c.virtualOutputs, func(v virtualOutput) bool { return v.out.Name() == name })
 	o := c.virtualOutputs[i].out
 	c.virtualOutputs = slices.Delete(c.virtualOutputs, i, i+1)
 	return errors.Join(c.OutputRemoved(o), o.Close())
+}
+
+func (c *Compositor) syncVirtualOutputs() error {
+	var errs []error
+	for _, v := range slices.Clone(c.virtualOutputs) {
+		if v.configured && !slices.Contains(c.virtualConfig, v.config()) {
+			errs = append(errs, c.dropVirtual(v.out.Name()))
+		}
+	}
+	for _, want := range c.virtualConfig {
+		if slices.ContainsFunc(c.virtualOutputs, func(v virtualOutput) bool { return v.configured && v.out.Name() == want.Name }) {
+			continue
+		}
+		if c.outputNamed(want.Name) {
+			errs = append(errs, fmt.Errorf("compositor: virtual output %s from the config: an output of that name exists", want.Name))
+			continue
+		}
+		errs = append(errs, c.addVirtual(want, 0, true))
+	}
+	return errors.Join(errs...)
+}
+
+func (v virtualOutput) config() VirtualOutput {
+	mode := v.out.State().Mode
+	return VirtualOutput{Name: v.out.Name(), Size: mode.Size, RefreshMHz: mode.RefreshMHz}
 }
 
 func (c *Compositor) outputNamed(name string) bool {
@@ -113,8 +161,9 @@ func (c *Compositor) closeVirtualOutputs() error {
 }
 
 func (c *Compositor) refuseVirtualHandover() error {
-	if len(c.virtualOutputs) == 0 {
+	i := slices.IndexFunc(c.virtualOutputs, func(v virtualOutput) bool { return !v.configured })
+	if i < 0 {
 		return nil
 	}
-	return fmt.Errorf("compositor: virtual output %s cannot move to another binary; remove it first", c.virtualOutputs[0].out.Name())
+	return fmt.Errorf("compositor: virtual output %s cannot move to another binary; remove it first", c.virtualOutputs[i].out.Name())
 }

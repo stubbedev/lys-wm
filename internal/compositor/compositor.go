@@ -78,6 +78,7 @@ type Config struct {
 	Rules           []wm.Rule
 	Swallow         Swallow
 	Outputs         OutputRules
+	VirtualOutputs  []VirtualOutput
 	ColorManagement bool
 	Tearing         bool
 	Hooks           Hooks
@@ -266,6 +267,7 @@ type Compositor struct {
 	outputRules        OutputRules
 	disabled           []backend.Output
 	virtualOutputs     []virtualOutput
+	virtualConfig      []VirtualOutput
 	powerSaver         bool
 	powerSaverRate     int
 	hooks              Hooks
@@ -462,6 +464,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	}
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules, c.binds = cfg.Report, cfg.Seat, cfg.Outputs, m
+	c.virtualConfig = cfg.VirtualOutputs
 	c.colorManagement = cfg.ColorManagement
 	c.clientHotkeys = cfg.ClientHotkeys
 	c.tearing, c.icons, c.inheritTimeout, c.holdBound = cfg.Tearing, cfg.Icons, cfg.InheritTimeout, cfg.HoldBound
@@ -666,6 +669,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if err := b.Start(c); err != nil {
 		return fmt.Errorf("start backend: %w", err)
 	}
+	if err := c.syncVirtualOutputs(); err != nil {
+		c.report(err)
+	}
 	return nil
 }
 
@@ -686,7 +692,7 @@ func (c *Compositor) Reconfigure(cfg Config) error {
 	c.outputOverrides = nil
 	c.submap = ""
 	c.stateChanged()
-	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.syncHotkeys(), c.applyOutputRules(), c.scheduleAll())
+	err = errors.Join(gestureErr, c.effects.Offer(!c.decor.Blur.Withhold), c.dropDecor(), c.dropShaders(), c.seat.Reconfigure(pending), c.repeat.stop(), c.syncColorManagement(), c.syncHotkeys(), c.applyOutputRules(), c.syncVirtualOutputs(), c.scheduleAll())
 	for _, o := range c.outputs {
 		c.shaderOf(o)
 	}

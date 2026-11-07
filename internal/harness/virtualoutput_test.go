@@ -312,3 +312,63 @@ func TestANestedSessionAddsAndRemovesAVirtualOutput(t *testing.T) {
 	n.do(func(c *compositor.Compositor) error { return c.RemoveOutput("VIRT-1") })
 	n.eventually("the virtual output gone", func(c *compositor.Compositor) bool { return len(c.Outputs()) == 1 })
 }
+
+func TestTheConfigKeepsVirtualOutputsAcrossReloads(t *testing.T) {
+	t.Parallel()
+	var cfg compositor.Config
+	var reported []error
+	tablet := compositor.VirtualOutput{Name: "tablet", Size: image.Pt(200, 120), RefreshMHz: 30000}
+	h := StartWith(t, func(c *compositor.Config) {
+		c.VirtualOutputs = []compositor.VirtualOutput{tablet}
+		c.Report = func(err error) { reported = append(reported, err) }
+		cfg = *c
+	}, small)
+	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	if len(outputs) != 2 || outputs[0].Name != "HEADLESS-1" {
+		t.Fatalf("outputs at start %+v, want the monitor first", outputs)
+	}
+	if got := outputNamed(t, outputs, "tablet"); got.Mode != (ipc.Mode{Width: 200, Height: 120, RefreshMHz: 30000}) || got.Rect.X != small.Size.X {
+		t.Fatalf("the configured virtual output is %+v", got)
+	}
+	if err := h.removeOutput("tablet"); err == nil || !strings.Contains(err.Error(), "virtual_outputs keeps it") {
+		t.Fatalf("removing a configured virtual output: %v", err)
+	}
+	h.createOutput(ipc.Request{Name: "extra", Mode: &virtualMode})
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		if _, err := c.HandoverState(nil, nil); err == nil || !strings.Contains(err.Error(), "virtual output extra cannot move") {
+			t.Errorf("an upgrade with a virtual output made by createoutput: %v", err)
+		}
+		return nil
+	})
+	if err := h.removeOutput("extra"); err != nil {
+		t.Fatal(err)
+	}
+
+	resized := tablet
+	resized.Size = image.Pt(300, 200)
+	cfg.VirtualOutputs = []compositor.VirtualOutput{resized, {Name: "HEADLESS-1", Size: image.Pt(10, 10), RefreshMHz: 60000}}
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Reconfigure(cfg) })
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		if len(reported) != 1 || !strings.Contains(reported[0].Error(), "virtual output HEADLESS-1 from the config: an output of that name exists") {
+			t.Errorf("a configured virtual output named after a monitor reported %v", reported)
+		}
+		reported = nil
+		return nil
+	})
+	outputs = query[[]ipc.Output](h, ipc.KindOutputs)
+	if got := outputNamed(t, outputs, "tablet"); len(outputs) != 2 || got.Mode.Width != 300 || got.Mode.Height != 200 {
+		t.Fatalf("after the reload resized it: %+v", outputs)
+	}
+
+	cfg.VirtualOutputs = nil
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Reconfigure(cfg) })
+	if outputs := query[[]ipc.Output](h, ipc.KindOutputs); len(outputs) != 1 {
+		t.Fatalf("after the reload dropped it: %+v", outputs)
+	}
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		if len(reported) != 0 {
+			t.Errorf("reported %v", reported)
+		}
+		return nil
+	})
+}

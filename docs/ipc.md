@@ -229,7 +229,8 @@ nobody watches costs no GPU work.
 workspaces and windows move to the remaining outputs, as when a monitor is
 unplugged, and its captures stop. Only virtual outputs can be removed. They
 last until removed or until lys-wm exits, and an [upgrade](./guide/upgrade)
-is refused while any exists.
+is refused while any exists. For outputs that last, list them under
+[`virtual_outputs`](./config#virtual_outputs) in the config.
 
 ## Debugging a running session
 

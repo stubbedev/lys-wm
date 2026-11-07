@@ -4950,6 +4950,21 @@
       "type": "boolean",
       "default": false
     },
+    "virtual_outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "workspaces": {
       "type": "array",
       "items": {
