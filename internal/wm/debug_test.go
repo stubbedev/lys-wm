@@ -40,3 +40,17 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestCastTargetRefusesBadArguments(t *testing.T) {
+	for text, want := range map[string]string{
+		"casttarget":                 "takes window, output or clear",
+		"casttarget screen":          `"screen" is not window, output or clear`,
+		"casttarget clear now":       `clear takes nothing more`,
+		"casttarget window zero":     `window ID "zero" is not a positive number`,
+		"casttarget output DP-1 HDR": "at most one more argument",
+	} {
+		if _, err := ParseAction(text); !errors.Is(err, ErrBadAction) || !strings.Contains(err.Error(), want) {
+			t.Errorf("ParseAction(%q) = %v, want %q", text, err, want)
+		}
+	}
+}

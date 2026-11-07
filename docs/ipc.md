@@ -12,7 +12,7 @@ lys-wmctl dispatch workspace 3     # any action from actions.md
 lys-wmctl batch "workspace 2" "exec foot" # several actions, in order and at once
 lys-wmctl reload                   # the same as: lys-wmctl dispatch reload
 lys-wmctl upgrade <path>           # move the session to the lys-wm at path; see Upgrading in place
-lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | layers | devices | binds | version
+lys-wmctl outputs | workspaces | windows | activewindow | submap | layout | locks | reducedmotion | overview | scratchpads | configproblems | layers | devices | casttarget | binds | version
 lys-wmctl watch [--snapshot]       # events as JSON lines, until lys-wm exits; the state first with --snapshot
 lys-wmctl pickwindow               # click a window to print its ID; Escape cancels
 lys-wmctl icon 7 64                # window 7's icon buffer closest to 64 pixels
@@ -33,7 +33,7 @@ then the server closes it:
 ```
 
 `request` is one of `version`, `outputs`, `workspaces`, `windows`,
-`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `layers`, `devices`, `binds`, `pickwindow`, `dispatch` (which needs `action` or `actions`, see [Batches](#batches)), `icon` (which needs
+`activewindow`, `submap`, `layout`, `locks`, `reducedmotion`, `overview`, `scratchpads`, `configproblems`, `layers`, `devices`, `binds`, `pickwindow`, `casttarget`, `dispatch` (which needs `action` or `actions`, see [Batches](#batches)), `icon` (which needs
 `window` and `size`), `upgrade` (which needs `binary`, and takes `drop_x11`; see
 [Upgrading in place](./guide/upgrade)), `createoutput` (which needs `mode`, and
 takes `name` and `scale`), `removeoutput` (which needs `name`), `watch` (which takes `snapshot`, see [Events](#events)) and `capture`
@@ -185,6 +185,18 @@ seat's active layout group, which every keyboard shares.
 `release`, `pass` and `inhibit_proof` as set (a lone modifier always has
 `release`); `long_press_ms` and `cooldown_ms` appear when set.
 
+`casttarget`: what the dynamic screencast source shows, `{"kind":"window","window":7}`,
+`{"kind":"output","output":"DP-1"}` or `{"kind":"none"}`. The `casttarget` action
+([actions](./actions)) sets it. A capture client creates the source with
+`lys_dynamic_capture_source_manager_v1.create_source` (lys-lib's
+`lys-dynamic-capture-v1.xml`, a privileged global) and opens an
+ext-image-copy-capture session on it as on any source: the session waits for
+the first target, then follows each change without stopping, sending new
+buffer constraints only when the size changes and a whole-buffer damage on the
+first frame after each change. A window target follows its window across
+workspaces and outputs; when it closes, or an output target goes, the target
+clears, and frames are black at the last size until the next one.
+
 `pickwindow`: waits for the next click and answers with the ID of the window
 under it, or `null` over no window (a bar, the wallpaper). The cursor is a
 crosshair meanwhile, and no client sees the pointer or the click. Escape
@@ -296,6 +308,7 @@ shows, the focused output, windows, focus, submap, layout, locks and reduced mot
 | `group` | `window`, `group` (as in `windows`, or `null`) | A window entered, left or moved within a container: tiled, floated, grouped with `makegroup`, or a sibling came or went before it |
 | `layer` | `change` (`open`, `close`), `id`, `namespace`, `output`, `layer` | A layer surface mapped or went away; the fields are as in `layers` |
 | `bell` | `window` (ID or `null`) | A client rang the system bell (`xdg_system_bell_v1`), for its window or for none |
+| `casttarget` | `target` (as in `casttarget`) | The dynamic screencast target changed: the `casttarget` action, or its window closed or its output went |
 | `pin` | `window`, `pinned` | A window was pinned to its output (the `pin` action) or unpinned |
 | `swallow` | `window`, `swallowed_by` | A terminal was swallowed by the window started from it (`swallowed_by` its ID) or came back (`swallowed_by` 0) |
 | `minimized` | `window`, `minimized` | A window was minimized, or came back |

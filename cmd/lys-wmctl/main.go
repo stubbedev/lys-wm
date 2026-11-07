@@ -79,7 +79,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow, ipc.KindBinds}
+var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow, ipc.KindBinds, ipc.KindCastTarget}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {

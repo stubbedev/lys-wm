@@ -641,6 +641,7 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 	closeErr = errors.Join(closeErr, c.dropJelly(w))
 	c.windows = slices.DeleteFunc(c.windows, func(x *window) bool { return x == w })
 	c.stack = slices.DeleteFunc(c.stack, func(x *window) bool { return x == w })
+	closeErr = errors.Join(closeErr, c.castGone(w, nil))
 	focused := c.active == w
 	if focused {
 		c.active = nil

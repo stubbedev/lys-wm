@@ -44,10 +44,11 @@ const (
 	KindLayers         Kind = "layers"
 	KindDevices        Kind = "devices"
 	KindPickWindow     Kind = "pickwindow"
+	KindCastTarget     Kind = "casttarget"
 	KindBinds          Kind = "binds"
 )
 
-var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture, KindLayers, KindDevices, KindPickWindow, KindBinds}
+var kinds = []Kind{KindVersion, KindOutputs, KindWorkspaces, KindWindows, KindActiveWindow, KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindDispatch, KindWatch, KindIcon, KindOverview, KindScratchpads, KindConfigProblems, KindUpgrade, KindCreateOutput, KindRemoveOutput, KindCapture, KindLayers, KindDevices, KindPickWindow, KindBinds, KindCastTarget}
 
 type Request struct {
 	Request  Kind        `json:"request"`
@@ -314,6 +315,20 @@ type Layer struct {
 	Keyboard  KeyboardInteractivity `json:"keyboard_interactivity"`
 }
 
+type CastKind string
+
+const (
+	CastNone   CastKind = "none"
+	CastWindow CastKind = "window"
+	CastOutput CastKind = "output"
+)
+
+type CastTarget struct {
+	Kind   CastKind    `json:"kind"`
+	Window wm.WindowID `json:"window,omitempty"`
+	Output string      `json:"output,omitempty"`
+}
+
 type Capability string
 
 const (
@@ -367,6 +382,7 @@ type Snapshot struct {
 	ShowDesktop    []string
 	Windows        []Window
 	Layers         []Layer
+	CastTarget     CastTarget
 	Devices        []Device
 	Binds          []Bind
 	MRU            []wm.WindowID
@@ -422,6 +438,8 @@ func (s Snapshot) answer(k Kind) any {
 		return nonNil(s.Layers)
 	case KindDevices:
 		return nonNil(s.Devices)
+	case KindCastTarget:
+		return s.CastTarget
 	case KindBinds:
 		return nonNil(s.Binds)
 	case KindConfigProblems:

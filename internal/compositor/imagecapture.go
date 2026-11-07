@@ -353,7 +353,7 @@ func (s *captureSession) sync() error {
 }
 
 func (s *captureSession) noteDamage(o *output.Output, frame *region.Set, cursorOnly bool) {
-	src, ok := s.source.(outputSource)
+	src, ok := s.c.resolved(s.source).(outputSource)
 	if s.stopped || !ok || src.output != o || (cursorOnly && !s.cursor) {
 		return
 	}
@@ -393,7 +393,7 @@ func (c *Compositor) noteCommit(sf *surface.Surface) error {
 	var errs []error
 	errs = append(errs, c.noteWindowCopies(sf))
 	for _, s := range c.captureSessions {
-		src, ok := s.source.(windowSource)
+		src, ok := c.resolved(s.source).(windowSource)
 		if !ok || s.stopped || !c.inWindow(src.window, sf) || !s.oneshot && c.decision(src.window).BlockOutFrom.Blocks(true) {
 			continue
 		}
@@ -431,7 +431,7 @@ func (c *Compositor) noteCursor(o *output.Output, repaint bool) error {
 			}
 		}
 		s.cursorAt = box
-		if _, window := s.source.(windowSource); window || !repaint {
+		if _, window := c.resolved(s.source).(windowSource); window || !repaint {
 			errs = append(errs, c.wakeCaptures(o))
 		}
 	}
@@ -559,7 +559,7 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 	}
 	k.done = func(at time.Duration, err error) error {
 		if err == nil {
-			if src, ok := s.source.(windowSource); ok {
+			if src, ok := s.c.resolved(s.source).(windowSource); ok {
 				return errors.Join(f.ready(at, damage), s.c.captured(src.window, at))
 			}
 			return f.ready(at, damage)

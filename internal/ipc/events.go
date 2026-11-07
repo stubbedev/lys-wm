@@ -142,6 +142,9 @@ type (
 	BellEvent struct {
 		Window *wm.WindowID `json:"window"`
 	}
+	CastTargetEvent struct {
+		Target CastTarget `json:"target"`
+	}
 	MRUEvent struct {
 		Windows []wm.WindowID `json:"windows"`
 	}
@@ -191,6 +194,7 @@ func (ScratchpadEvent) Name() string     { return "scratchpad" }
 func (LayerEvent) Name() string          { return "layer" }
 func (GroupEvent) Name() string          { return "group" }
 func (BellEvent) Name() string           { return "bell" }
+func (CastTargetEvent) Name() string     { return "casttarget" }
 func (BindsEvent) Name() string          { return "binds" }
 func (MRUEvent) Name() string            { return "mru" }
 func (SwitcherEvent) Name() string       { return "switcher" }
@@ -358,6 +362,9 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	if prev.Overview != next.Overview {
 		out = append(out, OverviewEvent{Open: next.Overview})
+	}
+	if prev.CastTarget != next.CastTarget {
+		out = append(out, CastTargetEvent{Target: next.CastTarget})
 	}
 	if prev.ConfigProblems.Rejected != next.ConfigProblems.Rejected || !slices.Equal(prev.ConfigProblems.Messages, next.ConfigProblems.Messages) {
 		out = append(out, ConfigProblemsEvent{ConfigProblems{Rejected: next.ConfigProblems.Rejected, Messages: nonNil(next.ConfigProblems.Messages)}})

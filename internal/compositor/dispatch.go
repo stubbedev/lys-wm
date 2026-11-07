@@ -96,6 +96,8 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return c.debugOverlay(e)
 	case wm.DebugRecordAction:
 		return c.debugRecord(e)
+	case wm.CastTargetAction:
+		return c.castTargetAction(e)
 	case wm.ReloadAction:
 		if c.hooks.Reload == nil {
 			return errors.New("no config file to reload")

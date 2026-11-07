@@ -339,7 +339,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	b := o.Backend()
 	c.outputs = slices.DeleteFunc(c.outputs, func(x *output.Output) bool { return x == o })
 	delete(c.shown, o)
-	var errs []error
+	errs := []error{c.castGone(nil, o)}
 	if hw, ok := c.hwCursors[o]; ok {
 		errs = append(errs, hw.release())
 		delete(c.hwCursors, o)

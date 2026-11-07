@@ -139,6 +139,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		})
 	}
 	snap.Layers = c.ipcLayers()
+	snap.CastTarget = c.ipcCastTarget()
 	snap.Devices = c.ipcDevices()
 	snap.Binds = c.ipcBinds
 	snap.MRU = slices.Clone(c.mru.order)

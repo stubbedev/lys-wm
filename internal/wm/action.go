@@ -1066,6 +1066,11 @@ var Actions = []ActionSpec{
 		parse:   parseDebug,
 	},
 	{
+		Name: "casttarget", Args: "<window [id]|output [name]|clear>",
+		Summary: "Point the dynamic screencast source at a window, the focused one unless given, or an output, the focused one unless given, or at nothing. A stream on that source (lys_dynamic_capture_v1) follows without stopping. When the window closes or the output goes, the target clears and the stream shows nothing until the next one.",
+		parse:   parseCastTarget,
+	},
+	{
 		Name:    "focuslast",
 		Summary: "Focus the window focused before the focused one, showing its workspace; pressed again, it toggles between the two.",
 		parse:   bare(FocusLastAction{}),

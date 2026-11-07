@@ -109,6 +109,9 @@ lys_capture_hint_manager_v1 = journal retire=
 lys_capture_hint_manager_v1.destroy = destructor
 lys_capture_hint_manager_v1.oneshot_session = dropped
 lys_capture_hint_manager_v1.oneshot_screencopy = dropped
+lys_dynamic_capture_source_manager_v1 = journal retire=
+lys_dynamic_capture_source_manager_v1.destroy = destructor
+lys_dynamic_capture_source_manager_v1.create_source = create
 lys_escape_arm_v1 = journal retire=
 lys_escape_arm_v1.destroy = destructor
 lys_escape_manager_v1 = journal retire=
