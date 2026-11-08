@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -237,7 +239,7 @@ func accepting(socket string) bool {
 
 func (c *compositor) stop(ask bool) error {
 	if ask && c.socket != "" {
-		_, _ = ipc.Do(c.socket, ipc.Request{Request: ipc.KindDispatch, Action: "exit"})
+		_, _ = ipc.Do(c.socket, ipc.Request{Request: wmipc.KindDispatch, Action: "exit"})
 	} else {
 		_ = c.cmd.Process.Signal(syscall.SIGTERM)
 	}

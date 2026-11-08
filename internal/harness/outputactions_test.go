@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -15,14 +17,14 @@ import (
 
 func (h *Harness) ctl(action string) {
 	h.t.Helper()
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: action}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: action}); err != nil {
 		h.t.Fatalf("lys-wmctl dispatch %s: %v", action, err)
 	}
 }
 
 func workspaceOn(h *Harness, id wm.WorkspaceID) ipc.Workspace {
 	h.t.Helper()
-	all := query[[]ipc.Workspace](h, ipc.KindWorkspaces)
+	all := query[[]ipc.Workspace](h, wmipc.KindWorkspaces)
 	i := slices.IndexFunc(all, func(w ipc.Workspace) bool { return w.ID == id })
 	if i < 0 {
 		h.t.Fatalf("IPC lists no workspace %d: %+v", id, all)
@@ -49,7 +51,7 @@ func TestWindowsAndWorkspacesMoveBetweenOutputs(t *testing.T) {
 	h.Eventually("blue at the left edge of the second output's tree", func(x *headless.Backend, comp *compositor.Compositor) bool {
 		return showingOn(1, 20, 50, blue)(x, comp) && showingOn(1, 140, 50, green)(x, comp) && showingOn(0, 140, 50, red)(x, comp) && !comp.Holding()
 	})
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "blue" || w.Workspace != 2 {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Title != "blue" || w.Workspace != 2 {
 		t.Fatalf("after move right the active window is %+v, want blue on workspace 2", w)
 	}
 	if w := workspaceOn(h, 2); w.Windows != 2 || w.Output != "HEADLESS-2" || !w.Focused {
@@ -63,7 +65,7 @@ func TestWindowsAndWorkspacesMoveBetweenOutputs(t *testing.T) {
 	if w := workspaceOn(h, 2); w.Output != "HEADLESS-1" || !w.Visible || !w.Focused {
 		t.Fatalf("workspace 2 after moving it left is %+v", w)
 	}
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "blue" {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Title != "blue" {
 		t.Fatalf("moving the workspace moved focus to %+v", w)
 	}
 	watcher.DispatchUntil("ext-workspace puts workspace 2 in the first output's group", func() bool {
@@ -76,7 +78,7 @@ func TestWindowsAndWorkspacesMoveBetweenOutputs(t *testing.T) {
 	})
 	h.ctl("focusoutput right")
 	h.ctl("movetooutput left")
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "blue" || w.Output != "HEADLESS-1" {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Title != "blue" || w.Output != "HEADLESS-1" {
 		t.Fatalf("movetooutput left left focus on %+v", w)
 	}
 }
@@ -122,7 +124,7 @@ func TestMoveToWorkspaceFollowRunsOneSwitch(t *testing.T) {
 	h.Eventually("workspace 3 in place with blue alone", func(x *headless.Backend, comp *compositor.Compositor) bool {
 		return showing(20, 60, blue)(x, comp) && showing(140, 60, blue)(x, comp)
 	})
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "blue" || w.Workspace != 3 {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Title != "blue" || w.Workspace != 3 {
 		t.Fatalf("the followed window is %+v", w)
 	}
 	before := framesOn(h, 0)

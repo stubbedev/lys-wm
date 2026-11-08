@@ -8,24 +8,26 @@ import (
 	"net"
 	"path/filepath"
 	"time"
+
+	"github.com/stubbedev/lys-lib/wmipc"
 )
 
 var ErrNoSocket = errors.New("ipc: no lys-wm socket")
 
 func FindSocket(getenv func(string) string) (string, error) {
-	if path := getenv(SocketEnv); path != "" {
+	if path := getenv(wmipc.SocketEnv); path != "" {
 		return path, nil
 	}
 	dir := getenv("XDG_RUNTIME_DIR")
 	if !filepath.IsAbs(dir) {
-		return "", fmt.Errorf("%w: neither %s nor XDG_RUNTIME_DIR is set", ErrNoSocket, SocketEnv)
+		return "", fmt.Errorf("%w: neither %s nor XDG_RUNTIME_DIR is set", ErrNoSocket, wmipc.SocketEnv)
 	}
 	matches, err := filepath.Glob(filepath.Join(dir, "lys-wm", "*.sock"))
 	if err != nil {
 		return "", fmt.Errorf("ipc: look for sockets: %w", err)
 	}
 	if len(matches) != 1 {
-		return "", fmt.Errorf("%w: %s is unset and %s holds %d sockets %v", ErrNoSocket, SocketEnv, filepath.Join(dir, "lys-wm"), len(matches), matches)
+		return "", fmt.Errorf("%w: %s is unset and %s holds %d sockets %v", ErrNoSocket, wmipc.SocketEnv, filepath.Join(dir, "lys-wm"), len(matches), matches)
 	}
 	return matches[0], nil
 }
@@ -74,12 +76,12 @@ func (cn *conn) response() (json.RawMessage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ipc: read the response: %w", err)
 	}
-	var resp Response
+	var resp wmipc.Response
 	if err := json.Unmarshal(line, &resp); err != nil {
 		return nil, fmt.Errorf("ipc: decode the response %q: %w", line, err)
 	}
-	if resp.Version != Version {
-		return nil, fmt.Errorf("ipc: lys-wm speaks IPC version %d, this client version %d", resp.Version, Version)
+	if resp.Version != wmipc.Version {
+		return nil, fmt.Errorf("ipc: lys-wm speaks IPC version %d, this client version %d", resp.Version, wmipc.Version)
 	}
 	if resp.Error != "" {
 		return nil, fmt.Errorf("lys-wm: %s", resp.Error)
@@ -95,10 +97,10 @@ func (cn *conn) close() error {
 }
 
 func Do(path string, req Request) (result json.RawMessage, err error) {
-	if req.Request == KindWatch {
+	if req.Request == wmipc.KindWatch {
 		return nil, fmt.Errorf("%w: use Watch for the event stream", ErrBadRequest)
 	}
-	if req.Request == KindCapture {
+	if req.Request == wmipc.KindCapture {
 		return nil, fmt.Errorf("%w: use OpenCapture for an input capture", ErrBadRequest)
 	}
 	cn, err := send(path, req)
@@ -107,9 +109,9 @@ func Do(path string, req Request) (result json.RawMessage, err error) {
 	}
 	defer func() { err = errors.Join(err, cn.close()) }()
 	switch req.Request {
-	case KindUpgrade:
+	case wmipc.KindUpgrade:
 		cn.wait = upgradeTimeout
-	case KindPickWindow:
+	case wmipc.KindPickWindow:
 		cn.wait = pickTimeout
 	}
 	return cn.response()
@@ -120,7 +122,7 @@ type Stream struct {
 }
 
 func Subscribe(path string, snapshot bool) (*Stream, error) {
-	cn, err := send(path, Request{Request: KindWatch, Snapshot: snapshot})
+	cn, err := send(path, Request{Request: wmipc.KindWatch, Snapshot: snapshot})
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +152,7 @@ type CaptureConn struct {
 }
 
 func OpenCapture(path string) (*CaptureConn, error) {
-	cn, err := send(path, Request{Request: KindCapture})
+	cn, err := send(path, Request{Request: wmipc.KindCapture})
 	if err != nil {
 		return nil, err
 	}

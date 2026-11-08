@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/jezek/xgb/xproto"
+	"github.com/stubbedev/lys-lib/wmipc"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
-	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/xsync"
@@ -207,7 +207,7 @@ func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
 	var cr *testclient.Client
 	answers("a window opens beside it", func() { cr, right = open(t, h, "right", fillBlue) })
 	h.Eventually("both tiled", xTiled(2))
-	var rect ipc.Rect
+	var rect wmipc.Rect
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		for _, w := range windowsOf(c) {
 			if w.AppID != "lys-wm.testclient" {

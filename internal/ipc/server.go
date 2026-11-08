@@ -17,12 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 const (
-	SocketEnv     = "LYS_WM_SOCKET"
 	maxRequest    = 64 << 10
 	ioTimeout     = 5 * time.Second
 	acceptBackoff = 100 * time.Millisecond
@@ -228,7 +229,7 @@ func ReplyUpgrade(file *os.File, result UpgradeResult) error {
 	if err != nil {
 		return fmt.Errorf("ipc: encode the upgrade's result: %w", err)
 	}
-	line, err := json.Marshal(Response{Version: Version, Result: body})
+	line, err := json.Marshal(wmipc.Response{Version: wmipc.Version, Result: body})
 	if err != nil {
 		return fmt.Errorf("ipc: encode the upgrade's response: %w", err)
 	}
@@ -293,7 +294,7 @@ func write(conn *net.UnixConn, line []byte) error {
 }
 
 func (s *Server) reply(conn *net.UnixConn, result any, failure error) {
-	resp := Response{Version: Version}
+	resp := wmipc.Response{Version: wmipc.Version}
 	if failure != nil {
 		resp.Error = failure.Error()
 	} else if result != nil {
@@ -353,24 +354,24 @@ func (s *Server) serve(conn *net.UnixConn) {
 		s.reply(conn, nil, err)
 		return
 	}
-	if req.kind == KindWatch {
+	if req.kind == wmipc.KindWatch {
 		s.watch(conn, true, req.snapshot)
 		return
 	}
-	if req.kind == KindPickWindow {
+	if req.kind == wmipc.KindPickWindow {
 		s.pickWindow(conn, r)
 		return
 	}
-	if req.kind == KindIcon {
+	if req.kind == wmipc.KindIcon {
 		result, err := s.icon(req.icon)
 		s.reply(conn, result, err)
 		return
 	}
-	if req.kind == KindUpgrade {
+	if req.kind == wmipc.KindUpgrade {
 		s.runUpgrade(conn, req.binary, req.dropX11)
 		return
 	}
-	if req.kind == KindCapture {
+	if req.kind == wmipc.KindCapture {
 		s.capture(conn, r)
 		return
 	}
@@ -380,11 +381,11 @@ func (s *Server) serve(conn *net.UnixConn) {
 	}
 	result, err := onLoop(s, func() (any, error) {
 		switch req.kind {
-		case KindDispatch:
+		case wmipc.KindDispatch:
 			return nil, s.dispatch(req.actions, loaded)
-		case KindCreateOutput:
+		case wmipc.KindCreateOutput:
 			return s.handler.CreateOutput(req.output)
-		case KindRemoveOutput:
+		case wmipc.KindRemoveOutput:
 			return nil, s.handler.RemoveOutput(req.output.Name)
 		}
 		return s.handler.Snapshot().answer(req.kind), nil

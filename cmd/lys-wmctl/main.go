@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -79,7 +81,7 @@ func main() {
 
 var errUsage = errors.New("bad usage")
 
-var queries = []ipc.Kind{ipc.KindOutputs, ipc.KindWorkspaces, ipc.KindWindows, ipc.KindActiveWindow, ipc.KindSubmap, ipc.KindLayout, ipc.KindLocks, ipc.KindReducedMotion, ipc.KindOverview, ipc.KindScratchpads, ipc.KindConfigProblems, ipc.KindVersion, ipc.KindLayers, ipc.KindDevices, ipc.KindPickWindow, ipc.KindBinds, ipc.KindCastTarget}
+var queries = []wmipc.Kind{wmipc.KindOutputs, wmipc.KindWorkspaces, wmipc.KindWindows, wmipc.KindActiveWindow, wmipc.KindSubmap, wmipc.KindLayout, wmipc.KindLocks, wmipc.KindReducedMotion, wmipc.KindOverview, wmipc.KindScratchpads, wmipc.KindConfigProblems, wmipc.KindVersion, wmipc.KindLayers, wmipc.KindDevices, wmipc.KindPickWindow, wmipc.KindBinds, wmipc.KindCastTarget}
 
 func parseArgs(args []string) (ipc.Request, error) {
 	if len(args) == 0 {
@@ -87,33 +89,33 @@ func parseArgs(args []string) (ipc.Request, error) {
 	}
 	cmd, rest := args[0], args[1:]
 	var req ipc.Request
-	switch kind := ipc.Kind(cmd); {
-	case kind == ipc.KindDispatch:
+	switch kind := wmipc.Kind(cmd); {
+	case kind == wmipc.KindDispatch:
 		if len(rest) == 0 {
 			return ipc.Request{}, fmt.Errorf("%w: dispatch needs an action", errUsage)
 		}
-		return ipc.Request{Request: ipc.KindDispatch, Action: strings.Join(rest, " ")}, nil
+		return ipc.Request{Request: wmipc.KindDispatch, Action: strings.Join(rest, " ")}, nil
 	case cmd == "batch":
 		if len(rest) == 0 {
 			return ipc.Request{}, fmt.Errorf("%w: batch needs at least one action", errUsage)
 		}
-		return ipc.Request{Request: ipc.KindDispatch, Actions: rest}, nil
-	case kind == ipc.KindWatch:
+		return ipc.Request{Request: wmipc.KindDispatch, Actions: rest}, nil
+	case kind == wmipc.KindWatch:
 		switch {
 		case len(rest) == 0:
-			return ipc.Request{Request: ipc.KindWatch}, nil
+			return ipc.Request{Request: wmipc.KindWatch}, nil
 		case len(rest) == 1 && rest[0] == "--snapshot":
-			return ipc.Request{Request: ipc.KindWatch, Snapshot: true}, nil
+			return ipc.Request{Request: wmipc.KindWatch, Snapshot: true}, nil
 		}
 		return ipc.Request{}, fmt.Errorf("%w: watch takes only --snapshot", errUsage)
-	case kind == ipc.KindIcon:
+	case kind == wmipc.KindIcon:
 		return parseIcon(rest)
-	case kind == ipc.KindUpgrade:
+	case kind == wmipc.KindUpgrade:
 		return parseUpgrade(rest)
 	case cmd == "output":
 		return parseOutput(rest)
 	case cmd == "reload":
-		req = ipc.Request{Request: ipc.KindDispatch, Action: wm.ReloadAction{}.String()}
+		req = ipc.Request{Request: wmipc.KindDispatch, Action: wm.ReloadAction{}.String()}
 	case slices.Contains(queries, kind):
 		req = ipc.Request{Request: kind}
 	default:
@@ -138,7 +140,7 @@ func parseOutput(args []string) (ipc.Request, error) {
 		if len(rest) != 1 {
 			return ipc.Request{}, fmt.Errorf("%w: output remove takes the name of a virtual output", errUsage)
 		}
-		return ipc.Request{Request: ipc.KindRemoveOutput, Name: rest[0]}, nil
+		return ipc.Request{Request: wmipc.KindRemoveOutput, Name: rest[0]}, nil
 	default:
 		return ipc.Request{}, fmt.Errorf("%w: output takes create or remove, not %q", errUsage, verb)
 	}
@@ -167,11 +169,11 @@ func parseCreateOutput(args []string) (ipc.Request, error) {
 	if m.RefreshMHz == 0 {
 		m.RefreshMHz = defaultRefreshMHz
 	}
-	return ipc.Request{Request: ipc.KindCreateOutput, Name: *name, Mode: &m, Scale: *scale}, nil
+	return ipc.Request{Request: wmipc.KindCreateOutput, Name: *name, Mode: &m, Scale: *scale}, nil
 }
 
 func parseUpgrade(args []string) (ipc.Request, error) {
-	req := ipc.Request{Request: ipc.KindUpgrade}
+	req := ipc.Request{Request: wmipc.KindUpgrade}
 	if len(args) > 0 && args[0] == "--drop-x11" {
 		req.DropX11 = true
 		args = args[1:]
@@ -201,7 +203,7 @@ func parseIcon(args []string) (ipc.Request, error) {
 	if err != nil || size <= 0 {
 		return ipc.Request{}, fmt.Errorf("%w: icon size %q is not a positive number", errUsage, args[1])
 	}
-	return ipc.Request{Request: ipc.KindIcon, Window: wm.WindowID(id), Size: size}, nil
+	return ipc.Request{Request: wmipc.KindIcon, Window: wm.WindowID(id), Size: size}, nil
 }
 
 func watch(path string, snapshot bool, out io.Writer) (err error) {
@@ -222,7 +224,7 @@ func watch(path string, snapshot bool, out io.Writer) (err error) {
 }
 
 func printWarnings(path string, warnings io.Writer) error {
-	result, err := ipc.Do(path, ipc.Request{Request: ipc.KindConfigProblems})
+	result, err := ipc.Do(path, ipc.Request{Request: wmipc.KindConfigProblems})
 	if err != nil {
 		return fmt.Errorf("ask what the reload did not apply: %w", err)
 	}
@@ -255,7 +257,7 @@ func run(args []string, getenv func(string) string, out, warnings io.Writer) err
 			return err
 		}
 	}
-	if req.Request == ipc.KindWatch {
+	if req.Request == wmipc.KindWatch {
 		return watch(path, req.Snapshot, out)
 	}
 	result, err := ipc.Do(path, req)
@@ -265,7 +267,7 @@ func run(args []string, getenv func(string) string, out, warnings io.Writer) err
 	if req.Action == (wm.ReloadAction{}).String() {
 		return printWarnings(path, warnings)
 	}
-	if req.Request == ipc.KindDispatch || req.Request == ipc.KindRemoveOutput {
+	if req.Request == wmipc.KindDispatch || req.Request == wmipc.KindRemoveOutput {
 		return nil
 	}
 	if result == nil {

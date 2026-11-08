@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/config"
@@ -23,7 +25,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
-func query[T any](h *Harness, kind ipc.Kind) T {
+func query[T any](h *Harness, kind wmipc.Kind) T {
 	h.t.Helper()
 	raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: kind})
 	if err != nil {
@@ -123,13 +125,13 @@ func TestEveryActionThroughIPC(t *testing.T) {
 		}
 	}
 	for _, a := range mouseOnly {
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err == nil || !strings.Contains(err.Error(), compositor.ErrNotFromMouseBind.Error()) {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: a}); err == nil || !strings.Contains(err.Error(), compositor.ErrNotFromMouseBind.Error()) {
 			t.Fatalf("%s through IPC: %v", a, err)
 		}
 	}
 	dispatch := func(a string) {
 		t.Helper()
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err != nil {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: a}); err != nil {
 			t.Fatalf("%s: %v", a, err)
 		}
 		expectEvent(t, lines, `{"event":"dispatch","action":"`+a+`"}`)
@@ -138,7 +140,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 		dispatch(a)
 		if a == "workspace 3" {
 			expectEvent(t, lines, `{"event":"workspace","output":"HEADLESS-1","workspace":3}`)
-			if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Workspace != 3 || !w.Focused {
+			if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Workspace != 3 || !w.Focused {
 				t.Fatalf("the window moved to workspace 3 is not active: %+v", w)
 			}
 		}
@@ -147,7 +149,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	if reloads != 1 || exits != 1 {
 		t.Fatalf("reload ran %d times and exit %d", reloads, exits)
 	}
-	all := query[[]ipc.Window](h, ipc.KindWindows)
+	all := query[[]ipc.Window](h, wmipc.KindWindows)
 	other := slices.IndexFunc(all, func(w ipc.Window) bool { return w.Workspace == 1 && !w.Focused })
 	if other < 0 {
 		t.Fatalf("no unfocused window on workspace 1 among %+v", all)
@@ -155,7 +157,7 @@ func TestEveryActionThroughIPC(t *testing.T) {
 	for _, name := range byID {
 		dispatch(fmt.Sprintf("%s %d", name, all[other].ID))
 	}
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.ID != all[other].ID {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.ID != all[other].ID {
 		t.Fatalf("focuswindow %d left window %d active", all[other].ID, w.ID)
 	}
 	c.DispatchUntil("kill and closewindow to close two windows", func() bool {
@@ -167,11 +169,11 @@ func TestEveryActionThroughIPC(t *testing.T) {
 		}
 		return closed == 2
 	})
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
-	if len(outputs) != 1 || outputs[0].Workspace != 1 || !outputs[0].Focused || outputs[0].Rect != (ipc.Rect{Width: 1280, Height: 800}) {
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
+	if len(outputs) != 1 || outputs[0].Workspace != 1 || !outputs[0].Focused || outputs[0].Rect != (wmipc.Rect{Width: 1280, Height: 800}) {
 		t.Fatalf("outputs %+v", outputs)
 	}
-	got := query[[]ipc.Workspace](h, ipc.KindWorkspaces)
+	got := query[[]ipc.Workspace](h, wmipc.KindWorkspaces)
 	want := []ipc.Workspace{{ID: 1, Output: "HEADLESS-1", Windows: 2, Visible: true, Focused: true}, {ID: 3, Output: "HEADLESS-1", Windows: 1}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("workspaces\n got %+v\nwant %+v", got, want)
@@ -195,21 +197,21 @@ func TestSubmapAndLayoutAreQueriedWithoutWaitingForAChange(t *testing.T) {
 		comp = c
 		return nil
 	})
-	if got := query[string](h, ipc.KindSubmap); got != "" {
+	if got := query[string](h, wmipc.KindSubmap); got != "" {
 		t.Fatalf("a fresh lys-wm is in submap %q", got)
 	}
-	if got := query[ipc.Layout](h, ipc.KindLayout); got.Index != 0 || got.Name == "" {
+	if got := query[wmipc.Layout](h, wmipc.KindLayout); got.Index != 0 || got.Name == "" {
 		t.Fatalf("a fresh lys-wm has layout %+v", got)
 	}
 	for _, a := range []string{"reload", "submap resize"} {
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err != nil {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: a}); err != nil {
 			t.Fatalf("%s: %v", a, err)
 		}
 	}
-	if got := query[string](h, ipc.KindSubmap); got != "resize" {
+	if got := query[string](h, wmipc.KindSubmap); got != "resize" {
 		t.Fatalf("after submap resize the submap is %q", got)
 	}
-	if got := query[ipc.Layout](h, ipc.KindLayout); got != (ipc.Layout{Name: "Danish"}) {
+	if got := query[wmipc.Layout](h, wmipc.KindLayout); got != (wmipc.Layout{Name: "Danish"}) {
 		t.Fatalf("after reloading a Danish keymap the layout is %+v", got)
 	}
 }
@@ -233,18 +235,18 @@ func TestNextLayoutCyclesThroughIPC(t *testing.T) {
 	})
 	dispatch := func(a string) {
 		t.Helper()
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: a}); err != nil {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: a}); err != nil {
 			t.Fatalf("%s: %v", a, err)
 		}
 	}
 	dispatch("nextlayout")
-	if got := query[ipc.Layout](h, ipc.KindLayout); got.Index != 0 {
+	if got := query[wmipc.Layout](h, wmipc.KindLayout); got.Index != 0 {
 		t.Fatalf("a keymap of one layout moved to %+v", got)
 	}
 	dispatch("reload")
-	for _, want := range []ipc.Layout{{Index: 1, Name: "Danish"}, {Index: 0, Name: "English (US)"}} {
+	for _, want := range []wmipc.Layout{{Index: 1, Name: "Danish"}, {Index: 0, Name: "English (US)"}} {
 		dispatch("nextlayout")
-		if got := query[ipc.Layout](h, ipc.KindLayout); got != want {
+		if got := query[wmipc.Layout](h, wmipc.KindLayout); got != want {
 			t.Fatalf("after nextlayout the layout is %+v, want %+v", got, want)
 		}
 	}
@@ -257,7 +259,7 @@ func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
 	a := c.Window("a", quadrants)
 	c.DispatchUntil("a to map", a.Mapped)
 	dispatch := func(action string) error {
-		_, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: action})
+		_, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: action})
 		return err
 	}
 	if err := dispatch("workspace 2"); err != nil {
@@ -266,16 +268,16 @@ func TestFocusAndCloseAWindowByIDThroughIPC(t *testing.T) {
 	b := c.Window("b", quadrants)
 	c.DispatchUntil("b to map", b.Mapped)
 	ids := map[string]wm.WindowID{}
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		ids[w.Title] = w.ID
 	}
 	if err := dispatch(fmt.Sprintf("focuswindow %d", ids["a"])); err != nil {
 		t.Fatal(err)
 	}
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.ID != ids["a"] || w.Workspace != 1 {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.ID != ids["a"] || w.Workspace != 1 {
 		t.Fatalf("after focuswindow %d the active window is %+v", ids["a"], w)
 	}
-	if o := query[[]ipc.Output](h, ipc.KindOutputs); o[0].Workspace != 1 {
+	if o := query[[]ipc.Output](h, wmipc.KindOutputs); o[0].Workspace != 1 {
 		t.Fatalf("after focuswindow %d the output shows workspace %d", ids["a"], o[0].Workspace)
 	}
 	c.DispatchUntil("a to be activated", func() bool { return slices.Contains(a.States, cxdg.XdgToplevelStateActivated) })
@@ -301,11 +303,11 @@ func TestWorkspacePreviousThroughIPC(t *testing.T) {
 		action string
 		shows  wm.WorkspaceID
 	}{{"workspace 3", 3}, {"workspace previous", 1}, {"workspace previous", 3}} {
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: step.action}); err != nil {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: step.action}); err != nil {
 			t.Fatalf("%s: %v", step.action, err)
 		}
 		expectEvent(t, lines, fmt.Sprintf(`{"event":"workspace","output":"HEADLESS-1","workspace":%d}`, step.shows))
-		if o := query[[]ipc.Output](h, ipc.KindOutputs); o[0].Workspace != step.shows {
+		if o := query[[]ipc.Output](h, wmipc.KindOutputs); o[0].Workspace != step.shows {
 			t.Fatalf("after %s the output shows workspace %d, want %d", step.action, o[0].Workspace, step.shows)
 		}
 	}
@@ -315,7 +317,7 @@ func (h *Harness) expectActive(c *Client) {
 	h.t.Helper()
 	deadline := time.Now().Add(clientTimeout)
 	for {
-		raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindActiveWindow})
+		raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindActiveWindow})
 		if err != nil {
 			h.t.Fatal(err)
 		}
@@ -326,7 +328,7 @@ func (h *Harness) expectActive(c *Client) {
 			}
 		}
 		if raw != nil && int(w.PID) == c.cmd.Process.Pid && w.Focused {
-			if windows := query[[]ipc.Window](h, ipc.KindWindows); !slices.ContainsFunc(windows, func(x ipc.Window) bool { return x.ID == w.ID }) {
+			if windows := query[[]ipc.Window](h, wmipc.KindWindows); !slices.ContainsFunc(windows, func(x ipc.Window) bool { return x.ID == w.ID }) {
 				h.t.Fatalf("the active window %d is not among the windows %+v", w.ID, windows)
 			}
 			return
@@ -347,15 +349,15 @@ func TestCapsLockShowsInTheLocksQuery(t *testing.T) {
 			return errors.Join(b.Keyboard().Key(capsLock, true), b.Keyboard().Key(capsLock, false))
 		})
 	}
-	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{}) {
+	if got := query[wmipc.Locks](h, wmipc.KindLocks); got != (wmipc.Locks{}) {
 		t.Fatalf("a fresh lys-wm has locks %+v", got)
 	}
 	tap()
-	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{Caps: true}) {
+	if got := query[wmipc.Locks](h, wmipc.KindLocks); got != (wmipc.Locks{Caps: true}) {
 		t.Fatalf("after Caps Lock the locks are %+v", got)
 	}
 	tap()
-	if got := query[ipc.Locks](h, ipc.KindLocks); got != (ipc.Locks{}) {
+	if got := query[wmipc.Locks](h, wmipc.KindLocks); got != (wmipc.Locks{}) {
 		t.Fatalf("after a second Caps Lock the locks are %+v", got)
 	}
 }
@@ -370,7 +372,7 @@ func TestWindowsReportTheirStackingOrder(t *testing.T) {
 	c := testclient.Connect(t, h.Socket())
 	dispatch := func(action string) {
 		t.Helper()
-		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: action}); err != nil {
+		if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: action}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -384,7 +386,7 @@ func TestWindowsReportTheirStackingOrder(t *testing.T) {
 	dispatch("workspace 1")
 	stacks := func() (map[string]*int, map[string]wm.WindowID) {
 		s, ids := map[string]*int{}, map[string]wm.WindowID{}
-		for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+		for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 			s[w.Title], ids[w.Title] = w.Stack, w.ID
 		}
 		return s, ids
@@ -418,7 +420,7 @@ func TestAnAppIDChangeAndARetileAreEvents(t *testing.T) {
 	c := testclient.Connect(t, h.Socket())
 	a := c.Window("a", quadrants)
 	c.DispatchUntil("a to map", a.Mapped)
-	id := query[[]ipc.Window](h, ipc.KindWindows)[0].ID
+	id := query[[]ipc.Window](h, wmipc.KindWindows)[0].ID
 	lines := h.watch()
 	if err := errors.Join(a.Toplevel.SetAppID("org.example.Renamed"), c.Display.Roundtrip()); err != nil {
 		t.Fatal(err)
@@ -427,7 +429,7 @@ func TestAnAppIDChangeAndARetileAreEvents(t *testing.T) {
 	b := c.Window("b", quadrants)
 	c.DispatchUntil("b to map", b.Mapped)
 	var halved ipc.Window
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		if w.ID == id {
 			halved = w
 		}

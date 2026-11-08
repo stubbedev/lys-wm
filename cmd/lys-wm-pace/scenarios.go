@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
@@ -105,7 +107,7 @@ type session struct {
 }
 
 func (s *session) dispatch(action string) {
-	if _, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindDispatch, Action: action}); err != nil {
+	if _, err := ipc.Do(s.ipc, ipc.Request{Request: wmipc.KindDispatch, Action: action}); err != nil {
 		panic(fatal{fmt.Errorf("dispatch %q: %w", action, err)})
 	}
 }
@@ -131,7 +133,7 @@ func (s *session) mapped(title string, w *testclient.Window) *testclient.Window 
 }
 
 func (s *session) placed(title string) bool {
-	data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindWindows})
+	data, err := ipc.Do(s.ipc, ipc.Request{Request: wmipc.KindWindows})
 	if err != nil {
 		panic(fatal{fmt.Errorf("list the windows: %w", err)})
 	}
@@ -238,7 +240,7 @@ func lifted(s *session) {
 
 func showsWindow(title string) func(*session) {
 	return func(s *session) {
-		data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindActiveWindow})
+		data, err := ipc.Do(s.ipc, ipc.Request{Request: wmipc.KindActiveWindow})
 		if err != nil {
 			panic(fatal{fmt.Errorf("ask for the active window: %w", err)})
 		}
@@ -254,7 +256,7 @@ func showsWindow(title string) func(*session) {
 
 func overviewIs(open bool) func(*session) {
 	return func(s *session) {
-		data, err := ipc.Do(s.ipc, ipc.Request{Request: ipc.KindOverview})
+		data, err := ipc.Do(s.ipc, ipc.Request{Request: wmipc.KindOverview})
 		if err != nil {
 			panic(fatal{fmt.Errorf("ask whether the overview is open: %w", err)})
 		}

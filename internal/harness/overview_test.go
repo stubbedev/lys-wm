@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jezek/xgb/xproto"
+	"github.com/stubbedev/lys-lib/wmipc"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -56,7 +57,7 @@ func planOf(h *Harness, outputIndex int) overviewPlan {
 			}
 		}
 		state := c.WM()
-		rect := func(r ipc.Rect) image.Rectangle { return image.Rect(r.X, r.Y, r.X+r.Width, r.Y+r.Height) }
+		rect := func(r wmipc.Rect) image.Rectangle { return image.Rect(r.X, r.Y, r.X+r.Width, r.Y+r.Height) }
 		var shown, hidden []wm.WindowID
 		var shownRects, hiddenRects []image.Rectangle
 		for _, p := range state.WorkspacePlacements(out.Workspace, wm.Spacing{TabBar: 20}) {
@@ -624,7 +625,7 @@ func TestTheOverviewIsAnEventAndAQuery(t *testing.T) {
 	h := Start(t, overviewMode)
 	lines := h.watch()
 	query := func() string {
-		got, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindOverview})
+		got, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindOverview})
 		if err != nil {
 			t.Fatal(err)
 		}

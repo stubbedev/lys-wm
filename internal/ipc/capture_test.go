@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-lib/wmipc"
 )
 
 type fakeCapture struct {
@@ -57,7 +59,7 @@ func TestParseCaptureCommand(t *testing.T) {
 		}
 	}
 	release, err := parseCaptureCommand([]byte(`{"command":"release","at":{"x":10.5,"y":20}}`))
-	if r, isRelease := release.(ReleaseCapture); err != nil || !isRelease || r.At == nil || *r.At != (CapturePoint{X: 10.5, Y: 20}) {
+	if r, isRelease := release.(ReleaseCapture); err != nil || !isRelease || r.At == nil || *r.At != (wmipc.CapturePoint{X: 10.5, Y: 20}) {
 		t.Errorf("release at a point = %#v, %v", release, err)
 	}
 	bad := map[string]string{
@@ -77,7 +79,7 @@ func TestParseCaptureCommand(t *testing.T) {
 			t.Errorf("%s = %v, want a bad request saying %q", line, err, want)
 		}
 	}
-	for _, at := range []CapturePoint{{X: math.NaN()}, {Y: math.Inf(1)}} {
+	for _, at := range []wmipc.CapturePoint{{X: math.NaN()}, {Y: math.Inf(1)}} {
 		line, err := EncodeCaptureCommand(ReleaseCapture{At: &at})
 		if err == nil {
 			_, err = parseCaptureCommand(line)
@@ -103,7 +105,7 @@ func TestEveryCaptureCommandRoundTrips(t *testing.T) {
 		EnableCapture{},
 		DisableCapture{},
 		ReleaseCapture{},
-		ReleaseCapture{At: &CapturePoint{X: 1, Y: 2}},
+		ReleaseCapture{At: &wmipc.CapturePoint{X: 1, Y: 2}},
 	} {
 		line, err := EncodeCaptureCommand(cmd)
 		if err != nil {
@@ -181,7 +183,7 @@ func (r *rig) closedCapture(fc *fakeCapture) {
 func TestACaptureCarriesCommandsInAndEventsOut(t *testing.T) {
 	r := start(t)
 	c, lines, fc := r.capture()
-	for _, cmd := range []CaptureCommand{SetBarriers{Barriers: []Barrier{{ID: 1, X1: 9, Y1: 0, X2: 9, Y2: 5}}}, EnableCapture{}, ReleaseCapture{At: &CapturePoint{X: 3, Y: 4}}} {
+	for _, cmd := range []CaptureCommand{SetBarriers{Barriers: []Barrier{{ID: 1, X1: 9, Y1: 0, X2: 9, Y2: 5}}}, EnableCapture{}, ReleaseCapture{At: &wmipc.CapturePoint{X: 3, Y: 4}}} {
 		if err := c.Send(cmd); err != nil {
 			t.Fatal(err)
 		}
@@ -196,7 +198,7 @@ func TestACaptureCarriesCommandsInAndEventsOut(t *testing.T) {
 		t.Errorf("applied %v", got)
 	}
 	r.do(func(*fake) {
-		fc.send(CaptureActivatedEvent{Activation: 4, At: CapturePoint{X: 9.5, Y: 2}, Barrier: 1})
+		fc.send(CaptureActivatedEvent{Activation: 4, At: wmipc.CapturePoint{X: 9.5, Y: 2}, Barrier: 1})
 		fc.send(CaptureKeyEvent{Key: 30, Pressed: true})
 	})
 	if l := next(t, lines); l != `{"event":"activated","activation":4,"at":{"x":9.5,"y":2},"barrier":1}` {
@@ -238,7 +240,7 @@ func TestABadCaptureCommandEndsTheCaptureWithAnError(t *testing.T) {
 func TestARefusedCaptureCommandEndsTheCaptureWithItsError(t *testing.T) {
 	r := start(t)
 	c, lines, fc := r.capture()
-	if err := c.Send(ReleaseCapture{At: &CapturePoint{X: -1, Y: 0}}); err != nil {
+	if err := c.Send(ReleaseCapture{At: &wmipc.CapturePoint{X: -1, Y: 0}}); err != nil {
 		t.Fatal(err)
 	}
 	if l := next(t, lines); l != `{"event":"error","error":"the fake refuses a release left of 0"}` {
@@ -249,7 +251,7 @@ func TestARefusedCaptureCommandEndsTheCaptureWithItsError(t *testing.T) {
 
 func TestDoRefusesACapture(t *testing.T) {
 	r := start(t)
-	if _, err := Do(r.path, Request{Request: KindCapture}); !errors.Is(err, ErrBadRequest) {
+	if _, err := Do(r.path, Request{Request: wmipc.KindCapture}); !errors.Is(err, ErrBadRequest) {
 		t.Errorf("Do(capture) = %v, want a bad request pointing at OpenCapture", err)
 	}
 }

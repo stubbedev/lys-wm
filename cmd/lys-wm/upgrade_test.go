@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -72,7 +73,7 @@ func startBare(t *testing.T, binary, config string, extra ...string) *running {
 	cmd := exec.Command(binary, append([]string{"--backend", "headless", "--config", path}, extra...)...)
 	cmd.Stderr, cmd.Stdout = logs, logs
 	env := os.Environ()
-	cmd.Env = append(slicesWithout(env, "WAYLAND_DISPLAY", ipc.SocketEnv, "XDG_RUNTIME_DIR"), "XDG_RUNTIME_DIR="+runtime)
+	cmd.Env = append(slicesWithout(env, "WAYLAND_DISPLAY", wmipc.SocketEnv, "XDG_RUNTIME_DIR"), "XDG_RUNTIME_DIR="+runtime)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +95,7 @@ func startBare(t *testing.T, binary, config string, extra ...string) *running {
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		socket, err := ipc.FindSocket(getenv)
 		if err == nil {
-			if _, err = ipc.Do(socket, ipc.Request{Request: ipc.KindVersion}); err == nil {
+			if _, err = ipc.Do(socket, ipc.Request{Request: wmipc.KindVersion}); err == nil {
 				s.socket = socket
 				s.waylandPath = s.waylandSocket()
 				return s
@@ -145,7 +146,7 @@ func (s *running) waylandSocket() string {
 
 func (s *running) windows() []ipc.Window {
 	s.t.Helper()
-	raw, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindWindows})
+	raw, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindWindows})
 	if err != nil {
 		s.t.Fatalf("query the windows: %v\n%s", err, s.log())
 	}
@@ -175,7 +176,7 @@ func TestUpgradeKeepsClientsWindowsAndLayout(t *testing.T) {
 	b := c.Window("second", testclient.Fill(0, 0xff, 0))
 	c.DispatchUntil("the second window to map", b.Mapped)
 	c.Sync()
-	if _, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindDispatch, Action: "workspace 3"}); err != nil {
+	if _, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindDispatch, Action: "workspace 3"}); err != nil {
 		t.Fatal(err)
 	}
 	third := c.Window("third", testclient.Fill(0, 0, 0xff))
@@ -187,7 +188,7 @@ func TestUpgradeKeepsClientsWindowsAndLayout(t *testing.T) {
 	}
 
 	next := buildCopy(t, binary)
-	raw, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindUpgrade, Binary: next})
+	raw, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindUpgrade, Binary: next})
 	if err != nil {
 		t.Fatalf("upgrade: %v\n%s", err, s.log())
 	}
@@ -240,7 +241,7 @@ func filepathProcExe(pid int) string {
 }
 
 func (s *running) upgrade(binary string) (ipc.UpgradeResult, error) {
-	raw, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindUpgrade, Binary: binary})
+	raw, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindUpgrade, Binary: binary})
 	if err != nil {
 		return ipc.UpgradeResult{}, err
 	}
@@ -458,7 +459,7 @@ func TestUpgradeKeepsEveryRoleAClientHolds(t *testing.T) {
 	if clipboard.Device == nil || in == nil {
 		t.Fatal("the seat objects went away")
 	}
-	if _, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindDispatch, Action: "workspace 2"}); err != nil {
+	if _, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindDispatch, Action: "workspace 2"}); err != nil {
 		t.Fatal(err)
 	}
 	opened := c.Window("after", testclient.Fill(0, 0xff, 0))
@@ -853,7 +854,7 @@ func TestAFailedUpgradeNeverClosesTheNextConnection(t *testing.T) {
 			t.Fatal("a binary that exits at once took over")
 		}
 		for range 20 {
-			if _, err := ipc.Do(s.socket, ipc.Request{Request: ipc.KindWindows}); err != nil {
+			if _, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindWindows}); err != nil {
 				t.Fatalf("round %d: the session did not answer right after the failed upgrade: %v\n%s", i, err, s.log())
 			}
 		}

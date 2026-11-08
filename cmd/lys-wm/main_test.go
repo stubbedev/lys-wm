@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -183,7 +185,7 @@ func TestSessionVarsLetTheConfigEnvWin(t *testing.T) {
 
 func outputScale(t *testing.T, socket string) float64 {
 	t.Helper()
-	raw, err := ipc.Do(socket, ipc.Request{Request: ipc.KindOutputs})
+	raw, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindOutputs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +213,7 @@ func startSessionOnBus(t *testing.T, config, bus string) (string, string, <-chan
 	if err := os.Mkdir(runtime, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"WAYLAND_DISPLAY", ipc.SocketEnv, "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"} {
+	for _, name := range []string{"WAYLAND_DISPLAY", wmipc.SocketEnv, "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("XDG_RUNTIME_DIR", runtime)
@@ -230,7 +232,7 @@ func startSessionOnBus(t *testing.T, config, bus string) (string, string, <-chan
 	for deadline := time.Now().Add(10 * time.Second); ; {
 		socket, err := ipc.FindSocket(getenv)
 		if err == nil {
-			if _, err = ipc.Do(socket, ipc.Request{Request: ipc.KindVersion}); err == nil {
+			if _, err = ipc.Do(socket, ipc.Request{Request: wmipc.KindVersion}); err == nil {
 				return socket, path, done
 			}
 		}
@@ -279,7 +281,7 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	defer stream.Close()
 
 	write("outputs:\n  - {match: HEADLESS-1, scale: 1.5}\n")
-	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err != nil {
+	if _, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "reload"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := outputScale(t, socket); got != 1.5 {
@@ -293,7 +295,7 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	}
 
 	write("outputs:\n  - {match: HEADLESS-1, scale: 1.5}\nbinds:\n  - {chord: SUPER + Q, action: teleport}\n")
-	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err == nil || !strings.Contains(err.Error(), path+":6: binds[0].action") {
+	if _, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "reload"}); err == nil || !strings.Contains(err.Error(), path+":6: binds[0].action") {
 		t.Fatalf("a bad config reloaded: %v", err)
 	}
 	if got := outputScale(t, socket); got != 1.5 {
@@ -304,7 +306,7 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	}
 
 	write("outputs:\n  - {match: HEADLESS-1, scale: 1.25}\nfrom_a_newer_lys_wm: true\n")
-	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err != nil {
+	if _, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "reload"}); err != nil {
 		t.Fatalf("a file with one unknown key did not reload: %v", err)
 	}
 	if got := outputScale(t, socket); got != 1.25 {
@@ -315,7 +317,7 @@ func TestConfiguredSessionOverIPC(t *testing.T) {
 	}
 
 	write("outputs:\n  - {match: HEADLESS-1, scale: 1.25}\n")
-	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"}); err != nil {
+	if _, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "reload"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := configProblems(t, socket); got.Rejected || len(got.Messages) != 0 {
@@ -338,7 +340,7 @@ func TestReloadPicksUpTheRuntimeOverridesAndRefusesABadOne(t *testing.T) {
 		}
 	}
 	reload := func() error {
-		_, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "reload"})
+		_, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "reload"})
 		return err
 	}
 	write("outputs:\n  - {match: HEADLESS-1, scale: 1.5}\n")
@@ -379,7 +381,7 @@ func TestReloadPicksUpTheRuntimeOverridesAndRefusesABadOne(t *testing.T) {
 
 func configProblems(t *testing.T, socket string) ipc.ConfigProblems {
 	t.Helper()
-	result, err := ipc.Do(socket, ipc.Request{Request: ipc.KindConfigProblems})
+	result, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindConfigProblems})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +405,7 @@ func TestAConfigWithAnUnknownKeyStartsAndSaysSo(t *testing.T) {
 
 func TestTheExitActionEndsTheSession(t *testing.T) {
 	socket, _, done := startSession(t, "binds:\n  - {chord: SUPER + Delete, action: exit}\n")
-	if _, err := ipc.Do(socket, ipc.Request{Request: ipc.KindDispatch, Action: "exit"}); err != nil {
+	if _, err := ipc.Do(socket, ipc.Request{Request: wmipc.KindDispatch, Action: "exit"}); err != nil {
 		t.Fatal(err)
 	}
 	expectCleanExit(t, socket, done, "exit")

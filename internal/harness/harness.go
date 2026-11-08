@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -461,7 +463,7 @@ func (h *Harness) run(runtimeDir, display string, env []string, binary string, a
 	if err != nil {
 		h.t.Fatalf("harness: %v", err)
 	}
-	cmd.Env = append(append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "WAYLAND_DISPLAY="+display, ipc.SocketEnv+"="+socket), env...)
+	cmd.Env = append(append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "WAYLAND_DISPLAY="+display, wmipc.SocketEnv+"="+socket), env...)
 	c := &Client{cmd: cmd, exited: make(chan error, 1)}
 	cmd.Stdout, cmd.Stderr = &c.output, &c.output
 	if err := cmd.Start(); err != nil {

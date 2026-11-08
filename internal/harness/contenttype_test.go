@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -32,7 +34,7 @@ func expectContentTypes(t *testing.T, h *Harness, want map[string]wm.ContentType
 	deadline := time.Now().Add(clientTimeout)
 	for {
 		got := map[string]wm.ContentType{}
-		for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+		for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 			got[w.Title] = w.ContentType
 		}
 		if maps.Equal(got, want) {

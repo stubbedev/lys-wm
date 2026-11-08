@@ -7,21 +7,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
 func TestParseRequest(t *testing.T) {
 	r, err := parseRequest([]byte(`{"request":"dispatch","action":"workspace 3"}`))
-	if err != nil || r.kind != KindDispatch || !slices.Equal(r.actions, []wm.Action{wm.WorkspaceAction{Target: wm.WorkspaceID(3)}}) {
+	if err != nil || r.kind != wmipc.KindDispatch || !slices.Equal(r.actions, []wm.Action{wm.WorkspaceAction{Target: wm.WorkspaceID(3)}}) {
 		t.Fatalf("dispatch parsed to %+v, %v", r, err)
 	}
-	if r, err := parseRequest([]byte(`{"request":"windows"}` + "\n")); err != nil || r.kind != KindWindows {
+	if r, err := parseRequest([]byte(`{"request":"windows"}` + "\n")); err != nil || r.kind != wmipc.KindWindows {
 		t.Fatalf("windows parsed to %+v, %v", r, err)
 	}
-	if r, err := parseRequest([]byte(`{"request":"icon","window":7,"size":32}`)); err != nil || r.kind != KindIcon || r.icon != (iconRequest{window: 7, size: 32}) {
+	if r, err := parseRequest([]byte(`{"request":"icon","window":7,"size":32}`)); err != nil || r.kind != wmipc.KindIcon || r.icon != (iconRequest{window: 7, size: 32}) {
 		t.Fatalf("icon parsed to %+v, %v", r, err)
 	}
-	for _, kind := range []Kind{KindSubmap, KindLayout, KindLocks, KindReducedMotion, KindOverview} {
+	for _, kind := range []wmipc.Kind{wmipc.KindSubmap, wmipc.KindLayout, wmipc.KindLocks, wmipc.KindReducedMotion, wmipc.KindOverview} {
 		if r, err := parseRequest([]byte(`{"request":"` + string(kind) + `"}`)); err != nil || r.kind != kind {
 			t.Fatalf("%s parsed to %+v, %v", kind, r, err)
 		}
@@ -66,9 +68,9 @@ func TestEncodeFlattensTheEventName(t *testing.T) {
 	for e, want := range map[Event]string{
 		FocusEvent{Window: &id}: `{"event":"focus","window":4}`,
 		FocusEvent{}:            `{"event":"focus","window":null}`,
-		WorkspaceEvent{Output: "DP-1", Workspace: 2}:          `{"event":"workspace","output":"DP-1","workspace":2}`,
-		DispatchEvent{Action: "exec foot"}:                    `{"event":"dispatch","action":"exec foot"}`,
-		LayoutEvent{Layout: Layout{Index: 1, Name: "Danish"}}: `{"event":"layout","layout":{"index":1,"name":"Danish"}}`,
+		WorkspaceEvent{Output: "DP-1", Workspace: 2}:                `{"event":"workspace","output":"DP-1","workspace":2}`,
+		DispatchEvent{Action: "exec foot"}:                          `{"event":"dispatch","action":"exec foot"}`,
+		LayoutEvent{Layout: wmipc.Layout{Index: 1, Name: "Danish"}}: `{"event":"layout","layout":{"index":1,"name":"Danish"}}`,
 	} {
 		got, err := Encode(e)
 		if err != nil || string(got) != want+"\n" {
@@ -90,11 +92,11 @@ func names(events []Event) []string {
 }
 
 func TestDiff(t *testing.T) {
-	dp1 := Output{Name: "DP-1", Rect: Rect{Width: 100, Height: 50}, Scale: 1, Workspace: 1, Focused: true}
-	hdmi := Output{Name: "HDMI-A-1", Rect: Rect{X: 100, Width: 100, Height: 50}, Scale: 1, Workspace: 2}
+	dp1 := Output{Name: "DP-1", Rect: wmipc.Rect{Width: 100, Height: 50}, Scale: 1, Workspace: 1, Focused: true}
+	hdmi := Output{Name: "HDMI-A-1", Rect: wmipc.Rect{X: 100, Width: 100, Height: 50}, Scale: 1, Workspace: 2}
 	a := Window{ID: 1, AppID: "foot", Title: "a", Workspace: 1, Output: "DP-1", Focused: true}
 	b := Window{ID: 2, AppID: "foot", Title: "b", Workspace: 2, Output: "HDMI-A-1"}
-	prev := Snapshot{Outputs: []Output{dp1, hdmi}, Windows: []Window{a, b}, Layout: Layout{Name: "English (US)"}}
+	prev := Snapshot{Outputs: []Output{dp1, hdmi}, Windows: []Window{a, b}, Layout: wmipc.Layout{Name: "English (US)"}}
 	if got := Diff(prev, prev); len(got) != 0 {
 		t.Fatalf("an unchanged snapshot gave %v", names(got))
 	}
@@ -107,13 +109,13 @@ func TestDiff(t *testing.T) {
 	a2, b2 := a, b
 	a2.Focused, a2.Title, a2.Workspace = false, "a!", 3
 	b2.Urgent, b2.Maximized = true, true
-	b2.AppID, b2.Rect = "footclient", Rect{X: 100, Y: 4, Width: 50, Height: 40}
+	b2.AppID, b2.Rect = "footclient", wmipc.Rect{X: 100, Y: 4, Width: 50, Height: 40}
 	b2.Icon = &Icon{Serial: 4, Name: "foot", Sizes: []int{16, 32}}
 	c := Window{ID: 3, AppID: "mpv", Workspace: 3, Output: "HDMI-A-1", Focused: true}
 	next.Windows = []Window{b2, a2, c}
 	next.Submap = "resize"
-	next.Layout = Layout{Index: 1, Name: "Danish"}
-	next.Locks = Locks{Caps: true}
+	next.Layout = wmipc.Layout{Index: 1, Name: "Danish"}
+	next.Locks = wmipc.Locks{Caps: true}
 	next.ReducedMotion = true
 	next.Overview = true
 	want := []string{
@@ -153,7 +155,7 @@ func TestDiff(t *testing.T) {
 }
 
 func TestEveryOutputFieldButWorkspaceAndFocusCountsAsAChange(t *testing.T) {
-	base := Output{Name: "DP-1", Description: "d", Rect: Rect{Width: 10, Height: 10}, Scale: 1, Mode: Mode{Width: 10, Height: 10, RefreshMHz: 60000}, Workspace: 1, Focused: true, Powered: true}
+	base := Output{Name: "DP-1", Description: "d", Rect: wmipc.Rect{Width: 10, Height: 10}, Scale: 1, Mode: wmipc.Mode{Width: 10, Height: 10, RefreshMHz: 60000}, Workspace: 1, Focused: true, Powered: true}
 	changed := func(f func(*Output)) bool {
 		o := base
 		f(&o)
@@ -195,7 +197,7 @@ func TestAWindowsStackChangeIsAnEvent(t *testing.T) {
 }
 
 func TestAWindowChangingOutputAloneSendsItsRect(t *testing.T) {
-	w := Window{ID: 4, AppID: "foot", Output: "DP-1", Rect: Rect{X: 10, Y: 10, Width: 20, Height: 20}}
+	w := Window{ID: 4, AppID: "foot", Output: "DP-1", Rect: wmipc.Rect{X: 10, Y: 10, Width: 20, Height: 20}}
 	moved := w
 	moved.Output = "HDMI-A-1"
 	want := []string{`{"event":"rect","window":4,"output":"HDMI-A-1","rect":{"x":10,"y":10,"width":20,"height":20}}`}
@@ -212,7 +214,7 @@ func TestAWindowChangingOutputAloneSendsItsRect(t *testing.T) {
 }
 
 func TestParseMode(t *testing.T) {
-	for text, want := range map[string]Mode{
+	for text, want := range map[string]wmipc.Mode{
 		"1920x1080":         {Width: 1920, Height: 1080},
 		"2560x1440@143.912": {Width: 2560, Height: 1440, RefreshMHz: 143912},
 		"800x600@60":        {Width: 800, Height: 600, RefreshMHz: 60000},

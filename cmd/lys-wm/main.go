@@ -22,6 +22,7 @@ import (
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wmipc"
 	"github.com/stubbedev/lys-lib/xcursor"
 	"github.com/stubbedev/lys-lib/xdg"
 	"golang.org/x/sys/unix"
@@ -407,7 +408,7 @@ func printEffectiveConfig(path, runtime string, getenv func(string) string, out 
 
 func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
 	out := slices.Clone(env)
-	for _, name := range []string{"PATH", "WAYLAND_DISPLAY", "DISPLAY", ipc.SocketEnv} {
+	for _, name := range []string{"PATH", "WAYLAND_DISPLAY", "DISPLAY", wmipc.SocketEnv} {
 		if slices.ContainsFunc(env, func(kv [2]string) bool { return kv[0] == name }) {
 			continue
 		}
@@ -733,7 +734,7 @@ func run(args []string) (err error) {
 		}
 		defer leave(profiles.Close)
 	}
-	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {ipc.SocketEnv, socket}}
+	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {wmipc.SocketEnv, socket}}
 	var xwRunning *xwayland.Server
 	if first.xwayland {
 		var xw *xwayland.Server

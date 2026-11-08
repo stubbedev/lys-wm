@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -82,7 +84,7 @@ func TestAFocusFalseRuleOpensTheWindowBehindTheFocusedOne(t *testing.T) {
 	c.DispatchUntil("base to map", c.Window("base", fillGreen).Mapped)
 	c.DispatchUntil("prompt to map", c.Window("prompt", fillGreen).Mapped)
 	h.settled(c, "prompt shown, centred, unfocused", func(w ipc.Window) bool {
-		return w.Stack != nil && !w.Focused && !w.Urgent && w.Rect == ipc.Rect{X: 60, Y: 40, Width: 40, Height: 20}
+		return w.Stack != nil && !w.Focused && !w.Urgent && w.Rect == wmipc.Rect{X: 60, Y: 40, Width: 40, Height: 20}
 	}, "prompt")
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 		if f := focusedTitle(comp); f != "base" {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -60,7 +62,7 @@ type (
 	RectEvent struct {
 		Window wm.WindowID `json:"window"`
 		Output string      `json:"output"`
-		Rect   Rect        `json:"rect"`
+		Rect   wmipc.Rect  `json:"rect"`
 	}
 	IconEvent struct {
 		Window wm.WindowID `json:"window"`
@@ -104,10 +106,10 @@ type (
 		Submap string `json:"submap"`
 	}
 	LayoutEvent struct {
-		Layout Layout `json:"layout"`
+		Layout wmipc.Layout `json:"layout"`
 	}
 	LocksEvent struct {
-		Locks Locks `json:"locks"`
+		Locks wmipc.Locks `json:"locks"`
 	}
 	ReducedMotionEvent struct {
 		ReducedMotion bool `json:"reduced_motion"`
@@ -163,41 +165,41 @@ type (
 	}
 )
 
-func (OutputEvent) Name() string         { return "output" }
-func (WorkspaceEvent) Name() string      { return "workspace" }
-func (FocusedOutputEvent) Name() string  { return "focusedoutput" }
-func (OpenEvent) Name() string           { return "open" }
-func (CloseEvent) Name() string          { return "close" }
-func (MoveEvent) Name() string           { return "move" }
-func (TitleEvent) Name() string          { return "title" }
-func (AppIDEvent) Name() string          { return "appid" }
-func (RectEvent) Name() string           { return "rect" }
-func (IconEvent) Name() string           { return "icon" }
-func (UrgentEvent) Name() string         { return "urgent" }
-func (MinimizedEvent) Name() string      { return "minimized" }
-func (ModeEvent) Name() string           { return "mode" }
-func (UnresponsiveEvent) Name() string   { return "unresponsive" }
-func (PinEvent) Name() string            { return "pin" }
-func (SwallowEvent) Name() string        { return "swallow" }
-func (StackEvent) Name() string          { return "stack" }
-func (FocusEvent) Name() string          { return "focus" }
-func (SubmapEvent) Name() string         { return "submap" }
-func (LayoutEvent) Name() string         { return "layout" }
-func (LocksEvent) Name() string          { return "locks" }
-func (ReducedMotionEvent) Name() string  { return "reducedmotion" }
-func (DispatchEvent) Name() string       { return "dispatch" }
-func (OverviewEvent) Name() string       { return "overview" }
-func (ConfigProblemsEvent) Name() string { return "configproblems" }
-func (WindowMenuEvent) Name() string     { return "windowmenu" }
-func (ShowDesktopEvent) Name() string    { return "showdesktop" }
-func (ScratchpadEvent) Name() string     { return "scratchpad" }
-func (LayerEvent) Name() string          { return "layer" }
-func (GroupEvent) Name() string          { return "group" }
-func (BellEvent) Name() string           { return "bell" }
-func (CastTargetEvent) Name() string     { return "casttarget" }
-func (BindsEvent) Name() string          { return "binds" }
-func (MRUEvent) Name() string            { return "mru" }
-func (SwitcherEvent) Name() string       { return "switcher" }
+func (OutputEvent) Name() string         { return string(wmipc.EventOutput) }
+func (WorkspaceEvent) Name() string      { return string(wmipc.EventWorkspace) }
+func (FocusedOutputEvent) Name() string  { return string(wmipc.EventFocusedOutput) }
+func (OpenEvent) Name() string           { return string(wmipc.EventOpen) }
+func (CloseEvent) Name() string          { return string(wmipc.EventClose) }
+func (MoveEvent) Name() string           { return string(wmipc.EventMove) }
+func (TitleEvent) Name() string          { return string(wmipc.EventTitle) }
+func (AppIDEvent) Name() string          { return string(wmipc.EventAppID) }
+func (RectEvent) Name() string           { return string(wmipc.EventRect) }
+func (IconEvent) Name() string           { return string(wmipc.EventIcon) }
+func (UrgentEvent) Name() string         { return string(wmipc.EventUrgent) }
+func (MinimizedEvent) Name() string      { return string(wmipc.EventMinimized) }
+func (ModeEvent) Name() string           { return string(wmipc.EventMode) }
+func (UnresponsiveEvent) Name() string   { return string(wmipc.EventUnresponsive) }
+func (PinEvent) Name() string            { return string(wmipc.EventPin) }
+func (SwallowEvent) Name() string        { return string(wmipc.EventSwallow) }
+func (StackEvent) Name() string          { return string(wmipc.EventStack) }
+func (FocusEvent) Name() string          { return string(wmipc.EventFocus) }
+func (SubmapEvent) Name() string         { return string(wmipc.EventSubmap) }
+func (LayoutEvent) Name() string         { return string(wmipc.EventLayout) }
+func (LocksEvent) Name() string          { return string(wmipc.EventLocks) }
+func (ReducedMotionEvent) Name() string  { return string(wmipc.EventReducedMotion) }
+func (DispatchEvent) Name() string       { return string(wmipc.EventDispatch) }
+func (OverviewEvent) Name() string       { return string(wmipc.EventOverview) }
+func (ConfigProblemsEvent) Name() string { return string(wmipc.EventConfigProblems) }
+func (WindowMenuEvent) Name() string     { return string(wmipc.EventWindowMenu) }
+func (ShowDesktopEvent) Name() string    { return string(wmipc.EventShowDesktop) }
+func (ScratchpadEvent) Name() string     { return string(wmipc.EventScratchpad) }
+func (LayerEvent) Name() string          { return string(wmipc.EventLayer) }
+func (GroupEvent) Name() string          { return string(wmipc.EventGroup) }
+func (BellEvent) Name() string           { return string(wmipc.EventBell) }
+func (CastTargetEvent) Name() string     { return string(wmipc.EventCastTarget) }
+func (BindsEvent) Name() string          { return string(wmipc.EventBinds) }
+func (MRUEvent) Name() string            { return string(wmipc.EventMRU) }
+func (SwitcherEvent) Name() string       { return string(wmipc.EventSwitcher) }
 
 func Encode(e Event) ([]byte, error) {
 	return AppendEvent(nil, e)

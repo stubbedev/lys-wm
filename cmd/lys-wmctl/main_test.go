@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/testenv"
@@ -19,24 +21,24 @@ import (
 
 func TestParseArgs(t *testing.T) {
 	for args, want := range map[string]ipc.Request{
-		"dispatch movetoworkspace 3": {Request: ipc.KindDispatch, Action: "movetoworkspace 3"},
-		"dispatch exec foot -e htop": {Request: ipc.KindDispatch, Action: "exec foot -e htop"},
-		"reload":                     {Request: ipc.KindDispatch, Action: "reload"},
-		"windows":                    {Request: ipc.KindWindows},
-		"activewindow":               {Request: ipc.KindActiveWindow},
-		"submap":                     {Request: ipc.KindSubmap},
-		"layout":                     {Request: ipc.KindLayout},
-		"locks":                      {Request: ipc.KindLocks},
-		"reducedmotion":              {Request: ipc.KindReducedMotion},
-		"configproblems":             {Request: ipc.KindConfigProblems},
-		"watch":                      {Request: ipc.KindWatch},
-		"watch --snapshot":           {Request: ipc.KindWatch, Snapshot: true},
-		`batch submap\x20a kill`:     {Request: ipc.KindDispatch, Actions: []string{"submap a", "kill"}},
-		"layers":                     {Request: ipc.KindLayers},
-		"devices":                    {Request: ipc.KindDevices},
-		"pickwindow":                 {Request: ipc.KindPickWindow},
-		"binds":                      {Request: ipc.KindBinds},
-		"icon 7 64":                  {Request: ipc.KindIcon, Window: 7, Size: 64},
+		"dispatch movetoworkspace 3": {Request: wmipc.KindDispatch, Action: "movetoworkspace 3"},
+		"dispatch exec foot -e htop": {Request: wmipc.KindDispatch, Action: "exec foot -e htop"},
+		"reload":                     {Request: wmipc.KindDispatch, Action: "reload"},
+		"windows":                    {Request: wmipc.KindWindows},
+		"activewindow":               {Request: wmipc.KindActiveWindow},
+		"submap":                     {Request: wmipc.KindSubmap},
+		"layout":                     {Request: wmipc.KindLayout},
+		"locks":                      {Request: wmipc.KindLocks},
+		"reducedmotion":              {Request: wmipc.KindReducedMotion},
+		"configproblems":             {Request: wmipc.KindConfigProblems},
+		"watch":                      {Request: wmipc.KindWatch},
+		"watch --snapshot":           {Request: wmipc.KindWatch, Snapshot: true},
+		`batch submap\x20a kill`:     {Request: wmipc.KindDispatch, Actions: []string{"submap a", "kill"}},
+		"layers":                     {Request: wmipc.KindLayers},
+		"devices":                    {Request: wmipc.KindDevices},
+		"pickwindow":                 {Request: wmipc.KindPickWindow},
+		"binds":                      {Request: wmipc.KindBinds},
+		"icon 7 64":                  {Request: wmipc.KindIcon, Window: 7, Size: 64},
 	} {
 		if got, err := parseArgs(splitArgs(args)); err != nil || !reflect.DeepEqual(got, want) {
 			t.Errorf("%q: %+v, %v; want %+v", args, got, err, want)
@@ -105,7 +107,7 @@ func TestRunAgainstASocket(t *testing.T) {
 		}
 	}()
 	getenv := func(k string) string {
-		if k == ipc.SocketEnv {
+		if k == wmipc.SocketEnv {
 			return path
 		}
 		return ""
@@ -187,9 +189,9 @@ func TestAnyOtherFailureIsNotReportedAsNotRunning(t *testing.T) {
 
 func TestOutputCreateAndRemove(t *testing.T) {
 	for args, want := range map[string]ipc.Request{
-		"output create 1920x1080":                             {Request: ipc.KindCreateOutput, Mode: &ipc.Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}},
-		"output create --name tablet --scale 2 2560x1600@120": {Request: ipc.KindCreateOutput, Name: "tablet", Scale: 2, Mode: &ipc.Mode{Width: 2560, Height: 1600, RefreshMHz: 120000}},
-		"output remove VIRT-1":                                {Request: ipc.KindRemoveOutput, Name: "VIRT-1"},
+		"output create 1920x1080":                             {Request: wmipc.KindCreateOutput, Mode: &wmipc.Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}},
+		"output create --name tablet --scale 2 2560x1600@120": {Request: wmipc.KindCreateOutput, Name: "tablet", Scale: 2, Mode: &wmipc.Mode{Width: 2560, Height: 1600, RefreshMHz: 120000}},
+		"output remove VIRT-1":                                {Request: wmipc.KindRemoveOutput, Name: "VIRT-1"},
 	} {
 		got, err := parseArgs(strings.Fields(args))
 		if err != nil || got.Request != want.Request || got.Name != want.Name || got.Scale != want.Scale || (got.Mode == nil) != (want.Mode == nil) || got.Mode != nil && *got.Mode != *want.Mode {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/icontheme"
 	gtext "github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wmipc"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
@@ -39,7 +40,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
-var reservedEnv = []string{"WAYLAND_DISPLAY", "DISPLAY", ipc.SocketEnv}
+var reservedEnv = []string{"WAYLAND_DISPLAY", "DISPLAY", wmipc.SocketEnv}
 
 var sessionEnv = map[string]string{"XDG_CURRENT_DESKTOP": "lys-wm", "XDG_SESSION_TYPE": "wayland"}
 

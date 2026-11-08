@@ -5,6 +5,8 @@ import (
 	"image"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -64,7 +66,7 @@ func floatingBar(t *testing.T, start gpuStarter) *barScene {
 	w := ssdWindow(c, "Editor", testclient.Fill(0x20, 0x40, 0x60))
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.dispatch("togglefloating")
-	win := query[ipc.Window](h, ipc.KindActiveWindow)
+	win := query[ipc.Window](h, wmipc.KindActiveWindow)
 	c.DispatchUntil("the floating size", func() bool { return w.Logical == image.Pt(win.Rect.Width, win.Rect.Height) })
 	quiesce(t, h, c, w)
 	return &barScene{h: h, c: c, w: w}
@@ -79,7 +81,7 @@ func (s *barScene) floatAgain() {
 }
 
 func (s *barScene) window() ipc.Window {
-	return query[ipc.Window](s.h, ipc.KindActiveWindow)
+	return query[ipc.Window](s.h, wmipc.KindActiveWindow)
 }
 
 func (s *barScene) bar() image.Rectangle {
@@ -121,7 +123,7 @@ func TestAFloatingServerDecoratedWindowHasATitlebarAndAClientDecoratedOneNone(t 
 	csd := s.c.Window("Shell", testclient.Fill(0x60, 0x40, 0x20))
 	s.c.DispatchUntil("the CSD window to map", csd.Mapped)
 	s.h.dispatch("togglefloating")
-	plain := query[ipc.Window](s.h, ipc.KindActiveWindow)
+	plain := query[ipc.Window](s.h, wmipc.KindActiveWindow)
 	s.c.DispatchUntil("the CSD floating size", func() bool { return csd.Logical == image.Pt(plain.Rect.Width, plain.Rect.Height) })
 	quiesce(t, s.h, s.c, csd)
 	if got := pixel(s.h.Rendered(0), plain.Rect.X+2, plain.Rect.Y+2); got != [3]byte{0x60, 0x40, 0x20} {
@@ -182,7 +184,7 @@ func TestTheButtonsFollowTheConfiguredSide(t *testing.T) {
 	w := ssdWindow(c, "Editor", testclient.Fill(0x20, 0x40, 0x60))
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.dispatch("togglefloating")
-	win := query[ipc.Window](h, ipc.KindActiveWindow)
+	win := query[ipc.Window](h, wmipc.KindActiveWindow)
 	c.DispatchUntil("the floating size", func() bool { return w.Logical == image.Pt(win.Rect.Width, win.Rect.Height) })
 	quiesce(t, h, c, w)
 	right := win.Rect.X + win.Rect.Width
@@ -224,7 +226,7 @@ func TestASteadyTitlebarRastersNothingAgain(t *testing.T) {
 	w := ssdWindow(c, "Busy", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.dispatch("togglefloating")
-	win := query[ipc.Window](h, ipc.KindActiveWindow)
+	win := query[ipc.Window](h, wmipc.KindActiveWindow)
 	c.DispatchUntil("the floating size", func() bool { return w.Logical == image.Pt(win.Rect.Width, win.Rect.Height) })
 	settle(t, h)
 	var landed uint64

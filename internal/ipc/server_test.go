@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -145,7 +147,7 @@ func (r *rig) do(f func(*fake)) {
 	<-ran
 }
 
-func (r *rig) raw(line string) Response {
+func (r *rig) raw(line string) wmipc.Response {
 	r.t.Helper()
 	c, err := net.Dial("unix", r.path)
 	if err != nil {
@@ -158,7 +160,7 @@ func (r *rig) raw(line string) Response {
 	if err := c.(*net.UnixConn).CloseWrite(); err != nil {
 		r.t.Fatal(err)
 	}
-	var resp Response
+	var resp wmipc.Response
 	if err := json.NewDecoder(c).Decode(&resp); err != nil {
 		r.t.Fatal(err)
 	}
@@ -167,25 +169,25 @@ func (r *rig) raw(line string) Response {
 
 func TestQueriesAndDispatch(t *testing.T) {
 	r := start(t)
-	if got, err := Do(r.path, Request{Request: KindVersion}); err != nil || string(got) != "1" {
+	if got, err := Do(r.path, Request{Request: wmipc.KindVersion}); err != nil || string(got) != "1" {
 		t.Fatalf("version %s, %v", got, err)
 	}
-	if got, err := Do(r.path, Request{Request: KindWindows}); err != nil || string(got) != "[]" {
+	if got, err := Do(r.path, Request{Request: wmipc.KindWindows}); err != nil || string(got) != "[]" {
 		t.Fatalf("no windows gave %s, %v", got, err)
 	}
-	if got, err := Do(r.path, Request{Request: KindActiveWindow}); err != nil || got != nil {
+	if got, err := Do(r.path, Request{Request: wmipc.KindActiveWindow}); err != nil || got != nil {
 		t.Fatalf("no active window gave %s, %v", got, err)
 	}
 	r.do(func(f *fake) { f.snap.Windows = []Window{{ID: 7, Title: "seven", Focused: true}} })
-	got, err := Do(r.path, Request{Request: KindActiveWindow})
+	got, err := Do(r.path, Request{Request: wmipc.KindActiveWindow})
 	var w Window
 	if err != nil || json.Unmarshal(got, &w) != nil || w.ID != 7 || w.Title != "seven" {
 		t.Fatalf("active window %s, %v", got, err)
 	}
-	if _, err := Do(r.path, Request{Request: KindDispatch, Action: "workspace 2"}); err != nil {
+	if _, err := Do(r.path, Request{Request: wmipc.KindDispatch, Action: "workspace 2"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Do(r.path, Request{Request: KindDispatch, Action: "kill"}); err == nil || err.Error() != "lys-wm: nothing to kill" {
+	if _, err := Do(r.path, Request{Request: wmipc.KindDispatch, Action: "kill"}); err == nil || err.Error() != "lys-wm: nothing to kill" {
 		t.Fatalf("a failing dispatch: %v", err)
 	}
 	r.do(func(f *fake) {
@@ -196,7 +198,7 @@ func TestQueriesAndDispatch(t *testing.T) {
 	if _, err := Do(r.path, Request{Request: "teleport"}); err == nil || !strings.Contains(err.Error(), `unknown request "teleport"`) {
 		t.Fatalf("an unknown request: %v", err)
 	}
-	if resp := r.raw(strings.Repeat("x", maxRequest+10)); !strings.Contains(resp.Error, "longer than") || resp.Version != Version {
+	if resp := r.raw(strings.Repeat("x", maxRequest+10)); !strings.Contains(resp.Error, "longer than") || resp.Version != wmipc.Version {
 		t.Fatalf("an oversized request: %+v", resp)
 	}
 	if resp := r.raw(`{"request":"version"}`); resp.Error != "" || string(resp.Result) != "1" {
@@ -206,19 +208,19 @@ func TestQueriesAndDispatch(t *testing.T) {
 
 func TestSubmapLayoutAndLocksAreQueries(t *testing.T) {
 	r := start(t)
-	for kind, want := range map[Kind]string{KindSubmap: `""`, KindLayout: `{"index":0,"name":""}`, KindLocks: `{"caps":false,"num":false,"scroll":false}`, KindReducedMotion: `false`, KindOverview: `false`} {
+	for kind, want := range map[wmipc.Kind]string{wmipc.KindSubmap: `""`, wmipc.KindLayout: `{"index":0,"name":""}`, wmipc.KindLocks: `{"caps":false,"num":false,"scroll":false}`, wmipc.KindReducedMotion: `false`, wmipc.KindOverview: `false`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s before any change: %s, %v; want %s", kind, got, err, want)
 		}
 	}
 	r.do(func(f *fake) {
 		f.snap.Submap = "resize"
-		f.snap.Layout = Layout{Index: 1, Name: "Danish"}
-		f.snap.Locks = Locks{Num: true}
+		f.snap.Layout = wmipc.Layout{Index: 1, Name: "Danish"}
+		f.snap.Locks = wmipc.Locks{Num: true}
 		f.snap.ReducedMotion = true
 		f.snap.Overview = true
 	})
-	for kind, want := range map[Kind]string{KindSubmap: `"resize"`, KindLayout: `{"index":1,"name":"Danish"}`, KindLocks: `{"caps":false,"num":true,"scroll":false}`, KindReducedMotion: `true`, KindOverview: `true`} {
+	for kind, want := range map[wmipc.Kind]string{wmipc.KindSubmap: `"resize"`, wmipc.KindLayout: `{"index":1,"name":"Danish"}`, wmipc.KindLocks: `{"caps":false,"num":true,"scroll":false}`, wmipc.KindReducedMotion: `true`, wmipc.KindOverview: `true`} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Fatalf("%s: %s, %v; want %s", kind, got, err, want)
 		}
@@ -272,7 +274,7 @@ func TestIconsArePNGs(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	img.Set(1, 0, color.RGBA{R: 0x80, A: 0x80})
 	r.do(func(f *fake) { f.icons = map[wm.WindowID]*image.RGBA{7: img} })
-	got, err := Do(r.path, Request{Request: KindIcon, Window: 7, Size: 64})
+	got, err := Do(r.path, Request{Request: wmipc.KindIcon, Window: 7, Size: 64})
 	var icon IconImage
 	if err != nil || json.Unmarshal(got, &icon) != nil {
 		t.Fatalf("icon %s, %v", got, err)
@@ -287,7 +289,7 @@ func TestIconsArePNGs(t *testing.T) {
 	if r, _, _, a := decoded.At(1, 0).RGBA(); r != 0x8080 || a != 0x8080 {
 		t.Fatalf("the half-transparent red pixel came back as %v", decoded.At(1, 0))
 	}
-	if _, err := Do(r.path, Request{Request: KindIcon, Window: 8, Size: 64}); err == nil || err.Error() != "lys-wm: no icon for window 8" {
+	if _, err := Do(r.path, Request{Request: wmipc.KindIcon, Window: 8, Size: 64}); err == nil || err.Error() != "lys-wm: no icon for window 8" {
 		t.Fatalf("a window without an icon: %v", err)
 	}
 }
@@ -297,7 +299,7 @@ func TestWatchStreamsDiffsAndDispatches(t *testing.T) {
 	r.do(func(f *fake) { f.snap.Submap = "resize" })
 	lines, stop := watch(t, r.path)
 	defer stop()
-	if _, err := Do(r.path, Request{Request: KindDispatch, Action: "submap reset"}); err != nil {
+	if _, err := Do(r.path, Request{Request: wmipc.KindDispatch, Action: "submap reset"}); err != nil {
 		t.Fatal(err)
 	}
 	r.do(func(f *fake) {
@@ -374,7 +376,7 @@ func TestFindSocket(t *testing.T) {
 	if got, err := FindSocket(getenv); err != nil || got != r.path {
 		t.Fatalf("one socket: %q, %v", got, err)
 	}
-	env[SocketEnv] = "/elsewhere.sock"
+	env[wmipc.SocketEnv] = "/elsewhere.sock"
 	if got, err := FindSocket(getenv); err != nil || got != "/elsewhere.sock" {
 		t.Fatalf("LYS_WM_SOCKET: %q, %v", got, err)
 	}
@@ -406,7 +408,7 @@ func TestADispatchThatStopsLysWMIsAnswered(t *testing.T) {
 		}
 		answered := make(chan error, 1)
 		go func() {
-			_, err := Do(path, Request{Request: KindDispatch, Action: "exit"})
+			_, err := Do(path, Request{Request: wmipc.KindDispatch, Action: "exit"})
 			answered <- err
 		}()
 		if err := errors.Join(l.Run(), s.Close(), l.Close()); err != nil {
@@ -448,15 +450,15 @@ func TestAWakeupWithoutAChangeBuildsNoSnapshot(t *testing.T) {
 
 func TestOutputsAreCreatedAndRemovedOnTheLoop(t *testing.T) {
 	r := start(t)
-	got, err := Do(r.path, Request{Request: KindCreateOutput, Name: "VIRT-1", Mode: &Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}, Scale: 1.5})
+	got, err := Do(r.path, Request{Request: wmipc.KindCreateOutput, Name: "VIRT-1", Mode: &wmipc.Mode{Width: 1920, Height: 1080, RefreshMHz: 60000}, Scale: 1.5})
 	var o CreatedOutput
 	if err != nil || json.Unmarshal(got, &o) != nil || o.Name != "VIRT-1" {
 		t.Fatalf("createoutput gave %s, %v", got, err)
 	}
-	if got, err := Do(r.path, Request{Request: KindRemoveOutput, Name: "VIRT-1"}); err != nil || got != nil {
+	if got, err := Do(r.path, Request{Request: wmipc.KindRemoveOutput, Name: "VIRT-1"}); err != nil || got != nil {
 		t.Fatalf("removeoutput gave %s, %v", got, err)
 	}
-	if _, err := Do(r.path, Request{Request: KindRemoveOutput, Name: "DP-1"}); err == nil || err.Error() != "lys-wm: no virtual output DP-1" {
+	if _, err := Do(r.path, Request{Request: wmipc.KindRemoveOutput, Name: "DP-1"}); err == nil || err.Error() != "lys-wm: no virtual output DP-1" {
 		t.Fatalf("removing an output that is not virtual: %v", err)
 	}
 	r.do(func(f *fake) {
@@ -469,14 +471,14 @@ func TestOutputsAreCreatedAndRemovedOnTheLoop(t *testing.T) {
 
 func TestABatchRunsInOrderAndStopsAtTheFirstFailure(t *testing.T) {
 	r := start(t)
-	if _, err := Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap a", "submap b"}}); err != nil {
+	if _, err := Do(r.path, Request{Request: wmipc.KindDispatch, Actions: []string{"submap a", "submap b"}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap c", "kill", "submap d"}})
+	_, err := Do(r.path, Request{Request: wmipc.KindDispatch, Actions: []string{"submap c", "kill", "submap d"}})
 	if err == nil || !strings.Contains(err.Error(), "action 1 (kill): nothing to kill") {
 		t.Fatalf("a batch failing at its second action: %v", err)
 	}
-	_, err = Do(r.path, Request{Request: KindDispatch, Actions: []string{"submap e", "fly up"}})
+	_, err = Do(r.path, Request{Request: wmipc.KindDispatch, Actions: []string{"submap e", "fly up"}})
 	if err == nil || !strings.Contains(err.Error(), `action 1 (fly up)`) {
 		t.Fatalf("a batch with an unknown action: %v", err)
 	}
@@ -489,7 +491,7 @@ func TestABatchRunsInOrderAndStopsAtTheFirstFailure(t *testing.T) {
 			t.Errorf("dispatched %v, want %v", got, want)
 		}
 	})
-	if _, err := Do(r.path, Request{Request: KindDispatch, Action: "submap a", Actions: []string{"submap b"}}); err == nil {
+	if _, err := Do(r.path, Request{Request: wmipc.KindDispatch, Action: "submap a", Actions: []string{"submap b"}}); err == nil {
 		t.Fatal("a dispatch with both an action and actions was accepted")
 	}
 }
@@ -522,7 +524,7 @@ func TestAWatchWithASnapshotStartsWithTheState(t *testing.T) {
 	if want := []string{"output", "workspace", "focusedoutput", "open", "focus", "layer", "open"}; !slices.Equal(got, want) {
 		t.Fatalf("events %v, want %v", got, want)
 	}
-	if _, err := Do(r.path, Request{Request: KindWindows, Snapshot: true}); err == nil {
+	if _, err := Do(r.path, Request{Request: wmipc.KindWindows, Snapshot: true}); err == nil {
 		t.Fatal("a query took a snapshot flag")
 	}
 }
@@ -530,12 +532,12 @@ func TestAWatchWithASnapshotStartsWithTheState(t *testing.T) {
 func TestLayersAndDevicesAreQueries(t *testing.T) {
 	r := start(t)
 	r.do(func(f *fake) {
-		f.snap.Layers = []Layer{{ID: 4, Namespace: "bar", Layer: LayerTop, Output: "DP-1", Rect: Rect{Width: 100, Height: 30}, Keyboard: KeyboardOnDemand}}
-		f.snap.Devices = []Device{{Name: "kbd", Capabilities: []Capability{CapKeyboard}, Layout: &Layout{Name: "Danish"}}}
+		f.snap.Layers = []Layer{{ID: 4, Namespace: "bar", Layer: LayerTop, Output: "DP-1", Rect: wmipc.Rect{Width: 100, Height: 30}, Keyboard: KeyboardOnDemand}}
+		f.snap.Devices = []Device{{Name: "kbd", Capabilities: []Capability{CapKeyboard}, Layout: &wmipc.Layout{Name: "Danish"}}}
 	})
-	for kind, want := range map[Kind]string{
-		KindLayers:  `[{"id":4,"namespace":"bar","layer":"top","output":"DP-1","rect":{"x":0,"y":0,"width":100,"height":30},"keyboard_interactivity":"on_demand"}]`,
-		KindDevices: `[{"name":"kbd","capabilities":["keyboard"],"layout":{"index":0,"name":"Danish"}}]`,
+	for kind, want := range map[wmipc.Kind]string{
+		wmipc.KindLayers:  `[{"id":4,"namespace":"bar","layer":"top","output":"DP-1","rect":{"x":0,"y":0,"width":100,"height":30},"keyboard_interactivity":"on_demand"}]`,
+		wmipc.KindDevices: `[{"name":"kbd","capabilities":["keyboard"],"layout":{"index":0,"name":"Danish"}}]`,
 	} {
 		if got, err := Do(r.path, Request{Request: kind}); err != nil || string(got) != want {
 			t.Errorf("%s: %s, %v; want %s", kind, got, err, want)
@@ -562,11 +564,11 @@ func TestPickWindowAnswersWithThePickAndCancelsWhenTheClientLeaves(t *testing.T)
 	}
 	answered := make(chan string, 1)
 	go func() {
-		got, err := Do(r.path, Request{Request: KindPickWindow})
+		got, err := Do(r.path, Request{Request: wmipc.KindPickWindow})
 		answered <- fmt.Sprint(string(got), err)
 	}()
 	awaitPick()
-	if _, err := Do(r.path, Request{Request: KindPickWindow}); err == nil || !strings.Contains(err.Error(), "a pick is running") {
+	if _, err := Do(r.path, Request{Request: wmipc.KindPickWindow}); err == nil || !strings.Contains(err.Error(), "a pick is running") {
 		t.Fatalf("a second pick: %v", err)
 	}
 	r.do(func(f *fake) {

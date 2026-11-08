@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -108,8 +110,8 @@ func (ic *inputCapture) Close() error {
 	return nil
 }
 
-func capturePoint(p point) ipc.CapturePoint {
-	return ipc.CapturePoint{X: p.X, Y: p.Y}
+func capturePoint(p point) wmipc.CapturePoint {
+	return wmipc.CapturePoint{X: p.X, Y: p.Y}
 }
 
 func captureModifiers(m xkb.Modifiers) ipc.CaptureModifiersEvent {

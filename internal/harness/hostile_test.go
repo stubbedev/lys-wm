@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -285,10 +286,10 @@ func TestAClientLeavingWithAnOlderWindowFocusedDoesNotStopTheCompositor(t *testi
 		w := gone.Window(name, quadrants)
 		gone.DispatchUntil(name+" to map", w.Mapped)
 	}
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "focus left"}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "focus left"}); err != nil {
 		t.Fatal(err)
 	}
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Title != "older" {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Title != "older" {
 		t.Fatalf("focus left made %q active", w.Title)
 	}
 	for range 2 {

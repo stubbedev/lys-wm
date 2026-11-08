@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -46,7 +48,7 @@ func holding(_ *headless.Backend, c *compositor.Compositor) bool {
 func (h *Harness) stalls(title string) int {
 	h.t.Helper()
 	var id wm.WindowID
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		if w.Title == title {
 			id = w.ID
 		}

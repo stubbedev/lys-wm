@@ -14,6 +14,7 @@ import (
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
+	"github.com/stubbedev/lys-lib/wmipc"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -221,7 +222,7 @@ func TestXWindowsAreManaged(t *testing.T) {
 	})
 	h.Eventually("the dialog floating in the middle", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
-		return len(ws) == 2 && ws[1].Floating && ws[1].Rect == ipc.Rect{X: 60, Y: 35, Width: 40, Height: 30} && ws[1].Focused
+		return len(ws) == 2 && ws[1].Floating && ws[1].Rect == wmipc.Rect{X: 60, Y: 35, Width: 40, Height: 30} && ws[1].Focused
 	})
 	h.Eventually("the dialog drawn over the window", showing(80, 50, [3]byte{0, 0, 0xff}))
 
@@ -472,7 +473,7 @@ func TestXWindowsRenderUnscaledOnHiDPIOutputs(t *testing.T) {
 	win := xc.window(image.Rect(0, 0, 50, 50), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("hidpi\x00HiDPI\x00")})
 	h.Eventually("the X window tiled in physical pixels", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
-		return len(ws) == 1 && ws[0].Rect == ipc.Rect{Width: 160, Height: 100} && xc.geometry(win) == image.Rect(0, 0, 240, 150)
+		return len(ws) == 1 && ws[0].Rect == wmipc.Rect{Width: 160, Height: 100} && xc.geometry(win) == image.Rect(0, 0, 240, 150)
 	})
 	h.Eventually("the X window filling the output pixel for pixel", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		snap := primary(b.Outputs()[0])
@@ -543,7 +544,7 @@ func TestXWindowsMovedPartlyOffAnOutputKeepItsScale(t *testing.T) {
 	}
 	h.Eventually("the dialog above the output's top edge, in logical and in X pixels", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
-		return len(ws) == 1 && ws[0].Rect == ipc.Rect{X: 20, Y: -10, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(30, -15, 90, 30)
+		return len(ws) == 1 && ws[0].Rect == wmipc.Rect{X: 20, Y: -10, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(30, -15, 90, 30)
 	})
 }
 
@@ -598,7 +599,7 @@ func TestFloatingXWindowsMapAtLeastAtTheirMinimumSize(t *testing.T) {
 	})
 	h.Eventually("the dialog floating centred at its minimum size", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
-		return len(ws) == 1 && ws[0].Floating && ws[0].Rect == ipc.Rect{X: 60, Y: 35, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(90, 53, 150, 98)
+		return len(ws) == 1 && ws[0].Floating && ws[0].Rect == wmipc.Rect{X: 60, Y: 35, Width: 40, Height: 30} && xc.geometry(win) == image.Rect(90, 53, 150, 98)
 	})
 }
 
@@ -893,7 +894,7 @@ func TestAFloatingXWindowWhoseMinimumArrivesAfterItsMapStaysCentred(t *testing.T
 		xc := xDial(t, h)
 		win := dialog(xc, "moved")
 		h.Eventually("the dialog floating", sized(image.Point{}))
-		var moved ipc.Rect
+		var moved wmipc.Rect
 		h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 			a, err := wm.ParseAction("resizeactive 8 4")
 			if err != nil {

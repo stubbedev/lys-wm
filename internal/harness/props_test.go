@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -155,12 +157,12 @@ func TestSetpropAppliesAtOnceAndGoesWithTheWindow(t *testing.T) {
 	w := c.Window("w", testclient.Fill(0, 0, 0xff))
 	c.DispatchUntil("w to map", w.Mapped)
 	h.settled(c, "w laid", func(ipc.Window) bool { return true }, "w")
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "setprop 1 border {width: 10, active: \"#00ff00\"}"}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "setprop 1 border {width: 10, active: \"#00ff00\"}"}); err != nil {
 		t.Fatal(err)
 	}
 	h.Eventually("a 10 px green border", showing(9, 50, [3]byte{0, 0xff, 0}))
 	c.DispatchUntil("w reconfigured inside it", func() bool { return w.Size.X == 160-20 })
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "setprop 1 border {width: nine}"}); err == nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "setprop 1 border {width: nine}"}); err == nil {
 		t.Fatal("a bad value was taken")
 	}
 	if err := errors.Join(w.Destroy(), c.Display.Flush()); err != nil {

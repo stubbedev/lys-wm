@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -60,7 +62,7 @@ func (c swallowChild) stop() {
 }
 
 func windowTitled(h *Harness, title string) (ipc.Window, bool) {
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		if w.Title == title {
 			return w, true
 		}

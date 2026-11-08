@@ -6,6 +6,8 @@ import (
 	"image"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -91,7 +93,7 @@ func TestADynamicCaptureFollowsItsTargetWithoutStopping(t *testing.T) {
 	c.DispatchUntil("b to map", b.Mapped)
 	a.Stop()
 	quiesce(t, h, c, b)
-	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	windows := query[[]ipc.Window](h, wmipc.KindWindows)
 	idA, idB := windows[0].ID, windows[1].ID
 	half := image.Pt(windows[0].Rect.Width, windows[0].Rect.Height)
 	if half != image.Pt(windows[1].Rect.Width, windows[1].Rect.Height) {
@@ -145,7 +147,7 @@ func TestADynamicTargetClearsWhenItsWindowCloses(t *testing.T) {
 	r := newDynamicRig(t, h, c)
 	h.dispatch("casttarget window")
 	r.frame()
-	if got := query[ipc.CastTarget](h, ipc.KindCastTarget); got.Kind != ipc.CastWindow || got.Window == 0 {
+	if got := query[ipc.CastTarget](h, wmipc.KindCastTarget); got.Kind != ipc.CastWindow || got.Window == 0 {
 		t.Fatalf("the cast target is %+v", got)
 	}
 	lines := h.watch()
@@ -153,7 +155,7 @@ func TestADynamicTargetClearsWhenItsWindowCloses(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStreamed(t, lines, "the target clearing", func(e streamed) bool { return e.Event == "casttarget" })
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "submap done"}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "submap done"}); err != nil {
 		t.Fatal(err)
 	}
 	cleared := 0
@@ -166,7 +168,7 @@ func TestADynamicTargetClearsWhenItsWindowCloses(t *testing.T) {
 	if cleared != 0 {
 		t.Fatalf("closing the target window sent %d more casttarget events", cleared)
 	}
-	if got := query[ipc.CastTarget](h, ipc.KindCastTarget); got != (ipc.CastTarget{Kind: ipc.CastNone}) {
+	if got := query[ipc.CastTarget](h, wmipc.KindCastTarget); got != (ipc.CastTarget{Kind: ipc.CastNone}) {
 		t.Fatalf("the cast target is %+v after its window closed", got)
 	}
 	h.Do(func(*headless.Backend, *compositor.Compositor) error { return nil })

@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/compositor"
-	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -275,8 +276,8 @@ func touchWindowRig(t *testing.T, drive binds.Drive) (*Harness, *fingers) {
 	return h, &fingers{h: h, at: time.Hour}
 }
 
-func windowRects(h *Harness) map[string]ipc.Rect {
-	out := map[string]ipc.Rect{}
+func windowRects(h *Harness) map[string]wmipc.Rect {
+	out := map[string]wmipc.Rect{}
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		for _, w := range c.Snapshot().Windows {
 			out[w.Title] = w.Rect
@@ -321,7 +322,7 @@ func TestThreeFingersOnTheScreenResizeTheWindowUnderThem(t *testing.T) {
 	}
 	f.up(ids...)
 	h.Eventually("the left window wider by the fingers' travel", func(_ *headless.Backend, c *compositor.Compositor) bool {
-		after := map[string]ipc.Rect{}
+		after := map[string]wmipc.Rect{}
 		for _, w := range c.Snapshot().Windows {
 			after[w.Title] = w.Rect
 		}

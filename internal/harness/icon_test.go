@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/icontheme"
+	"github.com/stubbedev/lys-lib/wmipc"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -78,13 +79,13 @@ func eventuallyIcon(t *testing.T, h *Harness, title string, ok func(*ipc.Icon) b
 	t.Helper()
 	deadline := time.Now().Add(clientTimeout)
 	for {
-		for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+		for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 			if w.Title == title && ok(w.Icon) {
 				return w.Icon
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s never reported the expected icon: %+v", title, query[[]ipc.Window](h, ipc.KindWindows))
+			t.Fatalf("%s never reported the expected icon: %+v", title, query[[]ipc.Window](h, wmipc.KindWindows))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -92,7 +93,7 @@ func eventuallyIcon(t *testing.T, h *Harness, title string, ok func(*ipc.Icon) b
 
 func iconImage(t *testing.T, h *Harness, size int) (ipc.IconImage, image.Image) {
 	t.Helper()
-	raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindIcon, Window: query[[]ipc.Window](h, ipc.KindWindows)[0].ID, Size: size})
+	raw, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindIcon, Window: query[[]ipc.Window](h, wmipc.KindWindows)[0].ID, Size: size})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -65,7 +67,7 @@ func TestADraggedToplevelFollowsThePointerWithoutConfigures(t *testing.T) {
 	a := join(t, h, "a")
 	tab := a.c.Window("tab", quadrants)
 	a.c.DispatchUntil("the tab window to map", tab.Mapped)
-	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	windows := query[[]ipc.Window](h, wmipc.KindWindows)
 	idTab := windows[1].ID
 	offset := image.Pt(12, 7)
 	start := image.Pt(windows[0].Rect.X+40, windows[0].Rect.Y+40)
@@ -120,7 +122,7 @@ func TestADraggedToplevelFollowsThePointerWithoutConfigures(t *testing.T) {
 	}
 }
 
-func rectOf(r ipc.Rect) image.Rectangle {
+func rectOf(r wmipc.Rect) image.Rectangle {
 	return image.Rect(r.X, r.Y, r.X+r.Width, r.Y+r.Height)
 }
 
@@ -187,7 +189,7 @@ func TestADropTargetIsTheWindowUnderTheDraggedToplevel(t *testing.T) {
 	a := join(t, h, "a")
 	tab := a.c.Window("tab", quadrants)
 	a.c.DispatchUntil("the tab window to map", tab.Mapped)
-	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	windows := query[[]ipc.Window](h, wmipc.KindWindows)
 	under, origin := windows[0].Rect, windows[1].Rect
 	pressOn(h, a.c, a.in, image.Pt(origin.X+20, origin.Y+20))
 	m, err := cxtd.NewXdgToplevelDragManagerV1(a.c.Display, 1)

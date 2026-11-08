@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -23,7 +25,7 @@ func workspaceRule(id wm.WorkspaceID, r wm.WorkspaceRule, bind string) composito
 }
 
 func ipcWorkspaces(h *Harness) []ipc.Workspace {
-	return query[[]ipc.Workspace](h, ipc.KindWorkspaces)
+	return query[[]ipc.Workspace](h, wmipc.KindWorkspaces)
 }
 
 func TestWorkspaceRulesBindNameAndKeepWorkspaces(t *testing.T) {

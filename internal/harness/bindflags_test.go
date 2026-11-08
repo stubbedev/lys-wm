@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/binds"
@@ -215,7 +217,7 @@ func TestBindsAreQueriedAndAnnouncedOnReload(t *testing.T) {
 		comp = c
 		return nil
 	})
-	got := query[[]ipc.Bind](h, ipc.KindBinds)
+	got := query[[]ipc.Bind](h, wmipc.KindBinds)
 	want := []ipc.Bind{
 		{Chord: "SUPER", Action: "exec launcher", Description: "Open the launcher", Flags: []string{"release"}},
 		{Chord: "SUPER + Q", Action: "kill", Flags: []string{"release", "inhibit_proof"}, CooldownMS: 250},
@@ -226,7 +228,7 @@ func TestBindsAreQueriedAndAnnouncedOnReload(t *testing.T) {
 	lines := h.watch()
 	h.Do(func(*headless.Backend, *compositor.Compositor) error { return comp.Reconfigure(next) })
 	expectEvent(t, lines, `{"event":"binds","binds":[{"submap":"","chord":"SUPER + R","action":"reload","description":"Reload the config","flags":[]}]}`)
-	if got := query[[]ipc.Bind](h, ipc.KindBinds); len(got) != 1 || !strings.Contains(got[0].Description, "Reload") {
+	if got := query[[]ipc.Bind](h, wmipc.KindBinds); len(got) != 1 || !strings.Contains(got[0].Description, "Reload") {
 		t.Fatalf("binds after the reload: %+v", got)
 	}
 }

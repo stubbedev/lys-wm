@@ -11,6 +11,8 @@ import (
 	"net"
 	"slices"
 	"time"
+
+	"github.com/stubbedev/lys-lib/wmipc"
 )
 
 const captureBacklog = 4096
@@ -47,11 +49,6 @@ func (b Barrier) ordered() Barrier {
 	return b
 }
 
-type CapturePoint struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
-
 type CaptureCommand interface {
 	captureCommand()
 }
@@ -60,7 +57,7 @@ type (
 	SetBarriers    struct{ Barriers []Barrier }
 	EnableCapture  struct{}
 	DisableCapture struct{}
-	ReleaseCapture struct{ At *CapturePoint }
+	ReleaseCapture struct{ At *wmipc.CapturePoint }
 )
 
 func (SetBarriers) captureCommand()    {}
@@ -69,9 +66,9 @@ func (DisableCapture) captureCommand() {}
 func (ReleaseCapture) captureCommand() {}
 
 type captureLine struct {
-	Command  string        `json:"command"`
-	Barriers *[]Barrier    `json:"barriers,omitempty"`
-	At       *CapturePoint `json:"at,omitempty"`
+	Command  string              `json:"command"`
+	Barriers *[]Barrier          `json:"barriers,omitempty"`
+	At       *wmipc.CapturePoint `json:"at,omitempty"`
 }
 
 const (
@@ -105,9 +102,9 @@ func EncodeCaptureCommand(cmd CaptureCommand) ([]byte, error) {
 
 func parseCaptureCommand(line []byte) (CaptureCommand, error) {
 	var raw struct {
-		Command  string        `json:"command"`
-		Barriers *[]Barrier    `json:"barriers"`
-		At       *CapturePoint `json:"at"`
+		Command  string              `json:"command"`
+		Barriers *[]Barrier          `json:"barriers"`
+		At       *wmipc.CapturePoint `json:"at"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(line))
 	dec.DisallowUnknownFields()
@@ -136,7 +133,7 @@ func parseCaptureCommand(line []byte) (CaptureCommand, error) {
 	return nil, fmt.Errorf("%w: unknown capture command %q (known: %s, %s, %s, %s)", ErrBadRequest, raw.Command, commandBarriers, commandEnable, commandDisable, commandRelease)
 }
 
-func finite(p CapturePoint) bool {
+func finite(p wmipc.CapturePoint) bool {
 	return !math.IsNaN(p.X) && !math.IsInf(p.X, 0) && !math.IsNaN(p.Y) && !math.IsInf(p.Y, 0)
 }
 
@@ -159,13 +156,13 @@ type (
 		Keymap string `json:"keymap"`
 	}
 	CaptureActivatedEvent struct {
-		Activation uint32       `json:"activation"`
-		At         CapturePoint `json:"at"`
-		Barrier    BarrierID    `json:"barrier"`
+		Activation uint32             `json:"activation"`
+		At         wmipc.CapturePoint `json:"at"`
+		Barrier    BarrierID          `json:"barrier"`
 	}
 	CaptureDeactivatedEvent struct {
-		Activation uint32       `json:"activation"`
-		At         CapturePoint `json:"at"`
+		Activation uint32             `json:"activation"`
+		At         wmipc.CapturePoint `json:"at"`
 	}
 	CaptureDisabledEvent struct{}
 	CaptureMotionEvent   struct {
@@ -205,20 +202,20 @@ type (
 	}
 )
 
-func (CaptureKeymapEvent) Name() string         { return "keymap" }
-func (CaptureActivatedEvent) Name() string      { return "activated" }
-func (CaptureDeactivatedEvent) Name() string    { return "deactivated" }
-func (CaptureDisabledEvent) Name() string       { return "disabled" }
-func (CaptureMotionEvent) Name() string         { return "motion" }
-func (CaptureButtonEvent) Name() string         { return "button" }
-func (CaptureScrollEvent) Name() string         { return "scroll" }
-func (CaptureScrollDiscreteEvent) Name() string { return "scroll_discrete" }
-func (CaptureScrollStopEvent) Name() string     { return "scroll_stop" }
-func (CaptureFrameEvent) Name() string          { return "frame" }
-func (CaptureKeyEvent) Name() string            { return "key" }
-func (CaptureModifiersEvent) Name() string      { return "modifiers" }
-func (CaptureErrorEvent) Name() string          { return "error" }
-func (CaptureAppliedEvent) Name() string        { return "applied" }
+func (CaptureKeymapEvent) Name() string         { return string(wmipc.CaptureKeymap) }
+func (CaptureActivatedEvent) Name() string      { return string(wmipc.CaptureActivated) }
+func (CaptureDeactivatedEvent) Name() string    { return string(wmipc.CaptureDeactivated) }
+func (CaptureDisabledEvent) Name() string       { return string(wmipc.CaptureDisabled) }
+func (CaptureMotionEvent) Name() string         { return string(wmipc.CaptureMotion) }
+func (CaptureButtonEvent) Name() string         { return string(wmipc.CaptureButton) }
+func (CaptureScrollEvent) Name() string         { return string(wmipc.CaptureScroll) }
+func (CaptureScrollDiscreteEvent) Name() string { return string(wmipc.CaptureScrollDiscrete) }
+func (CaptureScrollStopEvent) Name() string     { return string(wmipc.CaptureScrollStop) }
+func (CaptureFrameEvent) Name() string          { return string(wmipc.CaptureFrame) }
+func (CaptureKeyEvent) Name() string            { return string(wmipc.CaptureKey) }
+func (CaptureModifiersEvent) Name() string      { return string(wmipc.CaptureModifiers) }
+func (CaptureErrorEvent) Name() string          { return string(wmipc.CaptureError) }
+func (CaptureAppliedEvent) Name() string        { return string(wmipc.CaptureApplied) }
 
 type CaptureSession interface {
 	Apply(cmd CaptureCommand) error

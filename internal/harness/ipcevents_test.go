@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -77,7 +79,7 @@ func awaitStreamed(t *testing.T, lines <-chan string, what string, match func(st
 
 func windowIDTitled(t *testing.T, h *Harness, title string) wm.WindowID {
 	t.Helper()
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		if w.Title == title {
 			return w.ID
 		}
@@ -101,7 +103,7 @@ func TestModeGroupLayerAndBellEventsAndTheLayerAndDeviceQueries(t *testing.T) {
 	awaitStreamed(t, lines, "b's floating mode", func(e streamed) bool {
 		return e.Event == "mode" && *e.Window == idb && e.Floating
 	})
-	if w := query[ipc.Window](h, ipc.KindActiveWindow); w.Group != nil {
+	if w := query[ipc.Window](h, wmipc.KindActiveWindow); w.Group != nil {
 		t.Fatalf("the floating window reports group %+v", *w.Group)
 	}
 	h.dispatch("togglefloating")
@@ -112,7 +114,7 @@ func TestModeGroupLayerAndBellEventsAndTheLayerAndDeviceQueries(t *testing.T) {
 	tabs := awaitStreamed(t, lines, "b entering a tab group", func(e streamed) bool {
 		return e.Event == "group" && *e.Window == idb && e.Group != nil && e.Group.Layout == "tab"
 	})
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		if w.ID == idb && (w.Group == nil || *w.Group != *tabs.Group) {
 			t.Fatalf("b reports group %+v, its event %+v", w.Group, *tabs.Group)
 		}
@@ -127,8 +129,8 @@ func TestModeGroupLayerAndBellEventsAndTheLayerAndDeviceQueries(t *testing.T) {
 	if opened.Namespace != "bar" || !strings.Contains(opened.Raw, `"output":"HEADLESS-1","layer":"top"`) {
 		t.Fatalf("layer event %s", opened.Raw)
 	}
-	layers := query[[]ipc.Layer](h, ipc.KindLayers)
-	if len(layers) != 1 || layers[0].Namespace != "bar" || layers[0].Rect != (ipc.Rect{Width: desktop.Size.X, Height: 30}) || layers[0].Keyboard != ipc.KeyboardOnDemand {
+	layers := query[[]ipc.Layer](h, wmipc.KindLayers)
+	if len(layers) != 1 || layers[0].Namespace != "bar" || layers[0].Rect != (wmipc.Rect{Width: desktop.Size.X, Height: 30}) || layers[0].Keyboard != ipc.KeyboardOnDemand {
 		t.Fatalf("layers %+v", layers)
 	}
 	if err := errors.Join(bar.Destroy(), c.Display.Roundtrip()); err != nil {
@@ -136,7 +138,7 @@ func TestModeGroupLayerAndBellEventsAndTheLayerAndDeviceQueries(t *testing.T) {
 	}
 	awaitStreamed(t, lines, "the bar closing", func(e streamed) bool { return e.Event == "layer" && e.Change == "close" && e.Namespace == "bar" })
 
-	devices := query[[]ipc.Device](h, ipc.KindDevices)
+	devices := query[[]ipc.Device](h, wmipc.KindDevices)
 	keyboard := slices.IndexFunc(devices, func(d ipc.Device) bool { return slices.Contains(d.Capabilities, ipc.CapKeyboard) })
 	pointer := slices.IndexFunc(devices, func(d ipc.Device) bool { return slices.Contains(d.Capabilities, ipc.CapPointer) })
 	if keyboard < 0 || pointer < 0 || devices[keyboard].Layout == nil || devices[keyboard].Name == "" {
@@ -193,7 +195,7 @@ func TestAWatchWithASnapshotMissesNoWindowMappedMeanwhile(t *testing.T) {
 		}
 		streams = append(streams, lines)
 	}
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		for i, lines := range streams {
 			awaitStreamed(t, lines, fmt.Sprintf("window %s opening on stream %d", w.Title, i), func(e streamed) bool {
 				return e.Event == "open" && e.Opened.ID == w.ID
@@ -212,10 +214,10 @@ func TestABatchOfDispatchesLandsAsOneBurst(t *testing.T) {
 	}
 	lines := h.watch()
 	batch := []string{"move left", "move left", "focus right"}
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Actions: batch}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Actions: batch}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "submap done"}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "submap done"}); err != nil {
 		t.Fatal(err)
 	}
 	var got []streamed
@@ -268,7 +270,7 @@ func TestPickWindowAnswersTheClickedWindowAndEscapeCancels(t *testing.T) {
 	pick := func() <-chan string {
 		answer := make(chan string, 1)
 		go func() {
-			got, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindPickWindow})
+			got, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindPickWindow})
 			if err != nil {
 				answer <- "error: " + err.Error()
 				return

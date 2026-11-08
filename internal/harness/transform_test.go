@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -29,13 +31,13 @@ func twoWindows(t *testing.T, h *Harness) (*soft.Buffer, []ipc.Window) {
 	c.DispatchUntil("a to map", a.Mapped)
 	b := c.Window("b", testclient.Fill(0, 0x80, 0xff))
 	c.DispatchUntil("b to map", b.Mapped)
-	for _, w := range query[[]ipc.Window](h, ipc.KindWindows) {
+	for _, w := range query[[]ipc.Window](h, wmipc.KindWindows) {
 		drawn := map[string]*testclient.Window{"a": a, "b": b}[w.Title]
 		c.DispatchUntil(w.Title+" drawn at its tile", func() bool { return drawn.Logical == image.Pt(w.Rect.Width, w.Rect.Height) })
 	}
 	a.Stop()
 	quiesce(t, h, c, b)
-	return h.Rendered(0), query[[]ipc.Window](h, ipc.KindWindows)
+	return h.Rendered(0), query[[]ipc.Window](h, wmipc.KindWindows)
 }
 
 func upright(t *testing.T, buf *soft.Buffer, tr render.Transform) *soft.Buffer {
@@ -59,8 +61,8 @@ func upright(t *testing.T, buf *soft.Buffer, tr render.Transform) *soft.Buffer {
 	return out
 }
 
-func rects(ws []ipc.Window) []ipc.Rect {
-	out := make([]ipc.Rect, len(ws))
+func rects(ws []ipc.Window) []wmipc.Rect {
+	out := make([]wmipc.Rect, len(ws))
 	for i, w := range ws {
 		out[i] = w.Rect
 	}
@@ -108,8 +110,8 @@ func TestTheWorldIsToldTheTransformAndPointersFollowIt(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, transformed(render.Rotate90), small)
 	c := testclient.Connect(t, h.Socket())
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
-	if len(outputs) != 1 || outputs[0].Transform != "90" || outputs[0].Rect != (ipc.Rect{Width: small.Size.Y, Height: small.Size.X}) {
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
+	if len(outputs) != 1 || outputs[0].Transform != "90" || outputs[0].Rect != (wmipc.Rect{Width: small.Size.Y, Height: small.Size.X}) {
 		t.Fatalf("outputs %+v", outputs)
 	}
 	if len(c.Outputs) != 1 {
@@ -140,7 +142,7 @@ func TestRotatingAtRuntimeRetilesOnce(t *testing.T) {
 	lines := h.watch()
 	cfg.Outputs.Fallback.Transform = render.Rotate90
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(cfg) })
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindDispatch, Action: "submap done"}); err != nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindDispatch, Action: "submap done"}); err != nil {
 		t.Fatal(err)
 	}
 	var got []streamed
@@ -157,7 +159,7 @@ func TestRotatingAtRuntimeRetilesOnce(t *testing.T) {
 	if len(moved) != 2 || moved[1]+moved[2] != 2 {
 		t.Fatalf("rotating moved windows %v, want each once: %s", moved, raws(got))
 	}
-	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	windows := query[[]ipc.Window](h, wmipc.KindWindows)
 	for _, w := range windows {
 		if w.Rect.Height != desktop.Size.X || w.Rect.Width != desktop.Size.Y/2 {
 			t.Fatalf("on the portrait output window %d tiles at %+v", w.ID, w.Rect)
@@ -173,7 +175,7 @@ func TestReservedAreasKeepWindowsOut(t *testing.T) {
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("kept", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
-	if got := query[ipc.Window](h, ipc.KindActiveWindow).Rect; got != (ipc.Rect{X: 20, Y: 10, Width: small.Size.X - 20, Height: small.Size.Y - 15}) {
+	if got := query[ipc.Window](h, wmipc.KindActiveWindow).Rect; got != (wmipc.Rect{X: 20, Y: 10, Width: small.Size.X - 20, Height: small.Size.Y - 15}) {
 		t.Fatalf("the window tiles at %+v", got)
 	}
 }
@@ -187,11 +189,11 @@ func TestAMirrorShowsItsSourceWithOneDrawAndNoWorkspaces(t *testing.T) {
 	w := c.Window("shown", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	quiesce(t, h, c, w)
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
 	if len(outputs) != 2 || outputs[1].Name != "HEADLESS-2" || outputs[1].MirrorOf != "HEADLESS-1" || outputs[0].MirrorOf != "" {
 		t.Fatalf("outputs %+v", outputs)
 	}
-	for _, ws := range query[[]ipc.Workspace](h, ipc.KindWorkspaces) {
+	for _, ws := range query[[]ipc.Workspace](h, wmipc.KindWorkspaces) {
 		if ws.Output != "HEADLESS-1" {
 			t.Fatalf("workspace %+v is on the mirror", ws)
 		}

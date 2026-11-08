@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -132,7 +134,7 @@ func TestAPushThroughABarrierCapturesTheKeyboardAndPointer(t *testing.T) {
 		t.Fatalf("the focused window saw %q while captured", tail)
 	}
 
-	if got := r.send(ipc.ReleaseCapture{At: &ipc.CapturePoint{X: 80, Y: 50}}); !slices.Equal(got, []string{`{"event":"deactivated","activation":1,"at":{"x":80,"y":50}}`}) {
+	if got := r.send(ipc.ReleaseCapture{At: &wmipc.CapturePoint{X: 80, Y: 50}}); !slices.Equal(got, []string{`{"event":"deactivated","activation":1,"at":{"x":80,"y":50}}`}) {
 		t.Errorf("the release answered %q", got)
 	}
 	r.expect("kb_enter win", "enter win 80,50", "frame")

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/backend/virtual"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -19,11 +21,11 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-var virtualMode = ipc.Mode{Width: 200, Height: 120, RefreshMHz: 60000}
+var virtualMode = wmipc.Mode{Width: 200, Height: 120, RefreshMHz: 60000}
 
 func (h *Harness) createOutput(req ipc.Request) string {
 	h.t.Helper()
-	req.Request = ipc.KindCreateOutput
+	req.Request = wmipc.KindCreateOutput
 	raw, err := ipc.Do(h.IPCSocket(), req)
 	if err != nil {
 		h.t.Fatal(err)
@@ -36,7 +38,7 @@ func (h *Harness) createOutput(req ipc.Request) string {
 }
 
 func (h *Harness) removeOutput(name string) error {
-	_, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindRemoveOutput, Name: name})
+	_, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindRemoveOutput, Name: name})
 	return err
 }
 
@@ -66,7 +68,7 @@ func virtualFrames(h *Harness, name string) uint64 {
 
 func windowOutput(h *Harness) string {
 	h.t.Helper()
-	windows := query[[]ipc.Window](h, ipc.KindWindows)
+	windows := query[[]ipc.Window](h, wmipc.KindWindows)
 	if len(windows) != 1 {
 		h.t.Fatalf("windows %+v, want one", windows)
 	}
@@ -95,9 +97,9 @@ func TestAVirtualOutputComesAndGoesLikeAMonitor(t *testing.T) {
 	if name != "VIRT-1" {
 		t.Fatalf("the first virtual output is %q, want VIRT-1", name)
 	}
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
 	got := outputNamed(t, outputs, name)
-	if len(outputs) != 2 || got.Rect != (ipc.Rect{X: 160, Width: 200, Height: 120}) || got.Mode != virtualMode || got.Scale != 1 || got.Description != "Virtual output VIRT-1" || !got.Powered {
+	if len(outputs) != 2 || got.Rect != (wmipc.Rect{X: 160, Width: 200, Height: 120}) || got.Mode != virtualMode || got.Scale != 1 || got.Description != "Virtual output VIRT-1" || !got.Powered {
 		t.Fatalf("outputs %+v", outputs)
 	}
 	info := h.Run("wayland-info").Wait(t, clientTimeout)
@@ -112,14 +114,14 @@ func TestAVirtualOutputComesAndGoesLikeAMonitor(t *testing.T) {
 	if err := h.removeOutput(name); err != nil {
 		t.Fatal(err)
 	}
-	outputs = query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs = query[[]ipc.Output](h, wmipc.KindOutputs)
 	if len(outputs) != 1 || outputs[0].Name != "HEADLESS-1" {
 		t.Fatalf("outputs after the removal %+v", outputs)
 	}
 	if on := windowOutput(h); on != "HEADLESS-1" {
 		t.Fatalf("the window stayed on %q after its output went", on)
 	}
-	for _, ws := range query[[]ipc.Workspace](h, ipc.KindWorkspaces) {
+	for _, ws := range query[[]ipc.Workspace](h, wmipc.KindWorkspaces) {
 		if ws.Output != "HEADLESS-1" {
 			t.Fatalf("workspace %+v outlived its output", ws)
 		}
@@ -144,14 +146,14 @@ func TestOnlyVirtualOutputsAreRemovedAndNamesStayUnique(t *testing.T) {
 	}{
 		{ipc.Request{Name: "HEADLESS-1", Mode: &virtualMode}, "an output of that name exists"},
 		{ipc.Request{Mode: &virtualMode, Scale: 40}, "scale 40 is outside"},
-		{ipc.Request{Mode: &ipc.Mode{Width: 1 << 20, Height: 1 << 20, RefreshMHz: 60000}}, "is beyond 16384x16384"},
+		{ipc.Request{Mode: &wmipc.Mode{Width: 1 << 20, Height: 1 << 20, RefreshMHz: 60000}}, "is beyond 16384x16384"},
 	} {
-		c.req.Request = ipc.KindCreateOutput
+		c.req.Request = wmipc.KindCreateOutput
 		if _, err := ipc.Do(h.IPCSocket(), c.req); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("createoutput %+v: %v, want %q", c.req, err, c.want)
 		}
 	}
-	if outputs := query[[]ipc.Output](h, ipc.KindOutputs); len(outputs) != 1 {
+	if outputs := query[[]ipc.Output](h, wmipc.KindOutputs); len(outputs) != 1 {
 		t.Fatalf("refused requests left outputs %+v", outputs)
 	}
 	for name, want := range map[string]string{
@@ -163,7 +165,7 @@ func TestOnlyVirtualOutputsAreRemovedAndNamesStayUnique(t *testing.T) {
 		}
 	}
 	h.createOutput(ipc.Request{Name: "tablet", Mode: &virtualMode})
-	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: ipc.KindCreateOutput, Name: "tablet", Mode: &virtualMode}); err == nil {
+	if _, err := ipc.Do(h.IPCSocket(), ipc.Request{Request: wmipc.KindCreateOutput, Name: "tablet", Mode: &virtualMode}); err == nil {
 		t.Fatal("a second output took the name tablet")
 	}
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
@@ -186,8 +188,8 @@ func TestOutputRulesApplyToAVirtualOutput(t *testing.T) {
 	h.createOutput(ipc.Request{Mode: &virtualMode})
 	h.createOutput(ipc.Request{Mode: &virtualMode, Scale: 1.25})
 	h.createOutput(ipc.Request{Name: "VIRT-3", Mode: &virtualMode})
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
-	if got := outputNamed(t, outputs, "VIRT-1"); got.Scale != 2 || got.Rect != (ipc.Rect{X: 500, Y: 40, Width: 100, Height: 60}) {
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
+	if got := outputNamed(t, outputs, "VIRT-1"); got.Scale != 2 || got.Rect != (wmipc.Rect{X: 500, Y: 40, Width: 100, Height: 60}) {
 		t.Fatalf("the ruled output is %+v", got)
 	}
 	if got := outputNamed(t, outputs, "VIRT-2"); got.Scale != 1.25 || got.Rect.Width != 160 || got.Rect.Height != 96 {
@@ -323,11 +325,11 @@ func TestTheConfigKeepsVirtualOutputsAcrossReloads(t *testing.T) {
 		c.Report = func(err error) { reported = append(reported, err) }
 		cfg = *c
 	}, small)
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
 	if len(outputs) != 2 || outputs[0].Name != "HEADLESS-1" {
 		t.Fatalf("outputs at start %+v, want the monitor first", outputs)
 	}
-	if got := outputNamed(t, outputs, "tablet"); got.Mode != (ipc.Mode{Width: 200, Height: 120, RefreshMHz: 30000}) || got.Rect.X != small.Size.X {
+	if got := outputNamed(t, outputs, "tablet"); got.Mode != (wmipc.Mode{Width: 200, Height: 120, RefreshMHz: 30000}) || got.Rect.X != small.Size.X {
 		t.Fatalf("the configured virtual output is %+v", got)
 	}
 	if err := h.removeOutput("tablet"); err == nil || !strings.Contains(err.Error(), "virtual_outputs keeps it") {
@@ -355,14 +357,14 @@ func TestTheConfigKeepsVirtualOutputsAcrossReloads(t *testing.T) {
 		reported = nil
 		return nil
 	})
-	outputs = query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs = query[[]ipc.Output](h, wmipc.KindOutputs)
 	if got := outputNamed(t, outputs, "tablet"); len(outputs) != 2 || got.Mode.Width != 300 || got.Mode.Height != 200 {
 		t.Fatalf("after the reload resized it: %+v", outputs)
 	}
 
 	cfg.VirtualOutputs = nil
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error { return c.Reconfigure(cfg) })
-	if outputs := query[[]ipc.Output](h, ipc.KindOutputs); len(outputs) != 1 {
+	if outputs := query[[]ipc.Output](h, wmipc.KindOutputs); len(outputs) != 1 {
 		t.Fatalf("after the reload dropped it: %+v", outputs)
 	}
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {

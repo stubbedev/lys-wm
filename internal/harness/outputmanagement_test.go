@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -500,7 +502,7 @@ func TestOutputManagementRotatesAnOutput(t *testing.T) {
 		t.Fatalf("a rotation answered %+v", *r)
 	}
 	c.DispatchUntil("the rotated head", func() bool { return m.serial != serial && first.transform == cw.WlOutputTransform90 })
-	outputs := query[[]ipc.Output](h, ipc.KindOutputs)
+	outputs := query[[]ipc.Output](h, wmipc.KindOutputs)
 	if outputs[0].Transform != "90" || outputs[0].Rect.Width != small.Size.Y || outputs[0].Rect.Height != small.Size.X {
 		t.Fatalf("after the rotation the output is %+v", outputs[0])
 	}

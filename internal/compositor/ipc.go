@@ -5,6 +5,8 @@ import (
 	"image"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
@@ -37,7 +39,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 		Submap:         c.submap,
 		Overview:       c.overviewHolds(),
 		Layout:         c.keyboardLayout(),
-		Locks:          ipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
+		Locks:          wmipc.Locks{Caps: locks.Caps, Num: locks.Num, Scroll: locks.Scroll},
 		ReducedMotion:  c.animations.Reduced(),
 		ConfigProblems: ipc.ConfigProblems(c.configProblems),
 	}
@@ -51,7 +53,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Description: b.Description(),
 			Rect:        ipc.RectOf(o.Logical()),
 			Scale:       float64(o.Scale()) / float64(output.Unit),
-			Mode:        ipc.Mode{Width: mode.Size.X, Height: mode.Size.Y, RefreshMHz: mode.RefreshMHz},
+			Mode:        wmipc.Mode{Width: mode.Size.X, Height: mode.Size.Y, RefreshMHz: mode.RefreshMHz},
 			Workspace:   active,
 			Focused:     b.Name() == focusedOutput,
 			Powered:     b.State().Lit(),
@@ -68,7 +70,7 @@ func (c *Compositor) Snapshot() ipc.Snapshot {
 			Name:        m.out.Name(),
 			Description: m.out.Description(),
 			Scale:       1,
-			Mode:        ipc.Mode{Width: mode.Size.X, Height: mode.Size.Y, RefreshMHz: mode.RefreshMHz},
+			Mode:        wmipc.Mode{Width: mode.Size.X, Height: mode.Size.Y, RefreshMHz: mode.RefreshMHz},
 			Powered:     m.out.State().Lit(),
 			Transform:   ipcTransform(m.transform),
 			MirrorOf:    c.mirrorName(m),
@@ -259,9 +261,9 @@ func (c *Compositor) Icon(id wm.WindowID, size int) (*image.RGBA, int, error) {
 	return img.Image, img.Scale, nil
 }
 
-func (c *Compositor) keyboardLayout() ipc.Layout {
+func (c *Compositor) keyboardLayout() wmipc.Layout {
 	group := c.seat.Layout()
-	l := ipc.Layout{Index: group}
+	l := wmipc.Layout{Index: group}
 	if names := c.seat.Keymap().Layouts(); int(group) < len(names) {
 		l.Name = names[group]
 	}

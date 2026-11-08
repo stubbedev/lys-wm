@@ -4,6 +4,8 @@ import (
 	"image"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/wmipc"
+
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -97,7 +99,7 @@ func TestGroupActionsLandInOneTransactionAndAFocusedGroupHasTheActiveBorder(t *t
 
 	s.act("focusparent", [3]bool{}, false)
 	s.Eventually("the focused group ringed in red", showing(157, 30, red))
-	if w := query[ipc.Window](s.Harness, ipc.KindActiveWindow); w.Title != "c" {
+	if w := query[ipc.Window](s.Harness, wmipc.KindActiveWindow); w.Title != "c" {
 		t.Fatalf("focusparent moved keyboard focus to %+v", w)
 	}
 
@@ -113,7 +115,7 @@ func TestGroupActionsLandInOneTransactionAndAFocusedGroupHasTheActiveBorder(t *t
 	s.act("equalize", [3]bool{}, false)
 	s.act("equalize all", [3]bool{true, true, true}, true)
 	s.act("moveout", [3]bool{true, true, true}, true)
-	if got := query[[]ipc.Window](s.Harness, ipc.KindWindows); len(got) != 3 {
+	if got := query[[]ipc.Window](s.Harness, wmipc.KindWindows); len(got) != 3 {
 		t.Fatalf("windows %+v", got)
 	}
 }
