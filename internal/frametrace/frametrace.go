@@ -106,6 +106,7 @@ type track struct {
 	frame      pending
 	allocs     uint64
 	fileIO     uint64
+	ioTid      int
 	carried    Cost
 	queue      []pending
 }
@@ -114,7 +115,7 @@ const (
 	chunkFrames  = 512
 	writerChunks = 4
 	closeFenceMS = 1000
-	ioStatPath   = "/proc/self/io"
+	ioStatPath   = "/proc/thread-self/io"
 	ioStatSize   = 256
 	ownIOReads   = 2
 )
@@ -130,6 +131,7 @@ type Recorder struct {
 	done   chan error
 	file   *os.File
 	ioStat *os.File
+	ioTid  int
 	ioBuf  [ioStatSize]byte
 	mem    runtime.MemStats
 	stats  *runtimeStats
@@ -144,19 +146,15 @@ func Create(path string, h Header, sync Sync, clock Clock, report func(error)) (
 	if err != nil {
 		return nil, fmt.Errorf("frametrace: create the trace: %w", err)
 	}
-	ioStat, err := os.Open(ioStatPath)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("frametrace: open the process's I/O counters: %w", err), f.Close())
-	}
 	line, err := json.Marshal(h)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("frametrace: encode the header of %s: %w", path, err), f.Close(), ioStat.Close())
+		return nil, errors.Join(fmt.Errorf("frametrace: encode the header of %s: %w", path, err), f.Close())
 	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		return nil, errors.Join(fmt.Errorf("frametrace: write the header of %s: %w", path, err), f.Close(), ioStat.Close())
+		return nil, errors.Join(fmt.Errorf("frametrace: write the header of %s: %w", path, err), f.Close())
 	}
 	r := &Recorder{
-		clock: clock, sync: sync, report: report, file: f, ioStat: ioStat, tracks: map[string]*track{}, stats: newRuntimeStats(),
+		clock: clock, sync: sync, report: report, file: f, tracks: map[string]*track{}, stats: newRuntimeStats(),
 		chunk: make([]Frame, 0, chunkFrames), full: make(chan []Frame, writerChunks), free: make(chan []Frame, writerChunks), done: make(chan error, 1),
 	}
 	go r.write()
@@ -184,17 +182,42 @@ func (r *Recorder) write() {
 	if failed != nil {
 		failed = fmt.Errorf("frametrace: write the trace: %w", failed)
 	}
-	r.done <- errors.Join(failed, r.file.Close(), r.ioStat.Close())
+	r.done <- errors.Join(failed, r.file.Close())
 }
 
 func (r *Recorder) usage(output string) (allocs, fileIO uint64) {
 	runtime.ReadMemStats(&r.mem)
+	if err := r.followThread(output); err != nil {
+		r.report(err)
+	}
+	if r.ioStat == nil {
+		return r.mem.Mallocs, 0
+	}
 	n, err := r.ioStat.ReadAt(r.ioBuf[:], 0)
 	if err != nil && !errors.Is(err, io.EOF) {
 		r.report(fmt.Errorf("frametrace: read the I/O counters for %s: %w", output, err))
 		return r.mem.Mallocs, 0
 	}
 	return r.mem.Mallocs, ioCalls(r.ioBuf[:n])
+}
+
+func (r *Recorder) followThread(output string) error {
+	tid := unix.Gettid()
+	if r.ioStat != nil && tid == r.ioTid {
+		return nil
+	}
+	var moved error
+	if r.ioStat != nil {
+		moved = fmt.Errorf("frametrace: %s drew a frame on thread %d after thread %d, so its file I/O is not comparable; frames must stay on the pinned loop thread", output, tid, r.ioTid)
+		moved = errors.Join(moved, r.ioStat.Close())
+		r.ioStat = nil
+	}
+	ioStat, err := os.Open(ioStatPath)
+	if err != nil {
+		return errors.Join(moved, fmt.Errorf("frametrace: open the I/O counters of thread %d for %s: %w", tid, output, err))
+	}
+	r.ioStat, r.ioTid = ioStat, tid
+	return moved
 }
 
 func ioCalls(stat []byte) uint64 {
@@ -236,6 +259,7 @@ func (r *Recorder) Begin(output string) {
 	}
 	r.settle(t)
 	t.allocs, t.fileIO = r.usage(output)
+	t.ioTid = r.ioTid
 	now := r.clock.Now()
 	t.open = true
 	t.frame = pending{Output: output, Kind: Empty, Start: now, GPUSource: GPUNone, Refresh: t.refresh, fd: -1}
@@ -320,7 +344,10 @@ func (r *Recorder) End(output string, animating bool, cost Cost) {
 	t.frame.Animating = animating
 	t.frame.Sched, t.frame.GCPause = r.stats.read()
 	allocs, fileIO := r.usage(output)
-	cost.Allocs, cost.FileIO = allocs-t.allocs, fileIO-t.fileIO-ownIOReads
+	cost.Allocs = allocs - t.allocs
+	if r.ioTid == t.ioTid {
+		cost.FileIO = fileIO - t.fileIO - ownIOReads
+	}
 	cost.GPUWaits -= min(cost.GPUWaits, r.ownWaits)
 	r.ownWaits = 0
 	t.frame.Cost = t.carry(cost)
@@ -434,7 +461,11 @@ func (r *Recorder) Close() error {
 	}
 	r.chunk = nil
 	close(r.full)
-	return <-r.done
+	written := <-r.done
+	if r.ioStat == nil {
+		return written
+	}
+	return errors.Join(written, r.ioStat.Close())
 }
 
 func Read(src io.Reader) (Header, []Frame, error) {

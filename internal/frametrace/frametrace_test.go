@@ -68,6 +68,8 @@ type rig struct {
 
 func newRig(t *testing.T, sync func(r *rig) Sync) *rig {
 	t.Helper()
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
 	g := &rig{t: t, now: time.Second, path: filepath.Join(t.TempDir(), "trace"), signal: map[int]time.Duration{}, last: -1}
 	var s Sync
 	if sync != nil {

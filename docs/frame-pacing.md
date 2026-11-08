@@ -92,10 +92,10 @@ about a GPU. Every step and metric over its limit is named in one run:
 | `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
 | `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
 | `allocs_per_frame` | Heap allocations in the costliest frame of a play, taking the play where that is lowest. What only happens once, as the overview building its blur chain, passes: a median would move with how many frames fall in a step's costly part, which the load decides, and the worst alone would catch a burst from another goroutine | An allocation added to a path every play takes |
-| `file_io_per_frame` | Median read and write syscalls in a frame, from `/proc/self/io` | A file touched on every frame |
+| `file_io_per_frame` | Median read and write syscalls the pinned loop thread made in a frame, from `/proc/thread-self/io`, so other goroutines' I/O is not charged to it | A file touched on every frame |
 | RSS growth, 1024 KiB in every class of device | The smallest rise in resident size from one round to the next, per scenario, after two rounds that warm up. An arena that fills or trims once rises in one round only and counts for nothing; a limit needs at least five rounds, so growth has three chances to repeat | A leak that repeats with the animation |
 
-`/proc/self/io` counts the read and write families only: an ioctl or a socket
+`/proc/thread-self/io` counts the read and write families only: an ioctl or a socket
 call is not in `file_io_per_frame`, and the kernel offers no other unprivileged
 count. Every number is per frame or per play, not per second, so a machine too
 busy to reach 60 Hz draws fewer frames that each cost the same.
