@@ -12,11 +12,6 @@
       url = "github:stubbedev/lys-ui";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    lys-shell = {
-      url = "github:stubbedev/lys-shell";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-parts.follows = "flake-parts";
-    };
   };
 
   outputs = inputs @ {flake-parts, ...}:
@@ -31,5 +26,6 @@
         ./nix/module.nix
         ./nix/checks.nix
       ];
+      flake.lib.screencast = import ./nix/screencast.nix;
     };
 }

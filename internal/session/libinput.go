@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+	"github.com/stubbedev/lys-lib/clib"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
@@ -221,17 +222,6 @@ var callbacks = struct {
 	inputs map[uintptr]*Libinput
 }{inputs: map[uintptr]*Libinput{}}
 
-func goString(p *byte) string {
-	if p == nil {
-		return ""
-	}
-	n := 0
-	for *(*byte)(unsafe.Add(unsafe.Pointer(p), n)) != 0 { //nolint:gosec // a NUL-terminated path from libinput
-		n++
-	}
-	return string(unsafe.Slice(p, n)) //nolint:gosec // n bytes before the NUL
-}
-
 func lookup(userData uintptr) *Libinput {
 	callbacks.mu.Lock()
 	defer callbacks.mu.Unlock()
@@ -243,7 +233,7 @@ func openRestricted(path *byte, _ int32, userData uintptr) int32 {
 	if in == nil {
 		return -int32(unix.ENODEV)
 	}
-	fd, dev, err := in.take(goString(path))
+	fd, dev, err := in.take(clib.GoString(path))
 	if err != nil {
 		in.openErr = err
 		if errno, ok := errors.AsType[unix.Errno](err); ok {

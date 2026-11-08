@@ -15,7 +15,6 @@
     screencast = portal:
       import ./screencast.nix {
         inherit pkgs module portal;
-        lysShell = inputs.lys-shell.nixosModules.default;
         seconds = 10;
       };
     xwaylandApp = app:
@@ -112,7 +111,6 @@
         '';
       };
       vm-screencast = screencast "wlr";
-      vm-screencast-lys-shell = screencast "lys-shell";
       vm-apps = import ./apps.nix {inherit pkgs module;};
       vm-upgrade = import ./upgrade.nix {inherit pkgs module;};
       vm-cursor = import ./cursor.nix {inherit pkgs module;};

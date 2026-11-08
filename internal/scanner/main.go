@@ -144,6 +144,9 @@ func fetchAll(m *manifest) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	files := map[string][]byte{}
 	for _, e := range m.Protocols {
+		if m.sources[e.Source].Module != "" {
+			continue
+		}
 		data, err := download(client, m.url(e))
 		if err != nil {
 			return err

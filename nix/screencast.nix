@@ -1,7 +1,7 @@
 {
   pkgs,
   module,
-  lysShell,
+  lysShell ? null,
   portal,
   seconds,
 }: let

@@ -344,3 +344,7 @@ release-minor:
 
 release-major:
     nix run github:stubbedev/lys-ci#release -- major
+
+# Move every lys module and flake input to its head, then the vendor hash.
+bump-lys:
+    nix run github:stubbedev/lys-ci#bump-lys

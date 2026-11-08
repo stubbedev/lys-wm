@@ -27,8 +27,7 @@
     },
     {
       "name": "lys-lib",
-      "url": "https://raw.githubusercontent.com/stubbedev/lys-lib/{ref}/{path}",
-      "ref": "cab94edbbd52115588d1aa40fe6b2c74b57baa85"
+      "module": "github.com/stubbedev/lys-lib"
     },
     {
       "name": "hyprland",

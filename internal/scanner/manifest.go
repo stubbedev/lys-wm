@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 type source struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
-	Ref  string `json:"ref"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Ref    string `json:"ref"`
+	Module string `json:"module"`
 }
 
 type entryRef struct {
@@ -27,6 +29,7 @@ type manifest struct {
 	Protocols []entryRef `json:"protocols"`
 	dir       string
 	sources   map[string]source
+	moduleDir map[string]string
 }
 
 func loadManifest(dir string) (*manifest, error) {
@@ -35,14 +38,20 @@ func loadManifest(dir string) (*manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
-	m := &manifest{dir: dir, sources: map[string]source{}}
+	m := &manifest{dir: dir, sources: map[string]source{}, moduleDir: map[string]string{}}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	for _, s := range m.Sources {
-		if s.Name == "" || s.Ref == "" || !strings.Contains(s.URL, "{ref}") || !strings.Contains(s.URL, "{path}") {
+		if s.Module != "" {
+			modDir, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", s.Module).Output()
+			if err != nil {
+				return nil, fmt.Errorf("%s: locate module %s: %w", path, s.Module, err)
+			}
+			m.moduleDir[s.Name] = strings.TrimSpace(string(modDir))
+		} else if s.Name == "" || s.Ref == "" || !strings.Contains(s.URL, "{ref}") || !strings.Contains(s.URL, "{path}") {
 			return nil, fmt.Errorf("%s: source %q needs a name, a ref and a url with {ref} and {path}", path, s.Name)
 		}
 		if _, dup := m.sources[s.Name]; dup {
@@ -70,6 +79,9 @@ func loadManifest(dir string) (*manifest, error) {
 }
 
 func (m *manifest) xmlPath(p entryRef) string {
+	if dir, ok := m.moduleDir[p.Source]; ok {
+		return filepath.Join(dir, filepath.FromSlash(p.Path))
+	}
 	return filepath.Join(m.dir, "xml", p.Source, filepath.FromSlash(p.Path))
 }
 
