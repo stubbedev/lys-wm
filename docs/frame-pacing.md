@@ -1,130 +1,118 @@
 # Frame pacing
 
-`lys-wm-pace` measures how smoothly lys-wm's animations reach the screen. It
-boots lys-wm in a private runtime directory with its own config, plays every
-animation through a real client and the IPC socket, and reports per step:
-
-| Column | What it is |
-| --- | --- |
-| `frames` | Frames the compositor ran during the step |
-| `empty` | Frames that found nothing to draw, as the tail of a spring does below a pixel a frame |
-| `dropped` | Frames that failed or never reached the screen |
-| `late` | Frames shown after the vblank they aimed at: the one after the frame started |
-| `skipped` | Vblanks those late frames missed |
-| `interval` | From one frame on screen to the next, while the first of them asked for the second |
-| `cpu` | The frame on the compositor's thread, without any wait for the GPU |
-| `gpu` | From submitting the frame to the GPU finishing it: the time its fence took to signal, or the wait, on a stack without fences |
-| `latency` | From the frame starting to it being on screen |
-
-Times read p50 / p95 / p99 / worst, in milliseconds. `-json <file>` writes the
-same summaries with every frame.
-
-A last table gives each step that opens or closes the overview: from the action to
-the first frame on screen within 5% of where it is going, and to the first at rest,
-which a slow spring's tail may not reach before the step ends (`-`).
-The `frames` column cannot say this, since the clients in those steps keep drawing
-for the whole of the step. Like every time, it is reported and gates nothing.
-
-The steps cover opening and closing a window, moving one on a spring and
-interrupting that, switching workspaces, a three-finger swipe following the
-fingers and its release, the genie, and glass: over a client redrawing every
-frame, over nothing moving (which must draw nothing), and sliding with a
-workspace, three translucent tiled windows sliding with a workspace and
-resizing, and the overview with 10 and 30 overlapping floating windows, by action
-and scrubbed by three fingers. On a real GPU, `scanout-scaled-fullscreen` has a client
-flip half-size dmabufs viewported to fill the output, and `scanout-windowed-video`
-two tiled windows do the same with square corners, which `lys-wm
--headless-scanout` scans out on a scaling primary plane and on overlay planes; with
-`-allow-software` they are not measured. Swipes come from the headless backend's fake touchpad, through
-`lys-wm -headless-swipes`; `-backend drm` has no fingers to fake, and says it did
-not measure them.
+`lys-wm-pace` measures how smoothly animations reach the screen. It starts
+lys-wm in a private runtime directory with its own config, plays every
+animation through a real client and the IPC socket, and reports per step.
 
 ## Running it
 
 ```sh
-just pace                         # headless, Vulkan, on this machine's GPU
+just pace                         # headless, Vulkan, this machine's GPU
 just pace headless gles
 just pace headless vulkan 30 "-json report.json -scenarios move,genie"
 just pace drm vulkan              # real page flips, from a text console
-just docker pace                  # headless on the host's GPU, from a container
+just docker pace                  # headless on the host's GPU, in a container
 ```
 
-`just pace` runs no tests first, so the hardware tests failing never blocks a
-pacing number. `just hardware` runs them first and stops when they fail.
+`just pace` runs no tests first; `just hardware` runs the hardware tests, then
+pacing, and stops if the tests fail.
 
-`headless` renders on a real GPU through its render node and leaves the display
-alone, but its clock is a timer: vsync is simulated, and it latches frames as `drm`
-does, half a refresh before each tick until a frame earns more, up to the whole
-refresh. A frame asked for with less time left than a typical render waits for the
-next refresh's latch instead of starting a race it would lose. Only `-backend drm` has real present times; it takes
-the display and needs a seat, so it refuses to run with `WAYLAND_DISPLAY`,
-`DISPLAY` or a graphical `XDG_SESSION_TYPE` set. The report says which clock it
-used.
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `-backend` | `headless` | `headless` (simulated 60 Hz clock on a real GPU) or `drm` (takes the display; refuses to run with `WAYLAND_DISPLAY`, `DISPLAY` or a graphical `XDG_SESSION_TYPE`) |
+| `-renderer` | `vulkan` | `gles` or `vulkan` |
+| `-compositor` | next to `lys-wm-pace`, else `PATH` | The lys-wm binary |
+| `-rounds` | `10` | Plays per animation |
+| `-scenarios` | all | Comma-separated scenario names |
+| `-json <file>` | | Write the report with every frame |
+| `-cpu-profile <file>` | | Write a Go CPU profile of lys-wm |
+| `-allow-software` | off | Accept a software rasteriser; the report marks it and sets `real_gpu: false` |
+| `-gate` | off | Fail when a step exceeds `cmd/lys-wm-pace/baseline.json` |
+| `-write-baseline <file>` | | Write limits for this renderer and device class, derived from this run |
 
-A software rasteriser is refused, naming the driver it found, because its
-numbers say nothing about a GPU. `-allow-software` accepts it for relative
-numbers and hot spots, and the report then says so on its second line and sets
-`real_gpu: false`. `-cpu-profile <file>` adds a Go CPU profile of lys-wm.
+The headless clock latches frames as `drm` does: half a refresh before each
+tick, extended up to a whole refresh for frames that need it. A frame requested
+with less time left than a typical render waits for the next latch. Only `drm`
+has real present times; the report names the clock used.
 
+Scenarios cover window open and close, spring moves and interruption, resize,
+workspace switches, three-finger swipes (follow and release), the genie,
+glass over busy, still and sliding content, translucent tiles sliding and
+resizing, and the overview with 10 and 30 floating windows by action and by
+swipe. On a real GPU, `scanout-scaled-fullscreen` and
+`scanout-windowed-video` check direct scanout on scaling primary and overlay
+planes (`lys-wm -headless-scanout`); they are skipped with
+`-allow-software`. Swipes use the headless backend's fake touchpad
+(`lys-wm -headless-swipes`) and are skipped on `drm`.
+
+## Report
+
+Times are p50 / p95 / p99 / worst in milliseconds.
+
+| Column | Meaning |
+| --- | --- |
+| `frames` | Frames the compositor ran |
+| `empty` | Frames with nothing to draw |
+| `dropped` | Frames that failed or never reached the screen |
+| `late` | Frames shown after the vblank they aimed at |
+| `skipped` | Vblanks the late frames missed |
+| `interval` | Between consecutive frames on screen, when the first requested the second |
+| `cpu` | Compositor-thread time, excluding GPU waits |
+| `gpu` | Submit to GPU completion (fence signal, or the wait without fences) |
+| `latency` | Frame start to on screen |
+| `sched` | Worst runnable-goroutine wait for a processor (`runtime/metrics`) |
+| `gc` | Worst GC stop-the-world pause (`runtime/metrics`) |
+
+The cost table also reports the worst frame's `targets` (render targets
+created), `filter px`, `repaint px` and `copied bytes` (capture bytes copied
+to clients). A final table gives, for overview open and close steps, the time
+from the action to the first frame within 5% of the target and to the first
+frame at rest (`-` if not reached in the step).
 
 ## The gate
 
-Late frames, frame rates and the time columns measure the machine as much as the
-compositor, so they are reported and never fail anything. `-gate` fails on what
-no load can change, counted per step and compared with the limits checked in as
-`cmd/lys-wm-pace/baseline.json`, one set per renderer and class of device: `gles/gpu`,
-`vulkan/gpu`, `gles/software` and `vulkan/software`. They differ for good reason: a
-software rasteriser turns the overview's blur off by default, so its limits say nothing
-about a GPU. Every step and metric over its limit is named in one run:
+Timing depends on the machine, so it is reported and never gated. `-gate`
+checks counts per frame or per play against `cmd/lys-wm-pace/baseline.json`,
+which holds one set per renderer and device class: `gles/gpu`, `vulkan/gpu`,
+`gles/software`, `vulkan/software`. Every step and metric over its limit is
+reported in one run.
 
-| Limit | What it counts | What it catches |
+| Limit | Counts | Catches |
 | --- | --- | --- |
-| `draws_per_frame` | Scene ops in the worst composited frame | Drawing what is covered, or a pile drawn twice |
-| `render_passes_per_frame` | `Renderer.Begin` calls since the last composited frame, at worst | A new offscreen pass on every frame |
-| `filter_passes_per_frame` | Kawase passes since the last composited frame, at worst | Filtering inside the frame what should wait for a calm one |
-| `filter_passes_per_run` | Kawase passes in one play of an overview step: glass filters for as long as it takes, which the clock decides | Filtering that never stops once a thumbnail is calm |
-| `render_passes_per_scanout_frame` | In the `scanout-` steps, the worst `Renderer.Begin` calls of any frame, with no slack: 0 | A scaled fullscreen buffer or a windowed video composited instead of scanned out |
-| `render_passes_after_first_frame`, `filter_passes_after_first_frame` | In the `glass-tiles` steps, the worst `Renderer.Begin` calls and Kawase passes of any composited frame but the first of a play, with no slack: 1 and 0, the frame's own pass and no filter, since tiled windows blur over the output's shared background chain | A tiled window that refilters its own chain on every frame of a slide or a resize |
-| `filter_pixels_per_frame`, `repaint_pixels_per_frame` | In `glass-over-busy`, whose client damages only the band it moves, the worst frame's pixels covered by Kawase passes within their damage and pixels of the output repainted | A change under glass that refilters or repaints the whole window instead of the band grown by the blur's reach |
-| `uploads_per_frame` | Texture creations and updates since the last composited frame, at worst | Uploading what did not change |
-| `gpu_waits_per_frame` | Times the loop waited for the GPU to finish since the last composited frame, at worst, with no slack: a renderer's fence waits on Vulkan, `glFinish` on GLES | A frame or a resize that stalls the loop on the GPU, such as freeing a resource still in use |
-| `submits_per_frame` | GPU submissions since the last composited frame, at worst, with no slack: Vulkan queue submits from `Device.Submissions`, GLES flushes of ended passes at a fence export, `glFinish` or a read back. A frame is one, plus an upload flush when it uploads past the batch bound | A pass that submits on its own, as `glFlush` at every pass end did |
-| `thumb_draws_per_settle` | Overview thumbnails drawn in one play of the step | Redrawing thumbnails whose windows did not damage |
-| `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region, never above the cap of 32 | Damage that outgrows its cap while it accumulates |
-| `allocs_per_frame` | Heap allocations in the costliest frame of a play, taking the play where that is lowest. What only happens once, as the overview building its blur chain, passes: a median would move with how many frames fall in a step's costly part, which the load decides, and the worst alone would catch a burst from another goroutine | An allocation added to a path every play takes |
-| `file_io_per_frame` | Median read and write syscalls the pinned loop thread made in a frame, from `/proc/thread-self/io`, so other goroutines' I/O is not charged to it | A file touched on every frame |
-| RSS growth, 1024 KiB in every class of device | The smallest rise in resident size from one round to the next, per scenario, after two rounds that warm up. An arena that fills or trims once rises in one round only and counts for nothing; a limit needs at least five rounds, so growth has three chances to repeat | A leak that repeats with the animation |
+| `draws_per_frame` | Scene ops in the worst composited frame | Drawing covered content or drawing twice |
+| `render_passes_per_frame` | `Renderer.Begin` calls per composited frame, worst | A new offscreen pass every frame |
+| `filter_passes_per_frame` | Kawase passes per composited frame, worst | Filtering mid-animation |
+| `filter_passes_per_run` | Kawase passes in one overview play | Filtering that never settles |
+| `render_passes_per_scanout_frame` | `scanout-` steps: `Renderer.Begin` calls in any frame, limit 0 | Compositing what should scan out |
+| `render_passes_after_first_frame`, `filter_passes_after_first_frame` | `glass-tiles` steps: passes in any frame after the first, limits 1 and 0 | Tiles refiltering the shared background chain every frame |
+| `filter_pixels_per_frame`, `repaint_pixels_per_frame` | `glass-over-busy`: pixels filtered within damage and repainted, worst frame | Refiltering or repainting the whole window instead of the damaged band plus blur reach |
+| `uploads_per_frame` | Texture creations and updates per composited frame, worst | Re-uploading unchanged content |
+| `gpu_waits_per_frame` | Loop waits on the GPU per composited frame (fence waits on Vulkan, `glFinish` on GLES), worst, no slack | Stalling the loop on the GPU |
+| `submits_per_frame` | GPU submissions per composited frame (Vulkan queue submits, GLES flushes), worst, no slack | Extra submissions per pass |
+| `thumb_draws_per_settle` | Overview thumbnails drawn per play | Redrawing undamaged thumbnails |
+| `damage_rects_per_frame` | Rects in the worst frame's damage or repaint region (cap 32) | Damage outgrowing its cap |
+| `allocs_per_frame` | Heap allocations in the costliest frame of a play, from the play where that is lowest | Allocation added to a per-play path |
+| `file_io_per_frame` | Median read/write syscalls per frame on the loop thread (`/proc/thread-self/io`; ioctls and socket calls are not counted) | File I/O every frame |
+| RSS growth (1024 KiB, fixed) | Smallest per-round rise in resident size after 2 warm-up rounds; needs at least 5 rounds | A leak that repeats with the animation |
 
-`/proc/thread-self/io` counts the read and write families only: an ioctl or a socket
-call is not in `file_io_per_frame`, and the kernel offers no other unprivileged
-count. Every number is per frame or per play, not per second, so a machine too
-busy to reach 60 Hz draws fewer frames that each cost the same.
-
-The trace takes these with `runtime.ReadMemStats` and a read of `/proc/self/io`
-at both ends of each frame, outside the `cpu` column.
-
-The cost table also reports the worst frame's `targets` (render targets created),
-`filter px` (pixels a Kawase pass covered within its damage), `repaint px`
-(pixels of the output repainted, both gated in `glass-over-busy` only) and `copied bytes` (capture bytes copied to
-clients). The time table adds `sched`, the worst wait of a runnable goroutine
-for a processor, and `gc`, the worst GC stop-the-world pause, each frame
-taking the slowest bucket that gained a sample since the frame before from
-`/sched/latencies:seconds` and `/sched/pauses/total/gc:seconds` in
-`runtime/metrics`. Reading them allocates nothing.
-
-`just pace-gate gles` and `just pace-gate vulkan` run the gate in the dev shell on
-the software rasterisers, as CI does, and `just hardware` runs it on the GPU.
-A change that means to cost more updates its limits and commits the difference:
-`just pace-baseline-software` writes the software sets, and `just docker pace-baseline`
-the GPU sets from the host's GPU, both into the checkout, with a margin of a quarter over what
-they measured.
+`just pace-gate gles` and `just pace-gate vulkan` run the gate on the dev
+shell's software rasterisers, as CI does; `just hardware` runs it on the GPU.
+A change that is meant to cost more updates the limits and commits them:
+`just pace-baseline-software` writes the software sets,
+`just docker pace-baseline` the GPU sets from the host's GPU. Limits are the measured value
+plus a quarter.
 
 ## The trace
 
-`lys-wm -frame-trace <file>` is what the tool reads: a JSON header, then one JSON
-line per frame. Without the flag the compositor keeps one nil pointer and takes
-no time, fence or file for it. With it, lines are written in chunks from another
-goroutine, so the compositor's thread does no file I/O. Frames are fenced with
-the same sync files KMS waits on, which costs nothing on a stack that has them; a
-stack without them is waited for between submitting and presenting, which is
-reported as `gpu_source: wait` and paces the frame the way a page flip would.
+`lys-wm -frame-trace <file>` writes the input `lys-wm-pace` reads: a JSON
+header, then one JSON line per frame. The `debug trace` action
+([IPC](./ipc#debugging-a-running-session)) writes the same format from a
+running session.
+
+- Without the flag tracing costs nothing.
+- Lines are written in chunks from another goroutine; the compositor thread
+  does no file I/O.
+- Frames are fenced with the sync files KMS waits on. Without them the frame
+  is waited for between submit and present, reported as `gpu_source: wait`.
+- Allocation and I/O counts come from `runtime.ReadMemStats` and
+  `/proc/self/io` at both ends of each frame, outside the `cpu` column.

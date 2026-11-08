@@ -32,6 +32,7 @@ export default lysConfig({
       items: [
         { text: 'Contributing', link: '/guide/contributing' },
         { text: 'Architecture', link: '/architecture' },
+        { text: 'Frame pacing', link: '/frame-pacing' },
       ],
     },
   ],

@@ -1,72 +1,68 @@
 # Config
 
 lys-wm reads one YAML file: `$XDG_CONFIG_HOME/lys-wm/config.yaml`, or
-`~/.config/lys-wm/config.yaml` when `XDG_CONFIG_HOME` is unset.
-`lys-wm --config <file>` reads another file instead, and that file must exist.
-With no file at the default path, lys-wm runs the built-in config,
+`~/.config/lys-wm/config.yaml` when `XDG_CONFIG_HOME` is unset. Without it,
+lys-wm runs the built-in config,
 [`internal/config/default.yaml`](https://github.com/stubbedev/lys-wm/blob/main/internal/config/default.yaml),
-which is a good starting point to copy.
+a good starting point to copy.
 
-Every error gives the file, the line and the key:
+Every section is optional. A file replaces the built-in config rather than
+adding to it: a key it leaves out takes the default on this page, so a file
+without `binds` has no binds and without `env` none of the built-in variables.
+
+Every error names the file, line and key:
 
 ```
 config.yaml:12: binds[3].action: bad action: unknown action "teleport"
 ```
 
-`lys-wm --check-config [--config <file>]` loads the file exactly as a reload
-does and exits without starting: status 0 and no output when it applies whole,
-the error and status 1 when not, a key lys-wm does not know included. `lys-wm --default-config` prints the
-built-in config. `lys-wm --config-schema` prints a JSON schema of every key, the
-same as the committed
-[`schema/lys-wm-config.schema.json`](https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json),
-with the choices, bounds and defaults of the scalar keys, the defaults of
-`gaps.outer`, the borders and the built-in palette, and how many colours a
-gradient takes, which tests hold to what the parser does. The focus border
-defaults to `accent`, so it follows the desktop accent until set.
-Defaults are the GPU renderers'. These flags are the
-contract other programs use, lys-settings among them, instead of the parser's
-Go package.
+| Flag | Effect |
+| --- | --- |
+| `--config <file>` | Read this file instead; it must exist |
+| `--runtime <file>` | Read this override file instead of `runtime.yaml`; it must exist |
+| `--check-config` | Load the config and overrides as a reload would, then exit: status 0 and no output when accepted, the errors and status 1 when not |
+| `--default-config` | Print the built-in config |
+| `--config-schema` | Print the JSON schema, as [`schema/lys-wm-config.schema.json`](https://github.com/stubbedev/lys-wm/blob/main/schema/lys-wm-config.schema.json) |
+| `--effective-config` | Print, as JSON, the layers read and every key they set, with its source layer, file, line and value |
 
-A string key whose value comes from a set the system can list carries a
-`format`, so a settings program can offer a picker instead of a text entry.
-The tests hold each format to what the parser accepts.
+`SIGHUP`, the `reload` action and `lys-wmctl reload` read the file again;
+editing the file does not. A file that does not parse, or whose chords, keymap
+or font do not load, is rejected whole and the running config stays.
+
+An unknown key is a warning: it is skipped and the rest applies. Errors and
+warnings show as a red notice on every output until fixed or dismissed
+(`dismissconfignotice`). `lys-wmctl reload` prints warnings and exits 1 on a
+rejected file; `lys-wmctl configproblems` lists them.
+
+Schema `format`s for string keys:
 
 | Format | Keys | Value | Empty |
 | --- | --- | --- | --- |
 | `lys-wm-color` | every colour | A palette name or `#rrggbb[aa]` | Refused |
-| `lys-wm-font-file` | `tabs.font` | A TrueType or OpenType file, as fontconfig's `fc-list` lists them; a relative path is from lys-wm's working directory | `LYS_WM_FONT`, then the built-in font |
-| `lys-wm-icon-theme` | `tabs.icon_theme` | The directory name of an installed freedesktop icon theme, under `icons` in an XDG data directory; never a path | `Adwaita` |
-| `lys-wm-xkb-layout` | `input.keyboard.layout` | xkeyboard-config layout names, separated by commas without spaces: `us,dk` | The `XKB_DEFAULT_*` variables, when every keyboard key is empty |
-| `lys-wm-xkb-variant` | `input.keyboard.variant` | Variant names, comma-separated, one per layout in order and at most as many as layouts; an empty item is that layout's default: `,nodeadkeys` | Each layout's default variant |
-| `lys-wm-xkb-options` | `input.keyboard.options` | Option names (`group:option`), comma-separated without spaces: `grp:alt_shift_toggle,caps:escape` | No options |
-| `lys-wm-xkb-model` | `input.keyboard.model` | One xkeyboard-config model name: `pc105` | The rules' default model |
-| `lys-wm-xkb-rules` | `input.keyboard.rules` | One rules file name: `evdev` | `evdev` |
-| `lys-wm-drm-device` | `gpu` | A DRM card, `cardN` or `/dev/dri/cardN`, as listed under `/dev/dri`; never a render node | Refused; leave the key out |
-| `regex` | `rules[].app_id`, `rules[].title`, `rules[].tag` | A Go regular expression | Matches everything |
+| `lys-wm-font-file` | `tabs.font` | A TrueType or OpenType file; relative to lys-wm's working directory | `LYS_WM_FONT`, then the built-in font |
+| `lys-wm-icon-theme` | `tabs.icon_theme` | An installed freedesktop icon theme's directory name; never a path | `Adwaita` |
+| `lys-wm-xkb-layout` | `input.keyboard.layout` | Layout names, comma-separated without spaces: `us,dk` | `XKB_DEFAULT_*`, when every keyboard key is empty |
+| `lys-wm-xkb-variant` | `input.keyboard.variant` | One variant per layout, at most as many as layouts; an empty item is that layout's default: `,nodeadkeys` | Each layout's default |
+| `lys-wm-xkb-options` | `input.keyboard.options` | `group:option` names, comma-separated without spaces | None |
+| `lys-wm-xkb-model` | `input.keyboard.model` | One model name: `pc105` | The rules' default |
+| `lys-wm-xkb-rules` | `input.keyboard.rules` | One rules name: `evdev` | `evdev` |
+| `lys-wm-drm-device` | `gpu` | `cardN` or `/dev/dri/cardN`; never a render node | Refused; leave the key out |
+| `lys-wm-chord` | `binds[].chord`, `submaps.*[].chord` | A [chord](#binds-and-submaps) | Refused |
+| `lys-wm-action` | every `action` | An [action](./actions.md) | Refused |
+| `regex` | `rules[].app_id`, `rules[].title`, `rules[].tag`, `swallow.terminals`, `swallow.except_title` | A Go (RE2) regular expression | Matches everything |
 
-The layout, model, rules, variant and options names are the ones
-`/usr/share/X11/xkb/rules/evdev.xml` lists. A name with a space or comma in
-it, or an empty item in a layout or options list, is an error at the key's
-line.
-
-`SIGHUP` and the `reload` action read the file again. A file that does not
-parse, or whose chords, layout or font do not load, is rejected whole and the
-running config stays. Nothing reloads when the file changes.
+XKB names are those in `/usr/share/X11/xkb/rules/evdev.xml`. A name with a
+space or comma, or an empty item in a layout or options list, is an error.
 
 ## Runtime overrides
 
-`runtime.yaml` beside the config file (`$XDG_CONFIG_HOME/lys-wm/runtime.yaml`,
-or beside the file `--config` names) is merged over `config.yaml`, or over the
-built-in config when there is no `config.yaml`. It is how a program such as
-lys-settings changes a setting without rewriting `config.yaml`, which keeps
-working when `config.yaml` is a read-only link into the Nix store. lys-wm only
-reads it; a missing `runtime.yaml` is no overrides.
+`runtime.yaml` beside the config file is merged over `config.yaml` (or the
+built-in config). lys-settings writes it, so `config.yaml` can stay read-only.
+lys-wm only reads it; a missing file means no overrides.
 
-The merge is the one lys-shell's `runtime.yaml` uses: mappings merge key by
-key, and a scalar or a list in the override replaces the value below it whole.
-A key the override sets wins; a key it leaves out comes from `config.yaml`,
-then from the default this page gives. A `null` (`gaps:` with nothing after
-it) clears the whole mapping below it.
+- Mappings merge key by key.
+- A scalar or list replaces the value below it whole.
+- `null` (`gaps:` with nothing after it) clears the whole mapping below it.
 
 ```yaml
 # runtime.yaml
@@ -77,20 +73,13 @@ input:
     layout: us,dk
 ```
 
-Startup, `SIGHUP`, the `reload` action and `lys-wmctl reload` load the merged
-result, and errors and warnings name the file and line the key came from
-(`runtime.yaml:3: gaps.inner: -1 is not zero or more`). A bad override is
-rejected whole, as a bad `config.yaml` is, and the running config stays.
+Messages name the layer's file and line
+(`runtime.yaml:3: gaps.inner: -1 is not zero or more`). A bad override rejects
+the whole load. `lys-wm --check-config --runtime candidate.yaml` checks a
+candidate.
 
-`lys-wm --runtime <file>` reads another override file instead, which must
-exist. With `--check-config` it checks a candidate before it is installed:
-`lys-wm --check-config --runtime candidate.yaml` accepts and rejects exactly as
-a reload with `candidate.yaml` as `runtime.yaml` would.
-
-`lys-wm --effective-config` prints, as JSON, the layers it read and every key
-they set, each with the layer its value comes from (`runtime`, `config`, or
-`built-in` when there is no `config.yaml`), the file, the line and the value.
-A key that is not listed has the default this page gives.
+`--effective-config` output. `source` is `runtime`, `config`, or `built-in`
+when there is no `config.yaml`; an unlisted key has its default:
 
 ```json
 {
@@ -104,102 +93,57 @@ A key that is not listed has the default this page gives.
 }
 ```
 
-A path is a list of keys, so a key with a dot in it, such as a device name
-under `input.devices`, stays one key. A list is one value.
-
-To fold the overrides back into a Nix config, copy each key of `runtime.yaml`
-into the attribute set Home Manager writes `config.yaml` from, at the same
-path, then delete `runtime.yaml`: `lys-wm --effective-config` lists what is
-left to move, every key whose `source` is `runtime`.
-
-A key this lys-wm does not know, such as a typo or one a newer lys-wm reads, is
-a warning, not an error: it is left out and everything else in the file
-applies, so an update's config still reaches a compositor that has not moved
-to the new binary yet.
-
-Both reach the screen: a red notice across the top of every output names each
-problem, and stays until a reload no longer finds it, or until the
-`dismissconfignotice` action hides it. `lys-wmctl reload` prints warnings to
-stderr and exits 1 on a rejected file, and `lys-wmctl configproblems` lists them
-at any time.
-
-Every section is optional, and a file replaces the built-in config rather than
-adding to it: each key the file leaves out takes the default this page gives,
-and a file without `binds` has no binds and without `env` none of the built-in
-config's variables.
+A path is a list of keys (a dotted device name stays one key); a list is one
+value. To fold overrides into a Nix config, move every key whose `source` is
+`runtime` to the same path, then delete `runtime.yaml`.
 
 ## The default look
 
-An empty file, or none, looks finished: rounded corners, gaps, a soft shadow, a
-hairline border with the focused window's in the accent colour, and spring
-animations tuned per event. Every default is on this page, and any key you set
-wins over it, on every renderer.
+An empty file looks finished: rounded corners, gaps, a soft shadow, a hairline
+border (the focused window's in the accent colour) and spring animations. Any
+key you set wins.
 
-**A config you already have changes.** Rounding, gaps, shadows, borders,
-tab strips, animations and the look of blur used to be off, zero or a Catppuccin
-colour unless set. A file that sets only some of them now gets these defaults for
-the rest. To have the old look back:
-
-```yaml
-decoration:
-  rounding: 0
-  shadow: {enabled: false}
-  blur: {size: 8, passes: 1, saturation: 1}
-gaps: {inner: 0, outer: 0}
-borders: {active: "#cba6f7", inactive: "#11111b"}
-tabs:
-  height: 15
-  padding: 5
-  text_height: 8
-  text_padding: 3
-  active: {background: "#cba6f7", text: "#11111b"}
-animations: {enabled: false}
-```
-
-`animations: {enabled: true}` no longer means bezier curves: an event you do not
-configure gets its spring, unless a parent event in your file names a curve or a
-duration. See [animations](#animations).
-
-What a key left out defaults to depends on what draws the frames, decided when
-lys-wm starts, since an effect that is cheap on a GPU can eat a CPU:
+Some defaults depend on the renderer chosen at startup:
 
 | Renderer | Default look |
 | --- | --- |
-| GLES or Vulkan on a GPU | Everything, and blur for clients that ask for it |
-| GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | Everything but blur, the overview's included. Blur costs these 10 to 40 ms per redraw. `ext_background_effect_v1` is not offered as able to blur, so clients such as lys-shell show their opaque style |
-| lys-wm's software renderer (`-renderer soft`) | Also no shadow and no animated workspace switch: a 1080p frame takes 68 ms with shadows and 14 ms without, and a slide draws two workspaces. Windows and layer surfaces still animate |
+| GLES or Vulkan on a GPU | Everything; blur for clients that ask for it |
+| GLES on llvmpipe or softpipe, Vulkan on lavapipe or SwiftShader | No blur, the overview's included; `ext_background_effect_v1` is offered without blur |
+| Software renderer (`--renderer soft`) | Also no shadow and no animated workspace switch |
 
-Setting `decoration.blur.enabled`, or a layer rule's `blur`, either way, puts
-blur back in your hands on any renderer, `overview.blur` the overview's, as does `decoration.shadow.enabled` for
-shadows. `animations.events.workspaces` does the same for a workspace switch.
+Setting `decoration.blur.enabled` or a layer rule's `blur: true` takes blur
+back on any renderer; `overview.blur`, `decoration.shadow.enabled` and
+`animations.events.workspaces` do the same for theirs.
 
 ## outputs
 
-A list of rules. Each output takes the first rule that matches it, or the
-rule with `match: "*"` when none does; without one, it runs at its preferred
-mode and scale 1. Only one rule can use `"*"`.
+A list of rules. Each output takes the first rule that matches, else the
+`match: "*"` rule, else its preferred mode at scale 1. Only one rule may use
+`"*"`.
 
-| Key | Value |
-| --- | --- |
-| `match` | A connector name (`DP-1`), `desc:` and the start of the output's description: its EDID make, model and serial, as in `desc:Samsung Electric Company LC32G5xT`, or `"*"` for every output no other rule names |
-| `mode` | `preferred` (the default), `highres` (the largest mode, then the fastest), `<width>x<height>`, or `<width>x<height>@<hz>`. Without a rate, the fastest mode of that size; with one, the closest within 1 Hz |
-| `position` | `<x>x<y>` in logical pixels, or `auto` (the default): outputs without a position line up to the right of all the others |
-| `scale` | 0.25 to 10, in steps of 1/120. Default 1 |
-| `bitdepth` | `8` (the default) or `10`: draw frames in 10 bits per channel, for smoother gradients under a colour transform such as night light. Some drivers break screen sharing or fullscreen games with it; an output that cannot show 10-bit frames stays at 8 and says so in the log |
-| `vrr` | Variable refresh rate (adaptive sync, FreeSync, G-Sync Compatible): `off` (the default), `on` for always, or `fullscreen`: only while one surface alone fills the output and is a game or a video, as it says through `wp_content_type_v1` or a rule's `content` key says for it. A frame then reaches the screen when it is ready instead of at the next fixed vblank. An output without it (no `vrr_capable` connector, or a CRTC without `VRR_ENABLED`) keeps a fixed refresh and says so in the log |
-| `hdr` | `true` drives the output with HDR, as [HDR](#hdr) describes; `fullscreen` only while one surface alone fills the output and its image description is HDR (a PQ or HLG transfer function, or primaries wider than sRGB), switching back to SDR a second after that stops. Default `false` |
-| `sdr_brightness` | With `hdr`: the cd/m² SDR white shows at, 1 to 10000. Default `203` |
-| `hdr_peak` | With `hdr`: the display's peak in cd/m², 1 to 10000, for one whose EDID has it wrong. Default what the EDID says, else 400 |
-| `icc` | A matrix-shaper ICC profile for an SDR output, a path absolute, under `~/` or beside the config file. Where the CRTC has `DEGAMMA_LUT`, `CTM` and `GAMMA_LUT` the correction runs there (sRGB decode, sRGB to the profile's primaries, the profile's inverse curve, with gamma-control ramps applied after it and a colour matrix before), so frames and direct scanout cost what they cost without one; otherwise every draw is converted to the profile. Colour-managed clients are told the profile's primaries and curve. A profile lys-wm cannot read is a warning naming the file, and the output stays sRGB |
-| `transform` | How the panel is turned: `normal` (the default), `90`, `180`, `270`, `flipped`, `flipped-90`, `flipped-180` or `flipped-270`, as `wl_output.transform` counts them. Windows tile in the turned logical size, clients are told the transform so they can pre-rotate, and a fullscreen client whose `wl_surface.set_buffer_transform` matches keeps direct scanout; everything else is composed upright and turned in one copy into the frame. Absolute pointers, touchscreens and tablets mapped to the output follow it. Screen captures stay upright |
-| `mirror` | A connector name or `desc:` match of another output: this one shows that output's image, letterboxed to its own mode, instead of a desktop of its own. It gets no workspaces, is left out of `wl_output`, the layout and output management, and is reported in IPC with `mirror_of`. Its own `transform` turns the mirrored image. While no output matches, it stays black |
-| `reserved` | `[top, right, bottom, left]` in logical pixels kept free of tiled and maximized windows, on top of what bars reserve. Default none |
-| `disabled` | `true` turns the output off |
-| `shader` | A fragment shader for the output's final image: see [Screen shaders](./shaders). A shader that does not compile leaves the output unshaded and says why. Reloading the config reads the file again |
-| `hot_corners` | `false` turns every [hot corner](#hot_corners) off on this output, say a touch panel. A mapping of corners, written as under `hot_corners`, replaces those corners on this output, `false` for one turns it off, and the rest stay as `hot_corners` has them |
+| Key | Value | Default |
+| --- | --- | --- |
+| `match` | Required. A connector name (`DP-1`), `desc:` plus the start of the EDID make, model and serial (`desc:Samsung Electric Company LC32G5xT`), or `"*"` | |
+| `mode` | `preferred`; `highres` (largest, then fastest); `<w>x<h>` (fastest of that size); `<w>x<h>@<hz>` (closest within 1 Hz). A missing mode is reported and the current one kept | `preferred` |
+| `position` | `<x>x<y>` logical pixels, or `auto` (right of all others) | `auto` |
+| `scale` | 0.25 to 10, in steps of 1/120 | 1 |
+| `bitdepth` | `8` or `10`; an output that cannot do 10 stays at 8 and logs it | `8` |
+| `vrr` | `off`, `on`, or `fullscreen`: only while one game or video surface (`wp_content_type_v1` or a rule's `content`) alone fills the output | `off` |
+| `hdr` | `true`, `false`, or `fullscreen`: only while one surface with an HDR image description alone fills the output, back to SDR a second after. See [HDR](#hdr) | `false` |
+| `sdr_brightness` | With `hdr`: cd/m² of SDR white, 1 to 10000 | 203 |
+| `hdr_peak` | With `hdr`: display peak in cd/m², 1 to 10000 | EDID, else 400 |
+| `icc` | Matrix-shaper ICC profile for an SDR output; absolute, `~/`, or relative to the config file. Runs on the CRTC's colour pipeline where present, else per draw. An unreadable profile is a warning and the output stays sRGB | none |
+| `transform` | `normal`, `90`, `180`, `270`, `flipped`, `flipped-90`, `flipped-180`, `flipped-270`. Windows tile in the turned size; absolute pointers, touchscreens and tablets follow; captures stay upright | `normal` |
+| `mirror` | Connector or `desc:` of another output to show, letterboxed. A mirror has no workspaces, is hidden from `wl_output` and the layout, and has `mirror_of` in IPC. Black while nothing matches | none |
+| `reserved` | `[top, right, bottom, left]` logical pixels kept free of tiled and maximized windows, on top of what bars reserve | none |
+| `disabled` | `true` turns the output off | `false` |
+| `shader` | Fragment shader for the final image; see [Screen shaders](./shaders). Re-read on reload | none |
+| `hot_corners` | `false` turns every [hot corner](#hot_corners) off here; a mapping of corners replaces those corners here | |
 
-A mode the output does not have is reported, and the output keeps its current
-mode.
+Changes from wlr-output-management tools (wlr-randr, kanshi, wdisplays)
+replace these rules until the next reload. Rotation, unsupported VRR, unlisted
+modes and turning every output off are refused. While the lid is closed,
+`eDP-*` panels are off and their workspaces move to other outputs.
 
 ### HDR
 
@@ -210,57 +154,28 @@ outputs:
     sdr_brightness: 250
 ```
 
-An output with `hdr: true` carries PQ and BT.2020 at 10 bits, with the panel's
-primaries and luminance from its EDID as static metadata, and overrides
-`bitdepth`. Everything SDR shows at `sdr_brightness`, HDR clients at their own
-levels anchored to it, and light above the panel's peak compresses into it.
-An output stays SDR, and the log says why, when the backend is not DRM or
-headless, the connector lacks `HDR_OUTPUT_METADATA` or `Colorspace`, the EDID lists
-no ST 2084 or no BT.2020 RGB, the renderer has no float targets, or the kernel
-refuses the modeset.
+An HDR output carries PQ and BT.2020 at 10 bits with the panel's EDID metadata,
+overriding `bitdepth`. SDR content shows at `sdr_brightness`, HDR clients at
+their own levels, and light above the peak is compressed. The output stays SDR,
+and logs why, when the backend is not DRM or headless, the connector lacks
+`HDR_OUTPUT_METADATA` or `Colorspace`, the EDID lacks ST 2084 or BT.2020 RGB,
+the renderer has no float targets, or the modeset fails.
 
-On an HDR output the cursor keeps its plane: its image is encoded to the signal
-once per change of image, colour matrix or `sdr_brightness`, at the SDR white,
-so moving it repaints nothing (the frame draws it only where the plane refuses);
-a screen shader stays off, reported in the log, as shaders take SDR code values; only a
-fullscreen buffer tagged PQ and BT.2020 that fits the panel and shares the
-reference white scans out directly; `zwlr_gamma_control_manager_v1` refuses it,
-as gamma ramps act on code values; and a colour matrix applies in linear light.
-Screenshots and screen sharing get SDR on every output: HDR content tone-mapped,
-and SDR content with its own pixels, except what blurs over HDR light.
+On an HDR output screen shaders and gamma control are off, only a fullscreen
+PQ/BT.2020 buffer matching the panel scans out directly, and translucency
+composites in linear light (it looks lighter than on SDR). Captures are always
+SDR, HDR content tone-mapped.
 
-Clients see `wp_color_manager_v1` when any output has `hdr: true` or `hdr: fullscreen`, or with
-`color_management: true` at the top of the file, which also gives SDR outputs
-tone mapping for HDR clients. Without either nothing is offered and nothing is
-converted.
+`wp_color_manager_v1` is offered when any output has `hdr: true` or
+`fullscreen`, or with top-level `color_management: true` (default `false`),
+which also tone-maps HDR clients on SDR outputs. Client ICC profiles must be
+matrix-shaper with one parametric, gamma or sRGB curve; others fail with
+`unsupported`.
 
-Translucency, shadows and blur composite in linear light on an HDR output, which
-is physically right but looks lighter than the same config on SDR.
+## virtual_outputs {#virtual_outputs}
 
-The software renderer keeps 8 bits a channel of a client's 10-bit buffers and
-evaluates transforms per pixel in Go: it is for tests. ICC profiles work when
-they are matrix-shaper with one tone curve that is parametric or fits a gamma or
-sRGB within 1/255; others fail with `unsupported`, as the protocol has it.
-
-Display tools such as wlr-randr, kanshi, wdisplays and nwg-displays change
-outputs while lys-wm runs, through wlr-output-management. Their changes take the
-place of these rules for the outputs they name until the config is reloaded,
-which applies the rules again. lys-wm refuses a configuration that rotates an
-output, turns on adaptive sync where the output has none, uses a mode the output
-does not list, or turns every output off. Turning adaptive sync on or off there
-sets `vrr` to `on` or `off` for that output; the head reports whether it is on
-right now.
-
-While the laptop lid is closed, internal panels (`eDP-*`) are off whatever the
-rules say, and their workspaces move to the other outputs; opening the lid
-brings the panel back under its rule. libinput turns off the internal keyboard
-and touchpad while the lid is closed.
-
-## virtual_outputs
-
-Outputs that exist only in memory, made when lys-wm starts and kept across
-reloads, for streaming a second screen to a tablet or another PC (Sunshine,
-wayvnc, RustDesk) or a screencast at a size of its own:
+In-memory outputs, created at startup and kept across reloads, for streaming a
+second screen (Sunshine, wayvnc, RustDesk) or a screencast at its own size.
 
 ```yaml
 virtual_outputs:
@@ -270,36 +185,33 @@ virtual_outputs:
 
 | Key | Value |
 | --- | --- |
-| `name` | The output's name, which [`outputs`](#outputs) rules match like a connector's. Required, and unique |
-| `mode` | `<width>x<height>` or `<width>x<height>@<hz>`, 60 Hz without a rate. Required |
+| `name` | Required, unique. [`outputs`](#outputs) rules match it like a connector |
+| `mode` | Required. `<w>x<h>` or `<w>x<h>@<hz>`; 60 Hz without a rate |
 
-They behave as those `lys-wmctl output create` makes ([Virtual
-outputs](./ipc#virtual-outputs)): placed like a monitor, rendering only while
-something captures them. A reload adds the new ones, removes those it no
-longer lists, and makes again one whose mode changed; `output remove`
-refuses them. A name another output already has is reported and skipped. An
-[upgrade](./guide/upgrade) closes them and the new binary makes them again
-from its config.
+They behave like [`lys-wmctl output create`](./ipc#virtual-outputs) outputs,
+rendering only while captured. Reloads add, remove and remake them to match;
+`output remove` refuses them; a taken name is reported and skipped. An
+[upgrade](./guide/upgrade) recreates them.
 
 ## input.keyboard
 
-| Key | Value |
-| --- | --- |
-| `rules`, `model`, `layout`, `variant`, `options` | The XKB names, as in `setxkbmap`. With none set, the `XKB_DEFAULT_*` variables apply |
-| `repeat_rate` | Repeats per second; 0 turns repeat off. Default 50 |
-| `repeat_delay` | Milliseconds before repeat starts. Default 300 |
-| `sticky_keys` | `true`: a modifier pressed and released alone applies to the next key; pressed twice in a row it stays on until pressed a third time. Default `false` |
-| `slow_keys` | Milliseconds a key must be held before it counts; a key let go sooner is dropped. 0, the default, turns slow keys off |
-| `numlock` | `true`: Num Lock is on when lys-wm starts and again after every reload. Default `false` |
+| Key | Value | Default |
+| --- | --- | --- |
+| `rules`, `model`, `layout`, `variant`, `options` | XKB names, as in `setxkbmap` | `XKB_DEFAULT_*` when all are unset |
+| `repeat_rate` | Repeats per second; 0 turns repeat off | 50 |
+| `repeat_delay` | Milliseconds before repeat | 300 |
+| `sticky_keys` | A modifier tapped alone applies to the next key; tapped twice it locks until tapped again | `false` |
+| `slow_keys` | Milliseconds a key must be held to count; 0 is off | 0 |
+| `numlock` | Num Lock on at startup and after every reload | `false` |
 
-`lys-wmctl dispatch stickykeys on|off` and `slowkeys <ms>` change both while lys-wm runs, until the next reload.
+`lys-wmctl dispatch stickykeys on|off` and `slowkeys <ms>` change them until
+the next reload.
 
 ## input.pointer, input.touchpad and input.devices
 
 `input.touchpad` applies to touchpads (devices that can tap), `input.pointer` to
-every other pointing device. `input.devices` maps a libinput device name, as
-`libinput list-devices` prints it, to settings that override both for that
-device.
+other pointing devices. `input.devices` maps a libinput device name (as
+`libinput list-devices` prints it) to settings that override both.
 
 ```yaml
 input:
@@ -315,91 +227,72 @@ input:
 
 | Key | Value |
 | --- | --- |
-| `tap`, `drag_lock` | Tap to click, and keep a tap-and-drag going after the finger lifts |
-| `natural_scroll` | Content follows the fingers; also sets which way [gestures](#gestures) go |
-| `disable_while_typing` | Ignore the touchpad while the keyboard is in use |
-| `middle_emulation` | Pressing left and right together is a middle click |
-| `click_method` | `button_areas`, `clickfinger` or `none` |
-| `scroll_method` | `two_finger`, `edge`, `on_button_down` or `none` |
+| `tap`, `drag_lock` | Bool: tap to click; keep a tap-and-drag after the finger lifts |
+| `natural_scroll` | Bool: content follows the fingers; also sets [gesture](#gestures) direction |
+| `disable_while_typing` | Bool |
+| `middle_emulation` | Bool: left and right together is a middle click |
+| `left_handed` | Bool: swap buttons (a tablet: turn it around) |
+| `click_method` | `button_areas`, `clickfinger`, `none` |
+| `scroll_method` | `two_finger`, `edge`, `on_button_down`, `none` |
+| `scroll_button` | Button for `on_button_down`: `left`, `right`, `middle`, `side`, `extra`, `forward`, `back`, `task`, or an evdev code above 0 (`275`) |
+| `scroll_button_lock` | Bool: a click on `scroll_button` toggles scrolling |
+| `tap_button_map` | `lrm` or `lmr`: buttons for one-, two-, three-finger taps |
 | `accel_profile` | `adaptive` or `flat` |
-| `accel_points` | A custom acceleration curve, `{step, points}`: pointer speeds at device speeds 0, `step`, 2 × `step`, … (in device units per millisecond), as libinput's custom profile takes them. `step` is above 0 and up to 10000, `points` holds 2 to 64 speeds from 0 to 10000. It selects the custom profile, so it cannot stand next to `accel_profile` |
+| `accel_points` | `{step, points}`: libinput custom curve, pointer speeds at device speeds 0, `step`, 2·`step`, … `step` above 0 up to 10000; 2 to 64 `points`, each 0 to 10000. Not with `accel_profile` |
 | `accel_speed` | -1 to 1 |
-| `scroll_factor` | Multiplies scroll distances; above 0, up to 100. Default 1 |
-| `left_handed` | Swap the left and right buttons (on a tablet, turn it around) |
-| `scroll_button` | The button `on_button_down` scrolls with: `left`, `right`, `middle`, `side`, `extra`, `forward`, `back`, `task` or an evdev button code such as `275` |
-| `scroll_button_lock` | A click on `scroll_button` turns scrolling on until the next click, instead of scrolling only while it is held |
-| `tap_button_map` | Which buttons one-, two- and three-finger taps press: `lrm` (left, right, middle) or `lmr` |
-| `disabled_on_external_mouse` | Turn the touchpad off while another pointing device is plugged in |
+| `scroll_factor` | Above 0, up to 100. Default 1 |
+| `disabled_on_external_mouse` | Bool: touchpad off while another pointer is plugged in |
 
 Under `input.devices` a device also takes:
 
 | Key | Value |
 | --- | --- |
-| `output` | For a touchscreen, tablet or other absolute device: the output it covers, by connector name (`eDP-1`) or `desc:<description>` as in [outputs](#outputs). Its touches and pen positions map onto that output alone instead of the whole layout, and while the output is off or unplugged the device moves nothing |
-| `calibration` | Six numbers, the touchscreen's calibration matrix as libinput applies it to normalized coordinates: `[a, b, c, d, e, f]` maps (x, y) to (a·x + b·y + c, d·x + e·y + f) |
-| `region` | `[x, y, width, height]`, fractions of the tablet: only that part of its surface is used, stretched over the whole of its output |
-| `keyboard` | `rules`, `model`, `layout`, `variant` and `options` for this keyboard alone, as under `input.keyboard`. They replace the seat's names as a whole: a key left out takes the XKB default, not `input.keyboard`'s. Keys from this keyboard are read with its keymap, and the focused client is sent a new keymap when the next key comes from a keyboard with a different one; keyboards naming the same keymap share it, so switching between them sends nothing |
+| `output` | For an absolute device (touchscreen, tablet): the output it covers, by connector or `desc:`. While that output is off the device does nothing |
+| `calibration` | `[a, b, c, d, e, f]`: libinput calibration matrix on normalized coordinates |
+| `region` | `[x, y, width, height]`, fractions of a tablet's surface, stretched over its output |
+| `keyboard` | `rules`, `model`, `layout`, `variant`, `options` for this keyboard alone, replacing the seat's names whole (an unset key takes the XKB default) |
 
-An unset key keeps libinput's default for the device, and a reload that drops a
-key restores that default. A device that lacks a setting from `input.pointer`
-or `input.touchpad` skips it; one that lacks a setting named for it under
-`input.devices` is reported. These settings apply with the drm backend; nested,
-the host compositor configures the devices.
+An unset key keeps libinput's default. A setting a device lacks is skipped, or
+reported when named under `devices`. Applies on the drm backend only.
 
 ## cursor
 
-```yaml
-cursor:
-  hide_while_typing: true
-  hide_after: 5000
-  shake_to_find: true
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `hide_while_typing` | Hide the pointer when a key that is neither a bind nor a lone modifier reaches a window | `false` |
+| `hide_after` | Milliseconds without pointer input before hiding; 0 never. Never during a button hold, move, resize, drag or pointer lock | 0 |
+| `shake_to_find` | Shaking the mouse grows the pointer to three times its size briefly | `false` |
 
-| Key | Value |
-| --- | --- |
-| `hide_while_typing` | Hide the pointer when a key that is neither a bind nor a lone modifier reaches a window. Default `false` |
-| `hide_after` | Milliseconds without pointer input before the pointer hides; 0, the default, never hides it. It never hides while a button is held, a window is moved or resized, something is dragged, or a client has locked the pointer |
-| `shake_to_find` | Shaking the mouse left and right (four quick turns) grows the pointer to three times its size on a spring, and it settles back. Default `false` |
-
-The next pointer motion, button, scroll, touch or pen event shows a hidden
-pointer again. Hiding is lys-wm's own: windows keep pointer focus and get no
-leave or enter, a client's cursor stays as it set it, and a hidden pointer
-costs no cursor plane updates. A shape from the cursor theme grows from the
-theme's larger size when it has one, else it is scaled; a cursor surface a
-client draws itself keeps its size. The pointer's size itself comes from
+Any pointer, touch or pen event shows it again. Pointer size comes from
 `XCURSOR_SIZE`.
 
 ## Colours
 
-A colour is a palette name or `#rrggbb[aa]`. The palette starts as
+A colour is a palette name or `#rrggbb[aa]`. The palette is
 [Catppuccin Mocha](https://catppuccin.com/palette) (`mauve`, `crust`,
-`surface0`, …) and `accent`, the desktop's accent colour; `palette` adds
-names or overrides them:
+`surface0`, …) plus `accent`. `palette` adds or overrides names, with
+`#rrggbb[aa]` values:
 
 ```yaml
 palette:
   accent: "#ff8800"
 ```
 
-`accent` is the `accent-color` xdg-desktop-portal publishes, which in a
-lys-shell session is lys-shell's `styling.palette.primary`, the accent
-lys-settings edits. lys-wm follows it while it runs: a new accent reloads the
-config, so the focus border and the active tab change with it, with no
-`lys-wmctl reload`. Until the desktop publishes one, `accent` is `#e0947a`,
-lys-shell's default. A colour the config names, or `accent` set under
-`palette`, wins over the desktop's.
+`accent` follows the `accent-color` xdg-desktop-portal publishes (in a
+lys-shell session, `styling.palette.primary`) and reloads the config live when
+it changes; until one is published it is `#e0947a`. Setting `accent` under
+`palette` pins it.
 
 ## borders
 
-| Key | Default |
-| --- | --- |
-| `width` | 1 |
-| `active` | `accent`, the desktop's accent colour |
-| `inactive` | `#ffffff14`, a white hairline |
+| Key | Value | Default |
+| --- | --- | --- |
+| `width` | Logical pixels, 0 or more | 1 |
+| `active` | Colour or gradient | `accent` |
+| `inactive` | Colour or gradient | `#ffffff14` |
 
-`active` and `inactive` take a colour, or a gradient of 2 to 10 colours spread
-evenly across the border along `angle` degrees (0, the default, runs left to
-right; angles turn clockwise):
+A gradient is 2 to 10 colours along `angle` degrees (0, the default, is left to
+right; clockwise):
 
 ```yaml
 borders:
@@ -408,228 +301,113 @@ borders:
 
 ## decoration
 
-```yaml
-decoration:
-  rounding: 8
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `rounding` | Corner radius in logical pixels, 0 or more. Fullscreen windows stay square | 8 |
+| `active_opacity` | 0 to 1 | 1 |
+| `inactive_opacity` | 0 to 1 | 1 |
+| `fullscreen_opacity` | 0 to 1 | 1 |
+| `dim_inactive` | Darken every window but the focused one | `false` |
+| `dim_strength` | 0 to 1, for `dim_inactive` and `dim_around` | 0.5 |
 
-| Key | Default |
+Opacity multiplies what the client draws; borders stay opaque. A rule's
+`opacity` replaces these. Rounded or translucent windows are never scanned out
+directly.
+
+### decoration.shadow
+
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | Shadow under every non-fullscreen window (see [the default look](#the-default-look)) | `true` |
+| `range` | Fade distance in logical pixels, 0 or more | 24 |
+| `render_power` | Fade speed, 1 (linear) to 4 | 2 |
+| `sharp` | Hard edge, no fade | `false` |
+| `offset` | `[x, y]` logical pixels | `[0, 8]` |
+| `scale` | Size relative to the window, above 0 up to 1 | 1 |
+| `color` | Colour | `#00000060` |
+| `color_inactive` | Colour for unfocused windows | `#00000038`, or `color` when set |
+
+### decoration.blur
+
+Blurs what lies behind translucent windows, layer surfaces whose layer rule
+sets `blur`, and their popups.
+
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | Blur behind every translucent window and its popups | `false` |
+| `size` | Distance between taps, logical pixels, 1 or more | 6 |
+| `passes` | 1 to 4; each doubles the reach | 2 |
+| `xray` | Blur only the `background` and `bottom` layers, one shared blur per output | `false` |
+| `live_tiled` | `true` blurs what is behind each tiled window; `false` gives tiled windows the shared background blur | `false` |
+| `tint` | Colour over the blurred backdrop | none |
+| `saturation` | 0 to 4, CSS `saturate()` | 1.3 |
+| `brightness` | 0 to 4, CSS `brightness()` | 1 |
+| `contrast` | 0 to 4, CSS `contrast()` | 1 |
+| `grain` | Luminance noise, 0 to 1 | 0 |
+| `refraction.bezel` | Logical pixels in from the edge where the backdrop bends, 0 or more | 16 when `refraction` is set |
+| `refraction.amount` | Logical pixels it looks past the edge, 0 or more | 8 when `refraction` is set |
+| `specular.strength` | Rim sheen brightness, 0 to 1 | 0.6 when `specular` is set |
+| `specular.width` | Rim width, logical pixels, 1 or more | 1 when `specular` is set |
+| `mica.enabled` | Draw translucent window parts over a heavy blur of the `background` and `bottom` layers, shared per output | `false` |
+| `mica.size` | As `size` | 16 |
+| `mica.passes` | As `passes` | 4 |
+| `mica.tint` | Replaces `tint` for mica windows | none |
+
+Saturation, brightness and contrast apply in that order, then tint, then
+grain. The sheen faces the pointer; with reduced motion or animations off it
+rests at the top left.
+
+Client blur regions (`ext_background_effect_v1`) are honoured whether or not
+`enabled` is set, using this section's settings, and replace whole-surface
+blur. A CPU renderer withholds them unless `enabled` or a layer rule's `blur` is
+set. A window rule's `blur: false` turns them off for that window.
+
+## drag_preview {#drag_preview}
+
+While a window is dragged with `movewindow`, a translucent rectangle bordered in
+`borders.active` shows where it will land. A tiled window lands at its place in
+the tree. A floating window lands under the pointer, or snaps when the pointer
+is within `snap_distance` of a usable-area edge not shared with another output:
+
+| Pointer near | Window lands on |
 | --- | --- |
-| `rounding` | 8: the radius of window corners in logical pixels, scaled with the output. Surfaces are clipped to it, antialiased, and the border follows it with an outer radius of `rounding` plus the border width. Fullscreen windows stay square |
-| `active_opacity` | 1: the focused window's opacity, 0 to 1 |
-| `inactive_opacity` | 1: every other window's opacity |
-| `fullscreen_opacity` | 1: a fullscreen window's opacity, whether focused or not |
-| `dim_inactive` | `false`: darken every window but the focused one |
-| `dim_strength` | 0.5: how dark, 0 to 1, for `dim_inactive` and `dim_around` |
-
-A rounded window shows what is behind its corners, so it is always
-composited, never scanned out directly, unless it is fullscreen.
-
-`decoration.shadow` draws a soft shadow under every window but fullscreen
-ones, following its rounded corners:
-
-```yaml
-decoration:
-  shadow:
-    enabled: true
-    range: 12
-    render_power: 3
-    offset: [2, 4]
-    color: "#1a1a1aee"
-```
-
-| Key | Default |
-| --- | --- |
-| `enabled` | `true`, but see [the default look](#the-default-look) |
-| `range` | 24: how far the shadow fades out beyond its edge, in logical pixels |
-| `render_power` | 2: how fast it fades, 1 (linearly) to 4 (quickly, with a darker core) |
-| `sharp` | `false`: `true` gives a hard-edged shadow with no fade |
-| `offset` | `[0, 8]`: where the shadow sits relative to the window, in logical pixels |
-| `scale` | 1: the shadow's size relative to the window, above 0 to 1 |
-| `color` | `#00000060` |
-| `color_inactive` | `#00000038`, or `color` when the file sets that: the shadow of windows that are not focused |
-
-The shadow is cut out under the window, so a translucent window does not show
-its own shadow through itself.
-
-`decoration.blur` blurs what lies behind translucent windows, the
-translucent layer surfaces whose namespace it lists, and the translucent
-popups of both:
-
-```yaml
-decoration:
-  blur:
-    enabled: true
-    size: 8
-    passes: 2
-```
-
-| Key | Default |
-| --- | --- |
-| `enabled` | `false`: blur behind every window that is translucent, through its opacity or its own alpha, and its popups |
-| `size` | 6: the distance between the blur's taps, in logical pixels |
-| `passes` | 2: how many times it halves and doubles, 1 to 4; each pass doubles the reach |
-| `xray` | `false`: blur only the background and bottom layers (the wallpaper) behind windows, popups, top layer surfaces and client blur regions, never the windows below them; they then share one blur per output, which windows moving underneath never redraw |
-| `live_tiled` | `false`: a tiled window blurs over the output's shared background blur, as `xray` does, so sliding or resizing tiles never refilters it; `true` blurs what lies behind each tiled window, as floating windows always do, at a filter per window whenever its area moves; a window with only the background behind it uses the shared blur either way |
-
-A window rule's `blur: true` or `blur: false` overrides `enabled` for the
-windows it matches and their popups. The blur follows the window's rounded
-corners. A popup is blurred across its window geometry, so not behind the
-shadow margin its client draws, rounded by `decoration.rounding`. A blur is
-redrawn only when what lies behind it, within the blur's reach, changes, and
-then the blurred area is repainted.
-
-Clients ask for blur themselves through `ext_background_effect_v1`, which
-name the exact region of a surface to blur: a toplevel, a popup, a layer
-surface, a subsurface or an input method's popup. The region is honoured
-whether or not `enabled` is set, with this section's `size`, `passes` and
-`xray`, and it follows the window's rounded corners. Only a renderer that rasterizes on the CPU
-with neither `enabled` nor a layer rule's `blur` in the config withholds it: the global then
-offers no blur, and a region draws nothing, until a reload sets one. Where a surface has one,
-it replaces the whole-surface blur `enabled` or a layer rule would draw. A window
-rule's `blur: false` turns regions off for that window and its popups, and
-nothing else does.
-Cursors, drag icons and session-lock surfaces ignore regions. The blur fades
-with a surface's alpha-modifier, not with a window's `opacity`, which leaves the
-blur behind a translucent window at full strength.
-
-The same section gives glass its look, for windows, blurred layers, popups and
-client regions alike. Only saturation is on by default, and an effect that is off
-adds nothing to a frame: with `saturation: 1` the pixels are those of a plain blur.
-
-```yaml
-decoration:
-  blur:
-    enabled: true
-    tint: "#1e1e2e40"
-    saturation: 1.4
-    brightness: 1.05
-    contrast: 1.1
-    grain: 0.04
-    refraction: {bezel: 16, amount: 8}
-    specular: {strength: 0.6, width: 1}
-    mica: {enabled: false, size: 16, passes: 4, tint: "#1e1e2ec0"}
-```
-
-| Key | Default |
-| --- | --- |
-| `tint` | none: a colour laid over the blurred backdrop, under the client |
-| `saturation` | 1.3: `saturate()`, 0 to 4, as CSS filters define it |
-| `brightness` | 1: `brightness()`, 0 to 4 |
-| `contrast` | 1: `contrast()`, 0 to 4 |
-| `grain` | 0: luminance noise over the backdrop, 0 to 1, the same pixels as lys-ui's `-lys-grain` at that opacity with the surface's corner as origin |
-| `refraction.bezel` | 16 when `refraction` is set: how far in from the edge the backdrop bends, in logical pixels, as lys-ui's `-lys-refract()` does; 0 turns it off |
-| `refraction.amount` | 8 when `refraction` is set: how far it looks past the edge at the rim, in logical pixels; 0 turns it off |
-| `specular.strength` | 0.6 when `specular` is set: the brightness of a sheen on the rim, 0 to 1, drawn over the client |
-| `specular.width` | 1 when `specular` is set: the rim's width in logical pixels |
-
-Saturation, brightness and contrast apply in that order to what is already
-blurred, then the tint, then the grain, so changing them costs no blur. The bezel runs along the window's
-rounded corners, or the bounding box of a client's region on a surface without
-them. The sheen is brightest on the side of the surface that faces the pointer,
-with a fainter echo opposite, and turns in steps of 5.6 degrees: a pointer move
-redraws only the rims it turned, and a move that turns none draws nothing. A
-moving window turns its sheen as well. With `animations.reduced_motion` or
-without `animations.enabled`, the light rests at the top left and never moves.
-
-`mica` draws a window's translucent parts over a heavily blurred sample of the
-background and bottom layers, as `xray` does, instead of over what lies behind
-the window. `tint`, when set, replaces `decoration.blur.tint` for those windows,
-and the rest of the look applies. All mica windows on an output share one blur,
-which windows moving underneath never redraw; it is `xray`'s chain when `size`
-and `passes` match `decoration.blur`'s. `size` is 16 and `passes` 4 by default.
-Mica is for a window whose client leaves its background translucent; an opaque
-client hides it, as it hides any blur. A window's popups blur as usual, since
-they float over the window itself.
-
-A window that closes keeps its frost during its exit animation, with the blur
-and look it had when it closed, scaled and faded with the snapshot. A surface
-hidden behind an opaque window costs nothing: its blur is not redrawn, and frees
-its memory until it shows again.
-
-Opacity multiplies what the client draws, including the alpha it asks for
-through alpha-modifier; borders stay opaque. A window rule's `opacity` takes
-the place of these for the windows it matches. A translucent window shows
-what is below it, so it is never scanned out directly.
-
-## drag_preview
-
-```yaml
-drag_preview:
-  enabled: true
-  opacity: 0.25
-  blur: false
-  snap_distance: 16
-  snap_windows: false
-  drag_switch: {width: 4, frames: 30}
-```
-
-While a window is dragged with `movewindow`, a translucent rounded rectangle with a
-border in `borders.active` shows where it will land if dropped now, above the tiled
-windows and below the floating ones. For a tiled window that is its place in the
-tree, what `movewindow` does on release, and nothing while that is where it already
-is. A floating window lands under the pointer unless the pointer is near an edge of
-the usable area, the output less its bars: then it snaps, and the preview shows where.
-An edge shared with another output does not snap, so a window can cross it.
-
-| Pointer within `snap_distance` of | Window lands on |
-| --- | --- |
-| The left or right edge | That half |
-| The bottom edge | The bottom half |
-| The top edge | The whole usable area |
+| Left or right edge | That half |
+| Bottom edge | Bottom half |
+| Top edge | Whole usable area |
 | A corner | That quarter |
 
-A window with size limits keeps them, and gaps apply as they do to tiled windows.
-The rectangle moves on the [`snap` event](#animations) and fades on `fade_snap`.
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | Off: no preview and no snapping | `true` |
+| `opacity` | Fill opacity, 0 to 1 | 0.25 |
+| `blur` | Blur behind the rectangle with `decoration.blur` | `false` |
+| `snap_distance` | Logical pixels, 1 or more | 16 |
+| `snap_windows` | Floating windows also snap beside (`gaps.inner` apart) or aligned with other floating windows | `false` |
+| `drag_switch.width` | Logical pixels from an output edge with no neighbour, 1 or more | 4 |
+| `drag_switch.frames` | Frames a drag must be held there, 1 or more | 30 |
 
-| Key | Default |
-| --- | --- |
-| `enabled` | `true`. Off, a dragged window neither shows a preview nor snaps |
-| `opacity` | 0.25: of the fill; the border is drawn at full strength |
-| `blur` | `false`: blur what is behind the rectangle with `decoration.blur`'s `size`, `passes` and look |
-| `snap_distance` | 16: logical pixels |
-| `snap_windows` | `false`. On, a dragged floating window also snaps to the other floating windows of its workspace: flush beside one, `gaps.inner` apart, or aligned with its edge, when within `snap_distance`. `place restore` takes a window snapped at an edge back to where the drag began |
-| `drag_switch.width` | 4: logical pixels from an output edge that has no neighbouring output |
-| `drag_switch.frames` | 30: presented frames, counted on the output's frame clock rather than the wall clock, that a drag must be held in place before it acts |
-
-A `movewindow` drag or a client's drag and drop (Wayland or X11) held within
-`drag_switch.width` of an output edge with no neighbouring output for
-`drag_switch.frames` frames shows the previous or next workspace of that output,
-along the axis the `workspaces` animation slides on: left and right, or top and
-bottom for `slidevert`. Ahead of the last workspace it opens the next unused number.
-A dragged window travels to the new workspace; held longer, it keeps going. During a
-client's drag, holding over a background tab of a tab group for as long raises that
-tab, so the drop can land in it.
-
-It costs nothing outside a drag.
+A drag held within `drag_switch.width` of such an edge for
+`drag_switch.frames` switches to the previous or next workspace (vertically for
+`slidevert`), taking a dragged window along. Holding a client drag over a
+background tab raises it.
 
 ## floating
 
-```yaml
-floating:
-  step: 40
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `step` | Logical pixels `move <dir>` moves a floating window, 1 or more | 40 |
 
-`move <dir>` on a floating window moves it `step` logical pixels, never past the
-usable area; from that edge it crosses to the neighbouring output. `place` puts it
-on a half, quarter or the whole usable area, where a drag to that edge would snap,
-or in the centre, and `place restore` takes it back; see [actions](./actions.md).
+At the usable area's edge the window crosses to the next output. For `place`
+see [actions](./actions.md).
 
 ## gaps
 
-```yaml
-gaps:
-  inner: 6
-  outer: [12, 8, 12, 8]
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `inner` | Logical pixels between tiled windows, 0 or more | 8 |
+| `outer` | Logical pixels to the usable area's edges: one number or `[top, right, bottom, left]`, 0 or more | 8 |
 
-| Key | Default |
-| --- | --- |
-| `inner` | 8: logical pixels between neighbouring tiled windows, borders included |
-| `outer` | 8: logical pixels between the tiled windows and the edges of the output's usable area; one number for every side, or `[top, right, bottom, left]` |
-
-Floating and fullscreen windows ignore gaps; a tab group's strip and its windows
-sit inside the group's tile.
+Floating and fullscreen windows ignore gaps.
 
 ## animations
 
@@ -645,108 +423,71 @@ animations:
     windows_move: {curve: wobbly}
 ```
 
-On unless `enabled: false`.
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | Bool | `true` |
+| `reduced_motion` | Bool: events marked **still** below happen at once; **fade** and **cross-fade** become plain `ease_out` fades. Reported by `lys-wmctl reducedmotion` and IPC; lys-shell follows it and publishes it to apps through the portal | `false` |
+| `curves` | Named curves: `bezier: [x1, y1, x2, y2]` (x in 0 to 1) or `spring: {stiffness, damping, mass}` (all above 0, `mass` default 1) | |
+| `events` | Per event: `enabled`, `curve`, `duration` (milliseconds, above 0; bézier only), `style` | |
 
-`reduced_motion: true` is for people whom motion on screen bothers. Things no
-longer travel, stretch, bounce or follow the pointer: what the table below marks
-**still** happens at once, and what it marks **fade** or **cross-fade** keeps its
-`enabled` and `duration` as a plain `ease_out` fade without overshoot, whichever
-`curve` and `style` it was given. A window still fades in and out, so state changes
-stay readable; specular light rests at the top left. It applies to every event,
-including any added later, and a reload applies it. `lys-wmctl reducedmotion` and
-the `reducedmotion` IPC event report it. In a lys-wm session this key owns the
-setting for the desktop: lys-shell follows it, ignoring its own
-`animations.reduced-motion` and warning that it does, and publishes it to apps as
-`reduced-motion` in the portal's `org.freedesktop.appearance` namespace.
+Built-in curves, not redefinable: `linear`, `ease`, `ease_in`, `ease_out`,
+`ease_in_out` (CSS) and `spring` (stiffness 170, damping 26).
 
-`curves` names curves for the events to use. A curve is either a cubic
-`bezier: [x1, y1, x2, y2]`, as in CSS `cubic-bezier()`, whose x coordinates lie
-in 0 to 1 and whose y coordinates may leave 0 to 1 to overshoot, or a damped
-`spring: {stiffness, damping, mass}` (all above 0; `mass` defaults to 1), which
-settles in its own time: lower damping bounces, `damping` near
-`2 * sqrt(stiffness * mass)` settles fastest without overshooting. Built in, and
-not redefinable: `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out` (the CSS
-curves) and `spring` (stiffness 170, damping 26).
+An event's unset key comes from its parent, else its default motion below. A
+`duration` with no curve runs `ease_out`. An unknown event is a warning.
 
-`events` configures each event with `enabled`, `curve`, `duration`
-(milliseconds, for bézier curves; a spring takes none) and, where the table
-lists styles, `style`. Each key an event leaves out comes from its parent, or
-from the event's own default motion below if neither it nor a parent's key sets
-that; a `duration` with no curve in the file runs `ease_out`, since a spring takes
-none. `style` comes from the event's own default.
-
-With no config each event has a spring of its own, tuned to how far things travel
-and how much attention they should draw:
-
-| Event | Spring (stiffness, damping) | Overshoot | 95% there at | Style |
-| --- | --- | --- | --- | --- |
-| `windows_move` | 800, 54 | none | 156 ms | |
-| `windows_in` | 700, 40 | 2.7% | 120 ms | `popin 92%` |
-| `windows_out` | 900, 56 | 0.03% | 142 ms | `popin 94%` |
-| `windows_minimize` | 220, 30 | none | 326 ms | `genie` |
-| `workspaces` | 900, 60 | none | 159 ms | `slide` |
-| `scratchpad` | 900, 60 | none | 159 ms | `slidevert` |
-| `overview` | 300, 34 | none | 266 ms | |
-| `layers_in` | 800, 54 | none | 156 ms | `fade` |
-| `layers_out` | 900, 58 | none | 150 ms | `fade` |
-| `fade` | 800, 56 | none | 166 ms | |
-
-`fade_out` shares `windows_out`'s spring, and `borderangle` is off. A fade keeps
-its opacity at 1 when a spring passes its target.
-
-The events:
+| Event | Default motion | Default style |
+| --- | --- | --- |
+| `windows_move` | spring 800, 54 | |
+| `windows_in` | spring 700, 40 | `popin 92%` |
+| `windows_out` | spring 900, 56 | `popin 94%` |
+| `windows_minimize` | spring 220, 30 | `genie` |
+| `workspaces` | spring 900, 60 | `slide` |
+| `scratchpad` | spring 900, 60 | `slidevert` |
+| `overview` | spring 300, 34 (a spring unless this event names a curve) | |
+| `layers_in` | spring 800, 54 | `fade` |
+| `layers_out` | spring 900, 58 | `fade` |
+| `fade` | spring 800, 56 | |
+| `fade_out` | spring 900, 56 | |
+| `snap`, `zoom` | `spring` unless given a curve or duration | |
+| `borderangle` | off | `once` |
+| others | inherited; `global` is `ease_out` over 250 ms | |
 
 | Event | Parent | Animates | Styles | Reduced motion |
 | --- | --- | --- | --- | --- |
-| `global` | | Defaults for events with no motion of their own: `ease_out` over 250 ms | | fade |
+| `global` | | Defaults for all | | fade |
 | `windows` | `global` | Every window animation | | still |
-| `windows_move` | `windows` | A window's tile moving or resizing: its surfaces, popups and border are drawn at the tile in between. A change that resizes windows starts once every one of them has drawn its new size, or after 100 ms at most, so a tiling change lands in one frame (see [layout changes land together](./architecture#layout-changes-land-together)) | `morph`: the window stretches ahead of itself toward where it is going, its content filling a liquid blob that melts the rectangle it is at into the one it is about to reach; `elastic`: a window dragged with the mouse bends like jelly, the part under the pointer following it and the rest catching up on a spring (`windows_move`'s, when its curve is a spring) until it settles flat | still |
-| `windows_in` | `windows` | A window appearing | `popin <percent>` (the default, `popin 80%`): it grows from that share of its size at its centre; `slide`: it slides in from the nearest edge of its output; `bud`: it grows out of the middle of the nearest window, joined to it by a liquid blob in the inactive border colour that thins as it grows | still |
-| `windows_out` | `windows` | A window closing: its last frame plays the same styles in reverse, taking no input | `popin <percent>`, `slide`, `bud`: it flows back into the nearest window | still |
-| `windows_minimize` | `windows` | A window minimizing or coming back, in the same motion each way. The window minimized takes no input while it plays; the one coming back is live | `genie` (the default): cut into strips across its way, the window pours down a funnel toward the rectangle the taskbar named with `zwlr_foreign_toplevel_handle_v1.set_rectangle`, or toward the nearest edge of its output when none did, or the one named lies on another output; `fade`: it fades where it is | cross-fade |
-| `overview` | `global` | The [overview](#overview) opening and closing, its windows moving to new places in it, and a window dropped on a thumbnail. Unlike the other events its curve does not come from `global`: it is a spring unless this event names a curve, because a spring keeps its velocity when the overview reverses or a gesture lets go, and a bézier given here starts each move from rest. `enabled: false` or `animations.enabled: false` jumps, and so does `reduced_motion`. | |
+| `windows_move` | `windows` | A tile moving or resizing; a resize waits until every affected window has drawn its new size, up to 100 ms ([layout changes land together](./architecture#layout-changes-land-together)) | `morph` (stretches toward its target as a liquid blob), `elastic` (a mouse-dragged window bends like jelly) | still |
+| `windows_in` | `windows` | A window appearing | `popin <percent>`, `slide`, `bud` (grows out of the nearest window) | still |
+| `windows_out` | `windows` | A window closing | `popin <percent>`, `slide`, `bud` | still |
+| `windows_minimize` | `windows` | Minimizing and restoring | `genie` (toward the taskbar's rectangle, else the nearest edge), `fade` | cross-fade |
+| `overview` | `global` | The [overview](#overview) opening, closing and rearranging | | still |
 | `fade` | `global` | Every fade | | fade |
-| `fade_in` | `fade` | A window's opacity, border and shadow fading in as it appears, and the session lock fading in | | fade |
-| `fade_out` | `fade` | A closing window fading out, and the session lock fading out on unlock | | fade |
-| `fade_switch` | `fade` | A window's opacity changing between `active_opacity` and `inactive_opacity` as focus moves | | fade |
-| `fade_dim` | `fade` | `dim_inactive`'s dim coming and going as focus moves | | fade |
-| `fade_shadow` | `fade` | A shadow's colour changing between `color` and `color_inactive` | | fade |
-| `borderangle` | `global` | A gradient border's angle turning | `once` (the default): one full turn whenever the window gains or loses focus; `loop`: a full turn per `duration` for as long as the window is shown, which keeps its output drawing, but only the border | still |
-| `workspaces` | `global` | Switching an output to another workspace: the workspace it leaves stays drawn, taking no input, until the switch ends; layer surfaces and the cursor stay put | `slide` (the default), `slidevert`: both workspaces move along the workspace order, horizontally or vertically; `fade`: they cross-fade; `popin <percent>`: the new one grows from that share of the output and fades in while the old one fades out; `goo`: they cross-fade while each window of the old workspace flows into the nearest window of the new one as a liquid blob in its border colour | cross-fade |
-| `scratchpad` | `global` | A [scratchpad](#scratchpads) showing over an output or hiding: its windows, which take input once shown and none while they leave | `slidevert` (the default): down from the top edge and back up; `fade`; `popin <percent>` | cross-fade |
-| `layers` | `global` | Every layer-shell surface animation (bars, launchers, notifications) | | fade |
-| `layers_in` | `layers` | A layer surface mapping; its exclusive zone applies at once, so windows do not wait for it | `slide` (the default): in from the edge it is anchored to, or the nearest edge; `popin <percent>`; `fade` | cross-fade |
-| `layers_out` | `layers` | A layer surface unmapping: its last frame plays out, taking no input | `slide`, `popin <percent>`, `fade` | cross-fade |
-| `snap` | `windows` | The [drag preview](#drag_preview) moving to the next place a window would land. It runs on `spring` unless given a curve or a duration | | still |
+| `fade_in` | `fade` | A window or the session lock fading in | | fade |
+| `fade_out` | `fade` | A window or the session lock fading out | | fade |
+| `fade_switch` | `fade` | Active/inactive opacity change | | fade |
+| `fade_dim` | `fade` | `dim_inactive` coming and going | | fade |
+| `fade_shadow` | `fade` | Shadow `color`/`color_inactive` change | | fade |
+| `borderangle` | `global` | A gradient border's angle | `once` (one turn on focus change), `loop` (one turn per `duration`, continuously) | still |
+| `workspaces` | `global` | Switching an output's workspace | `slide`, `slidevert`, `fade`, `popin <percent>`, `goo` | cross-fade |
+| `scratchpad` | `global` | A [scratchpad](#scratchpads) showing or hiding | `slidevert`, `fade`, `popin <percent>` | cross-fade |
+| `layers` | `global` | Every layer-shell surface animation | | fade |
+| `layers_in` | `layers` | A layer surface mapping | `slide`, `popin <percent>`, `fade` | cross-fade |
+| `layers_out` | `layers` | A layer surface unmapping | `slide`, `popin <percent>`, `fade` | cross-fade |
+| `snap` | `windows` | The [drag preview](#drag_preview) moving | | still |
 | `fade_snap` | `fade` | The drag preview appearing and going | | fade |
-| `zoom` | `global` | The `zoom` action changing an output's magnification. It runs on `spring` unless given a curve or a duration, in equal ratios, so doubling takes the same motion at any level | | still |
+| `zoom` | `global` | The `zoom` action changing magnification | | still |
 
-`zoom` magnifies an output around the pointer. The pointer stays where it is on
-the screen and the picture moves under it, so the pointer reaches every part of
-the output and what it points at is what clients are told. Clients, the layout and
-input are untouched, and touches land on what is shown under the finger. Each
-output zooms on its own, from `zoom in`, `zoom out`, `zoom reset` and `zoom set` (see
-[actions](./actions.md)) on the output under the pointer, up to 16 times. While an
-output is zoomed it draws the cursor in the frame, magnified with the rest, in step
-with the picture instead of on a cursor plane, and does not scan out directly; both
-come back when it returns to 1, at which point it costs nothing. Screenshots and screen
-sharing show the output unzoomed, so zooming to read something does not change what
-others see or what a recording holds. `lys-wmctl outputs` reports the level as `zoom`
-while it is not 1.
+A spring keeps its velocity when retargeted. A mouse-dragged window follows the
+pointer directly, or trails it when `windows_move` is a spring.
 
-Animations run on each output's frame clock: every frame shows the animation
-at the time it starts drawing, and an output stops drawing once its
-animations end. A spring keeps its velocity when its target changes mid-flight, so a window
-retargeted while it moves carries on smoothly. A window being dragged or resized
-with the mouse follows the pointer without animating, unless `windows_move` uses
-a spring: then the window trails the pointer on that spring and settles where
-it is dropped, and a window that comes back with its workspace
-is drawn where it belongs at once.
+The `zoom` [action](./actions.md) magnifies an output around the pointer, up to
+16×, without touching clients, layout or input. Captures show it unzoomed.
 
 ## gestures
 
-Touchpad swipes, pinches and holds, and [touchscreen](#touchscreens) swipes, can drive lys-wm. A gesture nothing here
-claims goes to the window under the pointer, as `zwp_pointer_gestures_v1`.
+Touchpad swipes, pinches and holds, and [touchscreen](#touchscreens) swipes. A
+gesture nothing here claims goes to the window under the pointer.
 
 ```yaml
 gestures:
@@ -761,75 +502,43 @@ gestures:
     - {fingers: 4, action: fullscreen}
 ```
 
+| Key | Value | Default |
+| --- | --- | --- |
+| `swipe` | List of entries. Setting it replaces the default; `[]` turns swipes off | 3 fingers `horizontal` drive `workspaces`, `vertical` drive `overview`; with `workspaces` style `slidevert`, only `vertical` drive `workspaces` |
+| `pinch` | List of entries | none |
+| `hold` | List of entries | none |
+| `distance` | Unaccelerated touchpad units for one whole swipe (about 12 per mm), above 0 | 400 |
+
+Each entry:
+
 | Key | Value |
 | --- | --- |
-| `swipe` | Default: three fingers `horizontal` drive `workspaces` and `vertical` drive `overview`, or `vertical` drive `workspaces` and nothing drives `overview` when `animations.events.workspaces` has the style `slidevert`. Setting the list replaces that default; `swipe: []` turns it off |
-| `pinch`, `hold` | Default: none. The built-in config binds SUPER and a two-finger pinch to `drive: zoom` |
-| `fingers` | How many; at least 3 for a swipe, since two are scrolling, 2 for a pinch and 1 for a hold |
-| `direction` | Swipe: `left`, `right`, `up`, `down`, `horizontal`, `vertical`, or `any` for `move` and `resize`. Pinch: `in`, `out` or `both`. A hold has none |
-| `modifiers` | Keys to hold, as in a chord: `SUPER + CTRL`. A gesture with modifiers is taken only while exactly those are held, ahead of one without, which matches whatever is held. Optional |
-| `action` | Anything from [actions.md](actions.md) except the mouse-only `movewindow` and `resizewindow` |
-| `drive` | Instead of `action`: something that follows the fingers. `workspaces`, swipes only, takes `horizontal` or `vertical`; `overview`, swipes only, takes `up`, `down` or `vertical`; `view`, swipes only, takes `horizontal`; `move` and `resize`, swipes only, take `any`; `zoom`, pinches only, takes `both` |
-| `scope` | With `drive: overview`: the [scope](#overview) it opens, `workspace` (the default), `output` or `app`, so four fingers down can open `app` |
-| `distance` | Unaccelerated touchpad units for one whole swipe, above 0; about 12 units to the millimetre, depending on the touchpad. Default 400 |
+| `fingers` | Required. Swipe at least 3, pinch at least 2, hold at least 1 |
+| `direction` | Required for swipes and pinches, not allowed for holds. Swipe: `left`, `right`, `up`, `down`, `horizontal`, `vertical`, `any` (only with `move`/`resize`). Pinch: `in`, `out`, `both` |
+| `modifiers` | Optional, as in a chord (`SUPER + CTRL`). With modifiers, fires only with exactly those held, ahead of an entry without |
+| `action` | Any [action](./actions.md) except `movewindow` and `resizewindow` |
+| `drive` | Instead of `action`, follow the fingers: `workspaces` (swipe, `horizontal`/`vertical`), `overview` (swipe, `up`/`down`/`vertical`), `view` (swipe, `horizontal`), `move` and `resize` (swipe, `any`), `zoom` (pinch, `both`) |
+| `scope` | Only with `drive: overview`: `workspace` (default), `output` or `app` |
 
-Two entries for the same finger count that could match the same movement are an
-error. Claiming works the same way for every entry:
+Two entries for the same finger count that can match the same movement are an
+error. A swipe is claimed once its direction shows (the client gets a cancel)
+and its `action` runs after 100 units; a pinch at 15% scale; a hold when the
+fingers lift. While locked or shortcuts are inhibited, gestures go to the
+client.
 
-- A swipe goes to the client until about a millimetre of travel shows its
-  direction. If an entry matches, the client gets a cancelled end and sees
-  nothing more of it; otherwise the client keeps the whole gesture.
-- A swipe `action` runs once, after 100 units of travel. A pinch claims and runs
-  its `action` when the scale passes 15% in that direction. A bound hold never
-  reaches the client, and runs its `action` when the fingers lift, unless
-  libinput cancels the hold.
-- While the session is locked, or a window inhibits shortcuts, every gesture goes
-  to the client.
+- `workspaces`: scrubs through the output's workspaces; on release, position
+  plus velocity decides past halfway, settling on a spring.
+- `overview`: scrubs the overview open (up for `up`/`vertical`, down for
+  `down`) on the entry's `scope`.
+- `view`: scrolls a [scrolling workspace](#layout-and-scroll), one `distance`
+  per output width, settling on a column edge.
+- `zoom`: zoom follows the pinch, 1 to 16.
+- `move`, `resize`: as `movewindow`/`resizewindow` with the fingers.
 
-`drive: workspaces` draws the `workspaces` animation of
-[animations](#animations) at a position the fingers set, on the output under the
-pointer, with both workspaces drawn. It walks the open workspaces of that output
-in order, on past a whole workspace, and resists at the first and the last. On
-release the position plus 0.15 seconds of the fingers' velocity decides: past
-halfway it goes on, otherwise it goes back. A spring then carries that velocity to
-rest: the `workspaces` curve when it is a spring, otherwise the built-in `spring`,
-since a bézier cannot take a starting velocity. With animations off it jumps.
-Three fingers on a settling switch grab it where it is. A workspace switch from
-anywhere else ends the gesture, and the rest of its movement is ignored.
-
-`drive: overview` holds the [overview](#overview) at a position the fingers set on
-every output together, one `distance` for the whole way, resisting past fully open.
-Opening is up on `vertical` and `up`, and along the bound direction on `down`, and
-`natural` does not flip it. It takes the input as soon as the swipe is claimed.
-On release the position plus 0.15 seconds of velocity decides open or closed from
-halfway, and a spring carries that velocity to rest: the `overview` curve when it is
-a spring, otherwise the built-in `spring`. With animations off it jumps. Three fingers
-on an overview still settling grab it where it is. While it is open, a swipe bound
-to `workspaces` does nothing.
-The overview opens on the bind's `scope`; one already open keeps its own.
-
-`drive: view` scrolls the strip of a [scrolling workspace](#layout-and-scroll) under
-the pointer with the fingers, one `distance` for the width of its output, on
-`horizontal` only, and `natural` flips it. Windows follow the fingers without
-animating and are only moved, never resized. On release the view settles on the
-nearest column edge, on `windows_move`, and that column takes focus.
-
-`drive: zoom` sets the [zoom](#animations) of the output under the pointer by the
-pinch's scale, from the moment the fingers land: the client sees nothing of the
-gesture, and the level follows the fingers without animating, from 1 to 16.
-
-`drive: move` and `drive: resize` take the direction `any`: once the swipe is
-claimed, the window under the pointer (or under the fingers, on a touchscreen)
-moves or resizes with the fingers, as `movewindow` and `resizewindow` do with
-the mouse, and drops into the layout where the fingers lift.
-
-The fingers move the content unless `natural_scroll` is `false`, read from
-`input.devices` for that device and then `input.touchpad`. Left unset it counts as
-on for gestures, whatever libinput's default for scrolling is.
+Swipes move the content unless `natural_scroll` is `false` for the device
+(`input.devices`, then `input.touchpad`); unset counts as on.
 
 ### Touchscreens
-
-`touch` binds swipes on a touchscreen:
 
 ```yaml
 gestures:
@@ -842,26 +551,16 @@ gestures:
 
 | Key | Value |
 | --- | --- |
-| `edge` | `top`, `bottom`, `left` or `right`: one finger that lands within `edge_width` of that edge of its output and swipes in from it. It has no `direction`; it goes in from its edge |
-| `fingers` | Instead of `edge`: that many fingers anywhere, at least 3, up to 10, since fewer pan and zoom in windows. It takes a `direction` as a touchpad swipe does |
-| `action`, `drive` | As for touchpad swipes; `zoom` is for pinches only |
-| `edge_width` | Pixels from an output's edge where an `edge` swipe starts. Default 16 |
+| `edge_width` | Pixels from an output edge where an `edge` swipe starts, 1 or more. Default 16 |
+| `touch[].edge` | `top`, `bottom`, `left`, `right`: one finger swiping in from that edge; no `direction` |
+| `touch[].fingers` | Instead of `edge`: 3 to 10 fingers anywhere, with a `direction` as for touchpad swipes |
+| `touch[].action`, `touch[].drive` | As for touchpad swipes; no `zoom` |
 
-Every touch reaches the window under it the moment it lands, with no delay, so a
-finger that never makes a bound swipe stays the window's. Once the fingers travel
-about 12 pixels in a bound direction, lys-wm claims them: the windows holding them
-get `wl_touch.cancel` and see nothing more of that touch, and fingers that land
-while the swipe goes on join it. `drive: workspaces` and `drive: overview` follow
-the fingers the way they follow a touchpad, the content under the fingers, with
-the output's width or height as the whole way instead of `distance`, and settle
-by the fingers' velocity on release. A window with the rule key
-`touch_gestures: false` keeps every touch that starts on it, for drawing
-programs and others that handle several fingers themselves.
+Touches reach the window at once; after about 12 pixels in a bound direction
+lys-wm claims them (`wl_touch.cancel`). Drives use the output's size as the
+whole way.
 
-## hot_corners
-
-Pushing the pointer into a screen corner runs an action. None is set by
-default.
+## hot_corners {#hot_corners}
 
 ```yaml
 hot_corners:
@@ -871,168 +570,104 @@ hot_corners:
   fullscreen: false
 ```
 
-| Key | Value |
-| --- | --- |
-| `top_left`, `top_right`, `bottom_left`, `bottom_right` | `{action, modifiers}`: any [action](./actions.md) but `movewindow` and `resizewindow`, and optionally the modifiers that must be held for it, as in `SUPER + SHIFT`; without them it fires whatever is held. `false` leaves the corner off |
-| `pressure` | How far, in unaccelerated pointer units, the pointer must keep pushing against the corner before it fires. Above 0. Default `80` |
-| `fullscreen` | `true` lets the corners fire while a fullscreen window has focus. Default `false` |
+| Key | Value | Default |
+| --- | --- | --- |
+| `top_left`, `top_right`, `bottom_left`, `bottom_right` | `{action, modifiers}`: any [action](./actions.md) but `movewindow`/`resizewindow`; optional `modifiers` must be held. `false`: off | off |
+| `pressure` | Unaccelerated pointer units of push into the corner before it fires, above 0 | 80 |
+| `fullscreen` | Fire while a fullscreen window has focus | `false` |
 
-A corner is the one pixel where the pointer stops against two edges. Pressure
-is the motion the edges hold back while the pointer sits there: it counts only
-from a motion that starts in the corner, so a fast flick into the corner or past
-it does nothing, and slow drifts barely add up. Once it fires, the corner waits
-for the pointer to leave before it can fire again. There is no timer.
-
-Only a corner whose two edges border no other output counts, so the corners
-between side-by-side outputs never fire. The corners stay off while a client
-confines or locks the pointer, while the session is locked, and while a
-fullscreen window has focus unless `fullscreen` is `true`. They do fire during a
-window drag and a drag-and-drop. `outputs[].hot_corners` changes them per output.
+A corner re-arms when the pointer leaves. Corners bordering another output
+never fire, nor while the pointer is confined or locked or the session is
+locked. [`outputs[].hot_corners`](#outputs) overrides them per output.
 
 ## overview
 
-```yaml
-overview:
-  blur: true
-  dim: 0.35
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `blur` | Blur the layers below the windows, independent of `decoration.blur.enabled` | `true` on a GPU, `false` on a [slower renderer](#the-default-look) |
+| `dim` | How far those layers darken, 0 to 1 | 0.35 |
 
-The `overview` action opens every output's overview together: the windows of the
-workspace the output shows, side by side and uniformly shrunk so none overlap and
-each keeps its shape and its place relative to the others, under a strip of live
-thumbnails of the output's workspaces and a `+` tile. `SUPER + Tab` opens it in the
-built-in config, and three fingers up scrub it open, [down closed](#gestures).
+The `overview` action shows every output's windows shrunk side by side without
+overlap, under a strip of live workspace thumbnails and a `+` tile. Built-in
+bind: `SUPER + Tab`.
 
-It opens on one of three scopes, `overview [toggle|show|hide] [workspace|output|app]`:
+`overview [toggle|show|hide] [workspace|output|app]`:
 
 | Scope | Shows |
 | --- | --- |
-| `workspace` | The default: the windows of the workspace each output shows |
-| `output` | Every window of every workspace on each output in one grid, grouped by workspace, each group under a label with its workspace's name. A window dropped on another group moves to that workspace |
-| `app` | The windows sharing the focused window's `app_id`, on every workspace and output, all on the focused output; the rest of that output's workspace stays in place, dimmed underneath |
+| `workspace` | Default. The shown workspace's windows |
+| `output` | Every workspace of each output, grouped and labelled; dropping a window on another group moves it there |
+| `app` | Windows sharing the focused window's `app_id`, from everywhere, on the focused output |
 
-An open overview given another scope changes to it; `toggle` with the scope it already shows closes it. A swipe with `drive: overview` takes a `scope` too (see [gestures](#gestures)).
-
-Typing filters it: printable keys build a query, matched case-insensitively against each window's title and `app_id` and shown on the strip's pane. Windows that do not match fade out where they are, and the rest lay out again on the `overview` curve. Thumbnails do not redraw for it. `BackSpace` edits the query, and `Escape` clears it before it closes the overview.
-
-| Key | Default |
-| --- | --- |
-| `blur` | `true` on a GPU, `false` on a [slower renderer](#the-default-look): the layers below the windows blur over the mica chain (`decoration.blur.mica`'s size and passes), which redraws only when they change. Independent of `decoration.blur.enabled` |
-| `dim` | `0.35`: how far those layers darken, from 0 to 1 |
-
-Everything on the workspace takes part: tiled, floating and fullscreen windows,
-every tab of a tab group and windows a fullscreen one covers, on Wayland or X11.
-Dialogs stay with their parent as one tile, and popups scale with their window.
-Minimized windows sit in a row along the bottom, and a click there brings one back.
-
-The strip sits on a pane of the same glass as a lys-shell panel: a tint of `tabs.inactive`'s background and a hairline of its text colour over the blurred layers, and so does the `+` tile. A thumbnail has that hairline too. The workspace shown and the window under the ring carry a ring in `borders.active`, set off by a small gap.
-
-Layer surfaces: `background` and `bottom` stay, and blur and dim. `top`, so bars,
-fade out as the overview opens and back as it closes, keeping their frame callbacks.
-They stay in the thumbnails, under fullscreen windows as on screen, and a thumbnail
-redraws when they commit, so each shows its workspace as it looks.
-`overlay`, so notifications and launchers, stays on top and takes its own input,
-and one with exclusive or clicked keyboard focus keeps the keyboard. X11
-override-redirect windows fade out and take no input.
-
-While it is open the overview has the pointer and keyboard. Clients get
-`wl_pointer.leave` and `wl_keyboard.leave`, and `enter` with the current keys when
-it closes. Binds with modifiers still run.
+Another scope switches an open overview; `toggle` with its current scope
+closes it. Typing filters by title and `app_id`, case-insensitively. All
+windows take part, dialogs with their parent, minimized ones in a row at the
+bottom. `top` layers fade out; `overlay` stays on top. While open it has
+pointer and keyboard; binds with modifiers still run.
 
 | Input | Does |
 | --- | --- |
 | Hover | Rings a window and shows its title, or highlights a thumbnail |
-| Click a window | Focuses it, or restores it from the minimized row, and closes |
-| Click a thumbnail | Shows that workspace and stays open; on the workspace already shown, closes |
-| Click `+` | Shows a new workspace, the lowest number free, and stays open |
-| Click anywhere else, `Escape` | Closes; `Escape` first clears a filter query |
-| Drag a window onto a thumbnail, `+`, or another output | Moves it there with its dialogs; dropped anywhere else it springs back. Minimized windows do not drag |
-| Arrow keys, then `Return`, `Alt + Space` | Move the ring across windows and the strip on every output, repeating at the seat's rate while held, then act as a click does. Virtual keyboards work the same, through their own keymap |
-| `Down` with nothing below the ringed window, `Up` with no window above it | `Down` switches to the `app` scope for the ringed window's app; `Up` there goes back to the scope it came from |
-| Printable keys, `BackSpace` | Build and edit the filter query |
-| `Tab`, `Shift + Tab` | Move the ring to the next or previous window, wrapping |
-| `Alt + 1` to `Alt + 9`, `Alt + 0` | Shows that workspace on the focused output and stays open; `0` is workspace 10, and the workspace already shown closes the overview |
-| `Delete`, `Alt + x` | Closes the ringed window and moves the ring to the next one |
-| `Shift + Left`, `Shift + Right` | Move the ringed window and its dialogs to the workspace numbered one below or above, and stay open |
-| Touch | As the pointer, with the first finger |
+| Click a window | Focuses (or restores) it and closes |
+| Click a thumbnail | Shows that workspace; on the shown one, closes |
+| Click `+` | Shows the lowest free workspace number |
+| Click elsewhere, `Escape` | Closes; `Escape` first clears a filter |
+| Drag a window onto a thumbnail, `+` or another output | Moves it there with its dialogs |
+| Arrow keys, then `Return` or `Alt + Space` | Move the ring, then act as a click |
+| `Down` with nothing below, `Up` with nothing above | Switch to the `app` scope for the ringed window, and back |
+| Printable keys, `BackSpace` | Edit the filter |
+| `Tab`, `Shift + Tab` | Next or previous window, wrapping |
+| `Alt + 1` … `Alt + 9`, `Alt + 0` | Show that workspace (`0` is 10) |
+| `Delete`, `Alt + x` | Close the ringed window |
+| `Shift + Left`, `Shift + Right` | Move the ringed window to the workspace one below or above |
+| Touch | As the pointer, first finger |
 
-A session lock closes it at once and it will not open under one. It opens during a
-client's drag and drop, from a hot corner, a gesture or a bind: holding the drag over
-a workspace thumbnail for `drag_preview.drag_switch.frames` shows that workspace, and
-over a window for as long closes the overview and focuses the window, with the
-pointer at the same place in it, so the drop lands there.
+A session lock closes it. During a client drag, holding over a thumbnail or
+window for `drag_preview.drag_switch.frames` shows or focuses it.
 
 ## switcher
 
-```yaml
-switcher:
-  open_delay: 150
-binds:
-  - {chord: ALT + Tab, action: switcher next}
-  - {chord: ALT + SHIFT + Tab, action: switcher prev}
-  - {chord: ALT + grave, action: switcher next app}
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `open_delay` | Milliseconds the modifiers must be held before the preview strip shows, 0 or more | 150 |
 
-The `switcher` action is Alt-Tab. Its first press selects the window used
-before the focused one, in most-recently-used order across every workspace
-and output (`app` keeps to the focused window's app ID); each further press
-steps on. Releasing the bind's modifiers focuses the selection, showing its
-workspace, raising it and bringing it back if it was minimized; Escape
-cancels. A strip of previews with the selected window's title and icon shows
-on the focused output only once the modifiers have been held for
-`open_delay` milliseconds (0 or more, 150 unless set), measured on the frame
-clock, so a quick tap flips to the previous window without drawing anything.
-A preview is redrawn only when its window commits new content, and a closed
-switcher costs nothing. Windows that `block_out_from` screencasts are masked
-in their previews when captured, as they are on screen.
-
-The order changes only when focus settles: a click, a new or closed window,
-an activation or IPC records it at once; a key bind's focus change at its
-key's release, so a held `focus left` records only the window it ends on; and
-a hover focus at the next key or button, if the window still has focus.
-Focus that moves while the switcher or the overview is open is not recorded.
-`focuslast`, `focusurgent` and `cycle` walk the same order
-([actions.md](actions.md)); the default config binds Alt-Tab, Alt-Shift-Tab
-and Alt-grave to the switcher.
+The `switcher` action is Alt-Tab over windows in most-recently-used order
+across all workspaces and outputs (`switcher next app` keeps to the focused
+app). Releasing the modifiers focuses the selection; `Escape` cancels. A quick
+tap flips to the previous window without drawing anything. Focus is recorded
+once it settles (a bind's at key release, hover's at the next input).
+`focuslast`, `focusurgent` and `cycle` walk the same order.
 
 ## tabs
 
-| Key | Default |
-| --- | --- |
-| `height` | 24 |
-| `padding` | 0, between the tab strip and the windows. At 0 the strip and the window read as one rounded shape, with one border and shadow around both; above it the strip rounds on its own |
-| `text_height` | 11 |
-| `text_padding` | 8 |
-| `font` | A TrueType file. Default: `LYS_WM_FONT`, then the DejaVu Sans the package was built with |
-| `icon_theme` | The freedesktop icon theme tab icons named by windows resolve in, searched in the XDG data directories. Default: `Adwaita`, which falls back to `hicolor` |
-| `active`, `inactive`, `urgent` | `background` and `text` colours, both required. Defaults `accent`/`crust`, `surface0`/`text` and `red`/`crust` |
+| Key | Value | Default |
+| --- | --- | --- |
+| `height` | Logical pixels, 1 or more | 24 |
+| `padding` | Between strip and windows, 0 or more. At 0 strip and window share one outline | 0 |
+| `text_height` | 1 or more | 11 |
+| `text_padding` | 0 or more | 8 |
+| `font` | A TrueType or OpenType file | `LYS_WM_FONT`, then the packaged DejaVu Sans |
+| `icon_theme` | Freedesktop icon theme name | `Adwaita` (then `hicolor`) |
+| `active`, `inactive`, `urgent` | `{background, text}`, both required | `accent`/`crust`, `surface0`/`text`, `red`/`crust` |
 
-A tab shows the icon its window set through `xdg_toplevel_icon_v1` before
-the title, as a square as tall as the tab less `text_padding` on each side,
-when the tab is at least four icons wide. An icon name that resolves in
-`icon_theme` wins; otherwise the window's own pixel buffers are drawn.
+Tabs at least four icons wide show the window's `xdg_toplevel_icon_v1` icon.
 
 ## titlebars
 
-A title bar on floating windows that let lys-wm draw their decorations: those
-that bind `xdg-decoration` or KDE's server decoration (Qt, foot, Kitty,
-Alacritty, mpv and GTK3 apps that honour it), and X11 windows whose
-`_MOTIF_WM_HINTS` leave decorations on. Windows drawing their own (GTK4 and
-libadwaita) get none, nor does any tiled, maximized or fullscreen window.
-It shows the title and icon as a tab does, in the `tabs` colours and font.
+A title bar on floating windows that let lys-wm decorate them
+(`xdg-decoration`, KDE server decoration, X11 `_MOTIF_WM_HINTS`), in the `tabs`
+colours and font.
 
-| Key | Value |
-| --- | --- |
-| `floating` | `false` turns the bars off. Default `true` |
-| `height` | The bar's height in logical pixels, taken from the top of the floating rect, so the client gets that much less. Default `24` |
-| `buttons` | Any of `minimize`, `maximize` and `close`, in order, each once. Default all three |
-| `side` | `right` (the default) or `left`: where the buttons sit |
-| `double_click` | `maximize` (the default) toggles maximize; `float` tiles the window |
+| Key | Value | Default |
+| --- | --- | --- |
+| `floating` | `false` turns bars off | `true` |
+| `height` | Logical pixels, taken from the floating rect, 1 or more | 24 |
+| `buttons` | Any of `minimize`, `maximize`, `close`, in order, each once | all three |
+| `side` | `right` or `left` | `right` |
+| `double_click` | `maximize` toggles maximize; `float` tiles the window | `maximize` |
 
-Dragging the bar moves the window, as `movewindow` or a client's own move
-does. A button acts on a press; a hovered button shows in the bar's inverted
-colours. A middle click minimizes, and a right click sends the `windowmenu`
-[IPC event](./ipc#events) for a shell to draw a window menu.
+Dragging the bar moves the window. Middle click minimizes; right click sends
+the `windowmenu` [IPC event](./ipc#events).
 
 ## layout and scroll
 
@@ -1043,43 +678,29 @@ scroll:
   center: never
 ```
 
-`layout` is the layout a new workspace starts with; a workspace rule's `layout`
-wins for its workspace, and `setlayout` converts the focused one. `tree` is the
-tree of splits and tab groups. `scroll` lays a workspace out as a strip of columns
-that may be wider than the output: a new window opens as a column right of the
-focused one, half the output wide, and nothing else is resized. A column holds one
-window, or several stacked (`consume`, `expel`, `columndisplay stack`) or as tabs
-(`columndisplay tab`). `focus left` and `right` move between columns and `up` and
-`down` within one; `move` moves a window or column; `columnwidth` cycles `presets`,
-shares of the output's width or fixed widths in pixels (`1280px`) taken in order of width,
-or changes the width by or to a share (`+10%`, `50%`) or pixels (`-40px`, `900px`); a
-column with a fixed width keeps its pixels when the output changes size; `center` puts the focused column
-in the middle. Scrolling only moves windows, so it sends them no configure, and a
-column outside its output is not shown: it draws nothing, takes no input and gets
-frame callbacks at `hidden_frame_rate`.
+| Key | Value | Default |
+| --- | --- | --- |
+| `layout` | `tree` (splits and tab groups) or `scroll` (a strip of columns): a new workspace's layout. A workspace rule's `layout` wins; `setlayout` converts | `tree` |
+| `scroll.presets` | Non-empty list of widths `columnwidth` cycles: shares above 0 up to 1, or pixels (`1280px`) | `[1/3, 0.5, 2/3]` |
+| `scroll.center` | When the view scrolls to the focused column: `never` (just enough to show it), `always`, `on-overflow` (when not wholly shown) | `never` |
 
-| `center` | When the view scrolls to the focused column |
-| --- | --- |
-| `never` | Only as far as it takes to show the whole column |
-| `always` | Always, to put it in the middle |
-| `on-overflow` | To put it in the middle when it was not wholly shown |
-
-The view moves on the `windows_move` animation, and a swipe can drive it (see
-`drive: view` in [gestures](#gestures)). The overview shows every column of a
-strip.
+In `scroll`, a new window opens as a column right of the focused one, half the
+output wide. A column holds one window, a stack or tabs (`consume`, `expel`,
+`columndisplay`). Off-screen columns draw nothing and get frame callbacks at
+[`hidden_frame_rate`](#hidden_frame_rate).
 
 ## autotile
 
-| Key | Default |
-| --- | --- |
-| `enabled` | `true` |
-| `ephemeral` | `true`: groups autotile creates dissolve when one window is left |
-| `min_trigger` | 400 |
-| `divisor` | 3 |
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | Bool | `true` |
+| `ephemeral` | Groups autotile creates dissolve at one window | `true` |
+| `min_trigger` | Pixels, 0 or more | 400 |
+| `divisor` | 1 or more | 3 |
 
-When one more column would make the columns narrower than `min_trigger` or
-the output width divided by `divisor`, whichever is larger, the new window
-stacks under the focused one instead.
+When one more column would make columns narrower than the larger of
+`min_trigger` and output width / `divisor`, the new window stacks under the
+focused one.
 
 ## binds and submaps
 
@@ -1088,188 +709,105 @@ binds:
   - chord: SUPER + SHIFT + Q
     action: kill
   - {chord: SUPER + R, action: submap resize}
+  - {chord: SUPER, action: global shell:launcher, description: Open the launcher}
+  - {chord: SUPER + L, action: exec lock, long_press: 600}
+  - {chord: XF86AudioPlay, action: exec playerctl play-pause, flags: [pass]}
+  - {chord: SUPER + mouse_down, action: workspace e+1, cooldown: 150}
 submaps:
   resize:
     - {chord: Right, action: resizeactive 20 0, flags: [repeating]}
     - {chord: Escape, action: submap reset}
 ```
 
-A chord is modifiers and a trigger joined by `+`. Modifiers are `SUPER`
-(`MOD4`, `WIN`, `LOGO`), `SHIFT`, `CTRL` (`CONTROL`) and `ALT` (`MOD1`). The
-trigger is a keysym from the first layout (`Return`, `Q`, `bracketleft`,
-`XF86AudioRaiseVolume`), `mouse:<button code>` (`mouse:272` is the left
-button) or `mouse_up`/`mouse_down` for the scroll wheel.
+| Key | Value |
+| --- | --- |
+| `chord` | Required. Modifiers and a trigger joined by `+` |
+| `action` | Required. See [actions](./actions.md). `submap <name>` must name a defined submap |
+| `flags` | List of flags, below |
+| `long_press` | Milliseconds, 1 or more: fire on release only if held that long |
+| `cooldown` | Milliseconds, 1 or more: ignore the bind within that time of its last firing |
+| `description` | Text listed by `lys-wmctl binds` and the IPC `binds` query |
 
-A modifier on its own is a trigger too: `chord: SUPER` (or `SUPER_L`,
-`SUPER_R`, `ALT_L` and the like, which mean the same as the modifier name)
-fires when the modifier goes down and up again with no other key, button or
-scroll in between, so tapping SUPER can open a launcher while `SUPER + 1`
-still switches workspaces. Such a bind always fires on release, and the
-modifier still reaches the focused window. Modifiers before it are held
-around the tap: `CTRL + ALT` fires on tapping ALT with CTRL down.
+Modifiers: `SUPER` (`MOD4`, `WIN`, `LOGO`), `SHIFT`, `CTRL` (`CONTROL`), `ALT`
+(`MOD1`). Triggers: a keysym from the first layout (`Return`, `Q`,
+`XF86AudioRaiseVolume`), `mouse:<code>` (`mouse:272` is left), or
+`mouse_up`/`mouse_down` for the wheel. A modifier alone (`SUPER`, `SUPER_L`,
+`ALT_R`, …) fires on release when nothing else was pressed in between, and
+still reaches the window. Two binds with the same chord are an error.
 
-```yaml
-binds:
-  - {chord: SUPER, action: global shell:launcher, description: Open the launcher}
-  - {chord: SUPER + Q, action: kill, flags: [release]}
-  - {chord: SUPER + L, action: exec lock, long_press: 600}
-  - {chord: XF86AudioPlay, action: exec playerctl play-pause, flags: [pass]}
-  - {chord: SUPER + mouse_down, action: workspace e+1, cooldown: 150}
-```
+| Flag | Effect |
+| --- | --- |
+| `locked` | Works while the session is locked |
+| `repeating` | Repeats at the keyboard repeat rate while held |
+| `release` | Fires on release, only if nothing else was pressed in between |
+| `pass` | The focused window gets the input too |
+| `inhibit_proof` | Runs while a window inhibits shortcuts |
 
-`flags` takes:
+A bind that fires on release cannot repeat. While a window inhibits shortcuts
+(VMs, remote desktops) only `locked` and `inhibit_proof` binds run.
 
-- `locked`: the bind works while the session is locked.
-- `repeating`: the action repeats while the key is held, at the keyboard
-  repeat rate.
-- `release`: the bind fires when its key or button comes up, and only if no
-  other key, button or scroll came in between.
-- `pass`: the focused window gets the key, button or scroll as well; without
-  it a bind takes its trigger for itself.
-- `inhibit_proof`: the bind still runs while a window inhibits shortcuts,
-  without working on the lock screen as `locked` does.
-
-`long_press: <ms>` fires on release, and only when the key or button was held
-at least that long, measured on the input events' own timestamps.
-`cooldown: <ms>` ignores the bind when it fired less than that long ago, by
-the same timestamps; a scroll wheel that sends a burst of steps switches one
-workspace instead of several. A bind that fires on release (`release`,
-`long_press` or a lone modifier) cannot repeat, and a scroll has no release.
-
-`description` says what the bind does, for a cheat sheet: `lys-wmctl binds`
-and the IPC `binds` query list every bind with its chord, action, flags and
-description.
-
-A focused window that inhibits shortcuts (virtual machines, remote desktop
-clients) receives every key, button and scroll itself; only `locked` and
-`inhibit_proof` binds still run, so give the bind that takes focus back from
-such a window one of those flags.
-
-Actions are listed in [actions.md](actions.md).
-
-## client_hotkeys
+## client_hotkeys {#client_hotkeys}
 
 ```yaml
 client_hotkeys: true
 ```
 
-Lets applications bind their own global hotkeys through the experimental
-`xx_hotkey_v1` protocol: push-to-talk, a launcher's summon key, OBS hotkeys.
-Off by default, as the protocol asks. A hotkey fires whichever window has
-focus, and the focused window does not see the key or button. Applications
-choose the trigger, within this policy: a trigger with `CTRL`, `ALT` or
-`SUPER` is allowed; without them only a key that types no text (function,
-media and navigation keys, the keypad, a lone modifier tapped on its own) or
-an auxiliary mouse button is. A trigger one of the `binds` above uses, or
-another application holds, is refused, and a bind added on reload takes the
-trigger back. Nothing fires while the session is locked or a window inhibits
-shortcuts. Sandboxed applications do not see the protocol.
+Default `false`. Lets applications bind global hotkeys through the experimental
+`xx_hotkey_v1` protocol; the focused window does not see them. Allowed
+triggers: anything with `CTRL`, `ALT` or `SUPER`; otherwise only keys that type
+no text or auxiliary mouse buttons. Triggers used by `binds` or another
+application are refused. Nothing fires while locked or inhibited. Sandboxed
+applications do not see the protocol.
 
 ## focus
 
-```yaml
-focus:
-  on_activate: focus
-  follows_mouse: loose
-  raise_on_hover: false
-  warp_pointer: off
-  on_close: next
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `follows_mouse` | `always`: hover focuses; `loose`: as `always`, but after focus moves another way the pointer must enter a different window first; `off`: click to focus | `loose` |
+| `raise_on_hover` | Hover focus also raises a floating window | `false` |
+| `warp_pointer` | `off`; `on_keyboard_focus`: centre the pointer on a window a key bind focuses; `on_workspace_switch`: only when a key bind changes the shown workspace or output | `off` |
+| `on_close` | After the focused window closes, focus `next` (the previously focused) or `under_pointer` | `next` |
+| `on_activate` | `focus` or `urgent`: what a valid `xdg_activation_v1` request does | `focus` |
 
-`follows_mouse` decides what the pointer does to keyboard focus. `always`
-focuses whatever window the pointer moves over. `loose`, the default, does the
-same, except that after focus moves any other way (a key bind such as
-`focus left`, a new window, a closed one, an activation) the pointer has to
-cross into a different window before hovering takes focus again, so a twitch of
-the mouse over the old window does not undo a keyboard focus change. `off` is
-click to focus: hovering only moves pointer focus, so the window under the
-pointer gets motion and scroll events without being focused, and a button press
-on a window focuses it.
-
-Focusing a floating window by hovering it leaves the stacking order alone;
-`raise_on_hover: true` raises it as well. A click, a key bind and every other
-way of focusing a window raise it.
-
-`warp_pointer: on_keyboard_focus` moves the pointer to the centre of the newly
-focused window whenever a key bind moves focus to another window, unless the
-pointer is already inside it. `on_workspace_switch` does so only when a key
-bind changes the workspace shown on the focused output or focuses another
-output, warping to the focused window there or to the centre of the output
-when the workspace is empty. The pointer never warps while a client holds a
-pointer lock or confinement, or has hidden the cursor.
-
-`on_close: under_pointer` focuses the window under the pointer when the focused
-window closes, instead of the window focused before it (`next`).
-
-A window that asks for focus through `xdg_activation_v1` comes forward when its
-token was minted from a key press, click or touch in the client that had the
-keyboard or pointer, and keyboard focus has not moved since: lys-wm focuses it
-and shows its workspace on its output, as clicking a link in a chat client
-brings the browser forward. Any other activation marks the window urgent.
-`on_activate: urgent` marks it urgent even then. `focus` is the default; the
-`on_activate` rule key overrides it per window.
-
-`exec` binds, `autostart` commands and `lys-wmctl dispatch exec` hand the
-command a token in `XDG_ACTIVATION_TOKEN` and `DESKTOP_STARTUP_ID`. A window
-that presents it before it first maps opens on the workspace that was shown
-when the command ran, even after a switch to another one emptied and removed
-it: the workspace comes back for the window. GTK 3 and 4, Firefox and
-Chromium present the token after their first configure and before their first
-buffer, which is early enough. lys-wm keeps the newest 64 tokens.
+An activation token is valid when it comes from input in the focused client and
+focus has not moved since; other activations mark the window urgent. `exec`,
+`autostart` and `dispatch exec` pass a token (`XDG_ACTIVATION_TOKEN`,
+`DESKTOP_STARTUP_ID`); a window presenting it before mapping opens on the
+workspace shown at launch.
 
 ## fullscreen
 
-```yaml
-fullscreen:
-  new_window: behind
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `new_window` | A window opening where another is fullscreen or maximized: `behind` (the other keeps focus), `take_over` (gets the state), `exit` (state ends, new window focused) | `behind` |
 
-What a window does when it opens on a workspace where another window is
-fullscreen or maximized. `behind` (the default) puts it in its place behind
-that window, which keeps focus; `take_over` gives the new window the same
-state, returning the other to its tile; `exit` ends the state and focuses the
-new window.
+`fullscreen on fake` tells a window it is fullscreen while it stays in its
+tile.
 
-A window maximizes with the `maximize` action, its own maximize button
-(`xdg_toplevel.set_maximized`, `_NET_WM_STATE_MAXIMIZED_*` from an X client)
-or a taskbar's maximize: it fills the output's usable area inside the outer
-gaps, keeps the bars and its border, and covers the rest of its workspace
-until it is unmaximized and goes back to its tile. `fullscreen on fake`
-leaves a window where it is and only tells it it is fullscreen, so a video
-player or browser fills its tile instead of the output; the window's own
-request to leave fullscreen ends it.
-
-## layer_rules
+## layer_rules {#layer_rules}
 
 ```yaml
 layer_rules:
   - {namespace: ^lys-shell-notification-popup$, block_out_from: screencast}
 ```
 
-Rules for layer-shell surfaces, matched on the namespace the client gave
-(a regular expression), later rules overriding earlier ones, decided once per
-surface:
+Rules for layer-shell surfaces, decided once per surface; later rules override
+earlier ones.
 
 | Key | Value |
 | --- | --- |
+| `namespace` | Required. Regular expression on the namespace |
 | `blur` | `true`: blur behind the surface and its popups with `decoration.blur` |
-| `blur_alpha_threshold` | 0 to 1: blur only under texels whose alpha is above it, so a bar's transparent rounded corners show no blurred rectangle. It reads alpha from the surface's texture on the GPU, so shared-memory and dmabuf buffers alike are shaped |
-| `animation` | `false`: map and unmap without animating; or `{in: <style>, out: <style>}` with `layers_in` and `layers_out` styles |
-| `shadow` | `true`: a shadow as `decoration.shadow` draws for windows |
-| `rounding` | Corner radius in pixels for the surface, its blur and its shadow |
+| `blur_alpha_threshold` | 0 to 1: blur only under texels with alpha above it |
+| `animation` | `false`, or `{in: <style>, out: <style>}` with `layers_in`/`layers_out` styles |
+| `shadow` | `true`: shadow as `decoration.shadow` |
+| `rounding` | Corner radius in pixels, 0 or more |
 | `opacity` | 0 to 1 |
-| `dim_around` | `true`: darken everything below the surface by `decoration.dim_strength` |
-| `block_out_from` | As for windows |
+| `dim_around` | `true`: darken everything below by `decoration.dim_strength` |
+| `block_out_from` | `screencast` or `capture`, as for windows |
 
-`decoration.blur.layers` is gone: write `{namespace: ^waybar$, blur: true}`.
-
-What counts as a screenshot: a capture whose client declared it one-shot
-through `lys_capture_hint_v1` before its first frame, which lys-shell's
-Screenshot portal does. Every other `ext-image-copy-capture` session,
-`wlr-screencopy` frame and toplevel export is treated as a screencast, so a
-screenshot tool that does not declare its captures sees blocked surfaces
-masked. Sandboxed clients cannot declare. The surfaces draw normally on the
-screen, and changes inside a blocked window do not wake a screencast.
+Only captures declared one-shot through `lys_capture_hint_v1` count as
+screenshots; every other capture is a screencast.
 
 ## workspaces
 
@@ -1280,21 +818,19 @@ workspaces:
   - {match: single_tiled, gaps: {inner: 0, outer: 0}, borders: {width: 0}, rounding: 0}
 ```
 
-A rule with `id` shapes one workspace; a rule with `match` (`single_tiled`: one
-tiled window and nothing else, `fullscreen`, or `any`) applies its look to every
-workspace it matches, after the `id` rules' and in order.
+A rule has exactly one of `id` (a workspace number, 1 or more) or `match`
+(`single_tiled`, `fullscreen` or `any`). `match` rules apply after `id` rules,
+in order, and take only the look keys.
 
 | Key | Value |
 | --- | --- |
-| `output` | A connector name or `desc:<description prefix>`: the workspace is created on that output and returns to it whenever it is connected, and `workspace <n>` from another output shows it there and moves focus to it |
-| `default` | `true`: the output shows this workspace first. Needs `output` |
-| `persistent` | `true`: the workspace exists from startup and is never dropped, so bars and `lys-wmctl workspaces` list it empty |
-| `name` | Shown by ext-workspace and IPC, and accepted by `workspace <name>` and `movetoworkspace <name>`; starts with a letter |
-| `on_created_empty` | A command run each time the workspace is shown empty; the window it opens lands on the workspace |
-| `layout` | `tree` or `scroll`: the workspace is created with this layout in place of the global `layout` |
-| `gaps`, `borders.width`, `rounding`, `shadow` | The workspace's look in place of `gaps`, `borders.width`, `decoration.rounding` and `decoration.shadow.enabled`; a window rule's still wins |
-
-A `match` rule takes only the look keys.
+| `output` | Connector or `desc:`: the workspace is created there and returns there |
+| `default` | `true`: the output shows it first. Needs `output` |
+| `persistent` | `true`: exists from startup and is never dropped |
+| `name` | Unique; a letter, then letters, digits, `-` or `_`; not `previous` or `empty`. Accepted by `workspace` and `movetoworkspace` |
+| `on_created_empty` | Command run each time the workspace is shown empty |
+| `layout` | `tree` or `scroll` |
+| `gaps`, `borders.width`, `rounding`, `shadow` | Look instead of `gaps`, `borders.width`, `decoration.rounding`, `decoration.shadow.enabled`; window rules still win |
 
 ## swallow
 
@@ -1304,19 +840,15 @@ swallow:
   except_title: wev|lazygit
 ```
 
-A window started from a terminal, an image viewer or a video player run in a
-shell, takes the terminal's place in the layout: the same slot, size and tab, so
-nothing else moves, and the terminal hides until the window closes, then comes
-back where it was with focus. A terminal is a window whose `app_id` matches
-`terminals` and whose process is an ancestor, up to eight levels, of the new
-window's; lys-wm reads `/proc/<pid>/status` once per level when the window maps
-and never afterwards. Floating windows, dialogs, windows whose title matches
-`except_title`, windows asking for a workspace, output, group or fullscreen by
-rule, sandboxed clients (`wp_security_context_v1`) and clients in another pid
-namespace never swallow, and neither does a floating terminal. If the terminal
-closes first, the window stays. `swallow off` shows the terminal beside the
-window, `swallow on` hides it again; `lys-wmctl windows` reports `swallowed_by`.
-Without `terminals` nothing swallows.
+| Key | Value |
+| --- | --- |
+| `terminals` | Regex on `app_id`. Without it nothing swallows |
+| `except_title` | Regex on the new window's title: these never swallow |
+
+A window whose process descends (up to eight levels) from a matching terminal
+takes its place; the terminal hides until the window closes. Floating windows,
+dialogs, rule-placed windows, sandboxed or other-pid-namespace clients and
+floating terminals never swallow. `swallow off|on` toggles it.
 
 ## scratchpads
 
@@ -1326,45 +858,26 @@ scratchpads:
   music: {exec: spotify, hide_on_workspace_switch: false}
 ```
 
-A scratchpad is a named set of windows, laid out like a workspace, that the
-`scratchpad toggle <name>` action shows over the focused output: above its
-workspace, fullscreen windows included, below `overlay` layer surfaces, with
-the workspace beneath dimmed by `decoration.dim_strength`, as `dim_around` does. Focus goes
-to the scratchpad's window while it shows and back when it hides; toggling it
-on another output moves it there. No `workspace` number reaches it;
-`movetoscratchpad <name>` puts the focused window in, `movetoworkspace` takes
-it out, and a scratchpad is kept while it holds a window.
+| Key | Value | Default |
+| --- | --- | --- |
+| `exec` | Command run when toggled while empty; its window lands in the scratchpad | none |
+| `size` | `<w>%x<h>%`, each 1% to 100% of the usable area, centred | whole area |
+| `hide_on_workspace_switch` | Hide when the output switches workspace | `true` |
 
-`exec` runs when the scratchpad is toggled while empty, and the window it opens
-lands in the scratchpad: by its activation token, or by being that command's
-process or one of its children. `size` is the share of the output's usable area
-the scratchpad takes, centred; without it the whole area. A workspace switch on
-its output hides it unless `hide_on_workspace_switch: false`. Focusing a window
-beneath it hides it too. The `scratchpad` animation event slides it in and out.
-Scratchpads need no entry here to be used; one without an entry has no `exec`.
-ext-workspace lists each scratchpad as a workspace named after it, with the
-id `scratchpad:<name>`, no coordinates and the `hidden` state, so bars that
-draw only numbered workspaces leave it out; it is `active` while it shows, in
-the group of the output it shows on or last showed on. Activating it shows it
-on the focused output and deactivating it hides it.
+`scratchpad toggle <name>` shows a named set of windows over the focused
+output, dimming the workspace by `decoration.dim_strength`.
+`movetoscratchpad <name>` adds a window, `movetoworkspace` removes it. A scratchpad needs no entry
+here. ext-workspace lists it as hidden workspace `scratchpad:<name>`.
 
 ## showdesktop
 
-```yaml
-showdesktop:
-  peek: 2
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `peek` | Percent of the output's width left visible of each window, 1 to 50 | 2 |
 
-The `showdesktop` action slides the windows of the output under the pointer
-(or of every output, with `all`) toward their nearest edges, leaving `peek`
-percent of the output's width of each in view, on the `windows_move` curve.
-Nothing is resized and no configure is sent; the windows take no pointer input
-but their slivers, keyboard focus leaves them, and clicks on the wallpaper reach
-the `background` and `bottom` layer surfaces. A click on a sliver brings the
-windows back and focuses that one; so does a window opening or being activated
-on that output, a workspace switch there, a focus action or the action again.
-Bind it to a key or to a gesture, as `gestures.pinch: [{fingers: 4,
-direction: out, action: showdesktop toggle}]`.
+`showdesktop` slides the output's windows (every output's with `all`) to their
+nearest edges. A click on a sliver, a new window, a workspace switch or the
+action again brings them back.
 
 ## rules
 
@@ -1378,81 +891,64 @@ rules:
   - {initial_title: ^Picture-in-Picture$, float: true, size: 25%x25%, position: 74%x72%, pin: true}
 ```
 
-`app_id`, `title` and `tag` are regular expressions ([RE2](https://github.com/google/re2/wiki/Syntax));
-a rule needs at least one matcher. `initial_app_id` and `initial_title` match the values the window had when it first mapped, so a browser that retitles itself still matches; `xwayland: true` or `false` matches X11 windows or Wayland ones; `is_floating`, `is_focused`, `is_fullscreen`, `is_urgent` and `is_captured` (`true` or `false`) match the window's state, checked again whenever it changes: floating (when it opens, whether it asks to), holding the keyboard focus, fullscreen, asking for attention, and being captured by a screen share (an `ext-image-copy-capture` session of the window or its output); `exclude:` takes the same matchers and drops the windows it matches. `tag` matches the stable tag a client gives its
-window through `xdg_toplevel_tag_v1` (`main window`, `settings`), and the
-empty string for a window without one, X11 windows included. `float: true` or `tile: true` decides where a new
-window goes; `size: <w>x<h>` sizes it when it floats. `dim_around: true` darkens everything below the window by
-`decoration.dim_strength`, as for a dialog that should hold the attention.
-`blur: true` or `blur: false` turns `decoration.blur` on or off for the window and its popups; `blur: false` also ignores the blur regions they ask for through `ext_background_effect_v1`, and turns `mica` off.
+Later rules override earlier ones. A rule needs at least one matcher.
+`lys-wmctl dispatch setprop <id> <key> <value>` applies a rule key to one
+window until it closes (`setprop 7 border {width: 4}`).
 
-`mica: true` or `mica: false` overrides `decoration.blur.mica.enabled` for the window.
+| Matcher | Matches |
+| --- | --- |
+| `app_id`, `title` | [RE2](https://github.com/google/re2/wiki/Syntax) regex. For X11, `app_id` is the `WM_CLASS` class |
+| `tag` | Regex on the `xdg_toplevel_tag_v1` tag; the empty string without one |
+| `initial_app_id`, `initial_title` | Regex on the values at first map |
+| `xwayland` | `true` X11, `false` Wayland |
+| `is_floating`, `is_focused`, `is_fullscreen`, `is_urgent`, `is_captured` | Bool state, re-checked when it changes |
+| `exclude` | A non-empty mapping of matchers; matching windows are dropped |
 
-`blur_look` overrides the look for the window and its popups, key by key, with the same keys as `decoration.blur`: `tint`, `saturation`, `brightness`, `contrast`, `grain`, `refraction` and `specular`, as `blur_look: {saturation: 1.8, specular: {strength: 0.3}}`.
-`opacity: <0 to 1>` sets the window's opacity, focused or not, in place of
-`decoration`'s. `tearing: true` or
-`tearing: false` overrides what the window asks for through
-`wp_tearing_control_v1` (see [tearing](#tearing)). `on_activate: focus`,
-`urgent` or `ignore` overrides [`focus.on_activate`](#focus) for the window;
-`ignore` drops its activations altogether.
-`content: none`, `photo`, `video` or `game` says what the window shows in
-place of what it says through `wp_content_type_v1`, for the many games that
-never say (every Wine or Proton title through Xwayland, most SDL and Vulkan
-games): it decides `vrr: fullscreen`, the content type the connector tells a
-TV (its game mode) and the tearing default, and `lys-wmctl windows` shows it
-with `content_source: rule`. Later rules override earlier ones.
-
-These keys place a window once, when it first maps, in the same layout change,
-so it is never drawn where it does not belong:
+Placement, applied once at first map:
 
 | Key | Value |
 | --- | --- |
-| `workspace` | `<n>`: open on workspace n and follow it there; `<n> silent`: open there without switching or taking focus |
-| `output` | A connector name or `desc:<description prefix>`, as in `outputs`: open on that output's shown workspace, following it unless `workspace` says `silent` |
-| `focus` | `false`: open without focus; the window goes behind the focused one in the focus order and is not marked urgent |
-| `fullscreen`, `maximized` | `true` opens the window so; `false` refuses the window's own request for it made before it maps |
-| `position` | Floating windows: `center`, `cursor` (centred on the pointer, kept on the output) or `<x>x<y>`, from the usable area's top left, in pixels or percent of the usable area |
-| `size` | `<w>x<h>` in pixels or percent of the usable area (`25%x40%`) |
-| `group` | `tab`, `h` or `v`: open inside the focused window's group of that layout, wrapping the focused window in one when its group has another |
-| `suppress` | A list of `fullscreen`, `maximize` and `activate`: ignore those requests from the window, at map and afterwards |
-| `pin` | `true`: open pinned to every workspace of its output (see the `pin` action); the window floats |
+| `float`, `tile` | `true` (not both): where a new window goes |
+| `workspace` | `<n>` (open there and follow) or `<n> silent` |
+| `output` | Connector or `desc:`: open on its shown workspace |
+| `focus` | `false`: open without focus or urgency |
+| `fullscreen`, `maximized` | `true` opens so; `false` refuses the request before map |
+| `position` | Floating: `center`, `cursor`, or `<x>x<y>` in pixels or percent of the usable area |
+| `size` | `<w>x<h>` in pixels or percent of the usable area, above 0 |
+| `group` | `tab`, `h` or `v`: open inside the focused window's group of that layout |
+| `suppress` | List of `fullscreen`, `maximize`, `activate`: always ignore those requests |
+| `pin` | `true`: pinned to every workspace of its output, floating |
 
-A window launched through `exec` opens on the workspace it was launched from;
-a rule's `workspace` or `output` wins over that.
+A window launched by `exec` opens on its launching workspace unless `workspace`
+or `output` says otherwise.
 
-These keys change how a window looks and behaves for as long as the rule
-matches; a rule with `is_` matchers is checked again only when the window's
-state changes, never on a plain frame:
+Properties, held while the rule matches:
 
 | Key | Value |
 | --- | --- |
-| `border` | `active`, `inactive` (a colour or gradient, as in `borders`) and `width` in pixels, each optional |
-| `rounding` | Corner radius in pixels; 0 for square corners |
-| `shadow` | `false`: no shadow |
-| `dim_inactive` | `true` or `false` in place of `decoration.dim_inactive` |
-| `animation` | `false`: open and close with no animation; or `{in: <style>, out: <style>}` with `windows_in` and `windows_out` styles |
-| `idle_inhibit` | `visible`, `focus` or `fullscreen`: keep the session from going idle while the window is shown, focused and shown, or fullscreen and shown, for players that never ask |
-| `vrr` | `true`: turn adaptive sync on for the output while the window shows on it |
-| `scroll_factor` | Multiplies the window's scroll events, above 0 and below 100 |
-| `min_size`, `max_size` | `<w>x<h>` in pixels: lys-wm configures the window no smaller or larger |
-| `keep_aspect` | `true`: resizing the floating window keeps its aspect ratio |
-| `touch_gestures` | `false`: touches that start on the window stay with it; no [touch gesture](#touchscreens) claims them |
-| `block_out_from` | `screencast`: the window shows as a black shape in screen shares and other continuous captures, but in screenshots; `capture`: in every capture |
+| `border` | `{active, inactive, width}`, each optional, as in `borders` |
+| `rounding` | Pixels, 0 or more |
+| `shadow` | Bool |
+| `dim_inactive` | Bool |
+| `dim_around` | `true`: darken everything below by `decoration.dim_strength` |
+| `opacity` | 0 to 1, focused or not |
+| `blur` | Bool, for the window and its popups; `false` also ignores client blur regions and mica |
+| `mica` | Bool |
+| `blur_look` | `decoration.blur` look keys: `tint`, `saturation`, `brightness`, `contrast`, `grain`, `refraction`, `specular` |
+| `animation` | `false`, or `{in: <style>, out: <style>}` with `windows_in`/`windows_out` styles |
+| `idle_inhibit` | `visible`, `focus` or `fullscreen`: block idle while the window is shown, focused, or fullscreen |
+| `vrr` | `true`: adaptive sync on its output while shown |
+| `tearing` | Bool, overriding `wp_tearing_control_v1` (see [tearing](#tearing)) |
+| `content` | `none`, `photo`, `video`, `game`, overriding `wp_content_type_v1` (affects `vrr: fullscreen` and tearing) |
+| `on_activate` | `focus`, `urgent` or `ignore`, overriding [`focus.on_activate`](#focus) |
+| `scroll_factor` | Above 0, up to 100 |
+| `min_size`, `max_size` | `<w>x<h>` pixels, above 0 |
+| `keep_aspect` | Bool: resizing a floating window keeps its aspect |
+| `touch_gestures` | `false`: no [touch gesture](#touchscreens) claims touches starting on it |
+| `block_out_from` | `screencast`: black in screencasts but not screenshots; `capture`: black in every capture |
 
-Example: `{is_captured: true, border: {active: red}}` shows which window a
-screen share sees. `lys-wmctl dispatch setprop <id> <key> <value>` gives one
-window any rule key until it closes, after every rule, with the value written
-as in this file: `setprop 7 border {width: 4}`.
-
-X11 windows match `app_id` against the class half of `WM_CLASS` (`Steam`,
-`jetbrains-idea`). Without a rule, a window floats when it has a parent
-(`xdg_toplevel.set_parent` or xdg-foreign; `WM_TRANSIENT_FOR` for X11),
-has a fixed size (its minimum size equals its maximum; `WM_NORMAL_HINTS`
-for X11), is an `xdg_dialog_v1`, or, for X11, is modal or a dialog,
-utility, splash, toolbar, menu, combo, tooltip, notification or
-drag-and-drop window; `tile: true` overrides that. The
-choice is made again whenever the window's title, app_id, parent or size
-limits change, until you float or tile the window yourself.
+Without a rule a window floats when it has a parent or a fixed size, is an
+`xdg_dialog_v1`, or is an X11 modal or dialog-type window.
 
 ## env and autostart
 
@@ -1463,38 +959,22 @@ autostart:
   - waybar
 ```
 
-lys-wm sets `env` in its own environment at startup, before it starts
-anything, so every program it runs inherits it. `XDG_CURRENT_DESKTOP=lys-wm`
-and `XDG_SESSION_TYPE=wayland` are set unless `env` overrides them.
-`WAYLAND_DISPLAY`, `DISPLAY` and `LYS_WM_SOCKET` belong to lys-wm and cannot be
-set here. `XCURSOR_THEME`, `XCURSOR_SIZE` and `XCURSOR_PATH` set here choose the
-pointer for lys-wm as well as for its clients. Each `autostart` command runs once with `sh -c`, after the display
-and the IPC socket are up. A reload changes neither. Autostart commands and
-`exec` binds write to lys-wm's own stdout and stderr, and lys-wm logs any that
-exits with a non-zero status or dies from a signal.
+`env` is set in lys-wm's environment at startup, so everything it runs
+inherits it. `XDG_CURRENT_DESKTOP=lys-wm` and `XDG_SESSION_TYPE=wayland` are set
+unless overridden. `WAYLAND_DISPLAY`, `DISPLAY` and `LYS_WM_SOCKET` are
+refused. `XCURSOR_*` also sets lys-wm's own pointer.
+
+Each `autostart` command runs once with `sh -c` once the display and IPC socket
+are up. Reloads change neither key. Failures are logged.
 
 ## xwayland
 
-```yaml
-xwayland:
-  enabled: true
-  zero_scaling: true
-```
+| Key | Value | Default |
+| --- | --- | --- |
+| `enabled` | `false`: no X sockets, `DISPLAY` unset | `true` |
+| `zero_scaling` | X programs see outputs at physical resolution, scale 1 (sharp, small on scaled outputs). `false`: X windows are stretched (right size, blurry) | `true` |
 
-X11 programs run through Xwayland. lys-wm takes a free X display (`:0` and
-up, skipping displays whose lock in `/tmp` belongs to a live process),
-listens on its sockets, and exports `DISPLAY`; Xwayland itself starts only
-when the first X client connects, so a session without X programs never
-runs it. If Xwayland exits, the next X client starts it again. `enabled:
-false` leaves `DISPLAY` unset and binds no X sockets.
-
-With `zero_scaling: true` (the default), X programs see every output at its
-physical resolution with scale 1 and draw at full sharpness; on an output
-scaled to 1.5 they look smaller unless they scale themselves (`GDK_SCALE`,
-`QT_SCALE_FACTOR`, Steam's and JetBrains' own settings). With `false`,
-Xwayland sees the logical layout and lys-wm stretches X windows, which keeps
-their size but blurs them on scaled outputs. Both settings are read at
-startup; a reload does not change them.
+Xwayland starts on the first X client. Both keys are read at startup only.
 
 ## tearing
 
@@ -1504,70 +984,50 @@ rules:
   - {app_id: ^cs2$, tearing: true}
 ```
 
-Off by default. With `tearing: true`, a window that fills an output and
-scans out directly is presented with an async page flip, so frames show the
-moment they are ready and may tear, when a rule says `tearing: true`, when it asks
-for that through `wp_tearing_control_v1` (Mesa's Vulkan `IMMEDIATE` present
-mode does), or when it says nothing there and is a game, as it tags its surface
-through `wp_content_type_v1` or a `content: game` rule says. A rule with `tearing: false` keeps a window on
-vblank whatever it asks, and so does a vsync hint without a rule. Drivers without atomic async flips (Linux before
-6.8), and frames that change more than the buffer, flip at vblank as
-usual.
+Default `false`. When `true`, a window that fills an output and scans out
+directly uses async page flips if a rule says `tearing: true`, it asks via
+`wp_tearing_control_v1`, or it states nothing and is a game. A rule with
+`tearing: false`, or a vsync hint without a rule, keeps vblank. Needs atomic
+async flips (Linux 6.8 or later).
 
-## hidden_frame_rate
+## hidden_frame_rate {#hidden_frame_rate}
 
 ```yaml
 hidden_frame_rate: 5
 ```
 
-15 by default: the frame callbacks a second that a surface gets while opaque
-windows cover it whole or no output shows it, so a client drawing under them
-draws and uploads at this rate instead of the output's refresh. A positive
-whole number.
+Default 15, a positive integer: frame callbacks per second for a surface fully
+covered by opaque windows or on no output.
 
-## power_saver_frame_rate
+## power_saver_frame_rate {#power_saver_frame_rate}
 
 ```yaml
 power_saver_frame_rate: 0
 ```
 
-60 by default: while power-profiles-daemon's active profile is `power-saver`,
-an output refreshing faster composites on every k-th vblank, k being its
-refresh divided by this rate and rounded up (a 120 Hz panel at 60, a 165 Hz
-one at 55), and the surfaces on it get their frame callbacks at that rate.
-Animations take as long with fewer frames, presentation feedback reports the
-longer refresh, and the cursor plane still moves every refresh. Under
-adaptive sync the rate is a minimum time between frames instead. The rate
-returns on the next frame once the profile changes, with no modeset; without
-the daemon nothing changes. `0` turns it off. A whole number, zero or more.
+Default 60, an integer 0 or more; 0 is off. While power-profiles-daemon's
+profile is `power-saver`, a faster output composites every k-th vblank (k is
+refresh / rate rounded up) and its surfaces get frame callbacks at that rate.
+Under adaptive sync it is a minimum frame interval.
 
-## hold_opening
+## hold_opening {#hold_opening}
 
 ```yaml
 hold_opening: true
 ```
 
-Off by default: a window that opens fades in at once, and neighbours that
-resize for it are stretched until they draw their new size. With `true`, the
-layout change waits for those neighbours to draw, up to 100 ms, before the
-new window shows.
+Default `false`: a new window shows at once and resized neighbours are
+stretched until they redraw. `true` waits up to 100 ms for them first.
 
-## lid_suspend
+## lid_suspend {#lid_suspend}
 
 ```yaml
 lid_suspend: false
 ```
 
-On by default with the drm backend: lys-wm takes logind's
-`handle-lid-switch` inhibitor and decides itself what the lid does, so
-logind's `HandleLidSwitch*` settings do not apply while lys-wm runs. It
-suspends through logind when the lid is closed, no output other than an
-internal panel (`eDP-*`) is connected, and the machine runs on battery: a
-`Mains` or `USB` power supply exists and none is online. It checks when the
-lid closes, when an output is unplugged and when a power supply changes, so
-undocking or unplugging the charger with the lid already closed suspends too,
-which logind alone never does. A machine without such a power supply never
-counts as on battery. `false` leaves the lid to logind. Read at startup only.
+Default `true` on the drm backend: lys-wm inhibits logind's lid handling and
+suspends when the lid is closed, only `eDP-*` outputs are connected, and the
+machine is on battery. `false` leaves the lid to logind. Read at startup.
 
 ## gpu
 
@@ -1575,50 +1035,30 @@ counts as on battery. `false` leaves the lid to logind. Read at startup only.
 gpu: card1
 ```
 
-The DRM card that renders, as `card1` or `/dev/dri/card1`. Without it lys-wm
-picks the boot VGA device if it has a render node, else the first card with
-a render node. Every other card shows its outputs through a copy from this
-one. Read at startup only.
+The rendering DRM card, `cardN` or `/dev/dri/cardN`. Default: the boot VGA
+device if it has a render node, else the first card with one. Read at startup.
 
 ## Locking
 
-lys-wm speaks `ext-session-lock-v1`, so lockers such as swaylock, hyprlock or
-lys-login's lock screen work. While the session is locked, nothing but the lock
-surfaces renders or receives input, and only binds flagged `locked` run.
-The lock fades in over the desktop by `fade_in` and lys-wm tells the locker
-it is locked only after every output has drawn the lock fully opaque; on
-unlock the last lock frame fades out over the desktop by `fade_out`, while
-input already goes to the session. With those animations off both are
-instant. If the locker dies, the session stays locked on a dark red
-screen until a new locker takes over; outputs added while locked show the
-lock colour until the locker covers them. lys-wm does not set logind's
-`LockedHint`: the locker does, as lys-login does.
+lys-wm implements `ext-session-lock-v1`. While locked only lock surfaces render
+and get input, and only `locked` binds run. The lock fades on `fade_in` and
+`fade_out`. If the locker dies the session stays locked on a red screen. The
+locker, not lys-wm, sets logind's `LockedHint`.
 
 ## Session
 
-`lys-wm --systemd` hands `env`, `PATH`, `WAYLAND_DISPLAY`, `DISPLAY` and
-`LYS_WM_SOCKET` to D-Bus activation and the systemd user manager, so user
-services find the same commands the session does; a variable `env` sets wins
-over lys-wm's own. It then starts `lys-wm-session.target`, which binds
-`graphical-session.target`, so user services that want a graphical session
-start with lys-wm. The target also wants `xdg-desktop-autostart.target`, so the
-entries in `~/.config/autostart` and `/etc/xdg/autostart` start once the
-environment is in place, as systemd-xdg-autostart-generator reads them:
-`Hidden`, `X-systemd-skip`, and `OnlyShowIn` or `NotShowIn` against
-`XDG_CURRENT_DESKTOP=lys-wm` keep an entry from starting. The generator does
-not read `X-GNOME-Autostart-enabled`, so an entry turned off only that way
-still starts; a copy under `~/.config/autostart` with `Hidden=true` turns it
-off. On exit lys-wm stops the target and puts the user manager's environment
-back as it found it: a variable it had before gets its old value, one it did
-not have is removed. D-Bus cannot unset a variable, so the activation
-environment keeps them.
+`lys-wm --systemd`:
 
-A display manager session should run `lys-wm --systemd`. Leave the flag off
-when running lys-wm nested in another session, which owns
-`graphical-session.target`.
+- Exports `env`, `PATH`, `WAYLAND_DISPLAY`, `DISPLAY` and `LYS_WM_SOCKET` to
+  D-Bus activation and the systemd user manager.
+- Starts `lys-wm-session.target`, which binds `graphical-session.target` and
+  wants `xdg-desktop-autostart.target`, so XDG autostart entries start
+  (`X-GNOME-Autostart-enabled` is ignored; disable with `Hidden=true`).
+- On exit stops the target and restores the user manager's environment.
 
-Portals follow `XDG_CURRENT_DESKTOP=lys-wm`: the package installs
-`lys-wm-portals.conf`, which routes every portal to lys-shell's backend and falls
-back to xdg-desktop-portal-wlr for screen sharing and screenshots and to
-xdg-desktop-portal-gtk for the rest. Portal backends are started by D-Bus
-activation, so they reach the session only when lys-wm runs with `--systemd`.
+Display manager sessions should use `--systemd`; nested sessions should not.
+
+The package installs `lys-wm-portals.conf`, routing every portal to lys-shell's
+backend, falling back to xdg-desktop-portal-wlr for screen sharing and
+screenshots and xdg-desktop-portal-gtk for the rest. Portal backends are D-Bus
+activated, so they need `--systemd`.

@@ -5,8 +5,7 @@
 <h1 align="center">lys-wm</h1>
 
 <p align="center">
-  A tiling Wayland compositor in pure Go (<code>CGO_ENABLED=0</code>), built to
-  replace a Hyprland + hy3 setup with something smaller.
+  A tiling Wayland compositor in pure Go (<code>CGO_ENABLED=0</code>).
 </p>
 
 <p align="center">
@@ -47,12 +46,9 @@ lys-wmctl windows                # query a running lys-wm
 lys-wmctl dispatch workspace 3   # or control it
 ```
 
-[Getting started](https://stubbedev.github.io/lys-wm/guide/getting-started) covers
-the default binds and your first config,
-[Config](https://stubbedev.github.io/lys-wm/config) every key of
-`~/.config/lys-wm/config.yaml`, and
-[Contributing](https://stubbedev.github.io/lys-wm/guide/contributing) the
-development setup.
+- [Getting started](https://stubbedev.github.io/lys-wm/guide/getting-started): default binds and a first config
+- [Config](https://stubbedev.github.io/lys-wm/config): every key of `~/.config/lys-wm/config.yaml`
+- [Contributing](https://stubbedev.github.io/lys-wm/guide/contributing): development setup
 
 ## The lys family
 

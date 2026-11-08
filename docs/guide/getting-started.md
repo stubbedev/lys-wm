@@ -1,29 +1,21 @@
 # Getting started
 
 [Install](./install) lys-wm first. The built-in config binds `SUPER + Return`
-to `foot`. The Debian and Fedora packages recommend it and the Nix modules enable
-it; on any other install, or without recommended packages, install it too or
-[change the bind](#configure) before you start a session.
+to `foot`; install it or [change the bind](#configure).
 
 ## Start it
 
-**From a display manager**, pick the `lys-wm` session, which runs
-`lys-wm --systemd`. [Session](../config#session) says what the flag does.
+| From | Run |
+| --- | --- |
+| A display manager | Pick the `lys-wm` session (runs `lys-wm --systemd`) |
+| A text console | `lys-wm --systemd` |
+| Another Wayland session | `lys-wm` (opens a nested window) |
 
-**From a text console**, log in on a virtual terminal and run the same command:
-
-```sh
-lys-wm --systemd
-```
-
-**Inside another Wayland session**, run `lys-wm` without the flag. It opens a
-window on the running compositor and prints the display it listens on:
+Nested, it prints the display it listens on:
 
 ```
 lys-wm: listening on wayland-2 and X display :1 with the nested backend
 ```
-
-Point clients at it:
 
 ```sh
 WAYLAND_DISPLAY=wayland-2 foot
@@ -31,61 +23,67 @@ WAYLAND_DISPLAY=wayland-2 foot
 
 ## Command line
 
-| Flag | Value |
+| Flag | Effect |
 | --- | --- |
-| `--config <file>` | Read this file instead of the [default path](../config); the file must exist |
-| `--systemd` | Hand the environment to the user manager and run `lys-wm-session.target`; leave it off when nested |
-| `--backend <name>` | `drm`, `nested` or `headless`. Default: `nested` when `WAYLAND_DISPLAY` is set, else `drm` |
-| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default: `gles`, and `soft` on the headless backend. `gles` and `vulkan` work on every backend, `soft` on `nested` and `headless` |
+| `--config <file>` | Config file; must exist. Default `$XDG_CONFIG_HOME/lys-wm/config.yaml`, else the built-in config |
+| `--runtime <file>` | [Runtime overrides](../config#runtime-overrides) merged over the config; must exist. Default `runtime.yaml` beside the config, if present |
+| `--systemd` | Export the session environment to D-Bus activation and the systemd user manager, and run `lys-wm-session.target`; see [Session](../config#session). Not for nested use |
+| `--backend <name>` | `drm`, `nested` or `headless`. Default `nested` when `WAYLAND_DISPLAY` is set, else `drm` |
+| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default `gles`, `soft` on headless. `drm` takes only `gles` or `vulkan` |
+| `--holder` | Run under a holder process so the session can be [upgraded in place](./upgrade) |
+| `--check-config` | Load the config and runtime overrides as a reload would and exit; status 0 and no output when accepted |
+| `--effective-config` | Print every key set, with the layer, file and line it comes from, as JSON, and exit |
+| `--default-config` | Print the built-in config and exit |
+| `--config-schema` | Print the config's JSON schema and exit |
+| `--frame-trace <file>` | Record every frame's timing as JSON lines; see [Frame pacing](../frame-pacing) |
+| `--cpu-profile <file>` | Write a Go CPU profile while running |
 
-lys-wm logs to stderr. `LYS_WM_DEBUG=wire` adds a trace of the Wayland messages.
+lys-wm logs to stderr. `LYS_WM_DEBUG=wire` adds a Wayland message trace.
 
-## The default binds
+## Default binds
 
-These come from the built-in config,
-[`internal/config/default.yaml`](https://github.com/stubbedev/lys-wm/blob/main/internal/config/default.yaml),
-which is the full list.
+From the built-in config (`lys-wm --default-config` prints it in full):
 
 | Chord | Action |
 | --- | --- |
 | `SUPER + Return` | Run `foot` |
-| `SUPER + Space` | Open or close lys-shell's search panel, through the global shortcut lys-shell registers |
-| `SUPER + A` | Open or close lys-shell's dashboard, through the global shortcut lys-shell registers |
+| `SUPER + Space` | lys-shell's launcher (global shortcut) |
+| `SUPER + A` | lys-shell's dashboard (global shortcut) |
 | `SUPER + Q` | Close the focused window |
-| `SUPER + H`, `J`, `K`, `L` or the arrows | Move focus |
-| `SUPER + SHIFT + H`, `J`, `K`, `L` or the arrows | Move the focused window |
-| `SUPER + 1` … `0` | Show workspace 1 to 10 |
-| `SUPER + SHIFT + 1` … `0` | Move the focused window to workspace 1 to 10 |
-| `SUPER + D`, `S`, `T` | Wrap the focused window in a horizontal, vertical or tab group |
+| `SUPER + H J K L` or arrows | Move focus |
+| `SUPER + SHIFT + H J K L` or arrows | Move the focused window |
+| `SUPER + 1` … `0` | Show workspace 1–10 |
+| `SUPER + SHIFT + 1` … `0` | Move the window to workspace 1–10 |
+| `SUPER + D`, `S`, `T` | Wrap the window in a horizontal, vertical or tab group |
 | `SUPER + F` | Fullscreen |
-| `SUPER + V` | Float or tile the focused window |
-| `SUPER + R` | Resize with the arrows; `Return` or `Escape` leaves |
-| `SUPER + =`, `SUPER + -`, `SUPER + Backspace` | Zoom in, zoom out and back to normal |
-| `SUPER + CTRL` and scroll, or `SUPER` and a two-finger pinch | Zoom smoothly around the pointer |
-| `SUPER` + left or right drag | Move or resize the window under the pointer |
-| `SUPER` + scroll | Step through the open workspaces |
-| `SUPER + SHIFT + R` | Read the config file again |
-| `SUPER + SHIFT + E` | Leave the session, with no confirmation |
+| `SUPER + V` | Toggle floating |
+| `SUPER + Tab` | Toggle the overview |
+| `ALT + Tab`, `ALT + SHIFT + Tab` | Switch windows in most-recently-used order |
+| ``ALT + ` `` | Switch between the focused app's windows |
+| `SUPER + R` | Resize submap: arrows resize, `Return` or `Escape` leaves |
+| `SUPER + =`, `SUPER + -`, `SUPER + Backspace` | Zoom in, out, reset |
+| `SUPER + CTRL` + scroll, `SUPER` + two-finger pinch | Zoom smoothly |
+| `SUPER` + left / right drag | Move / resize the window under the pointer |
+| `SUPER` + scroll | Step through open workspaces |
+| Three-finger horizontal / vertical swipe | Switch workspaces / open the overview |
+| `SUPER + SHIFT + R` | Reload the config |
+| `SUPER + SHIFT + E` | Exit the session, without confirmation |
 
-Scripts can do the same with `lys-wmctl dispatch exit`.
-
-The keymap's `XF86Switch_VT_*` keys, usually `CTRL + ALT + F1` and up, switch
+The keymap's `XF86Switch_VT_*` keys (usually `CTRL + ALT + F1`…) switch
 virtual terminals.
 
 ## Configure
 
-lys-wm has one config file, `~/.config/lys-wm/config.yaml`. A file replaces the
-built-in config, binds included, so start from a copy:
+The config is `~/.config/lys-wm/config.yaml`. A file replaces the built-in
+config entirely, binds included, so start from a copy:
 
 ```sh
 mkdir -p ~/.config/lys-wm
-curl -fsSL -o ~/.config/lys-wm/config.yaml \
-  https://raw.githubusercontent.com/stubbedev/lys-wm/main/internal/config/default.yaml
+lys-wm --default-config > ~/.config/lys-wm/config.yaml
 ```
 
-Edit the copy, then press `SUPER + SHIFT + R` or run `lys-wmctl reload`. To use
-another terminal, change the `SUPER + Return` bind that is already there. For a
-keyboard layout, add:
+Edit it, then press `SUPER + SHIFT + R` or run `lys-wmctl reload`. Nothing
+reloads automatically. For example, a keyboard layout:
 
 ```yaml
 input:
@@ -93,17 +91,12 @@ input:
     layout: dk
 ```
 
-A bad file is rejected whole, with the file, line and key in the error, and the
-running config stays; a notice across the top of the screen says so until a
-reload fixes it. A key this lys-wm does not know is left out with the same
-notice, and the rest of the file applies. Nothing reloads by itself when the
-file changes.
-[Config](../config) has every key and [Actions](../actions) every action a bind
-can run.
+A file with an error is rejected whole and the running config stays; unknown
+keys are skipped and the rest applies. Either way an on-screen notice names
+the file, line and key until a reload fixes it. [Config](../config) lists
+every key, [Actions](../actions) every action.
 
 ## Script it
-
-`lys-wmctl` queries and controls a running lys-wm:
 
 ```sh
 lys-wmctl windows
@@ -111,13 +104,13 @@ lys-wmctl dispatch workspace 3
 lys-wmctl watch
 ```
 
-[IPC](../ipc) has the commands, the JSON protocol and the events.
+See [IPC](../ipc).
 
 ## A desktop around it
 
-lys-wm draws windows and nothing else: bars, launchers, wallpapers and portals
-are other programs, started from `autostart` in the config or as user services
-that want `graphical-session.target`.
-[lys-shell](https://stubbedev.github.io/lys-shell/) is the family's shell and
-[lys-login](https://stubbedev.github.io/lys-login/) its display manager and lock
-screen. Any layer-shell bar and `ext-session-lock-v1` locker works as well.
+lys-wm draws windows only. Bars, launchers, wallpapers and portals are separate
+programs, started from `autostart` or as user services wanted by
+`graphical-session.target`. [lys-shell](https://stubbedev.github.io/lys-shell/)
+is the lys shell and [lys-login](https://stubbedev.github.io/lys-login/) its
+display manager and lock screen; any layer-shell bar and
+`ext-session-lock-v1` locker also works.

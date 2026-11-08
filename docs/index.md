@@ -26,10 +26,10 @@ features:
     details: Layer-shell, session lock, idle, data control, screen capture, foreign toplevels, workspaces, output management, input methods, sandboxed clients and Xwayland.
   - title: Games and hardware
     details: Vulkan FIFO pacing, opt-in tearing, pointer warps and constraints, NVIDIA explicit sync and Mesa, fractional scaling, and outputs on several GPUs.
-  - title: Polished with no config
-    details: Rounded corners, gaps, soft shadows, quiet borders and spring animations tuned per event are on from the first start, with glass behind bars and dropdowns on a GPU. Every one of them is a config key, and what you set wins.
+  - title: A finished look by default
+    details: Rounded corners, gaps, soft shadows, borders and spring animations out of the box, with blur behind bars and dropdowns on a GPU. Each is a config key.
   - title: One config file, one socket
-    details: One strictly validated YAML file whose errors name the file, line and key, and lys-wmctl with a JSON protocol and event stream for scripts and bars.
+    details: One validated YAML file whose errors name file, line and key, and lys-wmctl with a JSON protocol and event stream.
   - title: Packaged
     details: A NixOS module, a home-manager module, and Debian, Ubuntu, Fedora and tarball release builds.
 ---
