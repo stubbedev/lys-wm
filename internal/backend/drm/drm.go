@@ -2171,7 +2171,7 @@ func (o *Output) frameWait() time.Duration {
 		}
 		return max(o.lastFlip+o.paceInterval()-now, 0)
 	}
-	return o.budget.Deadline(o.vblank(now), now, o.paceInterval()) - now
+	return backend.HoldToCap(o.budget.Deadline(o.vblank(now), now, o.paceInterval()), o.lastFlip, o.paceInterval(), modeOf(o.mode).Interval()) - now
 }
 
 func (o *Output) vblank(now time.Duration) time.Duration {

@@ -187,6 +187,31 @@ func TestTheLatchDeadlineLeavesTheBudgetBeforeTheNextVblank(t *testing.T) {
 	}
 }
 
+func TestACappedFrameNeverLatchesAtTheRefreshBeforeItsTurn(t *testing.T) {
+	const (
+		ms      = time.Millisecond
+		refresh = 8 * ms
+		paced   = 16 * ms
+		shown   = 100 * ms
+	)
+	for _, tc := range []struct {
+		name                  string
+		deadline, paced, want time.Duration
+	}{
+		{"a budget longer than a refresh", 103 * ms, paced, 108 * ms},
+		{"a deadline already in its turn", 112 * ms, paced, 112 * ms},
+		{"no cap", 103 * ms, refresh, 103 * ms},
+	} {
+		got := HoldToCap(tc.deadline, shown, tc.paced, refresh)
+		if got != tc.want {
+			t.Errorf("%s: held to %v, want %v", tc.name, got, tc.want)
+		}
+		if at, _ := NextVblank(shown, got, refresh); at < shown+tc.paced {
+			t.Errorf("%s: a frame started at %v lands at %v, before its turn at %v", tc.name, got, at, shown+tc.paced)
+		}
+	}
+}
+
 func TestAFrameWithNoTimeLeftWaitsForTheNextDeadline(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget

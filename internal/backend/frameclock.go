@@ -144,6 +144,13 @@ func (b *RenderBudget) Deadline(last, now, interval time.Duration) time.Duration
 	return deadline
 }
 
+func HoldToCap(deadline, shown, paced, refresh time.Duration) time.Duration {
+	if paced <= refresh {
+		return deadline
+	}
+	return max(deadline, shown+paced-refresh)
+}
+
 func (b *RenderBudget) leastToStart() time.Duration {
 	sorted := b.samples
 	seen := sorted[:b.n]

@@ -210,7 +210,7 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 			if o.vrr && o.frameCap > 0 && o.lastVblank != 0 {
 				return max(o.lastVblank+o.paceInterval()-now, 0)
 			}
-			return o.budget.Deadline(o.lastVblank, now, o.paceInterval()) - now
+			return backend.HoldToCap(o.budget.Deadline(o.lastVblank, now, o.paceInterval()), o.lastVblank, o.paceInterval(), o.state.Mode.Interval()) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
