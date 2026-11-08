@@ -234,8 +234,8 @@ fuzz duration="5m":
 # needs cgo; the binaries lys-wm ships keep CGO_ENABLED=0. LYS_WM_HEADLESS=1
 # turns a missing dev-shell program into a failure instead of a skip.
 race:
-    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race -count=1 ./...
-    cd third_party/xgb && CGO_ENABLED=1 go test -race -count=1 ./...
+    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race ${LYS_TEST_ARGS--count=1} ./...
+    cd third_party/xgb && CGO_ENABLED=1 go test -race ${LYS_TEST_ARGS--count=1} ./...
 
 # Run every release gate in order: vet, lint, test, build.
 check: vet lint no-fused test build
@@ -260,7 +260,7 @@ lint:
 # headless backend and drives real clients included. LYS_WM_HEADLESS=1 turns a
 # missing dev-shell program into a failure instead of a skip.
 test:
-    LYS_WM_HEADLESS=1 go test -count=1 ./...
+    LYS_WM_HEADLESS=1 go test ${LYS_TEST_ARGS--count=1} ./...
 
 # Compile-check every package; the output is discarded.
 build:
