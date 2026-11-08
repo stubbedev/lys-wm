@@ -45,3 +45,25 @@ func TestArrangeLayers(t *testing.T) {
 		t.Errorf("usable area %v, want %v", usable, want)
 	}
 }
+
+func TestALayerShowsItsAppliedSizeWithinItsSlot(t *testing.T) {
+	slot := image.Rect(470, 528, 530, 600)
+	for _, tc := range []struct {
+		name    string
+		applied image.Point
+		anchor  shell.Edges
+		want    image.Rectangle
+	}{
+		{"the old size held to the anchored bottom, centred across", image.Pt(40, 2), bottom, image.Rect(480, 598, 520, 600)},
+		{"the old size held to the anchored corner", image.Pt(40, 2), top | left, image.Rect(470, 528, 510, 530)},
+		{"the old size centred between both anchors", image.Pt(40, 2), top | bottom | left | right, image.Rect(480, 563, 520, 565)},
+		{"a larger old size overhanging the slot from its anchor", image.Pt(80, 90), bottom | right, image.Rect(450, 510, 530, 600)},
+		{"the applied size the slot was configured to", slot.Size(), bottom, slot},
+		{"nothing applied yet", image.Point{}, bottom, slot},
+		{"an applied size with an empty axis", image.Pt(40, 0), bottom, slot},
+	} {
+		if got := within(slot, tc.applied, tc.anchor); got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

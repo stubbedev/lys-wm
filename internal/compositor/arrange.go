@@ -17,19 +17,20 @@ func centred(lo, span, size int) int {
 	return lo + int(math.Round(float64(float64(span)/2)-float64(float64(size)/2)))
 }
 
-func placeAxis(lo, span, size, marginLo, marginHi int, anchorLo, anchorHi bool) (int, int) {
-	var start int
+func alignAxis(lo, span, size int, anchorLo, anchorHi bool) int {
 	switch {
-	case size == 0:
-		start = lo
-	case anchorLo && anchorHi:
-		start = centred(lo, span, size)
+	case anchorLo == anchorHi:
+		return centred(lo, span, size)
 	case anchorLo:
-		start = lo
-	case anchorHi:
-		start = lo + span - size
-	default:
-		start = centred(lo, span, size)
+		return lo
+	}
+	return lo + span - size
+}
+
+func placeAxis(lo, span, size, marginLo, marginHi int, anchorLo, anchorHi bool) (int, int) {
+	start := lo
+	if size != 0 {
+		start = alignAxis(lo, span, size, anchorLo, anchorHi)
 	}
 	switch {
 	case size == 0:
@@ -41,6 +42,15 @@ func placeAxis(lo, span, size, marginLo, marginHi int, anchorLo, anchorHi bool) 
 		start -= marginHi
 	}
 	return start, size
+}
+
+func within(slot image.Rectangle, size image.Point, anchor shell.Edges) image.Rectangle {
+	if size.X <= 0 || size.Y <= 0 || size == slot.Size() {
+		return slot
+	}
+	x := alignAxis(slot.Min.X, slot.Dx(), size.X, anchor.Has(swlr.ZwlrLayerSurfaceV1AnchorLeft), anchor.Has(swlr.ZwlrLayerSurfaceV1AnchorRight))
+	y := alignAxis(slot.Min.Y, slot.Dy(), size.Y, anchor.Has(swlr.ZwlrLayerSurfaceV1AnchorTop), anchor.Has(swlr.ZwlrLayerSurfaceV1AnchorBottom))
+	return image.Rectangle{Min: image.Pt(x, y), Max: image.Pt(x+size.X, y+size.Y)}
 }
 
 func exclusiveEdge(s shell.LayerState) shell.Edges {

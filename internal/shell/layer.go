@@ -52,6 +52,7 @@ type LayerSurface struct {
 	pending    LayerState
 	current    LayerState
 	configures configures[image.Point]
+	applied    image.Point
 	life       roleLife
 	closed     bool
 	destroyed  bool
@@ -115,6 +116,10 @@ func (l *LayerSurface) Namespace() string {
 
 func (l *LayerSurface) Current() LayerState {
 	return l.current
+}
+
+func (l *LayerSurface) Applied() image.Point {
+	return l.applied
 }
 
 func (l *LayerSurface) Mapped() bool {
@@ -185,8 +190,9 @@ func (l *LayerSurface) Committed(s *surface.Surface) error {
 		return err
 	}
 	l.current = l.pending
-	if _, ok := l.configures.take(); ok {
+	if size, ok := l.configures.take(); ok {
 		l.life.acked()
+		l.applied = size
 	}
 	step, configured := l.life.commit(s.Buffer() != nil)
 	if !configured {
@@ -194,6 +200,7 @@ func (l *LayerSurface) Committed(s *surface.Surface) error {
 	}
 	if step == stepUnmap {
 		l.configures.reset()
+		l.applied = image.Point{}
 		return errors.Join(l.dismissPopups(), l.shell.listener.LayerUnmapped(l))
 	}
 	return l.shell.listener.LayerCommitted(l)

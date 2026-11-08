@@ -275,6 +275,13 @@ the change lands. Until then everything keeps the old presentation, and because
 drawing, hit testing and popup placement all read those placements, what is shown
 and what takes input stay one state. Keyboard focus and `activated` do not wait.
 
+A layer surface resized by `set_size`, or by its output, is configured to its new
+slot at once, but placed by the size it last applied, held to its anchors inside
+that slot, until it commits for the configure that resized it. A dock growing under
+a still pointer therefore never shows its old buffer where the new one will go, nor
+loses the pointer to that sliver. Whenever a surface moves under a still pointer,
+its client hears the new local position as a motion, unless the pointer is locked.
+
 A window is waited for when it is visible, not minimized, on an output, and its new
 size differs both from what it was last asked for and from what it has already drawn.
 No such window, no transaction: the change is installed in the same call, so a

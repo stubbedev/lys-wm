@@ -79,9 +79,14 @@ func (c *Compositor) arrange(o *output.Output) (layerChanges, error) {
 	var errs []error
 	var got layerChanges
 	for i, e := range entries {
-		moved := e.box != result[i].box
+		slot := result[i].box
+		box := slot
+		if result[i].ok {
+			box = within(slot, e.surface.Applied(), states[i].Anchor)
+		}
+		moved := e.box != box
 		got.moved = got.moved || moved || e.placed != result[i].ok
-		e.box, e.placed = result[i].box, result[i].ok
+		e.box, e.placed = box, result[i].ok
 		if !e.placed {
 			continue
 		}
@@ -91,7 +96,7 @@ func (c *Compositor) arrange(o *output.Output) (layerChanges, error) {
 		case moved:
 			e.motion.Jump(e.box)
 		}
-		errs = append(errs, e.surface.Configure(e.box.Size()))
+		errs = append(errs, e.surface.Configure(slot.Size()))
 		if moved {
 			for _, p := range c.layerPopups(e) {
 				errs = append(errs, p.popup.Reconstrain())

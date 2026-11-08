@@ -287,3 +287,43 @@ func TestALayerOnAnOutputStartedWithTheLidClosed(t *testing.T) {
 	c.DispatchUntil("the bar to map", bar.Mapped)
 	expectBarAcross(t, h, "DP-1", "started with the lid closed")
 }
+
+func TestALayerResizingUnderAStillPointerKeepsItUntilItsBufferMoves(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	c := testclient.Connect(t, h.Socket())
+	_, in := c.Seat()
+	dock := c.Layer(testclient.LayerSpec{
+		Layer:  cwlr.ZwlrLayerShellV1LayerTop,
+		Anchor: cwlr.ZwlrLayerSurfaceV1AnchorBottom,
+		Size:   image.Pt(40, 2),
+	}, testclient.Fill(barColor[2], barColor[1], barColor[0]))
+	in.Name(dock.Surface, "dock")
+	c.DispatchUntil("the dock to map", dock.Mapped)
+	r := &inputRig{t: t, h: h, c: c, in: in}
+	r.moveOn(0, 80, 99)
+	r.expect("enter dock 20,1", "frame")
+
+	resize := func(width, height uint32) {
+		t.Helper()
+		if err := errors.Join(dock.Layer.SetSize(width, height), dock.Surface.Commit(), c.Display.Flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resize(60, 30)
+	r.expect("motion 30,29", "frame")
+	if dock.Size != image.Pt(60, 30) {
+		t.Fatalf("the dock moved the pointer at size %v, before its 60x30 buffer", dock.Size)
+	}
+	h.Eventually("the grown dock", showing(80, 75, barColor))
+	r.moveOn(0, 80, 75)
+	r.expect("motion 30,5", "frame")
+
+	resize(40, 2)
+	r.expect("leave dock", "frame")
+	if dock.Size != image.Pt(40, 2) {
+		t.Fatalf("the dock left the pointer at size %v, before its 40x2 buffer", dock.Size)
+	}
+	r.moveOn(0, 80, 99)
+	r.expect("enter dock 20,1", "frame")
+}
