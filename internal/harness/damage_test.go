@@ -50,9 +50,8 @@ func quiesce(t *testing.T, h *Harness, c *testclient.Client, w *testclient.Windo
 	for range 5 {
 		settle(t, h)
 		before := presentCount(h)
-		if err := c.Display.Roundtrip(); err != nil {
-			t.Fatal(err)
-		}
+		c.Sync()
+		c.Sync()
 		settle(t, h)
 		if presentCount(h) == before {
 			return
