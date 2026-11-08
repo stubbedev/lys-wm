@@ -190,6 +190,33 @@ func TestTheButtonsFollowTheConfiguredSide(t *testing.T) {
 	c.DispatchUntil("the close request from the first button on the right", func() bool { return w.Closed })
 }
 
+func TestATitleChangeRedrawsTheTitlebar(t *testing.T) {
+	t.Parallel()
+	s := floatingBar(t, softStart)
+	before := s.h.Rendered(0)
+	bar := s.bar()
+	if err := s.w.Toplevel.SetTitle("A much longer title"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.c.Display.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	s.h.Eventually("the new title drawn", func(b *headless.Backend, c *compositor.Compositor) bool {
+		snap, err := b.Outputs()[0].Snapshot()
+		if err != nil || c.LabelsPending() {
+			return false
+		}
+		for y := bar.Min.Y; y < bar.Max.Y; y++ {
+			for x := bar.Min.X; x < bar.Max.X; x++ {
+				if pixel(snap, x, y) != pixel(before, x, y) {
+					return true
+				}
+			}
+		}
+		return false
+	})
+}
+
 func TestASteadyTitlebarRastersNothingAgain(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, titlebars, barScreen)

@@ -684,7 +684,9 @@ func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) err
 	switch change {
 	case shell.ChangedSizeLimits:
 		return errors.Join(c.refreshLimits(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
-	case shell.ChangedTitle, shell.ChangedAppID, shell.ChangedTag, shell.ChangedParent:
+	case shell.ChangedTitle:
+		return errors.Join(c.redecide(xdgToplevel{t}), c.syncForeign(), c.scheduleAll())
+	case shell.ChangedAppID, shell.ChangedTag, shell.ChangedParent:
 		return errors.Join(c.redecide(xdgToplevel{t}), c.syncForeign())
 	case shell.ChangedModal:
 		return errors.Join(c.reconcile(), c.syncForeign())
