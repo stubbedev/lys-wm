@@ -740,6 +740,7 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 		}
 		p.Laid = p.Visible && !covered
 		p.Visible = p.Laid && shown
+		p.Offscreen = p.Offscreen && !covered && shown
 		if w.Tree.scroll {
 			p.Clip = o.Full
 		}

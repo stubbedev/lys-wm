@@ -116,7 +116,9 @@ func TestAViewSwipeTracksTheFingersAndSettlesOnAColumnEdge(t *testing.T) {
 	}
 	r.rest()
 	r.end(false)
-	r.h.Eventually("the spring starting where the fingers left the strip", showing(10, 60, swipeRed))
+	r.h.Eventually("the spring starting where the fingers left the strip", both(showing(10, 60, swipeRed), showing(50, 60, swipeBlue)))
+	r.at(*r.now + 60*time.Millisecond)
+	r.h.Eventually("red sliding out with the spring, still drawn while it is on screen", both(showing(4, 60, swipeRed), showing(16, 60, swipeBlue), showing(150, 60, swipeGreen)))
 	r.settle()
 	r.h.Eventually("blue settled on the left edge, green beside it", both(showing(5, 60, swipeBlue), showing(150, 60, swipeGreen)))
 	if w, _ := windowTitled(r.h, "blue"); !w.Focused {

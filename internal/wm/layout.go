@@ -9,6 +9,7 @@ type Placement struct {
 	ID        WindowID
 	Rect      image.Rectangle
 	Visible   bool
+	Offscreen bool
 	Laid      bool
 	Layer     PlacementLayer
 	Minimized bool
@@ -196,15 +197,33 @@ func (x *Arranger) reset() {
 	x.Windows, x.TabBars, x.Rings, x.rects, x.tabs = x.Windows[:0], x.TabBars[:0], x.Rings[:0], x.rects[:0], x.tabs[:0]
 }
 
-func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
+type sight uint8
+
+const (
+	sightHidden sight = iota
+	sightOffscreen
+	sightInView
+)
+
+func (s sight) of(g *Group, i int, view, child image.Rectangle) sight {
+	switch {
+	case s == sightHidden || g.Layout == Tabbed && i != g.Focus:
+		return sightHidden
+	case s == sightOffscreen || g.Layout == Scrolled && !child.Overlaps(view):
+		return sightOffscreen
+	}
+	return sightInView
+}
+
+func (x *Arranger) place(n Node, r image.Rectangle, s sight, sp Spacing) {
 	switch n := n.(type) {
 	case Window:
-		x.Windows = append(x.Windows, Placement{ID: n.ID, Rect: r, Visible: visible})
+		x.Windows = append(x.Windows, Placement{ID: n.ID, Rect: r, Visible: s == sightInView, Offscreen: s == sightOffscreen})
 	case *Group:
-		if n == x.lifted && visible {
+		if n == x.lifted && s == sightInView {
 			x.Rings = append(x.Rings, GroupRing{Rect: r})
 		}
-		if n.Layout == Tabbed && visible {
+		if n.Layout == Tabbed && s == sightInView {
 			from := len(x.tabs)
 			for _, c := range n.Children {
 				x.tabs = append(x.tabs, firstWindow(c.Node))
@@ -214,7 +233,7 @@ func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
 		base := len(x.rects)
 		x.rects = appendChildRects(x.rects, n, r, sp)
 		for i, c := range n.Children {
-			x.place(c.Node, x.rects[base+i], visible && (n.Layout != Tabbed || i == n.Focus) && (n.Layout != Scrolled || x.rects[base+i].Overlaps(r)), sp)
+			x.place(c.Node, x.rects[base+i], s.of(n, i, r, x.rects[base+i]), sp)
 		}
 		x.rects = x.rects[:base]
 	}
@@ -222,7 +241,7 @@ func (x *Arranger) place(n Node, r image.Rectangle, visible bool, sp Spacing) {
 
 func (t Tree) arrangeInto(x *Arranger, area image.Rectangle, sp Spacing) {
 	if t.root != nil {
-		x.place(t.root, sp.Gaps.Outer.shrink(area), true, sp)
+		x.place(t.root, sp.Gaps.Outer.shrink(area), sightInView, sp)
 	}
 }
 

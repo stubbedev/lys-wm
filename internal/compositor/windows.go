@@ -27,6 +27,7 @@ type window struct {
 	tile          image.Rectangle
 	rect          image.Rectangle
 	visible       bool
+	offscreen     bool
 	laid          bool
 	workspace     wm.WorkspaceID
 	layer         wm.PlacementLayer
@@ -311,7 +312,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			err = errors.Join(err, c.startRestore(w, p.Rect, now))
 		}
 		c.move(w, p, now)
-		w.tile, w.rect, w.visible, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned, w.wsLook, w.clip = p.Rect, rect, p.Visible, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned, p.Look, p.Clip
+		w.tile, w.rect, w.visible, w.offscreen, w.laid, w.workspace, w.layer, w.minimized, w.scratch, w.pinned, w.wsLook, w.clip = p.Rect, rect, p.Visible, p.Offscreen, p.Laid, p.Workspace, p.Layer, p.Minimized, p.Scratch, p.Pinned, p.Look, p.Clip
 		if o := c.outputAtRect(clipped(p.Rect, p)); o != nil {
 			w.output = o
 		}
@@ -338,11 +339,22 @@ func (c *Compositor) move(w *window, p wm.Placement, now time.Duration) {
 		w.motion.Jump(p.Rect)
 	case c.interaction != nil && c.interaction.w == w && c.springMoves():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
-	case !w.visible || !p.Visible || (c.interaction != nil && c.interaction.w == w) || c.gesture.view.tracking:
+	case !w.slides(p, now) || (c.interaction != nil && c.interaction.w == w) || c.gesture.view.tracking:
 		w.motion.Jump(p.Rect)
 	case p.Rect != w.motion.Target():
 		w.motion.Set(p.Rect, now, c.animations.Curve(anim.WindowsMove))
 	}
+}
+
+func (w *window) shown(now time.Duration) bool {
+	return w.visible || w.offscreen && !w.motion.Done(now)
+}
+
+func (w *window) slides(p wm.Placement, now time.Duration) bool {
+	if p.Visible {
+		return w.visible || w.offscreen
+	}
+	return p.Offscreen && w.shown(now)
 }
 
 func (c *Compositor) springMoves() bool {
@@ -356,7 +368,7 @@ func (c *Compositor) Animating(o *output.Output) bool {
 
 func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	return slices.ContainsFunc(c.windows, func(w *window) bool {
-		return w.visible && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
+		return w.shown(now) && (!w.motion.Done(now) || !w.fade.Done(now) || w.looking(now) || c.borderMoving(w, now) || w.wobble != nil || w.genie != nil) && w.motion.Source().Union(w.motion.Target()).Overlaps(o.Logical())
 	}) || c.overviewAnimating(o, now) || c.switcherWaiting(o) || c.switcherDirty(o) || slices.ContainsFunc(c.closing, func(cl *closing) bool { return cl.output == o }) || c.switchAnimates(o) || c.scratchSlideOf[o] != nil || c.peekAnimates(o, now) || c.shaderAnimates(o) || c.zoomMoves(o, now) || c.cursorGrows(o, now) || c.previewMoves(o, now) || c.lockFading(now) || slices.ContainsFunc(c.layers, func(e *layer) bool {
 		return e.output == o && e.appeared && (!e.motion.Done(now) || !e.fade.Done(now))
 	})

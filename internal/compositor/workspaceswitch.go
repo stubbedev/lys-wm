@@ -196,22 +196,22 @@ func (c *Compositor) workspaceView(o *output.Output, w *window) (view, bool) {
 
 func (c *Compositor) switchView(o *output.Output, w *window) (view, bool) {
 	if w.pinned {
-		return identity, w.visible
+		return identity, w.shown(c.frameTime)
 	}
 	if w.scratch {
 		if v, drawn, sliding := c.scratchView(o, w); sliding {
 			return v, drawn
 		}
-		return identity, w.visible
+		return identity, w.shown(c.frameTime)
 	}
 	sw := c.drawnSwitch
 	if sw == nil || !w.laid || (!w.visible && w.output != o) {
-		return identity, w.visible
+		return identity, w.shown(c.frameTime)
 	}
 	if v, ok := sw.viewOf(w.workspace); ok {
 		return v, true
 	}
-	return identity, w.visible
+	return identity, w.shown(c.frameTime)
 }
 
 func (c *Compositor) finishSwitches(o *output.Output, now time.Duration) {
