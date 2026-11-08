@@ -950,3 +950,37 @@ func TestANewCursorSizeFailsTheFrameWaitingInTheOldSize(t *testing.T) {
 		t.Fatalf("the grown cursor's frame %+v shows %v", *g, rgbAt(pix, 24*4, 20, 20))
 	}
 }
+
+func TestACursorMoveCapturedBeforeItsRepaintIsCapturedOnce(t *testing.T) {
+	t.Parallel()
+	theme := testenv.CursorTheme(t)
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = theme }, small)
+	c := testclient.Connect(t, h.Socket())
+	settle(t, h)
+	r := newCaptureRig(t, h, c)
+	session, view := r.outputSession(ceic.ExtImageCopyCaptureManagerV1OptionsPaintCursors)
+	r.first(session, view.size)
+	for i := range 10 {
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			return errors.Join(b.Pointer().MoveTo(b.Outputs()[0], 0.2+float64(i)*0.05, 0.3), b.Pointer().Frame())
+		})
+		f, fr, _ := grab(t, c, session, view.size)
+		c.DispatchUntil("the frame of the moved cursor", func() bool { return f.ready || f.failed })
+		if f.failed {
+			t.Fatalf("move %d failed its frame", i)
+		}
+		if err := fr.Destroy(); err != nil {
+			t.Fatal(err)
+		}
+		settle(t, h)
+		g, gr, _ := grab(t, c, session, view.size)
+		settle(t, h)
+		if err := c.Display.Roundtrip(); err != nil || g.ready {
+			t.Fatalf("move %d captured a second frame after its repaint (%v)", i, err)
+		}
+		if err := gr.Destroy(); err != nil {
+			t.Fatal(err)
+		}
+		c.Sync()
+	}
+}

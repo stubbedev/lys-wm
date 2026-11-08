@@ -268,6 +268,7 @@ type captureSession struct {
 	scratch  captureScratch
 	damage   region.Set
 	cursorAt image.Rectangle
+	shown    cursorShot
 	captured bool
 	stopped  bool
 	oneshot  bool
@@ -354,7 +355,7 @@ func (s *captureSession) sync() error {
 
 func (s *captureSession) noteDamage(o *output.Output, frame *region.Set, cursorOnly bool) {
 	src, ok := s.c.resolved(s.source).(outputSource)
-	if s.stopped || !ok || src.output != o || (cursorOnly && !s.cursor) {
+	if s.stopped || !ok || src.output != o || (cursorOnly && (!s.cursor || s.showsCursor(o))) {
 		return
 	}
 	_, area, ok := s.target()
@@ -554,7 +555,7 @@ func (f *captureFrame) Capture(obj *seic.ExtImageCopyCaptureFrameV1) error {
 			return nil
 		}
 		box, err := s.c.cursorBounds(o)
-		s.cursorAt = box
+		s.cursorAt, s.shown = box, cursorShot{box: box, gen: s.c.cursorGen}
 		return err
 	}
 	k.done = func(at time.Duration, err error) error {
@@ -611,4 +612,14 @@ func (c *Compositor) syncCaptureSessions() error {
 		errs = append(errs, s.sync())
 	}
 	return errors.Join(errs...)
+}
+
+type cursorShot struct {
+	box image.Rectangle
+	gen uint64
+}
+
+func (s *captureSession) showsCursor(o *output.Output) bool {
+	box, err := s.c.cursorBounds(o)
+	return err == nil && s.captured && s.shown == cursorShot{box: box, gen: s.c.cursorGen}
 }
