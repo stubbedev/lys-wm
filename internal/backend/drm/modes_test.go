@@ -302,3 +302,15 @@ func TestABackendClaimingMasterItLacksFailsToStart(t *testing.T) {
 		t.Fatalf("starting as master on a file without it: %v, want EACCES", err)
 	}
 }
+
+func TestAnOutputLitInItsModeTestsNoModeset(t *testing.T) {
+	lit := modes[0]
+	lit.Type, lit.Name = 0, [32]byte{'s', 'p', 'l', 'a', 's', 'h'}
+	r := bootLit(t, &splash{crtc: 10, plane: 40, mode: lit}, false)
+	if n := tests(r.dev.commits, kdrm.AtomicAllowModeset); n != 0 {
+		t.Fatalf("%d modeset tests adding an output its CRTC already shows: %+v", n, r.dev.commits)
+	}
+	if !r.b.Outputs()[0].Inherited() {
+		t.Fatal("the output does not report the frame it inherited")
+	}
+}

@@ -745,6 +745,10 @@ func (b *Backend) scanning(p *plane) (uint32, error) {
 }
 
 func (b *Backend) inherits(o *Output, routed uint32) (bool, error) {
+	return b.shows(o, routed, o.mode)
+}
+
+func (b *Backend) shows(o *Output, routed uint32, m kdrm.Mode) (bool, error) {
 	if routed != o.crtc.id || o.tiled() {
 		return false, nil
 	}
@@ -764,7 +768,7 @@ func (b *Backend) inherits(o *Output, routed uint32) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("drm: the lit mode of CRTC %d for %s: %w", o.crtc.id, o.Name(), err)
 	}
-	if !sameTimings(lit, o.mode) {
+	if !sameTimings(lit, m) {
 		return false, nil
 	}
 	on, err := b.scanning(o.primary)
@@ -851,7 +855,10 @@ func (b *Backend) light(c kdrm.Connector, t *tiling) error {
 	if o.commitLatch, err = b.loop.AddTimer(o.lateDue); err != nil {
 		return errors.Join(err, o.release())
 	}
-	if err := o.lightBest(); err != nil {
+	o.adding = routed
+	err = o.lightBest()
+	o.adding = 0
+	if err != nil {
 		err = errors.Join(err, o.release())
 		if refused(err) {
 			b.report(err)
@@ -998,6 +1005,7 @@ const (
 )
 
 type Output struct {
+	adding        uint32
 	spare         []*scanout
 	overlays      []*plane
 	overlayNext   overlayUses
@@ -1172,11 +1180,25 @@ func (o *Output) tryLayout(m kdrm.Mode, d backend.BitDepth, blob uint32, size im
 	if o.b.paused {
 		return buffers, false, nil
 	}
+	lit, err := o.litIn(m, d)
+	if err != nil {
+		return nil, false, errors.Join(err, o.free(buffers))
+	}
+	if lit {
+		return buffers, false, nil
+	}
 	restate, err := o.testMode(m, d, blob, buffers[0], next)
 	if err != nil {
 		return nil, false, errors.Join(fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
 	}
 	return buffers, restate, nil
+}
+
+func (o *Output) litIn(m kdrm.Mode, d backend.BitDepth) (bool, error) {
+	if d != backend.Depth8 || o.adding == 0 {
+		return false, nil
+	}
+	return o.b.shows(o, o.adding, m)
 }
 
 type fallingBack interface {
