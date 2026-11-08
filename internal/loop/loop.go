@@ -127,7 +127,7 @@ func (l *Loop) remove(t token) error {
 	}
 	delete(l.sources, t)
 	var errs []error
-	if err := unix.EpollCtl(l.epfd, unix.EPOLL_CTL_DEL, s.fd, nil); err != nil && !errors.Is(err, unix.EBADF) {
+	if err := unix.EpollCtl(l.epfd, unix.EPOLL_CTL_DEL, s.fd, nil); err != nil && !errors.Is(err, unix.EBADF) && !errors.Is(err, unix.ENOENT) {
 		errs = append(errs, fmt.Errorf("loop: remove fd %d: %w", s.fd, err))
 	}
 	if s.owned {

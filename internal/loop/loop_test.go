@@ -724,3 +724,21 @@ func TestTimersTakeNoFileDescriptors(t *testing.T) {
 		t.Fatalf("%v allocations per arm", allocs)
 	}
 }
+
+func TestAnFDItsOwnerClosedAndTheKernelReusedRemovesCleanly(t *testing.T) {
+	l, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := pipe(t)
+	if _, err := l.AddFD(r, Readable, func(Events) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := pipe(t)
+	if err := unix.Dup3(other, r, unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatalf("closing over an fd number reused since it was watched: %v", err)
+	}
+}
