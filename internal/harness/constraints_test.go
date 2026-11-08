@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"image"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cpc "github.com/stubbedev/lys-wm/internal/protocol/client/pointerconstraints"
 	crp "github.com/stubbedev/lys-wm/internal/protocol/client/relativepointer"
+	cwlr "github.com/stubbedev/lys-wm/internal/protocol/client/wlrlayershell"
 	cvp "github.com/stubbedev/lys-wm/internal/protocol/client/wlrvirtualpointer"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -246,5 +248,40 @@ func TestALockedPointerHoldsAgainstVirtualAbsoluteMotion(t *testing.T) {
 	}
 	if x, y := r.cursor(); x != 80 || y != 50 {
 		t.Fatalf("virtual absolute motion moved a locked cursor to %v,%v", x, y)
+	}
+}
+
+func TestAWindowMovingUnderAStillPointerReportsItUnlessLocked(t *testing.T) {
+	t.Parallel()
+	for _, locked := range []bool{false, true} {
+		t.Run(map[bool]string{false: "free", true: "locked"}[locked], func(t *testing.T) {
+			r := startInput(t)
+			r.expect("kb_enter win", "enter win 80,50", "frame")
+			l := &constraintLog{}
+			var lock *cpc.ZwpLockedPointerV1
+			if locked {
+				var err error
+				if lock, err = r.constraints().LockPointer(l, r.w.Surface, r.in.Pointer, nil, cpc.ZwpPointerConstraintsV1LifetimePersistent); err != nil {
+					t.Fatal(err)
+				}
+				r.await(l, "locked")
+			}
+			bar := r.c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
+			r.c.DispatchUntil("the window to make room for the bar", func() bool { return bar.Mapped() && r.w.Size == image.Pt(160, 80) })
+			r.h.Eventually("the window below the bar", showing(1, 21, [3]byte{0xff, 0, 0}))
+			if !locked {
+				r.expect("motion 80,30", "frame")
+				return
+			}
+			r.c.Sync()
+			if heard := r.in.Log[r.seen:]; len(heard) != 0 {
+				t.Fatalf("a locked pointer heard its window move: %q", heard)
+			}
+			if err := errors.Join(lock.Destroy(), r.c.Display.Flush()); err != nil {
+				t.Fatal(err)
+			}
+			r.nudge(1, 0)
+			r.expect("motion 81,30", "frame")
+		})
 	}
 }

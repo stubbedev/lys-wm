@@ -57,9 +57,18 @@ type heldButton struct {
 type pointerState struct {
 	focus       *surface.Surface
 	enterSerial uint32
+	local       fixedPoint
 	buttons     []heldButton
 	cursor      clientCursor
 	framed      []*server.Client
+}
+
+type fixedPoint struct {
+	x, y wire.Fixed
+}
+
+func fixedAt(x, y float64) fixedPoint {
+	return fixedPoint{wire.FixedFromFloat(x), wire.FixedFromFloat(y)}
 }
 
 func (s *Seat) HasPointer() bool {
@@ -103,23 +112,31 @@ func (s *Seat) SetPointerFocus(target *surface.Surface, x, y float64) error {
 			p.framed = append(p.framed, c)
 		}
 	}
-	p.focus, p.buttons = target, nil
+	p.focus, p.buttons, p.local = target, nil, fixedAt(x, y)
 	if c, pointers := s.focusPointers(); c != nil {
 		p.enterSerial = s.display.NextSerial()
 		for _, ptr := range pointers {
-			errs = append(errs, ptr.SendEnter(p.enterSerial, target.Resource(), wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+			errs = append(errs, ptr.SendEnter(p.enterSerial, target.Resource(), p.local.x, p.local.y))
 		}
 	}
 	return errors.Join(append(errs, s.listener.PointerFocusChanged(target))...)
 }
 
 func (s *Seat) PointerMotion(at time.Duration, x, y float64) error {
+	s.pointer.local = fixedAt(x, y)
 	_, pointers := s.focusPointers()
 	var errs error
 	for _, ptr := range pointers {
-		errs = errors.Join(errs, ptr.SendMotion(wire.Millis(at), wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, ptr.SendMotion(wire.Millis(at), s.pointer.local.x, s.pointer.local.y))
 	}
 	return errs
+}
+
+func (s *Seat) RebasePointer(at time.Duration, x, y float64) error {
+	if s.pointer.focus == nil || s.pointer.local == fixedAt(x, y) {
+		return nil
+	}
+	return errors.Join(s.PointerMotion(at, x, y), s.PointerFrame())
 }
 
 func (s *Seat) PointerButton(at time.Duration, button uint32, pressed bool) error {

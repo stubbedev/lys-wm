@@ -647,10 +647,13 @@ func (c *Compositor) refreshPointer() error {
 	}
 	s, local, w := c.pointerTarget()
 	c.hovered = w
-	if s == c.seat.PointerFocus() {
+	switch {
+	case s != c.seat.PointerFocus():
+		return errors.Join(c.seat.SetPointerFocus(s, local.X, local.Y), c.seat.PointerFrame())
+	case c.constraint != nil && c.constraint.locks():
 		return nil
 	}
-	return errors.Join(c.seat.SetPointerFocus(s, local.X, local.Y), c.seat.PointerFrame())
+	return c.seat.RebasePointer(backend.Now(), local.X, local.Y)
 }
 
 func hitPopups(popups []placedPopup, p point) (*surface.Surface, point) {
