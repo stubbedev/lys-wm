@@ -177,7 +177,7 @@ func TestContentCommitsOfABlockedWindowWakeNoScreencast(t *testing.T) {
 }
 
 func TestLysLibScreenshotsShowABlockedWindowAndScreencastsMaskIt(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Parallel()
 	r := startBlockRig(t, wm.BlockScreencast, false)
 	c, err := capture.ConnectTo(r.h.Socket())
 	if err != nil {
