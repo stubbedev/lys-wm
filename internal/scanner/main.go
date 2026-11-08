@@ -6,36 +6,30 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
+
+	xml "github.com/stubbedev/lys-lib/protocols"
 )
 
 func main() {
 	dir := flag.String("dir", "internal/protocol", "directory holding protocols.json")
-	fetch := flag.Bool("fetch", false, "download the XML named by the manifest instead of generating code")
 	flag.Parse()
-	if err := run(*dir, *fetch); err != nil {
+	if err := run(*dir); err != nil {
 		fmt.Fprintln(os.Stderr, "scanner:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir string, fetch bool) error {
+func run(dir string) error {
 	m, err := loadManifest(dir)
 	if err != nil {
 		return err
-	}
-	if fetch {
-		return fetchAll(m)
 	}
 	module, err := modulePath(dir)
 	if err != nil {
@@ -64,11 +58,11 @@ func run(dir string, fetch bool) error {
 func loadProtocols(m *manifest) ([]*protocol, error) {
 	var protocols []*protocol
 	for _, e := range m.Protocols {
-		f, err := os.Open(m.xmlPath(e))
+		f, err := xml.FS.Open(e.File)
 		if err != nil {
 			return nil, fmt.Errorf("open protocol XML: %w", err)
 		}
-		p, err := parseProtocol(f, path.Join("xml", e.Source, e.Path), e.Package)
+		p, err := parseProtocol(f, path.Join("lys-lib/protocols", e.File), e.Package)
 		_ = f.Close()
 		if err != nil {
 			return nil, err
@@ -136,45 +130,4 @@ func replaceTree(dst string, files map[string][]byte) error {
 		return fmt.Errorf("move generated tree into %s: %w", dst, err)
 	}
 	return nil
-}
-
-const maxDownload = 4 << 20
-
-func fetchAll(m *manifest) error {
-	client := &http.Client{Timeout: 30 * time.Second}
-	files := map[string][]byte{}
-	for _, e := range m.Protocols {
-		if m.sources[e.Source].Module != "" {
-			continue
-		}
-		data, err := download(client, m.url(e))
-		if err != nil {
-			return err
-		}
-		files[path.Join(e.Source, e.Path)] = data
-	}
-	return replaceTree(filepath.Join(m.dir, "xml"), files)
-}
-
-func download(client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request for %s: %w", url, err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch %s: %s", url, resp.Status)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownload+1))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", url, err)
-	}
-	if len(data) > maxDownload {
-		return nil, fmt.Errorf("read %s: larger than %d bytes", url, maxDownload)
-	}
-	return data, nil
 }

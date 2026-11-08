@@ -283,14 +283,8 @@ dist_font := "/usr/share/lys-wm/DejaVuSans.ttf"
 dist:
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -I {{fhs_interpreter}} -X main.defaultFont={{dist_font}}" -o dist/ ./cmd/lys-wm ./cmd/lys-wmctl
 
-# Regenerate the protocol bindings from the vendored XML.
+# Regenerate the protocol bindings from lys-lib's protocols.
 generate:
-    go generate ./internal/scanner
-
-# Download the protocol XML pinned in internal/protocol/protocols.json, then
-# regenerate the bindings.
-protocols-fetch:
-    go run ./internal/scanner -dir internal/protocol -fetch
     go generate ./internal/scanner
 
 # Format every Go source in place with the formatters in .golangci.yml.

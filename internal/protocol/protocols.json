@@ -1,375 +1,272 @@
 {
-  "sources": [
-    {
-      "name": "wayland",
-      "url": "https://gitlab.freedesktop.org/wayland/wayland/-/raw/{ref}/{path}",
-      "ref": "1.26.0"
-    },
-    {
-      "name": "wayland-protocols",
-      "url": "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/{ref}/{path}",
-      "ref": "1.49"
-    },
-    {
-      "name": "wlr-protocols",
-      "url": "https://gitlab.freedesktop.org/wlroots/wlr-protocols/-/raw/{ref}/{path}",
-      "ref": "bf4fc79abc359eea5a0edec0ac6d4a2b2955f82a"
-    },
-    {
-      "name": "wlroots",
-      "url": "https://gitlab.freedesktop.org/wlroots/wlroots/-/raw/{ref}/{path}",
-      "ref": "0.20.2"
-    },
-    {
-      "name": "hyprland-protocols",
-      "url": "https://raw.githubusercontent.com/hyprwm/hyprland-protocols/{ref}/{path}",
-      "ref": "4c27ba9ce104782bf718aabf59df3f503afe7caa"
-    },
-    {
-      "name": "lys-lib",
-      "module": "github.com/stubbedev/lys-lib"
-    },
-    {
-      "name": "hyprland",
-      "url": "https://raw.githubusercontent.com/hyprwm/Hyprland/{ref}/{path}",
-      "ref": "f389f008228d51fa48bdd69a4c9e2b91f24bb2da"
-    }
-  ],
   "protocols": [
     {
       "package": "wayland",
-      "source": "wayland",
-      "path": "protocol/wayland.xml"
+      "file": "wayland.xml"
     },
     {
       "package": "xdgshell",
-      "source": "wayland-protocols",
-      "path": "stable/xdg-shell/xdg-shell.xml"
+      "file": "xdg-shell.xml"
     },
     {
       "package": "viewporter",
-      "source": "wayland-protocols",
-      "path": "stable/viewporter/viewporter.xml"
+      "file": "viewporter.xml"
     },
     {
       "package": "presentationtime",
-      "source": "wayland-protocols",
-      "path": "stable/presentation-time/presentation-time.xml"
+      "file": "presentation-time.xml"
     },
     {
       "package": "linuxdmabuf",
-      "source": "wayland-protocols",
-      "path": "stable/linux-dmabuf/linux-dmabuf-v1.xml"
+      "file": "linux-dmabuf-v1.xml"
     },
     {
       "package": "tablet",
-      "source": "wayland-protocols",
-      "path": "stable/tablet/tablet-v2.xml"
+      "file": "tablet-v2.xml"
     },
     {
       "package": "cursorshape",
-      "source": "wayland-protocols",
-      "path": "staging/cursor-shape/cursor-shape-v1.xml"
+      "file": "cursor-shape-v1.xml"
     },
     {
       "package": "fractionalscale",
-      "source": "wayland-protocols",
-      "path": "staging/fractional-scale/fractional-scale-v1.xml"
+      "file": "fractional-scale-v1.xml"
     },
     {
       "package": "singlepixelbuffer",
-      "source": "wayland-protocols",
-      "path": "staging/single-pixel-buffer/single-pixel-buffer-v1.xml"
+      "file": "single-pixel-buffer-v1.xml"
     },
     {
       "package": "xdgactivation",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-activation/xdg-activation-v1.xml"
+      "file": "xdg-activation-v1.xml"
     },
     {
       "package": "linuxdrmsyncobj",
-      "source": "wayland-protocols",
-      "path": "staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml"
+      "file": "linux-drm-syncobj-v1.xml"
     },
     {
       "package": "extsessionlock",
-      "source": "wayland-protocols",
-      "path": "staging/ext-session-lock/ext-session-lock-v1.xml"
+      "file": "ext-session-lock-v1.xml"
     },
     {
       "package": "extidlenotify",
-      "source": "wayland-protocols",
-      "path": "staging/ext-idle-notify/ext-idle-notify-v1.xml"
+      "file": "ext-idle-notify-v1.xml"
     },
     {
       "package": "extdatacontrol",
-      "source": "wayland-protocols",
-      "path": "staging/ext-data-control/ext-data-control-v1.xml"
+      "file": "ext-data-control-v1.xml"
     },
     {
       "package": "extforeigntoplevellist",
-      "source": "wayland-protocols",
-      "path": "staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml"
+      "file": "ext-foreign-toplevel-list-v1.xml"
     },
     {
       "package": "extimagecapturesource",
-      "source": "wayland-protocols",
-      "path": "staging/ext-image-capture-source/ext-image-capture-source-v1.xml"
+      "file": "ext-image-capture-source-v1.xml"
     },
     {
       "package": "extimagecopycapture",
-      "source": "wayland-protocols",
-      "path": "staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml"
+      "file": "ext-image-copy-capture-v1.xml"
     },
     {
       "package": "extworkspace",
-      "source": "wayland-protocols",
-      "path": "staging/ext-workspace/ext-workspace-v1.xml"
+      "file": "ext-workspace-v1.xml"
     },
     {
       "package": "xwaylandshell",
-      "source": "wayland-protocols",
-      "path": "staging/xwayland-shell/xwayland-shell-v1.xml"
+      "file": "xwayland-shell-v1.xml"
     },
     {
       "package": "xdgdecoration",
-      "source": "wayland-protocols",
-      "path": "unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
+      "file": "xdg-decoration-unstable-v1.xml"
     },
     {
       "package": "xdgoutput",
-      "source": "wayland-protocols",
-      "path": "unstable/xdg-output/xdg-output-unstable-v1.xml"
+      "file": "xdg-output-unstable-v1.xml"
     },
     {
       "package": "primaryselection",
-      "source": "wayland-protocols",
-      "path": "unstable/primary-selection/primary-selection-unstable-v1.xml"
+      "file": "primary-selection-unstable-v1.xml"
     },
     {
       "package": "idleinhibit",
-      "source": "wayland-protocols",
-      "path": "unstable/idle-inhibit/idle-inhibit-unstable-v1.xml"
+      "file": "idle-inhibit-unstable-v1.xml"
     },
     {
       "package": "pointerconstraints",
-      "source": "wayland-protocols",
-      "path": "unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
+      "file": "pointer-constraints-unstable-v1.xml"
     },
     {
       "package": "relativepointer",
-      "source": "wayland-protocols",
-      "path": "unstable/relative-pointer/relative-pointer-unstable-v1.xml"
+      "file": "relative-pointer-unstable-v1.xml"
     },
     {
       "package": "keyboardshortcutsinhibit",
-      "source": "wayland-protocols",
-      "path": "unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml"
+      "file": "keyboard-shortcuts-inhibit-unstable-v1.xml"
     },
     {
       "package": "wlrlayershell",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-layer-shell-unstable-v1.xml"
+      "file": "wlr-layer-shell-unstable-v1.xml"
     },
     {
       "package": "wlrdatacontrol",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-data-control-unstable-v1.xml"
+      "file": "wlr-data-control-unstable-v1.xml"
     },
     {
       "package": "wlrscreencopy",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-screencopy-unstable-v1.xml"
+      "file": "wlr-screencopy-unstable-v1.xml"
     },
     {
       "package": "wlrforeigntoplevel",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-foreign-toplevel-management-unstable-v1.xml"
+      "file": "wlr-foreign-toplevel-management-unstable-v1.xml"
     },
     {
       "package": "wlrvirtualpointer",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-virtual-pointer-unstable-v1.xml"
+      "file": "wlr-virtual-pointer-unstable-v1.xml"
     },
     {
       "package": "wlroutputpower",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-output-power-management-unstable-v1.xml"
+      "file": "wlr-output-power-management-unstable-v1.xml"
     },
     {
       "package": "xdgforeignv1",
-      "source": "wayland-protocols",
-      "path": "unstable/xdg-foreign/xdg-foreign-unstable-v1.xml"
+      "file": "xdg-foreign-unstable-v1.xml"
     },
     {
       "package": "xdgforeignv2",
-      "source": "wayland-protocols",
-      "path": "unstable/xdg-foreign/xdg-foreign-unstable-v2.xml"
+      "file": "xdg-foreign-unstable-v2.xml"
     },
     {
       "package": "xdgdialog",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-dialog/xdg-dialog-v1.xml"
+      "file": "xdg-dialog-v1.xml"
     },
     {
       "package": "systembell",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-system-bell/xdg-system-bell-v1.xml"
+      "file": "xdg-system-bell-v1.xml"
     },
     {
       "package": "alphamodifier",
-      "source": "wayland-protocols",
-      "path": "staging/alpha-modifier/alpha-modifier-v1.xml"
+      "file": "alpha-modifier-v1.xml"
     },
     {
       "package": "securitycontext",
-      "source": "wayland-protocols",
-      "path": "staging/security-context/security-context-v1.xml"
+      "file": "security-context-v1.xml"
     },
     {
       "package": "pointergestures",
-      "source": "wayland-protocols",
-      "path": "unstable/pointer-gestures/pointer-gestures-unstable-v1.xml"
+      "file": "pointer-gestures-unstable-v1.xml"
     },
     {
       "package": "wlroutputmanagement",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-output-management-unstable-v1.xml"
+      "file": "wlr-output-management-unstable-v1.xml"
     },
     {
       "package": "kdeserverdecoration",
-      "source": "wlroots",
-      "path": "protocol/server-decoration.xml"
+      "file": "server-decoration.xml"
     },
     {
       "package": "virtualkeyboard",
-      "source": "wlroots",
-      "path": "protocol/virtual-keyboard-unstable-v1.xml"
+      "file": "virtual-keyboard-unstable-v1.xml"
     },
     {
       "package": "hyprlandglobalshortcuts",
-      "source": "hyprland-protocols",
-      "path": "protocols/hyprland-global-shortcuts-v1.xml"
+      "file": "hyprland-global-shortcuts-v1.xml"
     },
     {
       "package": "hyprlandfocusgrab",
-      "source": "hyprland-protocols",
-      "path": "protocols/hyprland-focus-grab-v1.xml"
+      "file": "hyprland-focus-grab-v1.xml"
     },
     {
       "package": "hyprlandctmcontrol",
-      "source": "hyprland-protocols",
-      "path": "protocols/hyprland-ctm-control-v1.xml"
+      "file": "hyprland-ctm-control-v1.xml"
     },
     {
       "package": "hyprlandsurface",
-      "source": "hyprland-protocols",
-      "path": "protocols/hyprland-surface-v1.xml"
+      "file": "hyprland-surface-v1.xml"
     },
     {
       "package": "hyprlandtoplevelexport",
-      "source": "hyprland-protocols",
-      "path": "protocols/hyprland-toplevel-export-v1.xml"
+      "file": "hyprland-toplevel-export-v1.xml"
     },
     {
       "package": "colorrepresentation",
-      "source": "wayland-protocols",
-      "path": "staging/color-representation/color-representation-v1.xml"
+      "file": "color-representation-v1.xml"
     },
     {
       "package": "colormanagement",
-      "source": "wayland-protocols",
-      "path": "staging/color-management/color-management-v1.xml"
+      "file": "color-management-v1.xml"
     },
     {
       "package": "fifo",
-      "source": "wayland-protocols",
-      "path": "staging/fifo/fifo-v1.xml"
+      "file": "fifo-v1.xml"
     },
     {
       "package": "committiming",
-      "source": "wayland-protocols",
-      "path": "staging/commit-timing/commit-timing-v1.xml"
+      "file": "commit-timing-v1.xml"
     },
     {
       "package": "wlrgammacontrol",
-      "source": "wlr-protocols",
-      "path": "unstable/wlr-gamma-control-unstable-v1.xml"
+      "file": "wlr-gamma-control-unstable-v1.xml"
     },
     {
       "package": "tearingcontrol",
-      "source": "wayland-protocols",
-      "path": "staging/tearing-control/tearing-control-v1.xml"
+      "file": "tearing-control-v1.xml"
     },
     {
       "package": "textinput",
-      "source": "wayland-protocols",
-      "path": "unstable/text-input/text-input-unstable-v3.xml"
+      "file": "text-input-unstable-v3.xml"
     },
     {
       "package": "textinputv1",
-      "source": "wayland-protocols",
-      "path": "unstable/text-input/text-input-unstable-v1.xml"
+      "file": "text-input-unstable-v1.xml"
     },
     {
       "package": "inputmethod",
-      "source": "wlroots",
-      "path": "protocol/input-method-unstable-v2.xml"
+      "file": "input-method-unstable-v2.xml"
     },
     {
       "package": "pointerwarp",
-      "source": "wayland-protocols",
-      "path": "staging/pointer-warp/pointer-warp-v1.xml"
+      "file": "pointer-warp-v1.xml"
     },
     {
       "package": "contenttype",
-      "source": "wayland-protocols",
-      "path": "staging/content-type/content-type-v1.xml"
+      "file": "content-type-v1.xml"
     },
     {
       "package": "xdgtoplevelicon",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml"
+      "file": "xdg-toplevel-icon-v1.xml"
     },
     {
       "package": "xdgtopleveltag",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml"
+      "file": "xdg-toplevel-tag-v1.xml"
     },
     {
       "package": "xdgtopleveldrag",
-      "source": "wayland-protocols",
-      "path": "staging/xdg-toplevel-drag/xdg-toplevel-drag-v1.xml"
+      "file": "xdg-toplevel-drag-v1.xml"
     },
     {
       "package": "lysescape",
-      "source": "lys-lib",
-      "path": "wlr/lys-escape-v1.xml"
+      "file": "lys-escape-v1.xml"
     },
     {
       "package": "lysvirtualtouch",
-      "source": "lys-lib",
-      "path": "wlr/lys-virtual-touch-v1.xml"
+      "file": "lys-virtual-touch-v1.xml"
     },
     {
       "package": "lyscapturehint",
-      "source": "lys-lib",
-      "path": "wlr/lys-capture-hint-v1.xml"
+      "file": "lys-capture-hint-v1.xml"
     },
     {
       "package": "lysdynamiccapture",
-      "source": "lys-lib",
-      "path": "wlr/lys-dynamic-capture-v1.xml"
+      "file": "lys-dynamic-capture-v1.xml"
     },
     {
       "package": "backgroundeffect",
-      "source": "wayland-protocols",
-      "path": "staging/ext-background-effect/ext-background-effect-v1.xml"
+      "file": "ext-background-effect-v1.xml"
     },
     {
       "package": "xxhotkey",
-      "source": "hyprland",
-      "path": "protocols/xx-hotkey-v1.xml"
+      "file": "xx-hotkey-v1.xml"
     }
   ]
 }

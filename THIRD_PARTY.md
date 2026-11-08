@@ -2,8 +2,9 @@
 
 ## Protocol XML
 
-`internal/protocol/xml/` vendors protocol descriptions at the versions
-pinned in `internal/protocol/protocols.json`. Each file carries its own
+lys-lib's `protocols` package holds the protocol descriptions, at the versions
+pinned in its `sources.json`; `internal/protocol/protocols.json` lists the ones
+bound here. Each file carries its own
 copyright notice and licence, which are kept verbatim; the generated
 bindings under `internal/protocol/server/` and `internal/protocol/client/`
 derive from them.
