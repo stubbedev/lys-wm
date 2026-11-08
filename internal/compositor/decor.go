@@ -7,8 +7,8 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/icontheme"
 	gtext "github.com/stubbedev/lys-lib/render"
-	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/loop"

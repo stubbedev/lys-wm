@@ -15,9 +15,9 @@ import (
 
 	"github.com/stubbedev/lys-lib/drm"
 	lgpu "github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/icontheme"
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
-	"github.com/stubbedev/lys-ui/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/alphamodifier"
 	"github.com/stubbedev/lys-wm/internal/anim"

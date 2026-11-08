@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-ui/icontheme"
+	"github.com/stubbedev/lys-lib/icontheme"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"

@@ -23,7 +23,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | udev | netlink, read directly |
 | X11 window manager | `github.com/jezek/xgb`, built from `third_party/xgb` (a `go.mod` replace) |
 | Text | lys-lib's `render` on its `third_party/typesetting` |
-| Icon themes | lys-ui's `icontheme` |
+| Icon themes | lys-lib's `icontheme` |
 | Config file | `go.yaml.in/yaml/v3`, strict |
 
 Adding a purego library or a dependency to this table is a decision.

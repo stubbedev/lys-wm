@@ -3,8 +3,8 @@ package main
 import (
 	"sync"
 
-	"github.com/stubbedev/lys-ui/appearance"
-	"github.com/stubbedev/lys-ui/portalsettings"
+	"github.com/stubbedev/lys-lib/appearance"
+	"github.com/stubbedev/lys-lib/portalsettings"
 
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"

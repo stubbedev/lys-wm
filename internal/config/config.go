@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stubbedev/lys-lib/icontheme"
 	gtext "github.com/stubbedev/lys-lib/render"
-	"github.com/stubbedev/lys-ui/icontheme"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
