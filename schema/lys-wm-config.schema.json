@@ -6086,6 +6086,20 @@
     "titlebars": {
       "type": "object",
       "properties": {
+        "active": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "text": {
+              "type": "string",
+              "format": "lys-wm-color"
+            }
+          },
+          "additionalProperties": false
+        },
         "buttons": {
           "type": "array",
           "items": {
@@ -6114,13 +6128,59 @@
           "minimum": 1,
           "default": 24
         },
+        "inactive": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "text": {
+              "type": "string",
+              "format": "lys-wm-color"
+            }
+          },
+          "additionalProperties": false
+        },
+        "lights": {
+          "type": "object",
+          "properties": {
+            "close": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "maximize": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "minimize": {
+              "type": "string",
+              "format": "lys-wm-color"
+            }
+          },
+          "additionalProperties": false
+        },
         "side": {
           "type": "string",
           "enum": [
             "left",
             "right"
           ],
-          "default": "right"
+          "default": "left"
+        },
+        "urgent": {
+          "type": "object",
+          "properties": {
+            "background": {
+              "type": "string",
+              "format": "lys-wm-color"
+            },
+            "text": {
+              "type": "string",
+              "format": "lys-wm-color"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

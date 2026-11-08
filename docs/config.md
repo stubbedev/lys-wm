@@ -655,16 +655,21 @@ Tabs at least four icons wide show the window's `xdg_toplevel_icon_v1` icon.
 ## titlebars
 
 A title bar on floating windows that let lys-wm decorate them
-(`xdg-decoration`, KDE server decoration, X11 `_MOTIF_WM_HINTS`), in the `tabs`
-colours and font.
+(`xdg-decoration`, KDE server decoration, X11 `_MOTIF_WM_HINTS`): the window
+buttons as coloured dots, the title centred, in the `tabs` font. The defaults
+are lys-shell's default surface, text and status colours; they do not follow
+its theme. Hovering a button shows the glyphs on all of them. An unfocused
+window's dots take the `inactive` text colour.
 
 | Key | Value | Default |
 | --- | --- | --- |
 | `floating` | `false` turns bars off | `true` |
 | `height` | Logical pixels, taken from the floating rect, 1 or more | 24 |
-| `buttons` | Any of `minimize`, `maximize`, `close`, in order, each once | all three |
-| `side` | `right` or `left` | `right` |
+| `buttons` | Any of `minimize`, `maximize`, `close`, in order, each once | `close`, `minimize`, `maximize` |
+| `side` | `right` or `left` | `left` |
 | `double_click` | `maximize` toggles maximize; `float` tiles the window | `maximize` |
+| `active`, `inactive`, `urgent` | `{background, text}`, both required | `#1c1c2c`/`#d4d6e8`, `#1c1c2c`/`#8a8ca4`, `red`/`crust` |
+| `lights.close`, `lights.minimize`, `lights.maximize` | Colour of that button's dot | `#e46870`, `#e0b870`, `#68c898` |
 
 Dragging the bar moves the window. Middle click minimizes; right click sends
 the `windowmenu` [IPC event](./ipc#events).

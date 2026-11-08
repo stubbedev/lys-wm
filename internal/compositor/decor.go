@@ -22,9 +22,23 @@ type TabColors struct {
 	Background, Text render.Color
 }
 
+type StateColors struct {
+	Active, Inactive, Urgent TabColors
+}
+
+func (s StateColors) of(urgent, active bool) TabColors {
+	switch {
+	case urgent:
+		return s.Urgent
+	case active:
+		return s.Active
+	}
+	return s.Inactive
+}
+
 type TabStyle struct {
+	StateColors
 	Height, Padding, TextHeight, TextPadding int
-	Active, Inactive, Urgent                 TabColors
 }
 
 type Opacity struct {
@@ -65,6 +79,13 @@ var (
 	surface0 = render.Color{R: 0x31, G: 0x32, B: 0x44, A: 0xff}
 	textFg   = render.Color{R: 0xcd, G: 0xd6, B: 0xf4, A: 0xff}
 	red      = render.Color{R: 0xf3, G: 0x8b, B: 0xa8, A: 0xff}
+
+	shellSurface = render.Color{R: 0x1c, G: 0x1c, B: 0x2c, A: 0xff}
+	shellText    = render.Color{R: 0xd4, G: 0xd6, B: 0xe8, A: 0xff}
+	shellMuted   = render.Color{R: 0x8a, G: 0x8c, B: 0xa4, A: 0xff}
+	shellRed     = render.Color{R: 0xe4, G: 0x68, B: 0x70, A: 0xff}
+	shellYellow  = render.Color{R: 0xe0, G: 0xb8, B: 0x70, A: 0xff}
+	shellGreen   = render.Color{R: 0x68, G: 0xc8, B: 0x98, A: 0xff}
 )
 
 func PlainDecor() Decor {
@@ -87,7 +108,14 @@ func PlainDecor() Decor {
 			Urgent:   TabColors{Background: red, Text: crust},
 		},
 		DragPreview: DragPreview{Enabled: true, Opacity: 0.25, SnapDistance: 16, Switch: DragSwitch{Width: 4, Frames: 30}},
-		Titlebar:    Titlebars{Height: 15, Buttons: [titlebarButtonKinds]TitlebarButton{TitlebarMinimize, TitlebarMaximize, TitlebarClose}},
+		Titlebar: Titlebars{
+			Height:   15,
+			Buttons:  [titlebarButtonKinds]TitlebarButton{TitlebarClose, TitlebarMinimize, TitlebarMaximize},
+			Active:   TabColors{Background: shellSurface, Text: shellText},
+			Inactive: TabColors{Background: shellSurface, Text: shellMuted},
+			Urgent:   TabColors{Background: red, Text: crust},
+			Lights:   TitlebarLights{Close: shellRed, Minimize: shellYellow, Maximize: shellGreen},
+		},
 	}
 }
 
@@ -156,6 +184,8 @@ type labelKey struct {
 	px       int
 	colors   TabColors
 	centered bool
+	inset    int
+	light    render.Color
 }
 
 type label struct {
@@ -251,16 +281,33 @@ func rasterLabel(font *gtext.Typeface, key labelKey, pad int) ([]byte, error) {
 	pix := make([]byte, stride*key.size.Y)
 	cv := gtext.New(pix, stride, key.size.X, key.size.Y)
 	cv.Clear(gtext.Rect{W: key.size.X, H: key.size.Y}, lysUIColor(key.colors.Background))
-	box := gtext.Rect{X: pad, W: key.size.X - 2*pad, H: key.size.Y}
-	side, err := drawTabIcon(cv, key, pad)
+	if key.light != (render.Color{}) {
+		drawLight(cv, font, key)
+		return pix, nil
+	}
+	box := gtext.Rect{X: pad + key.inset, W: key.size.X - 2*(pad+key.inset), H: key.size.Y}
+	ic, side, err := labelIcon(key, pad)
 	if err != nil {
 		return nil, fmt.Errorf("the icon: %w", err)
 	}
-	if side > 0 {
-		box.X += side + pad
-		box.W -= side + pad
+	room := 0
+	if ic != nil {
+		room = side + pad
 	}
-	text := font.Ellipsize(key.text, float64(box.W), float64(key.px))
+	if box.W <= room {
+		return pix, nil
+	}
+	text := font.Ellipsize(key.text, float64(box.W-room), float64(key.px))
+	if key.centered {
+		width := min(int(math.Ceil(font.Shape(text, float64(key.px)).Advance())), box.W-room)
+		box.X += (box.W - room - width) / 2
+		box.W = room + width
+	}
+	if ic != nil {
+		ic.Draw(cv, box.X, pad)
+		box.X += room
+		box.W -= room
+	}
 	align := gtext.AlignStart
 	if key.centered {
 		align = gtext.AlignCenter
@@ -269,17 +316,22 @@ func rasterLabel(font *gtext.Typeface, key labelKey, pad int) ([]byte, error) {
 	return pix, nil
 }
 
-func drawTabIcon(cv *gtext.Canvas, key labelKey, pad int) (int, error) {
+func drawLight(cv *gtext.Canvas, font *gtext.Typeface, key labelKey) {
+	d := key.size.Y / 2
+	cv.RoundedRect(gtext.Rect{X: (key.size.X - d) / 2, Y: (key.size.Y - d) / 2, W: d, H: d}, d/2, lysUIColor(key.light))
+	if key.text == "" {
+		return
+	}
+	font.DrawAligned(cv, key.text, gtext.Rect{W: key.size.X, H: key.size.Y}, float64(key.px), lysUIColor(key.colors.Text), gtext.AlignCenter)
+}
+
+func labelIcon(key labelKey, pad int) (*gtext.Icon, int, error) {
 	side := key.size.Y - 2*pad
-	if side <= 0 || key.size.X < tabIconRoom*side || key.icon == nil {
-		return 0, nil
+	if side <= 0 || key.size.X-2*key.inset < tabIconRoom*side || key.icon == nil {
+		return nil, 0, nil
 	}
 	ic, err := tabIcon(key, side)
-	if err != nil || ic == nil {
-		return 0, err
-	}
-	ic.Draw(cv, pad, pad)
-	return side, nil
+	return ic, side, err
 }
 
 func tabIcon(key labelKey, side int) (*gtext.Icon, error) {
@@ -516,13 +568,8 @@ func (c *Compositor) dropStops() error {
 }
 
 func (c *Compositor) tabColors(id wm.WindowID, active bool) TabColors {
-	switch w := c.windowByID(id); {
-	case w != nil && w.urgent:
-		return c.decor.Tab.Urgent
-	case active:
-		return c.decor.Tab.Active
-	}
-	return c.decor.Tab.Inactive
+	w := c.windowByID(id)
+	return c.decor.Tab.of(w != nil && w.urgent, active)
 }
 
 func (c *Compositor) workspaceDecorView(ws wm.WorkspaceID, shown bool) (view, bool) {

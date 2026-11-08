@@ -582,6 +582,16 @@ type rawTitlebars struct {
 	Buttons     *At[[]string] `yaml:"buttons"`
 	Side        *At[string]   `yaml:"side"`
 	DoubleClick *At[string]   `yaml:"double_click"`
+	Active      *rawTabColors `yaml:"active"`
+	Inactive    *rawTabColors `yaml:"inactive"`
+	Urgent      *rawTabColors `yaml:"urgent"`
+	Lights      rawLights     `yaml:"lights"`
+}
+
+type rawLights struct {
+	Close    *At[string] `yaml:"close"`
+	Minimize *At[string] `yaml:"minimize"`
+	Maximize *At[string] `yaml:"maximize"`
 }
 
 type rawAutotile struct {
@@ -1563,6 +1573,14 @@ func (p *parser) tabColors(r *rawTabColors, key string, fallback compositor.TabC
 	return compositor.TabColors{Background: p.color(r.Background, key+".background", fallback.Background), Text: p.color(r.Text, key+".text", fallback.Text)}
 }
 
+func (p *parser) stateColors(active, inactive, urgent *rawTabColors, key string, def compositor.StateColors) compositor.StateColors {
+	return compositor.StateColors{
+		Active:   p.tabColors(active, key+".active", def.Active),
+		Inactive: p.tabColors(inactive, key+".inactive", def.Inactive),
+		Urgent:   p.tabColors(urgent, key+".urgent", def.Urgent),
+	}
+}
+
 func (p *parser) bind(submap string, i int, at At[rawBind], submaps map[string][]At[rawBind]) Bind {
 	r := at.V
 	key := fmt.Sprintf("binds[%d]", i)
@@ -1886,9 +1904,7 @@ func (p *parser) decor(raw rawConfig, def compositor.Decor) compositor.Decor {
 			Padding:     p.nonNegative(raw.Tabs.Padding, "tabs.padding", def.Tab.Padding),
 			TextHeight:  p.positive(raw.Tabs.TextHeight, "tabs.text_height", def.Tab.TextHeight),
 			TextPadding: p.nonNegative(raw.Tabs.TextPadding, "tabs.text_padding", def.Tab.TextPadding),
-			Active:      p.tabColors(raw.Tabs.Active, "tabs.active", def.Tab.Active),
-			Inactive:    p.tabColors(raw.Tabs.Inactive, "tabs.inactive", def.Tab.Inactive),
-			Urgent:      p.tabColors(raw.Tabs.Urgent, "tabs.urgent", def.Tab.Urgent),
+			StateColors: p.stateColors(raw.Tabs.Active, raw.Tabs.Inactive, raw.Tabs.Urgent, "tabs", def.Tab.StateColors),
 		},
 		DragPreview: p.dragPreview(raw.DragPreview, def.DragPreview),
 		Titlebar:    p.titlebars(raw.Titlebars, def.Titlebar),
@@ -2565,6 +2581,12 @@ func (p *parser) titlebars(raw rawTitlebars, def compositor.Titlebars) composito
 		t.Floating = *raw.Floating
 	}
 	t.Height = p.positive(raw.Height, "titlebars.height", def.Height)
+	t.StateColors = p.stateColors(raw.Active, raw.Inactive, raw.Urgent, "titlebars", def.StateColors)
+	t.Lights = compositor.TitlebarLights{
+		Close:    p.optColor(raw.Lights.Close, "titlebars.lights.close", def.Lights.Close),
+		Minimize: p.optColor(raw.Lights.Minimize, "titlebars.lights.minimize", def.Lights.Minimize),
+		Maximize: p.optColor(raw.Lights.Maximize, "titlebars.lights.maximize", def.Lights.Maximize),
+	}
 	if s := choice(p, raw.Side, "titlebars.side", titlebarSides); s != nil {
 		t.Side = *s
 	}

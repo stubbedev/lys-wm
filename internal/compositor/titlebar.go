@@ -23,13 +23,13 @@ const (
 
 const titlebarButtonKinds = 3
 
-var titlebarGlyphs = [...]string{TitlebarMinimize: "–", TitlebarMaximize: "□", TitlebarClose: "×"}
+var titlebarGlyphs = [...]string{TitlebarMinimize: "–", TitlebarMaximize: "+", TitlebarClose: "×"}
 
 type TitlebarSide uint8
 
 const (
-	TitlebarRight TitlebarSide = iota
-	TitlebarLeft
+	TitlebarLeft TitlebarSide = iota
+	TitlebarRight
 )
 
 type TitlebarDoubleClick uint8
@@ -39,7 +39,17 @@ const (
 	DoubleClickFloat
 )
 
+type TitlebarLights struct {
+	Close, Minimize, Maximize render.Color
+}
+
+func (l TitlebarLights) of(b TitlebarButton) render.Color {
+	return [...]render.Color{TitlebarMinimize: l.Minimize, TitlebarMaximize: l.Maximize, TitlebarClose: l.Close}[b]
+}
+
 type Titlebars struct {
+	StateColors
+	Lights      TitlebarLights
 	Floating    bool
 	Height      int
 	Buttons     [titlebarButtonKinds]TitlebarButton
@@ -82,23 +92,22 @@ func (c *Compositor) barOf(w *window) (image.Rectangle, bool) {
 	return image.Rect(w.rect.Min.X, w.rect.Min.Y-h, w.rect.Max.X, w.rect.Min.Y), true
 }
 
-func (c *Compositor) barButton(bar image.Rectangle, i int) image.Rectangle {
-	side := bar.Dy()
-	if c.decor.Titlebar.Side == TitlebarLeft {
-		return image.Rect(bar.Min.X+i*side, bar.Min.Y, bar.Min.X+(i+1)*side, bar.Max.Y)
-	}
-	n := len(c.decor.Titlebar.buttons())
-	return image.Rect(bar.Max.X-(n-i)*side, bar.Min.Y, bar.Max.X-(n-i-1)*side, bar.Max.Y)
+func barSlots(bar image.Rectangle) (margin, slot int) {
+	return bar.Dy() / 12, bar.Dy() * 5 / 6
 }
 
-func (c *Compositor) barTitle(bar image.Rectangle) image.Rectangle {
-	room := len(c.decor.Titlebar.buttons()) * bar.Dy()
-	if c.decor.Titlebar.Side == TitlebarLeft {
-		bar.Min.X = min(bar.Min.X+room, bar.Max.X)
-		return bar
+func (c *Compositor) barButton(bar image.Rectangle, i int) image.Rectangle {
+	margin, slot := barSlots(bar)
+	x := bar.Min.X + margin + i*slot
+	if c.decor.Titlebar.Side == TitlebarRight {
+		x = bar.Max.X - margin - (len(c.decor.Titlebar.buttons())-i)*slot
 	}
-	bar.Max.X = max(bar.Max.X-room, bar.Min.X)
-	return bar
+	return image.Rect(x, bar.Min.Y, x+slot, bar.Max.Y)
+}
+
+func (c *Compositor) barControlsWidth(bar image.Rectangle) int {
+	margin, slot := barSlots(bar)
+	return margin + len(c.decor.Titlebar.buttons())*slot
 }
 
 func (c *Compositor) drawTitlebar(pass *frame, o *output.Output, w *window, mask render.Mask) {
@@ -107,15 +116,25 @@ func (c *Compositor) drawTitlebar(pass *frame, o *output.Output, w *window, mask
 		return
 	}
 	focused, hasFocus := c.wm.Focused()
-	colors := c.tabColors(w.id, hasFocus && focused == w.id)
-	px := o.Scale().ToDevice(c.decor.Tab.TextHeight)
-	c.drawBarLabel(pass, o, c.barTitle(bar), labelKey{text: w.top.Title(), icon: w.top.Icon(), theme: c.icons, px: px, colors: colors}, mask)
-	for i, b := range c.decor.Titlebar.buttons() {
-		shown := colors
-		if c.barHover == (barHover{id: w.id, button: b}) {
-			shown = TabColors{Background: colors.Text, Text: colors.Background}
+	active := hasFocus && focused == w.id
+	style := c.decor.Titlebar
+	c.drawBarLabel(pass, o, bar, labelKey{
+		text: w.top.Title(), icon: w.top.Icon(), theme: c.icons,
+		px:       o.Scale().ToDevice(c.decor.Tab.TextHeight),
+		colors:   style.of(w.urgent, active),
+		centered: true,
+		inset:    o.Scale().ToDevice(c.barControlsWidth(bar)),
+	}, mask)
+	hovered := c.barHover.button != 0 && c.barHover.id == w.id
+	for i, b := range style.buttons() {
+		key := labelKey{light: style.Inactive.Text}
+		if active || hovered {
+			key.light = style.Lights.of(b)
 		}
-		c.drawBarLabel(pass, o, c.barButton(bar, i), labelKey{text: titlebarGlyphs[b], px: px, colors: shown, centered: true}, mask)
+		if hovered {
+			key.text, key.px, key.colors.Text = titlebarGlyphs[b], o.Scale().ToDevice(bar.Dy()/2), crust
+		}
+		c.drawBarLabel(pass, o, c.barButton(bar, i), key, mask)
 	}
 }
 
@@ -127,7 +146,9 @@ func (c *Compositor) drawBarLabel(pass *frame, o *output.Output, r image.Rectang
 	key.size = dst.Size()
 	tex := c.label(o, key, labelSlot{})
 	if tex == nil {
-		pass.fillMasked(dst, key.colors.Background, mask)
+		if key.colors.Background.A != 0 {
+			pass.fillMasked(dst, key.colors.Background, mask)
+		}
 		return
 	}
 	size := tex.Size()

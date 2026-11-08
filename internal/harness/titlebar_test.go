@@ -13,12 +13,24 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
-const barHeight = 16
+const (
+	barHeight = 16
+	barMargin = barHeight / 12
+	barSlot   = barHeight * 5 / 6
+)
+
+const (
+	closeButton = iota
+	minimizeButton
+	maximizeButton
+)
+
+var surfaceColor = [3]byte{0x1c, 0x1c, 0x2c}
 
 var barScreen = backend.Mode{Size: image.Pt(320, 200), RefreshMHz: 60000, Preferred: true}
 
 func titlebars(cfg *compositor.Config) {
-	cfg.Decor.Titlebar = compositor.Titlebars{Floating: true, Height: barHeight, Buttons: [3]compositor.TitlebarButton{compositor.TitlebarMinimize, compositor.TitlebarMaximize, compositor.TitlebarClose}}
+	cfg.Decor.Titlebar.Floating, cfg.Decor.Titlebar.Height = true, barHeight
 }
 
 type decorationEvents struct{}
@@ -77,7 +89,12 @@ func (s *barScene) bar() image.Rectangle {
 
 func (s *barScene) button(i int) image.Point {
 	bar := s.bar()
-	return image.Pt(bar.Max.X-(3-i)*barHeight+barHeight/2, bar.Min.Y+barHeight/2)
+	return image.Pt(bar.Min.X+barMargin+i*barSlot+barSlot/2, bar.Min.Y+barHeight/2)
+}
+
+func (s *barScene) title() image.Point {
+	bar := s.bar()
+	return image.Pt(bar.Max.X-barMargin-2, bar.Min.Y+barHeight/2)
 }
 
 func (s *barScene) click(at image.Point, button uint32) {
@@ -97,8 +114,8 @@ func TestAFloatingServerDecoratedWindowHasATitlebarAndAClientDecoratedOneNone(t 
 	}
 	frame := s.h.Rendered(0)
 	bar := s.bar()
-	if got := pixel(frame, bar.Min.X+1, bar.Min.Y+1); got != [3]byte{0xcb, 0xa6, 0xf7} {
-		t.Fatalf("the focused window's titlebar shows %v", got)
+	if got := pixel(frame, bar.Min.X+1, bar.Min.Y+1); got != surfaceColor {
+		t.Fatalf("the focused window's titlebar shows %v, want the surface colour", got)
 	}
 
 	csd := s.c.Window("Shell", testclient.Fill(0x60, 0x40, 0x20))
@@ -116,7 +133,7 @@ func TestTheTitlebarMovesClosesMinimizesAndMaximizes(t *testing.T) {
 	t.Parallel()
 	s := floatingBar(t, softStart)
 	before := s.window().Rect
-	title := s.bar().Min.Add(image.Pt(10, barHeight/2))
+	title := s.title()
 	s.h.movePointer(title)
 	s.h.button(true)
 	s.h.movePointer(title.Add(image.Pt(30, 20)))
@@ -126,33 +143,51 @@ func TestTheTitlebarMovesClosesMinimizesAndMaximizes(t *testing.T) {
 		t.Fatalf("dragging the titlebar by 30,20 moved the window from %+v to %+v", before, got)
 	}
 
-	s.click(s.button(1), btnLeft)
+	s.click(s.button(maximizeButton), btnLeft)
 	s.h.Eventually("maximized", func(_ *headless.Backend, c *compositor.Compositor) bool { return windowsOf(c)[0].Maximized })
 	s.floatAgain()
 
-	title = s.bar().Min.Add(image.Pt(10, barHeight/2))
+	title = s.title()
 	s.click(title, btnLeft)
 	s.click(title, btnLeft)
 	s.h.Eventually("a double click to maximize", func(_ *headless.Backend, c *compositor.Compositor) bool { return windowsOf(c)[0].Maximized })
 	s.floatAgain()
 
 	lines := s.h.watch()
-	menuAt := s.bar().Min.Add(image.Pt(1, 1))
+	menuAt := image.Pt(s.title().X, s.bar().Min.Y+1)
 	s.h.Eventually("the bar drawn where the menu click goes", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		snap, err := b.Outputs()[0].Snapshot()
-		return err == nil && pixel(snap, menuAt.X, menuAt.Y) == [3]byte{0xcb, 0xa6, 0xf7}
+		return err == nil && pixel(snap, menuAt.X, menuAt.Y) == surfaceColor
 	})
 	s.click(menuAt, btnRight)
 	awaitStreamed(t, lines, "the window menu", func(e streamed) bool { return e.Event == "windowmenu" })
 
-	s.click(s.button(0), btnLeft)
+	s.click(s.button(minimizeButton), btnLeft)
 	s.h.Eventually("minimized", func(_ *headless.Backend, c *compositor.Compositor) bool { return windowsOf(c)[0].Minimized })
 	s.h.dispatch("restore")
 	s.h.Eventually("restored", func(_ *headless.Backend, c *compositor.Compositor) bool { return !windowsOf(c)[0].Minimized })
 	s.c.DispatchUntil("the restored window drawn", func() bool { return true })
 
-	s.click(s.button(2), btnLeft)
+	s.click(s.button(closeButton), btnLeft)
 	s.c.DispatchUntil("the close request", func() bool { return s.w.Closed })
+}
+
+func TestTheButtonsFollowTheConfiguredSide(t *testing.T) {
+	t.Parallel()
+	h := StartWith(t, func(cfg *compositor.Config) {
+		titlebars(cfg)
+		cfg.Decor.Titlebar.Side = compositor.TitlebarRight
+	}, barScreen)
+	c := testclient.Connect(t, h.Socket())
+	w := ssdWindow(c, "Editor", testclient.Fill(0x20, 0x40, 0x60))
+	c.DispatchUntil("the window to map", w.Mapped)
+	h.dispatch("togglefloating")
+	win := query[ipc.Window](h, ipc.KindActiveWindow)
+	c.DispatchUntil("the floating size", func() bool { return w.Logical == image.Pt(win.Rect.Width, win.Rect.Height) })
+	quiesce(t, h, c, w)
+	right := win.Rect.X + win.Rect.Width
+	h.click(0, float64(right-barMargin-3*barSlot+barSlot/2), float64(win.Rect.Y-barHeight/2), btnLeft)
+	c.DispatchUntil("the close request from the first button on the right", func() bool { return w.Closed })
 }
 
 func TestASteadyTitlebarRastersNothingAgain(t *testing.T) {
@@ -183,7 +218,7 @@ func TestASteadyTitlebarRastersNothingAgain(t *testing.T) {
 func titlebarGoldens(t *testing.T, start gpuStarter) {
 	s := floatingBar(t, start)
 	s.h.assertGolden("titlebar-active")
-	s.h.movePointer(s.button(2))
+	s.h.movePointer(s.button(closeButton))
 	s.h.assertGolden("titlebar-hover")
 	other := s.c.Window("Other", testclient.Fill(0, 0, 0))
 	s.c.DispatchUntil("another window to map", other.Mapped)

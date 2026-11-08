@@ -208,7 +208,7 @@ func annotations() map[string]annotation {
 		"tabs.height":                      atLeastAnn(1, d.Tab.Height),
 		"titlebars.floating":               {def: d.Titlebar.Floating},
 		"titlebars.height":                 atLeastAnn(1, d.Titlebar.Height),
-		"titlebars.side":                   {enum: slices.Sorted(maps.Keys(titlebarSides)), def: "right"},
+		"titlebars.side":                   {enum: slices.Sorted(maps.Keys(titlebarSides)), def: "left"},
 		"titlebars.double_click":           {enum: slices.Sorted(maps.Keys(doubleClicks)), def: "maximize"},
 		"titlebars.buttons[]":              {enum: slices.Sorted(maps.Keys(titlebarButtons))},
 		"tabs.padding":                     atLeastAnn(0, d.Tab.Padding),
@@ -277,8 +277,13 @@ func annotations() map[string]annotation {
 		}
 	}
 	for _, state := range []string{"active", "inactive", "urgent"} {
-		out["tabs."+state+".background"] = colorAnn(nil)
-		out["tabs."+state+".text"] = colorAnn(nil)
+		for _, section := range []string{"tabs", "titlebars"} {
+			out[section+"."+state+".background"] = colorAnn(nil)
+			out[section+"."+state+".text"] = colorAnn(nil)
+		}
+	}
+	for _, light := range []string{"close", "minimize", "maximize"} {
+		out["titlebars.lights."+light] = colorAnn(nil)
 	}
 	saturation := short(d.Blur.Look.SaturationShift + 1)
 	for _, group := range []map[string]annotation{
