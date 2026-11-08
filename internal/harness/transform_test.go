@@ -199,6 +199,15 @@ func TestAMirrorShowsItsSourceWithOneDrawAndNoWorkspaces(t *testing.T) {
 	if len(c.Outputs) != 1 {
 		t.Fatalf("clients see %d outputs, want the mirror left out", len(c.Outputs))
 	}
+	source := h.Snapshot(0)
+	points := []image.Point{{20, 20}, {140, 80}, {80, 50}}
+	h.Eventually("the mirror to rest on its source", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		o := b.Outputs()[1]
+		mirror := snapshot(o)
+		return !o.FrameOwed() && !slices.ContainsFunc(points, func(at image.Point) bool {
+			return pixel(source, at.X, at.Y) != pixel(mirror, at.X, at.Y)
+		})
+	})
 	var draws, presents uint64
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 		draws, _ = comp.MirrorDraws("HEADLESS-2")
@@ -207,12 +216,6 @@ func TestAMirrorShowsItsSourceWithOneDrawAndNoWorkspaces(t *testing.T) {
 	})
 	if draws == 0 || draws != presents {
 		t.Fatalf("the mirror presented %d frames with %d textured draws, want one each", presents, draws)
-	}
-	source, mirror := h.Snapshot(0), h.Snapshot(1)
-	for _, at := range []image.Point{{20, 20}, {140, 80}, {80, 50}} {
-		if a, b := pixel(source, at.X, at.Y), pixel(mirror, at.X, at.Y); a != b {
-			t.Fatalf("at %v the mirror shows %v, its source %v", at, b, a)
-		}
 	}
 }
 
