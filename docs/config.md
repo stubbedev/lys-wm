@@ -654,16 +654,16 @@ Tabs at least four icons wide show the window's `xdg_toplevel_icon_v1` icon.
 
 ## titlebars
 
-A title bar on floating windows that let lys-wm decorate them
-(`xdg-decoration`, KDE server decoration, X11 `_MOTIF_WM_HINTS`): the window
-buttons as coloured dots, the title centred, in the `tabs` font. The defaults
-are lys-shell's default surface, text and status colours; they do not follow
+An optional title bar, off by default, on floating windows that let lys-wm
+decorate them (`xdg-decoration`, KDE server decoration, X11
+`_MOTIF_WM_HINTS`): the window buttons as coloured dots, the title centred, in
+the `tabs` font. The default colours are lys-shell's default surface, text and status colours; they do not follow
 its theme. Hovering a button shows the glyphs on all of them. An unfocused
 window's dots take the `inactive` text colour.
 
 | Key | Value | Default |
 | --- | --- | --- |
-| `floating` | `false` turns bars off | `true` |
+| `floating` | `true` turns bars on | `false` |
 | `height` | Logical pixels, taken from the floating rect, 1 or more | 24 |
 | `buttons` | Any of `minimize`, `maximize`, `close`, in order, each once | `close`, `minimize`, `maximize` |
 | `side` | `right` or `left` | `left` |

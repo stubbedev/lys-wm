@@ -6121,7 +6121,7 @@
         },
         "floating": {
           "type": "boolean",
-          "default": true
+          "default": false
         },
         "height": {
           "type": "integer",

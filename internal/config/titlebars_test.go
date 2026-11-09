@@ -9,7 +9,7 @@ import (
 )
 
 func TestTitlebarsParse(t *testing.T) {
-	cfg, err := Parse("t.yaml", []byte("titlebars:\n  floating: false\n  height: 30\n  buttons: [close, minimize]\n  side: left\n  double_click: float\n"))
+	cfg, err := Parse("t.yaml", []byte("titlebars:\n  floating: true\n  height: 30\n  buttons: [close, minimize]\n  side: left\n  double_click: float\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,13 +18,13 @@ func TestTitlebarsParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := def.Decor.Titlebar
-	want.Floating, want.Height, want.Side, want.DoubleClick = false, 30, compositor.TitlebarLeft, compositor.DoubleClickFloat
+	want.Floating, want.Height, want.Side, want.DoubleClick = true, 30, compositor.TitlebarLeft, compositor.DoubleClickFloat
 	want.Buttons = [3]compositor.TitlebarButton{compositor.TitlebarClose, compositor.TitlebarMinimize}
 	if cfg.Decor.Titlebar != want {
 		t.Fatalf("titlebars %+v, want %+v", cfg.Decor.Titlebar, want)
 	}
 	wantButtons := [3]compositor.TitlebarButton{compositor.TitlebarClose, compositor.TitlebarMinimize, compositor.TitlebarMaximize}
-	if got := def.Decor.Titlebar; !got.Floating || got.Height != 24 || got.Buttons != wantButtons || got.Side != compositor.TitlebarLeft {
+	if got := def.Decor.Titlebar; got.Floating || got.Height != 24 || got.Buttons != wantButtons || got.Side != compositor.TitlebarLeft {
 		t.Fatalf("default titlebars %+v", got)
 	}
 	if got := def.Decor.Titlebar.Active.Background; got == def.Decor.Tab.Active.Background {

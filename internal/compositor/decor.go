@@ -136,7 +136,7 @@ func DefaultDecor(accent render.Color) Decor {
 		Inactive: render.Color{A: 0x38},
 	}
 	d.Blur = Blur{Size: 6, Passes: 2, Look: wm.Look{SaturationShift: 0.3}}
-	d.Titlebar.Floating, d.Titlebar.Height = true, 24
+	d.Titlebar.Height = 24
 	d.Tab = TabStyle{
 		Height: 24, Padding: 0, TextHeight: 11, TextPadding: 8,
 		Active:   TabColors{Background: accent, Text: crust},
