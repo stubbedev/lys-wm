@@ -742,3 +742,41 @@ func TestAnFDItsOwnerClosedAndTheKernelReusedRemovesCleanly(t *testing.T) {
 		t.Fatalf("closing over an fd number reused since it was watched: %v", err)
 	}
 }
+
+func TestAnFDNumberStillWatchedIsRefusedUntilItsSourceIsRemoved(t *testing.T) {
+	l := newLoop(t)
+	r, _ := pipe(t)
+	stale, err := l.AddFD(r, Readable, func(Events) error { return errors.New("the source whose fd was closed was called") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, w := pipe(t)
+	if err := unix.Dup3(other, r, unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.AddFD(r, Readable, func(Events) error { return nil }); !errors.Is(err, errWatched) {
+		t.Fatalf("watching fd %d while an earlier source still holds it = %v, want errWatched", r, err)
+	}
+	if err := stale.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	fired := false
+	fresh, err := l.AddFD(r, Readable, func(Events) error {
+		fired = true
+		l.Stop()
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("watching fd %d after its earlier source was removed: %v", r, err)
+	}
+	if _, err := unix.Write(w, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	run(t, l)
+	if !fired {
+		t.Fatal("the source watching the reused fd number never fired")
+	}
+	if err := fresh.Remove(); err != nil {
+		t.Fatal(err)
+	}
+}

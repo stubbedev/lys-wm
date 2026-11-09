@@ -29,6 +29,8 @@ const (
 
 var ErrClosed = errors.New("loop: closed")
 
+var errWatched = errors.New("already watched by a source that has not been removed")
+
 type token uint64
 
 func (t token) event(events Events) unix.EpollEvent {
@@ -48,6 +50,7 @@ type source struct {
 type Loop struct {
 	epfd     int
 	sources  map[token]*source
+	watched  map[int]token
 	next     token
 	events   []unix.EpollEvent
 	pending  []unix.EpollEvent
@@ -79,7 +82,7 @@ func New() (*Loop, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loop: epoll_create1: %w", err)
 	}
-	l := &Loop{epfd: epfd, sources: map[token]*source{}, events: make([]unix.EpollEvent, 64), epoch: time.Now()}
+	l := &Loop{epfd: epfd, sources: map[token]*source{}, watched: map[int]token{}, events: make([]unix.EpollEvent, 64), epoch: time.Now()}
 	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
 	if err != nil {
 		_ = unix.Close(epfd)
@@ -98,6 +101,9 @@ func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error
 	if l.closed {
 		return 0, ErrClosed
 	}
+	if _, ok := l.watched[fd]; ok {
+		return 0, fmt.Errorf("loop: add fd %d: %w", fd, errWatched)
+	}
 	l.next++
 	t := l.next
 	ev := t.event(events)
@@ -105,6 +111,7 @@ func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error
 		return 0, fmt.Errorf("loop: add fd %d: %w", fd, err)
 	}
 	l.sources[t] = &source{fd: fd, owned: owned, handler: handler}
+	l.watched[fd] = t
 	return t, nil
 }
 
@@ -126,6 +133,7 @@ func (l *Loop) remove(t token) error {
 		return nil
 	}
 	delete(l.sources, t)
+	delete(l.watched, s.fd)
 	var errs []error
 	if err := unix.EpollCtl(l.epfd, unix.EPOLL_CTL_DEL, s.fd, nil); err != nil && !errors.Is(err, unix.EBADF) && !errors.Is(err, unix.ENOENT) {
 		errs = append(errs, fmt.Errorf("loop: remove fd %d: %w", s.fd, err))
