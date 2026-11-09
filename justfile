@@ -122,8 +122,7 @@ render-bench:
 # over three rounds after the two that warm up, as the baselines were measured.
 pace_rounds := "5"
 
-# Both renderers at once: nothing the gate counts depends on the load.
-[parallel]
+# Both renderers, one after the other.
 pace-gates: (pace-gate "gles") (pace-gate "vulkan")
 
 # Fail when a step's per-frame counts pass cmd/lys-wm-pace/baseline.json on the
