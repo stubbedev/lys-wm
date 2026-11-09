@@ -193,8 +193,16 @@ type OverlayPlanes interface {
 	OverlayTarget() gpu.ScanoutTarget
 	TestOverlays(layers []Overlay) uint
 	SetOverlays(layers []Overlay) error
-	FlipOverlays() (bool, error)
+	FlipOverlays() (OverlayFlip, error)
 }
+
+type OverlayFlip uint8
+
+const (
+	OverlaysNotFlipped OverlayFlip = iota
+	OverlaysFlipped
+	OverlaysRefused
+)
 
 type CursorPlane interface {
 	CursorSize() image.Point

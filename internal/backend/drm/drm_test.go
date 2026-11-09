@@ -2844,9 +2844,9 @@ func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 	if err := o.SetOverlays([]backend.Overlay{overlayLayer(key, client, dst, func() error { released++; return nil })}); err != nil {
 		t.Fatal(err)
 	}
-	flipped, err := o.FlipOverlays()
-	if err != nil || !flipped {
-		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
+	flip, err := o.FlipOverlays()
+	if err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("FlipOverlays = %d, %v", flip, err)
 	}
 	c := r.dev.commits[len(r.dev.commits)-1]
 	if c.flags&kdrm.AtomicTestOnly != 0 || c.values[[2]uint32{42, propFB}] == 0 || c.values[[2]uint32{42, propCRTCW}] != 640 {
@@ -2860,8 +2860,8 @@ func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 	if err := o.SetOverlays(nil); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("clearing the overlay: %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("clearing the overlay: %d, %v", flip, err)
 	}
 	if off := r.dev.commits[len(r.dev.commits)-1]; off.values[[2]uint32{42, propFB}] != 0 {
 		t.Fatalf("clearing left the overlay on: %+v", off)
@@ -2892,23 +2892,23 @@ func TestEveryOverlayUseIsReleasedEvenIfItNeverReachedThePlane(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.dev.refuseOverlay = true
-	if flipped, err := o.FlipOverlays(); err != nil || flipped {
-		t.Fatalf("a refused overlay flip: %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysRefused {
+		t.Fatalf("a refused overlay flip: %d, %v", flip, err)
 	}
 	r.dev.refuseOverlay = false
 	if err := o.SetOverlays(layer()); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("FlipOverlays = %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("FlipOverlays = %d, %v", flip, err)
 	}
 	r.dev.flip(t, 10, 2)
 	r.until("the overlay's flip", func() bool { return !o.flipping })
 	if err := o.SetOverlays(nil); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("clearing the overlay: %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("clearing the overlay: %d, %v", flip, err)
 	}
 	r.dev.flip(t, 10, 3)
 	r.until("the flip that takes it off", func() bool { return !o.flipping })

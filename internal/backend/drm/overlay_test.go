@@ -47,8 +47,8 @@ func TestAYUVOverlayCarriesItsColourEncodingAndRange(t *testing.T) {
 	if err := o.SetOverlays([]backend.Overlay{overlayLayer(key, d, dst, func() error { return nil })}); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("FlipOverlay = %d, %v", flip, err)
 	}
 	if e, rng, ok := colorOf(r.dev.commits[len(r.dev.commits)-1]); !ok || e != 1 || rng != 0 {
 		t.Fatalf("the overlay flip set encoding %d and range %d (%v), want BT.709 limited", e, rng, ok)
@@ -140,8 +140,8 @@ func TestTwoScaledVideosTakeBothOverlayPlanesOneTestAFrame(t *testing.T) {
 	if err := o.SetOverlays(layers[:2]); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("FlipOverlays = %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("FlipOverlays = %d, %v", flip, err)
 	}
 	c := r.dev.commits[len(r.dev.commits)-1]
 	for _, plane := range []uint32{42, 44} {

@@ -283,22 +283,22 @@ func (o *Output) sentOverlay() {
 	}
 }
 
-func (o *Output) FlipOverlays() (bool, error) {
+func (o *Output) FlipOverlays() (backend.OverlayFlip, error) {
 	if !o.overlaysUsable() {
-		return false, nil
+		return backend.OverlaysNotFlipped, nil
 	}
 	r := &o.b.req
 	r.Reset()
 	o.addOverlay()
 	if err := o.b.dev.Commit(r, planeFlags, uint64(o.crtc.id)); err != nil {
 		if refused(err) {
-			return false, o.overlayRefused()
+			return backend.OverlaysRefused, o.overlayRefused()
 		}
-		return false, fmt.Errorf("drm: flip the overlays of %s: %w", o.Name(), err)
+		return backend.OverlaysNotFlipped, fmt.Errorf("drm: flip the overlays of %s: %w", o.Name(), err)
 	}
 	o.sentOverlay()
 	o.flipping = true
-	return true, nil
+	return backend.OverlaysFlipped, nil
 }
 
 func (o *Output) overlayFlipped() overlayFlip {

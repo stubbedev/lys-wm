@@ -359,8 +359,8 @@ func TestAnOverlayTakesAClientBufferOnASeat(t *testing.T) {
 	if err := o.SetOverlays([]backend.Overlay{overlayLayer(key, d, dst, func() error { released = true; return nil })}); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("FlipOverlay = %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("FlipOverlay = %d, %v", flip, err)
 	}
 	s.until("the overlay's flip", func() bool { return !o.flipping })
 	p := o.overlays[0].id
@@ -371,8 +371,8 @@ func TestAnOverlayTakesAClientBufferOnASeat(t *testing.T) {
 	if err := o.SetOverlays(nil); err != nil {
 		t.Fatal(err)
 	}
-	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
-		t.Fatalf("clearing the overlay: FlipOverlay = %t, %v", flipped, err)
+	if flip, err := o.FlipOverlays(); err != nil || flip != backend.OverlaysFlipped {
+		t.Fatalf("clearing the overlay: FlipOverlay = %d, %v", flip, err)
 	}
 	s.until("the cleared overlay's flip", func() bool { return !o.flipping && released })
 	if fb := s.property(p, kdrm.ObjectPlane, "FB_ID"); fb != 0 {

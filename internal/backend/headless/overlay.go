@@ -21,6 +21,10 @@ func (b *Backend) SetOverlayPlanes(n int, t gpu.ScanoutTarget) error {
 	return nil
 }
 
+func (b *Backend) RefuseOverlayFlips(refuse bool) {
+	b.refuseOverlay = refuse
+}
+
 func (o *Output) OverlayPlanes() int {
 	return o.backend.overlayPlanes
 }
@@ -73,14 +77,17 @@ func (o *Output) dropUnsent() error {
 	return errors.Join(errs...)
 }
 
-func (o *Output) FlipOverlays() (bool, error) {
+func (o *Output) FlipOverlays() (backend.OverlayFlip, error) {
 	if !o.state.Lit() || o.removed || o.inFrame || o.presentPending {
-		return false, nil
+		return backend.OverlaysNotFlipped, nil
+	}
+	if o.backend.refuseOverlay {
+		return backend.OverlaysRefused, o.dropUnsent()
 	}
 	o.latchOverlays()
 	o.presentPending = true
 	o.overlayFlips++
-	return true, o.arm()
+	return backend.OverlaysFlipped, o.arm()
 }
 
 func (o *Output) OverlayFlips() uint64 {

@@ -42,6 +42,7 @@ type Backend struct {
 	plugged       []backend.Device
 	cursorSize    image.Point
 	overlayPlanes int
+	refuseOverlay bool
 	overlayTarget gpu.ScanoutTarget
 	inherit       bool
 	closed        bool

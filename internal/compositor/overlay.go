@@ -223,7 +223,26 @@ func (c *Compositor) flipOverlays(o *output.Output, sc *scene) (bool, error) {
 	if shown == (overlaysShown{}) || !sc.onlyOverlaidChanged() {
 		return false, nil
 	}
-	return out.FlipOverlays()
+	flip, err := out.FlipOverlays()
+	switch flip {
+	case backend.OverlaysFlipped:
+		return true, err
+	case backend.OverlaysRefused:
+		return false, errors.Join(err, c.composeOverlaid(o, out, sc))
+	}
+	return false, err
+}
+
+func (c *Compositor) composeOverlaid(o *output.Output, out backend.OverlayPlanes, sc *scene) error {
+	delete(c.overlays, o)
+	for i := range sc.cur.ops {
+		if op := &sc.cur.ops[i]; op.overlay {
+			op.overlay = false
+			sc.damage.Add(op.dst)
+		}
+	}
+	clear(sc.zeroCopy[1:])
+	return out.SetOverlays(nil)
 }
 
 func (sc *scene) onlyOverlaidChanged() bool {

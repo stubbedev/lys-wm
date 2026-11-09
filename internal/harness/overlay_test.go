@@ -172,3 +172,37 @@ func testWindowedVideosGoToOverlayPlanes(t *testing.T, start gpuStarter) {
 		t.Fatalf("50 lasting changes of a video's candidacy sent %d feedback updates, want one each", got)
 	}
 }
+
+func TestARefusedOverlayFlipCompositesTheWindowInstead(t *testing.T) {
+	onEachDMABUFRenderer(t, testARefusedOverlayFlipCompositesTheWindowInstead)
+}
+
+func testARefusedOverlayFlipCompositesTheWindowInstead(t *testing.T, start gpuStarter) {
+	h := start(t, func(cfg *compositor.Config) { cfg.Decor.BorderWidth = 2 }, wide)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		return b.SetOverlayPlanes(1, overlayPlane)
+	})
+	c := testclient.Connect(t, h.Socket())
+	_, in := c.Seat()
+	v := videoWindow(t, c, nil, "video")
+	c.DispatchUntil("the pointer to enter the video", func() bool { return in.Serial != 0 })
+	if err := errors.Join(in.Pointer.SetCursor(in.Serial, nil, 0, 0), c.Display.Flush()); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		v.commit(t, c, v.w.Logical)
+	}
+	h.Eventually("the video on an overlay plane", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		return len(b.Outputs()[0].ShownOverlays()) == 1
+	})
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		b.RefuseOverlayFlips(true)
+		return nil
+	})
+	v.commit(t, c, v.w.Logical)
+	want := [2][3]byte{{0, 0, 0xff}, {0xff, 0, 0}}[1-v.next]
+	h.Eventually("the refused video composited in its new colour", func(b *headless.Backend, _ *compositor.Compositor) bool {
+		o := b.Outputs()[0]
+		return len(o.ShownOverlays()) == 0 && pixel(primary(o), 200, 200) == want
+	})
+}
