@@ -57,8 +57,20 @@ func (o *Output) SetOverlays(layers []backend.Overlay) error {
 		}
 		next[i] = &l
 	}
+	err := o.dropUnsent()
 	o.overlayNext = next
-	return nil
+	return err
+}
+
+func (o *Output) dropUnsent() error {
+	var errs []error
+	for i, l := range o.overlayNext {
+		if l != nil && l != o.overlayShown[i] && l != o.overlayQueued[i] {
+			errs = append(errs, l.Release())
+		}
+	}
+	o.overlayNext = o.overlayShown
+	return errors.Join(errs...)
 }
 
 func (o *Output) FlipOverlays() (bool, error) {
@@ -105,7 +117,7 @@ func (o *Output) overlaysFlipped() error {
 }
 
 func (o *Output) releaseOverlays() error {
-	var errs []error
+	errs := []error{o.dropUnsent()}
 	for i := range o.overlayShown {
 		shown, queued := o.overlayShown[i], o.overlayQueued[i]
 		if shown != nil {

@@ -2872,3 +2872,47 @@ func TestAnOverlayIsTestedThenFlippedWithoutThePrimaryPlane(t *testing.T) {
 		t.Fatalf("the overlay's buffer was released %d times", released)
 	}
 }
+
+func TestEveryOverlayUseIsReleasedEvenIfItNeverReachedThePlane(t *testing.T) {
+	r, o, client := overlayRig(t, 2)
+	key := &fakeBuffer{client}
+	dst := image.Rect(100, 100, 740, 460)
+	if !testOverlay(o, key, client, dst) {
+		t.Fatal("the overlay was refused")
+	}
+	set, released := 0, 0
+	layer := func() []backend.Overlay {
+		set++
+		return []backend.Overlay{overlayLayer(key, client, dst, func() error { released++; return nil })}
+	}
+	if err := o.SetOverlays(layer()); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.SetOverlays(layer()); err != nil {
+		t.Fatal(err)
+	}
+	r.dev.refuseOverlay = true
+	if flipped, err := o.FlipOverlays(); err != nil || flipped {
+		t.Fatalf("a refused overlay flip: %t, %v", flipped, err)
+	}
+	r.dev.refuseOverlay = false
+	if err := o.SetOverlays(layer()); err != nil {
+		t.Fatal(err)
+	}
+	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
+		t.Fatalf("FlipOverlays = %t, %v", flipped, err)
+	}
+	r.dev.flip(t, 10, 2)
+	r.until("the overlay's flip", func() bool { return !o.flipping })
+	if err := o.SetOverlays(nil); err != nil {
+		t.Fatal(err)
+	}
+	if flipped, err := o.FlipOverlays(); err != nil || !flipped {
+		t.Fatalf("clearing the overlay: %t, %v", flipped, err)
+	}
+	r.dev.flip(t, 10, 3)
+	r.until("the flip that takes it off", func() bool { return !o.flipping })
+	if released != set {
+		t.Fatalf("%d overlay uses were handed to the backend and %d released", set, released)
+	}
+}

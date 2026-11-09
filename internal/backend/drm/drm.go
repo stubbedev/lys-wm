@@ -1841,7 +1841,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	err = errors.Join(err, o.dropRestated())
 	if err != nil {
 		if refused(err) {
-			o.overlayRefused()
+			err = errors.Join(err, o.overlayRefused())
 		}
 		if fence >= 0 {
 			err = errors.Join(err, unix.Close(fence))

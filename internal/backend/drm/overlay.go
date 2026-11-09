@@ -240,8 +240,20 @@ func (o *Output) SetOverlays(layers []backend.Overlay) error {
 		}
 		next[i] = &overlayUse{client: cf, test: t, release: l.Release}
 	}
+	err := o.dropUnsent()
 	o.overlayNext = next
-	return nil
+	return err
+}
+
+func (o *Output) dropUnsent() error {
+	var errs []error
+	for i, u := range o.overlayNext {
+		if u != nil && u != o.overlayShown[i] && u != o.overlayQueued[i] {
+			errs = append(errs, u.release())
+		}
+	}
+	o.overlayNext = o.overlayShown
+	return errors.Join(errs...)
 }
 
 func (o *Output) addOverlay() {
@@ -280,8 +292,7 @@ func (o *Output) FlipOverlays() (bool, error) {
 	o.addOverlay()
 	if err := o.b.dev.Commit(r, planeFlags, uint64(o.crtc.id)); err != nil {
 		if refused(err) {
-			o.overlayRefused()
-			return false, nil
+			return false, o.overlayRefused()
 		}
 		return false, fmt.Errorf("drm: flip the overlays of %s: %w", o.Name(), err)
 	}
@@ -306,7 +317,7 @@ func (o *Output) overlayFlipped() overlayFlip {
 }
 
 func (o *Output) dropOverlays() error {
-	var errs []error
+	errs := []error{o.dropUnsent()}
 	for i := range o.overlays {
 		shown, queued := o.overlayShown[i], o.overlayQueued[i]
 		if shown != nil {
@@ -322,9 +333,9 @@ func (o *Output) dropOverlays() error {
 	return errors.Join(errs...)
 }
 
-func (o *Output) overlayRefused() {
+func (o *Output) overlayRefused() error {
 	if o.overlayNext == o.overlayShown {
-		return
+		return nil
 	}
 	set := o.overlayNext.set()
 	if layers := slices.DeleteFunc(slices.Clone(set[:]), func(t overlayTest) bool { return t.fb == 0 }); len(layers) == 1 {
@@ -332,7 +343,7 @@ func (o *Output) overlayRefused() {
 	} else {
 		o.rememberOverlaySet(set, false)
 	}
-	o.overlayNext = o.overlayShown
+	return o.dropUnsent()
 }
 
 func (o *Output) forgetOverlayTests(fb uint32) {
