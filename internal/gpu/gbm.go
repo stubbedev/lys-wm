@@ -96,6 +96,20 @@ func NewBuffer(d DMABUF, destroy func()) *Buffer {
 	return &Buffer{DMABUF: d, destroy: destroy}
 }
 
+func (d DMABUF) Dup() (*Buffer, error) {
+	dup := NewBuffer(d, func() {})
+	dup.Planes = make([]Plane, 0, len(d.Planes))
+	for _, p := range d.Planes {
+		fd, err := unix.FcntlInt(uintptr(p.FD), unix.F_DUPFD_CLOEXEC, 0)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("gpu: duplicate plane fd %d of a %v %v buffer: %w", p.FD, d.Size, d.Format, err), dup.Close())
+		}
+		p.FD = fd
+		dup.Planes = append(dup.Planes, p)
+	}
+	return dup, nil
+}
+
 func (d *GBM) Allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, usage Usage) (*Buffer, error) {
 	if size.X <= 0 || size.Y <= 0 {
 		return nil, fmt.Errorf("gpu: cannot allocate a %dx%d buffer", size.X, size.Y)

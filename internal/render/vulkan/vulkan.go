@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/fourcc"
 	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
@@ -187,14 +186,15 @@ func (r *Renderer) DeviceName() string {
 }
 
 func (r *Renderer) Close() error {
+	errs := make([]error, 0, len(r.targets)+len(r.linears))
 	for t := range r.targets {
-		t.closeDmabuf()
+		errs = append(errs, t.closeDmabuf())
 	}
 	for l := range r.linears {
-		l.closeDmabuf()
+		errs = append(errs, l.closeDmabuf())
 	}
 	r.d.Close()
-	return nil
+	return errors.Join(errs...)
 }
 
 func (r *Renderer) Speed() render.Speed { return render.DriverSpeed(r.d.Name()) }
@@ -325,7 +325,7 @@ type Target struct {
 	kind    targetKind
 	size    image.Point
 	dmabuf  gpu.DMABUF
-	owned   bool
+	kept    *gpu.Buffer
 	tex     *texture
 }
 
@@ -355,22 +355,28 @@ func (t *Target) make() error {
 }
 
 func (t *Target) keepDmabuf() error {
-	if t.kind != exportedTarget || t.owned || t.t == nil {
+	if t.kind != exportedTarget || t.kept != nil || t.t == nil {
 		return nil
 	}
-	d, err := dupDmabuf(t.t.Dmabuf())
+	kept, err := gpu.FromDmabuf(t.t.Dmabuf()).Dup()
 	if err != nil {
 		return fmt.Errorf("vulkan: keep the %v exported target's dmabuf for the next device: %w", t.size, err)
 	}
-	t.dmabuf, t.owned = d, true
+	t.dmabuf, t.kept = kept.DMABUF, kept
 	return nil
 }
 
-func (t *Target) closeDmabuf() {
-	if t.owned {
-		closePlanes(t.dmabuf)
-		t.owned = false
+func (t *Target) closeDmabuf() error {
+	return closeKept(&t.kept)
+}
+
+func closeKept(kept **gpu.Buffer) error {
+	b := *kept
+	if b == nil {
+		return nil
 	}
+	*kept = nil
+	return b.Close()
 }
 
 func (t *Target) dropReads() {
@@ -381,25 +387,6 @@ func (t *Target) dropReads() {
 	if t.back != nil {
 		t.back.Close()
 		t.back = nil
-	}
-}
-
-func dupDmabuf(b dmabuf.Buffer) (gpu.DMABUF, error) {
-	d := gpu.FromDmabuf(b)
-	for i := range d.Planes {
-		fd, err := unix.FcntlInt(uintptr(d.Planes[i].FD), unix.F_DUPFD_CLOEXEC, 0)
-		if err != nil {
-			closePlanes(gpu.DMABUF{Planes: d.Planes[:i]})
-			return gpu.DMABUF{}, err
-		}
-		d.Planes[i].FD = fd
-	}
-	return d, nil
-}
-
-func closePlanes(d gpu.DMABUF) {
-	for _, p := range d.Planes {
-		_ = unix.Close(p.FD)
 	}
 }
 
@@ -458,8 +445,7 @@ func (t *Target) Destroy() error {
 	if t.t != nil {
 		t.t.Close()
 	}
-	t.closeDmabuf()
-	return nil
+	return t.closeDmabuf()
 }
 
 func (r *Renderer) NewTarget(size image.Point) (render.ReadTarget, error) {
@@ -535,7 +521,7 @@ type linearCopy struct {
 	target *Target
 	shared *lgpu.Buffer
 	dmabuf gpu.DMABUF
-	owned  bool
+	kept   *gpu.Buffer
 	dst    *lgpu.Linear
 	all    []image.Rectangle
 }
@@ -550,23 +536,20 @@ func (l *linearCopy) make() error {
 }
 
 func (l *linearCopy) keepDmabuf() error {
-	if l.owned {
+	if l.kept != nil {
 		return nil
 	}
-	d, err := dupDmabuf(l.shared.Dmabuf())
+	kept, err := gpu.FromDmabuf(l.shared.Dmabuf()).Dup()
 	if err != nil {
 		return fmt.Errorf("vulkan: keep the linear %v buffer's dmabuf for the next device: %w", l.all[0].Size(), err)
 	}
 	l.shared.Close()
-	l.shared, l.dmabuf, l.owned = nil, d, true
+	l.shared, l.dmabuf, l.kept = nil, kept.DMABUF, kept
 	return nil
 }
 
-func (l *linearCopy) closeDmabuf() {
-	if l.owned {
-		closePlanes(l.dmabuf)
-		l.owned = false
-	}
+func (l *linearCopy) closeDmabuf() error {
+	return closeKept(&l.kept)
 }
 
 func (l *linearCopy) copy() error {
@@ -583,8 +566,7 @@ func (l *linearCopy) free() error {
 	if l.shared != nil {
 		l.shared.Close()
 	}
-	l.closeDmabuf()
-	return err
+	return errors.Join(err, l.closeDmabuf())
 }
 
 func (r *Renderer) NewLinearCopyTarget(size image.Point, format fourcc.Format) (LinearCopyTarget, error) {

@@ -6,7 +6,6 @@ import (
 	"image"
 
 	"github.com/stubbedev/lys-lib/fourcc"
-	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -80,7 +79,7 @@ func (m vulkanMemory) drawable(size image.Point, format fourcc.Format, modifiers
 	if err != nil {
 		return drawable{}, err
 	}
-	kept, err := keepPlanes(exported)
+	kept, err := exported.Dup()
 	if err != nil {
 		return drawable{}, errors.Join(err, target.Destroy())
 	}
@@ -93,19 +92,5 @@ func (m vulkanMemory) linear(size image.Point, format fourcc.Format) (*gpu.Buffe
 		return nil, fmt.Errorf("vulkan: a linear %v %v buffer to copy into: %w", size, format, err)
 	}
 	defer b.Close()
-	return keepPlanes(gpu.FromDmabuf(b.Dmabuf()))
-}
-
-func keepPlanes(d gpu.DMABUF) (*gpu.Buffer, error) {
-	kept := gpu.NewBuffer(d, func() {})
-	kept.Planes = make([]gpu.Plane, 0, len(d.Planes))
-	for _, p := range d.Planes {
-		fd, err := unix.FcntlInt(uintptr(p.FD), unix.F_DUPFD_CLOEXEC, 0)
-		if err != nil {
-			return nil, errors.Join(fmt.Errorf("drm: keep plane fd %d of a %v %v buffer: %w", p.FD, d.Size, d.Format, err), kept.Close())
-		}
-		p.FD = fd
-		kept.Planes = append(kept.Planes, p)
-	}
-	return kept, nil
+	return gpu.FromDmabuf(b.Dmabuf()).Dup()
 }
