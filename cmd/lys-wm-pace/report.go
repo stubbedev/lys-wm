@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/stubbedev/lys-lib/atomicfile"
 
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 )
@@ -122,20 +122,8 @@ func (r *report) save(path string) error {
 	if err != nil {
 		return fmt.Errorf("encode the report: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp*")
-	if err != nil {
+	if err := atomicfile.WriteFile(path, append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write the report: %w", err)
-	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
-	_, err = tmp.Write(append(data, '\n'))
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Rename(tmp.Name(), path)
-	}
-	if err != nil {
-		return fmt.Errorf("write the report to %s: %w", path, err)
 	}
 	return nil
 }

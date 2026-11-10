@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -356,5 +357,52 @@ func TestASecondSubmitInAFrameIsOverTheLimitOfOne(t *testing.T) {
 	two.Submits.Worst = 2
 	if err := checkBaseline(b, costReport("glass-over-busy", two)); err == nil || !strings.Contains(err.Error(), "glass-over-busy: submits_per_frame 2, limit 1") {
 		t.Fatalf("two submits in a frame: %v", err)
+	}
+}
+
+func TestTheReportAndTheBaselineAreWrittenWholeAndKeepOtherRenderers(t *testing.T) {
+	dir := t.TempDir()
+	r := costReport("open", frametrace.CostSummary{Allocs: frametrace.CostStat{P50: 10, Worst: 10}})
+	reportPath := filepath.Join(dir, "report.json")
+	if err := r.save(reportPath); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved report
+	if err := json.Unmarshal(data, &saved); err != nil || len(saved.Steps) != 1 || saved.Steps[0].Name != "open" {
+		t.Fatalf("the saved report reads back as %+v, %v", saved, err)
+	}
+
+	baselinePath := filepath.Join(dir, "baseline.json")
+	other := costReport("close", frametrace.CostSummary{})
+	other.RealGPU = true
+	for _, rep := range []*report{other, r} {
+		if err := updateBaseline(baselinePath, rep); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err = os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b baseline
+	if err := json.Unmarshal(data, &b); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := b[baselineKey(other)]; !ok {
+		t.Errorf("updating %s dropped %s: %v", baselineKey(r), baselineKey(other), slices.Collect(maps.Keys(b)))
+	}
+	if _, ok := b[baselineKey(r)].Steps["open"]; !ok {
+		t.Errorf("the baseline lacks the step just written: %+v", b[baselineKey(r)])
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("writing left %d files behind, want only the report and the baseline", len(entries))
 	}
 }

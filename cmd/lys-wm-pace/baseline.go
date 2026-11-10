@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/atomicfile"
+
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 )
 
@@ -119,11 +121,7 @@ func updateBaseline(path string, r *report) error {
 	if err != nil {
 		return fmt.Errorf("encode the baseline: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(out, '\n'), 0o600); err != nil {
-		return fmt.Errorf("write the baseline: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := atomicfile.WriteFile(path, append(out, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write the baseline: %w", err)
 	}
 	return nil
