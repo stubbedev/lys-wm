@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	Format      = 1
+	Format      = 2
 	maxFDsAMsg  = 200
 	maxFrame    = 1 << 30
 	frameHeader = 8

@@ -635,6 +635,15 @@ none of this runs. [Upgrade](./guide/upgrade) is the user guide.
   `server/testdata/handover-policy.txt` classifies every request of every
   protocol and a test fails on an unclassified one. Surfaces and buffers are
   written from their state (`surface/handover.go`).
+- **The seat moves with the session**: the requests replay before the new
+  compositor's input devices appear, since those arrive on the loop after
+  it starts. The handover state therefore carries the capabilities the seat
+  advertises and those it ever had (`seat/handover.go`). `get_keyboard`,
+  `get_pointer` and `get_touch` replay against the history that admitted them,
+  and the new seat goes on advertising an inherited capability until a device
+  of its own backs it, so no client is told of a loss that did not happen. A
+  device unplugged during the handover stays advertised until one of its kind
+  has come and gone.
 - What cannot be rebuilt is retired with an event any compositor may send
   (popup dismissed, head closed, source cancelled, capture failed). What cannot
   be retired refuses the upgrade up front, naming client and reason: a session

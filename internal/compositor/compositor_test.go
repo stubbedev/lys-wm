@@ -3,7 +3,6 @@ package compositor
 import (
 	"errors"
 	"image"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,12 +105,22 @@ func setup(t *testing.T) *rig {
 func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure func(*Config)) *rig {
 	t.Helper()
 	dir := testenv.SocketDir(t)
+	r := boot(t, func(l *loop.Loop, opts server.Options) (*server.Display, error) {
+		opts.RuntimeDir = dir
+		return server.New(l, opts)
+	}, back, configure)
+	r.connect()
+	return r
+}
+
+func boot(t *testing.T, open func(*loop.Loop, server.Options) (*server.Display, error), back func(*spyRenderer) backend.Backend, configure func(*Config)) *rig {
+	t.Helper()
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := &rig{t: t, loop: l, renderer: &spyRenderer{Renderer: soft.New()}}
-	disp, err := server.New(l, server.Options{RuntimeDir: dir, Report: func(err error) { t.Error(err) }})
+	disp, err := open(l, server.Options{Report: func(err error) { t.Error(err) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +144,14 @@ func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure 
 		_ = disp.Close()
 		_ = l.Close()
 	})
-	if r.client, err = wlclient.Connect(filepath.Join(dir, disp.Name())); err != nil {
+	return r
+}
+
+func (r *rig) connect() {
+	r.t.Helper()
+	t := r.t
+	var err error
+	if r.client, err = wlclient.Connect(r.comp.display.Path()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.client.Close() })
@@ -154,7 +170,6 @@ func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure 
 		t.Fatal(err)
 	}
 	r.roundtrip()
-	return r
 }
 
 func (r *rig) on(f func()) {

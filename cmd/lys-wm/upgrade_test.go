@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/stubbedev/lys-lib/wmipc"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/handover"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	cel "github.com/stubbedev/lys-wm/internal/protocol/client/extforeigntoplevellist"
 	csl "github.com/stubbedev/lys-wm/internal/protocol/client/extsessionlock"
@@ -276,12 +278,12 @@ func TestAFailedUpgradeLeavesTheSessionRunningAndSaysWhy(t *testing.T) {
 	c.Sync()
 	before := stable(s.windows())
 
-	info := `case "$1" in --handover-info) echo '{"format":1}'; exit 0;; esac` + "\n"
+	info := answersHandoverInfo()
 	cases := map[string]struct{ binary, want string }{
 		"no such file":        {filepath.Join(t.TempDir(), "absent"), "does not answer"},
 		"not a lys-wm":        {script(t, "echo hello\n"), "not a handover description"},
 		"another format":      {script(t, `echo '{"format":999}'`+"\n"), "format 999"},
-		"rejects the config":  {script(t, `echo '{"format":1,"config_error":"c.yaml:1: nope"}'`+"\n"), "c.yaml:1: nope"},
+		"rejects the config":  {script(t, fmt.Sprintf(`echo '{"format":%d,"config_error":"c.yaml:1: nope"}'`+"\n", handover.Format)), "c.yaml:1: nope"},
 		"exits at once":       {script(t, info+"echo it broke >&2\nexit 3\n"), "it broke"},
 		"crashes mid restore": {script(t, info+"echo reading >&2\ncat <&4 >/dev/null &\nsleep 0.1\nulimit -c 0\nkill -SEGV $$\n"), "did not take over"},
 	}
@@ -848,7 +850,7 @@ func TestALateExitNoticeLeavesTheConnectionOnTheReusedNumberAlone(t *testing.T) 
 func TestAFailedUpgradeNeverClosesTheNextConnection(t *testing.T) {
 	binary := buildLysWM(t)
 	s := startProcess(t, binary, "")
-	fake := script(t, `case "$1" in --handover-info) echo '{"format":1}'; exit 0;; esac`+"\nexit 3\n")
+	fake := script(t, answersHandoverInfo()+"exit 3\n")
 	for i := range 10 {
 		if _, err := s.upgrade(fake); err == nil {
 			t.Fatal("a binary that exits at once took over")
@@ -859,4 +861,8 @@ func TestAFailedUpgradeNeverClosesTheNextConnection(t *testing.T) {
 			}
 		}
 	}
+}
+
+func answersHandoverInfo() string {
+	return fmt.Sprintf(`case "$1" in --handover-info) echo '{"format":%d}'; exit 0;; esac`+"\n", handover.Format)
 }

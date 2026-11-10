@@ -54,6 +54,7 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
@@ -72,18 +73,21 @@ func setup(t *testing.T) *env {
 	if err := e.seat.AddDevice(sw.WlSeatCapabilityKeyboard); err != nil {
 		t.Fatal(err)
 	}
+	e.serve()
+	return e
+}
+
+func (e *env) serve() {
 	done := make(chan error, 1)
-	go func() { done <- l.Run() }()
-	t.Cleanup(func() {
-		e.on(func() { l.Stop() })
+	go func() { done <- e.loop.Run() }()
+	e.t.Cleanup(func() {
+		e.on(func() { e.loop.Stop() })
 		if err := <-done; err != nil {
-			t.Errorf("Run: %v", err)
+			e.t.Errorf("Run: %v", err)
 		}
 		_ = e.disp.Close()
-		_ = l.Close()
-		_ = os.RemoveAll(dir)
+		_ = e.loop.Close()
 	})
-	return e
 }
 
 func (e *env) on(f func()) {

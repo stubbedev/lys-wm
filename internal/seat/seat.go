@@ -61,23 +61,24 @@ type Listener interface {
 }
 
 type Seat struct {
-	display  *server.Display
-	listener Listener
-	cfg      Config
-	state    *xkb.State
-	states   map[*xkb.Keymap]*xkb.State
-	keymap   *xkb.Keymap
-	device   string
-	devices  map[sw.WlSeatCapability]int
-	caps     sw.WlSeatCapability
-	everCaps sw.WlSeatCapability
-	clients  []*clientResources
-	keyboard keyboardState
-	keymaps  map[*sw.WlKeyboard]sentKeymap
-	pointer  pointerState
-	gesture  gestureState
-	touch    touchState
-	tablet   tabletState
+	display   *server.Display
+	listener  Listener
+	cfg       Config
+	state     *xkb.State
+	states    map[*xkb.Keymap]*xkb.State
+	keymap    *xkb.Keymap
+	device    string
+	devices   map[sw.WlSeatCapability]int
+	inherited sw.WlSeatCapability
+	caps      sw.WlSeatCapability
+	everCaps  sw.WlSeatCapability
+	clients   []*clientResources
+	keyboard  keyboardState
+	keymaps   map[*sw.WlKeyboard]sentKeymap
+	pointer   pointerState
+	gesture   gestureState
+	touch     touchState
+	tablet    tabletState
 }
 
 func New(d *server.Display, cfg Config, listener Listener) (*Seat, error) {
@@ -188,6 +189,7 @@ func (s *Seat) AddDevice(caps sw.WlSeatCapability) error {
 			s.devices[c]++
 		}
 	}
+	s.inherited &^= caps
 	return s.updateCapabilities()
 }
 
@@ -206,7 +208,7 @@ func (s *Seat) RemoveDevice(caps sw.WlSeatCapability) error {
 }
 
 func (s *Seat) updateCapabilities() error {
-	caps := sw.WlSeatCapability(0)
+	caps := s.inherited
 	for c, n := range s.devices {
 		if n > 0 {
 			caps |= c

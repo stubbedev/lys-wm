@@ -5,7 +5,7 @@
   launch = import ./launch.nix pkgs;
   bad = pkgs.writeShellScript "not-a-lys-wm" ''
     case "$1" in
-      --handover-info) echo '{"format":1}'; exit 0 ;;
+      --handover-info) exec lys-wm "$@" ;;
     esac
     echo "this binary breaks on purpose" >&2
     sleep 1
@@ -56,7 +56,7 @@ in
     in ''
       import json
       params = json.loads(${builtins.toJSON params})
-      exec(open("${./upgrade.py}").read())
+      exec(compile(open("${./upgrade.py}").read(), "${./upgrade.py}", "exec"))
     '';
     timeout = 600;
   }

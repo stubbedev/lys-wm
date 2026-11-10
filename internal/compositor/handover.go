@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/anim"
 	"github.com/stubbedev/lys-wm/internal/handover"
 	"github.com/stubbedev/lys-wm/internal/output"
+	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -24,6 +25,7 @@ type windowPlan struct {
 
 type HandoverState struct {
 	Display    *server.State
+	Seat       seat.HandoverState
 	WM         json.RawMessage
 	Windows    []windowPlan
 	NextWindow wm.WindowID
@@ -97,7 +99,7 @@ func (c *Compositor) HandoverState(t *handover.FDs, skip func(*server.Client) bo
 		return nil, err
 	}
 	layout := c.wm
-	out := &HandoverState{Display: st, NextWindow: c.nextWindow, Cursor: c.cursor.pixel()}
+	out := &HandoverState{Display: st, Seat: c.seat.HandoverState(), NextWindow: c.nextWindow, Cursor: c.cursor.pixel()}
 	for _, o := range c.outputs {
 		if c.blanked[o] {
 			out.Off = append(out.Off, o.Backend().Name())
@@ -131,6 +133,9 @@ func (c *Compositor) AdoptHandover(st *HandoverState, t *handover.FDs) (func() e
 	}
 	c.animations = anim.Table{}
 	c.parked = false
+	if err := c.seat.AdoptHandover(st.Seat); err != nil {
+		return nil, err
+	}
 	return c.display.Restore(st.Display, t)
 }
 
