@@ -93,7 +93,11 @@ in
         assert framed == sorted(${builtins.toJSON framedCursors}), f"the cursor is drawn in the frame on {framed}"
         machine.succeed("journalctl -b --no-pager -t lys-wm | grep 'rendering on ${rendersOn},'")
         machine.fail("journalctl -b --no-pager -t lys-wm | grep CREATE_DUMB")
-        if ${if lysWMArgs == "" then "True" else "False"}:
+        if ${
+          if lysWMArgs == ""
+          then "True"
+          else "False"
+        }:
             compositor = machine.succeed("pgrep -x lys-wm").split()
             assert len(compositor) == 1, f"a session without --holder runs {compositor}"
             machine.succeed(f"ls -l /proc/{compositor[0]}/fd | grep -q /dev/dri/card")

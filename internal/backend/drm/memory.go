@@ -75,15 +75,11 @@ func (m vulkanMemory) modifiers(format fourcc.Format) ([]fourcc.Modifier, error)
 }
 
 func (m vulkanMemory) drawable(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, _ bufferUse) (drawable, error) {
-	target, exported, err := m.r.NewExportedTarget(size, format, modifiers)
+	target, shared, err := m.r.NewExportedTarget(size, format, modifiers)
 	if err != nil {
 		return drawable{}, err
 	}
-	kept, err := exported.Dup()
-	if err != nil {
-		return drawable{}, errors.Join(err, target.Destroy())
-	}
-	return drawable{target: target, buf: kept.DMABUF, free: func() error { return errors.Join(target.Destroy(), kept.Close()) }}, nil
+	return drawable{target: target, buf: shared.DMABUF, free: func() error { return errors.Join(target.Destroy(), shared.Close()) }}, nil
 }
 
 func (m vulkanMemory) linear(size image.Point, format fourcc.Format) (*gpu.Buffer, error) {

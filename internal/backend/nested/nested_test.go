@@ -486,6 +486,41 @@ func TestVulkanCopiesLinearBytesForADeviceThatRendersNoLinear(t *testing.T) {
 	checkLinearBytes(t, r, &vulkanStack{r: r, layout: hostLayout{modifier: fourcc.Invalid, copied: true}}, nil, r, fourcc.Linear)
 }
 
+func TestAVulkanStackLeavesNoDescriptorOfABufferItFreed(t *testing.T) {
+	r := testenv.Vulkan(t)
+	if !r.Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+	}
+	rendered, err := r.ExportModifiers(dmabufFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		layout    hostLayout
+		modifiers []fourcc.Modifier
+	}{
+		{"rendered in place", hostLayout{direct: true}, rendered},
+		{"copied into", hostLayout{modifier: fourcc.Linear, copied: true}, nil},
+	} {
+		s := &vulkanStack{r: r, layout: tc.layout}
+		before := testenv.OpenDMABUFs(t)
+		b, err := s.allocate(image.Pt(16, 8), tc.modifiers)
+		if err != nil {
+			t.Fatalf("a buffer %s: %v", tc.name, err)
+		}
+		if held := testenv.OpenDMABUFs(t); held < before+len(b.dmabuf.Planes) {
+			t.Errorf("a buffer %s: %d dma-buf descriptors are open while it is shared, %d before: its %d planes are not among them", tc.name, held, before, len(b.dmabuf.Planes))
+		}
+		if err := b.free(); err != nil {
+			t.Fatalf("a buffer %s: %v", tc.name, err)
+		}
+		if open := testenv.OpenDMABUFs(t); open != before {
+			t.Errorf("a buffer %s: %d dma-buf descriptors are open after it was freed, %d before it was allocated", tc.name, open, before)
+		}
+	}
+}
+
 type dmabufHost interface {
 	render.Renderer
 	ImportTexture(b gpu.DMABUF) (render.Texture, error)

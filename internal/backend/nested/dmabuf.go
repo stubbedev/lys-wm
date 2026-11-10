@@ -235,26 +235,32 @@ func (s *vulkanStack) modifiers(host feedback.Feedback) ([]fourcc.Modifier, erro
 func (s *vulkanStack) allocate(size image.Point, modifiers []fourcc.Modifier) (sharedBuffer, error) {
 	switch {
 	case s.layout.direct:
-		target, d, err := s.r.NewExportedTarget(size, dmabufFormat, modifiers)
-		if err != nil {
-			return sharedBuffer{}, err
-		}
-		return sharedBuffer{target: target, dmabuf: d, free: target.Destroy}, nil
+		return s.exported(size, modifiers)
 	case s.layout.copied:
 		c, err := s.r.NewLinearCopyTarget(size, dmabufFormat)
 		if err != nil {
 			return sharedBuffer{}, err
 		}
-		d := c.DMABUF
-		d.Modifier = s.layout.modifier
-		return sharedBuffer{target: c.Target, dmabuf: d, prepare: c.Copy, free: c.Free}, nil
+		return s.toldAs(sharedBuffer{target: c.Target, dmabuf: c.Buffer.DMABUF, prepare: c.Copy, free: func() error { return errors.Join(c.Free(), c.Buffer.Close()) }}), nil
 	}
-	target, d, err := s.r.NewExportedTarget(size, dmabufFormat, []fourcc.Modifier{fourcc.Linear})
+	b, err := s.exported(size, []fourcc.Modifier{fourcc.Linear})
 	if err != nil {
 		return sharedBuffer{}, err
 	}
-	d.Modifier = s.layout.modifier
-	return sharedBuffer{target: target, dmabuf: d, free: target.Destroy}, nil
+	return s.toldAs(b), nil
+}
+
+func (s *vulkanStack) exported(size image.Point, modifiers []fourcc.Modifier) (sharedBuffer, error) {
+	target, shared, err := s.r.NewExportedTarget(size, dmabufFormat, modifiers)
+	if err != nil {
+		return sharedBuffer{}, err
+	}
+	return sharedBuffer{target: target, dmabuf: shared.DMABUF, free: func() error { return errors.Join(target.Destroy(), shared.Close()) }}, nil
+}
+
+func (s *vulkanStack) toldAs(b sharedBuffer) sharedBuffer {
+	b.dmabuf.Modifier = s.layout.modifier
+	return b
 }
 
 func (s *vulkanStack) close() error {

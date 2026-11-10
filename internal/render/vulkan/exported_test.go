@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/rendertest"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
 const sharedFormat = fourcc.XRGB8888
@@ -20,6 +21,7 @@ var sharedSize = image.Pt(8, 8)
 type sharedTarget struct {
 	t      *testing.T
 	r      *vulkan.Renderer
+	before int
 	target render.Target
 	held   *gpu.Buffer
 	copy   func() error
@@ -34,18 +36,14 @@ func exporting(t *testing.T) *vulkan.Renderer {
 	return r
 }
 
-func hold(t *testing.T, r *vulkan.Renderer, target render.Target, shared gpu.DMABUF, copy func() error) *sharedTarget {
+func hold(t *testing.T, r *vulkan.Renderer, before int, target render.Target, held *gpu.Buffer, copy func() error) *sharedTarget {
 	t.Helper()
-	held, err := shared.Dup()
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() {
 		if err := held.Close(); err != nil {
 			t.Error(err)
 		}
 	})
-	return &sharedTarget{t: t, r: r, target: target, held: held, copy: copy}
+	return &sharedTarget{t: t, r: r, before: before, target: target, held: held, copy: copy}
 }
 
 func (s *sharedTarget) paint(c render.Color) {
@@ -110,7 +108,7 @@ func (s *sharedTarget) holdsTheSameMemory(fd int) bool {
 	return false
 }
 
-func (s *sharedTarget) survivesALostDevice(free func() error) {
+func (s *sharedTarget) survivesALostDeviceAndItsTarget(free func() error) {
 	s.t.Helper()
 	red, blue := render.Color{R: 0xff, A: 0xff}, render.Color{B: 0xff, A: 0xff}
 	s.paint(red)
@@ -150,6 +148,19 @@ func (s *sharedTarget) survivesALostDevice(free func() error) {
 	if left := vulkan.KeptPlanes(s.r); len(left) != 0 {
 		s.t.Fatalf("%d planes are still kept after their target was destroyed", len(left))
 	}
+
+	if open, want := testenv.OpenDMABUFs(s.t), s.before+len(s.held.Planes); open != want {
+		s.t.Fatalf("%d dma-buf descriptors are open after the target was destroyed, want %d: those there were before and the holder's", open, want)
+	}
+	if got := s.shown(); got != blue {
+		s.t.Fatalf("after its target was destroyed the holder's dmabuf shows %v, want %v: the buffer is the holder's to close", got, blue)
+	}
+	if err := s.held.Close(); err != nil {
+		s.t.Fatal(err)
+	}
+	if open := testenv.OpenDMABUFs(s.t); open != s.before {
+		s.t.Fatalf("%d dma-buf descriptors are open after the holder closed its buffer, %d before the target was made", open, s.before)
+	}
 }
 
 func TestAnExportedTargetDrawsIntoTheSameDMABUFAfterALostDeviceOnHardware(t *testing.T) {
@@ -158,18 +169,20 @@ func TestAnExportedTargetDrawsIntoTheSameDMABUFAfterALostDeviceOnHardware(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
+	before := testenv.OpenDMABUFs(t)
 	target, shared, err := r.NewExportedTarget(sharedSize, sharedFormat, modifiers)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hold(t, r, target, shared, func() error { return nil }).survivesALostDevice(target.Destroy)
+	hold(t, r, before, target, shared, func() error { return nil }).survivesALostDeviceAndItsTarget(target.Destroy)
 }
 
 func TestALinearCopyTargetCopiesIntoTheSameDMABUFAfterALostDeviceOnHardware(t *testing.T) {
 	r := exporting(t)
+	before := testenv.OpenDMABUFs(t)
 	c, err := r.NewLinearCopyTarget(sharedSize, sharedFormat)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hold(t, r, c.Target, c.DMABUF, c.Copy).survivesALostDevice(c.Free)
+	hold(t, r, before, c.Target, c.Buffer, c.Copy).survivesALostDeviceAndItsTarget(c.Free)
 }

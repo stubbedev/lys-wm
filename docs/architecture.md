@@ -168,6 +168,11 @@ created with `EGL_LOSE_CONTEXT_ON_RESET`.
   their identity, dmabuf-backed ones reimported from their open fds. The
   compositor then re-uploads shm surfaces, drops what it drew itself and
   repaints every output (`compositor/gpureset.go`).
+- A target the Vulkan renderer exports (`NewExportedTarget`,
+  `NewLinearCopyTarget`) hands out its dmabuf as a `gpu.Buffer` the caller
+  owns and closes. It outlives the target and the device, so nothing a caller
+  holds dies in `Recover`; the renderer duplicates descriptors for itself only
+  when a device is lost.
 - More than lys-lib's `gpu.LossLimit` (3) losses within `LossWindow` (1 min)
   returns `backend.ErrDeviceLost`. Secondary-GPU blitters in `backend/drm`
   recover the same way, bounded separately.

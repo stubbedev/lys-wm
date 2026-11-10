@@ -493,25 +493,32 @@ func (r *Renderer) ExportModifiers(format fourcc.Format) ([]fourcc.Modifier, err
 	return r.d.Modifiers(format)
 }
 
-func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (render.ReadTarget, gpu.DMABUF, error) {
+func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier) (render.ReadTarget, *gpu.Buffer, error) {
 	if r.lost != nil {
-		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share while the device is lost: %w", size, r.lost)
+		return nil, nil, fmt.Errorf("vulkan: a %v target to share while the device is lost: %w", size, r.lost)
 	}
 	t, err := r.d.NewTarget(size.X, size.Y, format, modifiers)
 	if err != nil {
-		return nil, gpu.DMABUF{}, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, r.note(err))
+		return nil, nil, fmt.Errorf("vulkan: a %v target to share in %v: %w", size, format, r.note(err))
+	}
+	shared, err := gpu.FromDmabuf(t.Dmabuf()).Dup()
+	if err != nil {
+		t.Close()
+		return nil, nil, fmt.Errorf("vulkan: share the dmabuf of a %v %v target: %w", size, format, err)
 	}
 	target := &Target{r: r, t: t, kind: exportedTarget, size: size}
 	r.targets[target] = struct{}{}
-	return target, gpu.FromDmabuf(t.Dmabuf()), nil
+	return target, shared, nil
 }
 
 // LinearCopyTarget is a target whose frames reach a linear dmabuf by the
 // copy engine, for a device that renders into no linear layout. Copy
-// after each frame; Free releases all of it.
+// after each frame; Free releases all of it but Buffer, which is the
+// caller's: it outlives the target and a lost device, and the caller
+// closes it.
 type LinearCopyTarget struct {
 	Target render.ReadTarget
-	DMABUF gpu.DMABUF
+	Buffer *gpu.Buffer
 	Copy   func() error
 	Free   func() error
 }
@@ -587,8 +594,14 @@ func (r *Renderer) NewLinearCopyTarget(size image.Point, format fourcc.Format) (
 		shared.Close()
 		return LinearCopyTarget{}, err
 	}
+	buffer, err := l.dmabuf.Dup()
+	if err != nil {
+		l.dst.Close()
+		shared.Close()
+		return LinearCopyTarget{}, errors.Join(fmt.Errorf("vulkan: share the dmabuf of a linear %v %v buffer: %w", size, format, err), l.target.Destroy())
+	}
 	r.linears[l] = struct{}{}
-	return LinearCopyTarget{Target: l.target, DMABUF: l.dmabuf, Copy: l.copy, Free: l.free}, nil
+	return LinearCopyTarget{Target: l.target, Buffer: buffer, Copy: l.copy, Free: l.free}, nil
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
