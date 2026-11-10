@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ type nestedLysWM struct {
 	t       *testing.T
 	host    *Harness
 	loop    *loop.Loop
+	backend *nested.Backend
 	comp    *compositor.Compositor
 	dir     string
 	display string
@@ -64,6 +66,7 @@ func startNestedOn(t *testing.T, host *Harness, renderer nested.Renderer, config
 	if err != nil {
 		t.Fatal(err)
 	}
+	n.backend = b
 	display, err := server.New(n.loop, server.Options{RuntimeDir: n.dir, Report: func(err error) { t.Error(err) }})
 	if err != nil {
 		t.Fatal(err)
@@ -333,12 +336,65 @@ func TestNestedLysWMRendersWithVulkan(t *testing.T) {
 	n.eventually("the window in the nested lys-wm", nestedToplevels(1))
 	const x, y = 100, 100
 	host.Eventually("the nested window through Vulkan and the host", showing(x, y, [3]byte{0xff, 0, 0}))
-	green := c.Buffer(w.Size, 0, testclient.Fill(0, 0xff, 0))
 	w.Stop()
-	if err := errors.Join(w.Surface.Attach(green, 0, 0), w.Surface.DamageBuffer(0, 0, int32(w.Size.X), int32(w.Size.Y)), w.Surface.Commit(), c.Display.Flush()); err != nil {
+	refill(t, c, w, testclient.Fill(0, 0xff, 0))
+	host.Eventually("the next frame through both buffers of the chain", showing(x, y, [3]byte{0, 0xff, 0}))
+}
+
+func refill(t *testing.T, c *testclient.Client, w *testclient.Window, paint testclient.Painter) {
+	t.Helper()
+	buf := c.Buffer(w.Size, 0, paint)
+	if err := errors.Join(w.Surface.Attach(buf, 0, 0), w.Surface.DamageBuffer(0, 0, int32(w.Size.X), int32(w.Size.Y)), w.Surface.Commit(), c.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}
-	host.Eventually("the next frame through both buffers of the chain", showing(x, y, [3]byte{0, 0xff, 0}))
+}
+
+func TestNestedLysWMRendersWithVulkanIntoTheHostsBuffersAfterAGPUReset(t *testing.T) {
+	if !testenv.Vulkan(t).Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs with a host; lavapipe needs /dev/udmabuf")
+	}
+	host := StartVulkan(t, func(*compositor.Config) {}, desktop)
+	got := &reports{}
+	n := startNestedOn(t, host, nested.Vulkan, func(cfg *compositor.Config) { cfg.Report = got.report })
+	host.Eventually("the nested lys-wm window", mappedToplevels(1))
+	c := testclient.Connect(t, filepath.Join(n.dir, n.display))
+	w := c.Window("nested through a reset", testclient.Fill(0, 0, 0xff))
+	c.DispatchUntil("the window to map", w.Mapped)
+	n.eventually("the window in the nested lys-wm", nestedToplevels(1))
+	const x, y = 100, 100
+	host.Eventually("the nested window before the reset", showing(x, y, [3]byte{0xff, 0, 0}))
+	w.Stop()
+	n.do(func(*compositor.Compositor) error {
+		n.backend.Renderer().LoseDevice()
+		return nil
+	})
+	for _, frame := range []struct {
+		paint testclient.Painter
+		shows [3]byte
+	}{
+		{testclient.Fill(0, 0xff, 0), [3]byte{0, 0xff, 0}},
+		{testclient.Fill(0xff, 0, 0), [3]byte{0, 0, 0xff}},
+		{testclient.Fill(0, 0, 0xff), [3]byte{0xff, 0, 0}},
+	} {
+		refill(t, c, w, frame.paint)
+		host.Eventually(fmt.Sprintf("%v in a buffer the host imported before the reset", frame.shows), showing(x, y, frame.shows))
+	}
+	n.do(func(c *compositor.Compositor) error {
+		if got := c.GPUResets(); got != 1 {
+			return fmt.Errorf("the nested lys-wm recovered from %d GPU resets, want 1", got)
+		}
+		return n.backend.Renderer().Lost()
+	})
+	resets := 0
+	errs := got.take()
+	for _, err := range errs {
+		if strings.Contains(err.Error(), "the GPU was reset") {
+			resets++
+		}
+	}
+	if resets != 1 || len(errs) != 1 {
+		t.Fatalf("the nested lys-wm reported %v, want one GPU reset and nothing else", errs)
+	}
 }
 
 func TestNestedGLESNamesWhatAHostWithoutAMainDeviceLacks(t *testing.T) {
