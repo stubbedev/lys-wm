@@ -8,28 +8,18 @@ import (
 	"fmt"
 	"os"
 	"sync/atomic"
-	"time"
 
+	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/logind"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 )
 
-const (
-	login1        = "org.freedesktop.login1"
-	managerPath   = "/org/freedesktop/login1"
-	managerIface  = login1 + ".Manager"
-	sessionIface  = login1 + ".Session"
-	seatIface     = login1 + ".Seat"
-	propsIface    = "org.freedesktop.DBus.Properties"
-	callTimeout   = 5 * time.Second
-	defaultSystem = "unix:path=/run/dbus/system_bus_socket"
-)
+const defaultSystem = "unix:path=/run/dbus/system_bus_socket"
 
-type Device struct {
-	Major, Minor uint32
-}
+type Device = logind.Device
 
 func DeviceOf(path string) (Device, error) {
 	var st unix.Stat_t
@@ -55,19 +45,17 @@ type Listener interface {
 
 type Logind struct {
 	conn       *dbus.Conn
-	manager    dbus.BusObject
-	session    dbus.BusObject
-	seat       dbus.BusObject
+	manager    logind.Manager
+	session    logind.Session
+	seat       logind.Seat
 	listener   Listener
 	loop       *loop.Loop
-	signals    chan *dbus.Signal
-	done       chan struct{}
+	watch      *logind.Watch
+	unwatch    context.CancelFunc
 	active     bool
 	sleeping   atomic.Bool
 	work       loop.Serial
 	deferPause bool
-	seatID     string
-	owner      string
 }
 
 func SystemBus(getenv func(string) string) string {
@@ -77,155 +65,85 @@ func SystemBus(getenv func(string) string) string {
 	return defaultSystem
 }
 
-func call(obj dbus.BusObject, method string, args ...any) *dbus.Call {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	defer cancel()
-	return obj.CallWithContext(ctx, method, 0, args...)
-}
-
 func Open(l *loop.Loop, address string, getenv func(string) string, listener Listener) (lg *Logind, err error) {
 	conn, err := dbus.Connect(address)
 	if err != nil {
 		return nil, fmt.Errorf("session: connect to the system bus: %w", err)
 	}
-	lg = &Logind{conn: conn, listener: listener, loop: l, signals: make(chan *dbus.Signal, 32), done: make(chan struct{})}
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, conn.Close())
 		}
 	}()
-	if err := call(conn.BusObject(), "org.freedesktop.DBus.GetNameOwner", login1).Store(&lg.owner); err != nil {
-		return nil, fmt.Errorf("session: find the owner of %s: %w", login1, err)
-	}
-	lg.manager = conn.Object(login1, managerPath)
-	var path dbus.ObjectPath
-	if id := getenv("XDG_SESSION_ID"); id != "" {
-		err = call(lg.manager, managerIface+".GetSession", id).Store(&path)
-	} else {
-		err = call(lg.manager, managerIface+".GetSessionByPID", uint32(os.Getpid())).Store(&path) //nolint:gosec // process IDs fit a uint32
-	}
-	if err != nil {
+	ctx := context.Background()
+	lg = &Logind{conn: conn, manager: logind.NewManager(conn), listener: listener, loop: l}
+	if lg.session, err = ownSession(ctx, lg.manager, getenv); err != nil {
 		return nil, fmt.Errorf("session: find this process's logind session: %w", err)
 	}
-	lg.session = conn.Object(login1, path)
-	var seat struct {
-		ID   string
-		Path dbus.ObjectPath
+	if lg.seat, err = lg.session.Seat(ctx); err != nil {
+		return nil, fmt.Errorf("session: %w", err)
 	}
-	if err := lg.property(lg.session, sessionIface, "Seat", &seat); err != nil {
-		return nil, err
+	if lg.active, err = lg.session.Active(ctx); err != nil {
+		return nil, fmt.Errorf("session: %w", err)
 	}
-	lg.seat, lg.seatID = conn.Object(login1, seat.Path), seat.ID
-	if err := lg.property(lg.session, sessionIface, "Active", &lg.active); err != nil {
-		return nil, err
+	if err := lg.session.TakeControl(ctx, false); err != nil {
+		return nil, fmt.Errorf("session: %w", err)
 	}
-	if err := call(lg.session, sessionIface+".TakeControl", false).Err; err != nil {
-		return nil, fmt.Errorf("session: take control of %s: %w", path, err)
+	var watching context.Context
+	watching, lg.unwatch = context.WithCancel(ctx)
+	if lg.watch, err = lg.session.Watch(watching, lg.relay); err != nil {
+		lg.unwatch()
+		return nil, fmt.Errorf("session: %w", errors.Join(err, lg.session.ReleaseControl(ctx)))
 	}
-	for _, opts := range [][]dbus.MatchOption{
-		{dbus.WithMatchSender(login1), dbus.WithMatchObjectPath(path), dbus.WithMatchInterface(sessionIface)},
-		{dbus.WithMatchSender(login1), dbus.WithMatchObjectPath(path), dbus.WithMatchInterface(propsIface), dbus.WithMatchMember("PropertiesChanged")},
-		{dbus.WithMatchSender(login1), dbus.WithMatchObjectPath(managerPath), dbus.WithMatchInterface(managerIface), dbus.WithMatchMember("PrepareForSleep")},
-	} {
-		if err := conn.AddMatchSignal(opts...); err != nil {
-			return nil, fmt.Errorf("session: subscribe to %s: %w", path, err)
-		}
-	}
-	conn.Signal(lg.signals)
-	go lg.relay()
 	return lg, nil
 }
 
-func (lg *Logind) property(obj dbus.BusObject, iface, name string, out any) error {
-	v, err := obj.GetProperty(iface + "." + name)
+func ownSession(ctx context.Context, m logind.Manager, getenv func(string) string) (logind.Session, error) {
+	if id := getenv("XDG_SESSION_ID"); id != "" {
+		return m.GetSession(ctx, logind.SessionID(id))
+	}
+	pid, err := intconv.Exact[uint32](os.Getpid())
 	if err != nil {
-		return fmt.Errorf("session: read %s.%s: %w", iface, name, err)
+		return logind.Session{}, fmt.Errorf("pid %d: %w", os.Getpid(), err)
 	}
-	if err := v.Store(out); err != nil {
-		return fmt.Errorf("session: decode %s.%s: %w", iface, name, err)
-	}
-	return nil
+	return m.GetSessionByPID(ctx, pid)
 }
 
 func (lg *Logind) Seat() string {
-	return lg.seatID
+	return string(lg.seat.ID())
 }
 
 func (lg *Logind) Active() bool {
 	return lg.active
 }
 
-func (lg *Logind) relay() {
-	for {
-		select {
-		case sig, ok := <-lg.signals:
-			if !ok {
-				return
-			}
-			if err := lg.loop.Post(func() error { return lg.handle(sig) }); err != nil {
-				return
-			}
-		case <-lg.done:
-			return
-		}
+func (lg *Logind) relay(e logind.Event, decodeErr error) {
+	posted := lg.loop.Post(func() error { return errors.Join(decodeErr, lg.handle(e)) })
+	if posted == nil {
+		return
+	}
+	lg.unwatch()
+	if r, ok := e.(logind.DeviceResumed); ok && errors.Is(posted, loop.ErrClosed) {
+		_ = unix.Close(int(r.FD))
 	}
 }
 
-func closeFDs(body []any) error {
-	var errs []error
-	for _, v := range body {
-		if fd, ok := v.(dbus.UnixFD); ok {
-			errs = append(errs, unix.Close(int(fd)))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (lg *Logind) handle(sig *dbus.Signal) error {
-	if sig.Sender != lg.owner {
-		return closeFDs(sig.Body)
-	}
-	switch sig.Name {
-	case sessionIface + ".PauseDevice":
-		var d Device
-		var kind string
-		if err := dbus.Store(sig.Body, &d.Major, &d.Minor, &kind); err != nil {
-			return fmt.Errorf("session: PauseDevice: %w", err)
-		}
-		err := lg.listener.DevicePaused(d)
-		if kind == "pause" && !lg.deferPause {
-			lg.work.Run(func() { lg.completePause(d) })
+func (lg *Logind) handle(e logind.Event) error {
+	switch e := e.(type) {
+	case logind.DevicePaused:
+		err := lg.listener.DevicePaused(e.Device())
+		if e.Kind == logind.PausePause && !lg.deferPause {
+			lg.work.Run(func() { lg.completePause(e.Device()) })
 		}
 		return err
-	case sessionIface + ".ResumeDevice":
-		var d Device
-		var fd dbus.UnixFD
-		if err := dbus.Store(sig.Body, &d.Major, &d.Minor, &fd); err != nil {
-			return fmt.Errorf("session: ResumeDevice: %w", err)
-		}
-		return lg.listener.DeviceResumed(d, int(fd))
-	case managerIface + ".PrepareForSleep":
-		var sleeping bool
-		if err := dbus.Store(sig.Body, &sleeping); err != nil {
-			return fmt.Errorf("session: PrepareForSleep: %w", err)
-		}
-		lg.sleeping.Store(sleeping)
-		return lg.listener.PrepareForSleep(sleeping)
-	case propsIface + ".PropertiesChanged":
-		var iface string
-		var changed map[string]dbus.Variant
-		var invalidated []string
-		if err := dbus.Store(sig.Body, &iface, &changed, &invalidated); err != nil {
-			return fmt.Errorf("session: PropertiesChanged: %w", err)
-		}
-		v, ok := changed["Active"]
-		if iface != sessionIface || !ok {
-			return nil
-		}
-		if err := v.Store(&lg.active); err != nil {
-			return fmt.Errorf("session: decode Active: %w", err)
-		}
-		return lg.listener.ActiveChanged(lg.active)
+	case logind.DeviceResumed:
+		return lg.listener.DeviceResumed(e.Device(), int(e.FD))
+	case logind.Sleep:
+		lg.sleeping.Store(e.Start)
+		return lg.listener.PrepareForSleep(e.Start)
+	case logind.ActiveChanged:
+		lg.active = e.Active
+		return lg.listener.ActiveChanged(e.Active)
 	}
 	return nil
 }
@@ -235,12 +153,11 @@ func (lg *Logind) TakeDevice(path string) (int, Device, error) {
 	if err != nil {
 		return -1, Device{}, err
 	}
-	var fd dbus.UnixFD
-	var inactive bool
-	if err := call(lg.session, sessionIface+".TakeDevice", d.Major, d.Minor).Store(&fd, &inactive); err != nil {
+	fd, _, err := lg.session.TakeDevice(context.Background(), d)
+	if err != nil {
 		return -1, Device{}, fmt.Errorf("session: take %s: %w", path, err)
 	}
-	return int(fd), d, nil
+	return fd, d, nil
 }
 
 func (lg *Logind) DeferPauses() {
@@ -248,8 +165,8 @@ func (lg *Logind) DeferPauses() {
 }
 
 func (lg *Logind) CompletePause(d Device) error {
-	if err := call(lg.session, sessionIface+".PauseDeviceComplete", d.Major, d.Minor).Err; err != nil {
-		return fmt.Errorf("session: complete the pause of device %d:%d: %w", d.Major, d.Minor, err)
+	if err := lg.session.PauseDeviceComplete(context.Background(), d); err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
 	return nil
 }
@@ -265,25 +182,25 @@ func (lg *Logind) completePause(d Device) {
 }
 
 func (lg *Logind) ReleaseDevice(d Device) error {
-	if err := call(lg.session, sessionIface+".ReleaseDevice", d.Major, d.Minor).Err; err != nil {
-		return fmt.Errorf("session: release device %d:%d: %w", d.Major, d.Minor, err)
+	if err := lg.session.ReleaseDevice(context.Background(), d); err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
 	return nil
 }
 
 func (lg *Logind) InhibitLidSwitch() (*os.File, error) {
-	var fd dbus.UnixFD
-	if err := call(lg.manager, managerIface+".Inhibit", "handle-lid-switch", "lys-wm", "lys-wm applies the lid policy itself", "block").Store(&fd); err != nil {
-		return nil, fmt.Errorf("session: take the handle-lid-switch inhibitor: %w", err)
+	f, err := lg.manager.Inhibit(context.Background(), logind.InhibitLidSwitch, "lys-wm", "lys-wm applies the lid policy itself", logind.InhibitBlock)
+	if err != nil {
+		return nil, fmt.Errorf("session: %w", err)
 	}
-	return os.NewFile(uintptr(int(fd)), "logind-lid-inhibitor"), nil
+	return f, nil
 }
 
 func (lg *Logind) Suspend() error {
 	if lg.sleeping.Load() {
 		return nil
 	}
-	err := call(lg.manager, managerIface+".Suspend", false).Err
+	err := lg.manager.Power(context.Background(), logind.Suspend)
 	var refusal dbus.Error
 	switch {
 	case errors.As(err, &refusal):
@@ -296,15 +213,13 @@ func (lg *Logind) Suspend() error {
 }
 
 func (lg *Logind) SwitchTo(vt uint32) error {
-	if err := call(lg.seat, seatIface+".SwitchTo", vt).Err; err != nil {
-		return fmt.Errorf("session: switch to VT %d: %w", vt, err)
+	if err := lg.seat.SwitchTo(context.Background(), vt); err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
 	return nil
 }
 
 func (lg *Logind) Close() error {
 	lg.work.Wait()
-	close(lg.done)
-	lg.conn.RemoveSignal(lg.signals)
-	return errors.Join(call(lg.session, sessionIface+".ReleaseControl").Err, lg.conn.Close())
+	return errors.Join(lg.watch.Stop(), lg.session.ReleaseControl(context.Background()), lg.conn.Close())
 }

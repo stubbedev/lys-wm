@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/logind"
+
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -81,7 +83,7 @@ func TestWithoutALidPolicyTheLidNeverSuspends(t *testing.T) {
 func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 	t.Parallel()
 	var r reports
-	refusal := errors.New("session: logind refused to suspend: org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress")
+	refusal := errors.New("session: logind refused to suspend: " + logind.ErrOperationInProgress + ": logind Manager.Suspend(false) on " + string(logind.ManagerPath) + ": There's already a shutdown or sleep operation in progress")
 	suspends := 0
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report

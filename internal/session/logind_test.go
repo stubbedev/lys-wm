@@ -11,170 +11,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/logind"
+	"github.com/stubbedev/lys-lib/logind/logindtest"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
-	"github.com/stubbedev/lys-lib/third_party/godbus/prop"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
-	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
-const (
-	sessionPath         = dbus.ObjectPath("/org/freedesktop/login1/session/_31")
-	operationInProgress = login1 + ".OperationInProgress"
-)
+const own logind.SessionID = "1"
 
-type fakeLogind struct {
-	address  string
-	mu       sync.Mutex
-	calls    []string
-	conn     *dbus.Conn
-	props    *prop.Properties
-	sleeping bool
-	refusal  *dbus.Error
-}
-
-func (f *fakeLogind) note(s string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls = append(f.calls, s)
-}
-
-func (f *fakeLogind) seen() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return slices.Clone(f.calls)
-}
-
-func (f *fakeLogind) refuse(e *dbus.Error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.refusal = e
-}
-
-func (f *fakeLogind) sleep() *dbus.Error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	switch {
-	case f.refusal != nil:
-		return f.refusal
-	case f.sleeping:
-		return dbus.NewError(operationInProgress, []any{"There's already a shutdown or sleep operation in progress"})
-	}
-	f.sleeping = true
-	if err := f.conn.Emit(managerPath, managerIface+".PrepareForSleep", true); err != nil {
-		return dbus.MakeFailedError(err)
-	}
-	return nil
-}
-
-func (f *fakeLogind) wake() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sleeping = false
-	return f.conn.Emit(managerPath, managerIface+".PrepareForSleep", false)
-}
-
-type manager struct{ f *fakeLogind }
-
-func (m manager) GetSession(id string) (dbus.ObjectPath, *dbus.Error) {
-	m.f.note("GetSession " + id)
-	return sessionPath, nil
-}
-
-func (m manager) GetSessionByPID(uint32) (dbus.ObjectPath, *dbus.Error) {
-	m.f.note("GetSessionByPID")
-	return sessionPath, nil
-}
-
-func (m manager) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Error) {
-	m.f.note("Inhibit " + what + " " + mode)
-	fd, err := os.Open(os.DevNull)
-	if err != nil {
-		return 0, dbus.MakeFailedError(err)
-	}
-	return dbus.UnixFD(fd.Fd()), nil
-}
-
-func (m manager) Suspend(interactive bool) *dbus.Error {
-	m.f.note(fmt.Sprintf("Suspend %v", interactive))
-	return m.f.sleep()
-}
-
-type session struct{ f *fakeLogind }
-
-func (s session) TakeControl(force bool) *dbus.Error {
-	s.f.note("TakeControl")
-	return nil
-}
-
-func (s session) ReleaseControl() *dbus.Error {
-	s.f.note("ReleaseControl")
-	return nil
-}
-
-func (s session) TakeDevice(major, minor uint32) (dbus.UnixFD, bool, *dbus.Error) {
-	s.f.note("TakeDevice")
-	fd, err := os.Open(os.DevNull)
-	if err != nil {
-		return 0, false, dbus.MakeFailedError(err)
-	}
-	return dbus.UnixFD(fd.Fd()), false, nil
-}
-
-func (s session) ReleaseDevice(major, minor uint32) *dbus.Error {
-	s.f.note("ReleaseDevice")
-	return nil
-}
-
-func (s session) PauseDeviceComplete(major, minor uint32) *dbus.Error {
-	s.f.note("PauseDeviceComplete")
-	return nil
-}
-
-type seat struct{ f *fakeLogind }
-
-func (s seat) SwitchTo(vt uint32) *dbus.Error {
-	s.f.note("SwitchTo")
-	if vt == 0 {
-		return dbus.MakeFailedError(errors.New("no VT 0"))
-	}
-	return nil
-}
-
-func logind(t *testing.T, address string) *fakeLogind {
-	t.Helper()
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	f := &fakeLogind{address: address, conn: conn}
-	seatPath := dbus.ObjectPath("/org/freedesktop/login1/seat/seat0")
-	for _, e := range []struct {
-		v     any
-		path  dbus.ObjectPath
-		iface string
-	}{{manager{f}, managerPath, managerIface}, {session{f}, sessionPath, sessionIface}, {seat{f}, seatPath, seatIface}} {
-		if err := conn.Export(e.v, e.path, e.iface); err != nil {
-			t.Fatal(err)
-		}
-	}
-	f.props, err = prop.Export(conn, sessionPath, prop.Map{sessionIface: {
-		"Seat": {Value: struct {
-			ID   string
-			Path dbus.ObjectPath
-		}{"seat0", seatPath}, Emit: prop.EmitTrue},
-		"Active": {Value: true, Emit: prop.EmitTrue},
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reply, err := conn.RequestName(login1, dbus.NameFlagDoNotQueue); err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("own %s: %v %v", login1, reply, err)
-	}
-	return f
-}
+var null = Device{Major: 1, Minor: 3}
 
 type events struct {
 	mu  sync.Mutex
@@ -200,7 +47,7 @@ func (e *events) DeviceResumed(d Device, fd int) error {
 	if fd < 0 {
 		return errors.New("resumed without an fd")
 	}
-	return e.add("resumed")
+	return errors.Join(unix.Close(fd), e.add("resumed"))
 }
 
 func (e *events) PrepareForSleep(sleeping bool) error {
@@ -227,10 +74,9 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func openLogind(t *testing.T) (*fakeLogind, *loop.Loop, *Logind, *events) {
+func openLogind(t *testing.T, env map[string]string) (*logindtest.Logind, *loop.Loop, *Logind, *events) {
 	t.Helper()
-	address := testenv.DBus(t)
-	f := logind(t, address)
+	fake := logindtest.Start(t, logindtest.Config{Own: own})
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
@@ -241,16 +87,11 @@ func openLogind(t *testing.T) (*fakeLogind, *loop.Loop, *Logind, *events) {
 		}
 	})
 	ev := &events{}
-	lg, err := Open(l, address, func(k string) string {
-		if k == "XDG_SESSION_ID" {
-			return "1"
-		}
-		return ""
-	}, ev)
+	lg, err := Open(l, fake.Bus.Address, func(k string) string { return env[k] }, ev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return f, l, lg, ev
+	return fake, l, lg, ev
 }
 
 func run(t *testing.T, l *loop.Loop) {
@@ -269,72 +110,79 @@ func run(t *testing.T, l *loop.Loop) {
 }
 
 func TestLogindSession(t *testing.T) {
-	f, l, lg, ev := openLogind(t)
+	fake, l, lg, ev := openLogind(t, map[string]string{"XDG_SESSION_ID": string(own)})
 	run(t, l)
-	if !lg.Active() || lg.Seat() != "seat0" {
+	if !lg.Active() || lg.Seat() != string(logindtest.Seat) {
 		t.Fatalf("active %v on seat %q", lg.Active(), lg.Seat())
 	}
 	fd, dev, err := lg.TakeDevice(os.DevNull)
-	if err != nil || fd < 0 || dev != (Device{Major: 1, Minor: 3}) {
+	if err != nil || fd < 0 || dev != null {
 		t.Fatalf("TakeDevice: %d %+v %v", fd, dev, err)
 	}
-	if err := errors.Join(lg.ReleaseDevice(dev), lg.SwitchTo(2)); err != nil {
+	if err := errors.Join(unix.Close(fd), lg.ReleaseDevice(dev), lg.SwitchTo(2)); err != nil {
 		t.Fatal(err)
 	}
 	inhibitor, err := lg.InhibitLidSwitch()
 	if err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, "the inhibitor held", func() bool { return fake.Inhibitors.Load() == 1 })
 	if err := inhibitor.Close(); err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, "the inhibitor released", func() bool { return fake.Inhibitors.Load() == 0 })
 	if err := lg.SwitchTo(0); err == nil {
 		t.Fatal("a refused VT switch succeeded")
 	}
 	if _, _, err := lg.TakeDevice("/"); err == nil {
 		t.Fatal("a directory was taken as a device")
 	}
-	forger, err := dbus.Connect(f.address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer forger.Close()
+	forger := fake.Bus.Conn(t)
+	path := logind.SessionPath(own)
 	if err := errors.Join(
-		forger.Emit(sessionPath, sessionIface+".PauseDevice", uint32(1), uint32(3), "pause"),
-		forger.Emit(sessionPath, propsIface+".PropertiesChanged", sessionIface, map[string]dbus.Variant{"Active": dbus.MakeVariant(false)}, []string{}),
-		forger.Emit(managerPath, managerIface+".PrepareForSleep", true),
+		forger.Emit(path, logind.SessionInterface+".PauseDevice", uint32(1), uint32(3), "pause"),
+		forger.Emit(path, "org.freedesktop.DBus.Properties.PropertiesChanged", logind.SessionInterface, map[string]dbus.Variant{"Active": dbus.MakeVariant(false)}, []string{}),
+		forger.Emit(logind.ManagerPath, logind.ManagerInterface+".PrepareForSleep", true),
 	); err != nil {
 		t.Fatal(err)
 	}
-	for _, sig := range []struct {
-		name string
-		args []any
-	}{
-		{"PauseDevice", []any{uint32(1), uint32(3), "pause"}},
-		{"PauseDevice", []any{uint32(1), uint32(3), "gone"}},
-		{"ResumeDevice", []any{uint32(1), uint32(3), dbus.UnixFD(0)}},
-	} {
-		if err := f.conn.Emit(sessionPath, sessionIface+"."+sig.name, sig.args...); err != nil {
-			t.Fatal(err)
-		}
-	}
-	f.props.SetMust(sessionIface, "Active", false)
-	for _, sleeping := range []bool{true, false} {
-		if err := f.conn.Emit(managerPath, managerIface+".PrepareForSleep", sleeping); err != nil {
-			t.Fatal(err)
-		}
-	}
+	fake.PauseDevice(t, own, null, logind.PausePause)
+	fake.PauseDevice(t, own, null, logind.PauseGone)
+	fake.ResumeDevice(t, own, null)
+	fake.SetActive(t, own, false)
+	fake.PrepareForSleep(t, true)
+	fake.PrepareForSleep(t, false)
 	waitFor(t, "the signals", func() bool { return len(ev.seen()) == 6 })
 	if got := ev.seen(); !slices.Equal(got, []string{"paused", "paused", "resumed", "inactive", "sleep", "wake"}) {
 		t.Fatalf("events %v", got)
 	}
-	waitFor(t, "the pause acknowledged", func() bool { return slices.Contains(f.seen(), "PauseDeviceComplete") })
+	waitFor(t, "the pause acknowledged", func() bool { return len(fake.CallsTo("Session.PauseDeviceComplete")) == 1 })
 	if err := lg.Close(); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"GetSession 1", "TakeControl", "TakeDevice", "ReleaseDevice", "SwitchTo", "Inhibit handle-lid-switch block", "SwitchTo", "PauseDeviceComplete", "ReleaseControl"}
-	if got := f.seen(); !slices.Equal(got, want) {
+	want := []string{"Manager.GetSession", "Session.TakeControl", "Session.TakeDevice", "Session.ReleaseDevice", "Seat.SwitchTo", "Manager.Inhibit", "Seat.SwitchTo", "Session.PauseDeviceComplete", "Session.ReleaseControl"}
+	if got := fake.Methods(); !slices.Equal(got, want) {
 		t.Fatalf("logind saw %v, want %v", got, want)
+	}
+	if got := fake.CallsTo("Manager.GetSession")[0].Args; !slices.Equal(got, []any{string(own)}) {
+		t.Errorf("GetSession%v, want XDG_SESSION_ID", got)
+	}
+	if got := fake.CallsTo("Manager.Inhibit")[0].Args; got[0] != "handle-lid-switch" || got[3] != "block" {
+		t.Errorf("Inhibit%v, want a handle-lid-switch block", got)
+	}
+}
+
+func TestWithoutXDGSessionIDTheSessionIsThisProcesss(t *testing.T) {
+	fake, _, lg, _ := openLogind(t, nil)
+	if err := lg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.CallsTo("Manager.GetSessionByPID")
+	if len(calls) != 1 || !slices.Equal(calls[0].Args, []any{uint32(os.Getpid())}) {
+		t.Fatalf("GetSessionByPID calls %v, want one for pid %d", calls, os.Getpid())
+	}
+	if got := fake.CallsTo("Manager.GetSession"); len(got) != 0 {
+		t.Errorf("GetSession calls %v without XDG_SESSION_ID", got)
 	}
 }
 
@@ -343,9 +191,9 @@ var acUnplug = [][]byte{
 	udevMessage("ACTION=change", "SUBSYSTEM=power_supply", "DEVPATH=/devices/LNXSYSTM:00/PNP0C0A:00/power_supply/BAT0", "POWER_SUPPLY_STATUS=Discharging"),
 }
 
-func suspendOnPowerChanges(t *testing.T) (*fakeLogind, *events, func(msgs ...[]byte)) {
+func suspendOnPowerChanges(t *testing.T) (*logindtest.Logind, *events, func(msgs ...[]byte)) {
 	t.Helper()
-	f, l, lg, ev := openLogind(t)
+	f, l, lg, ev := openLogind(t, map[string]string{"XDG_SESSION_ID": string(own)})
 	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -374,6 +222,16 @@ func suspendOnPowerChanges(t *testing.T) (*fakeLogind, *events, func(msgs ...[]b
 	return f, ev, func(msgs ...[]byte) { sendUevents(t, fds[1], msgs...) }
 }
 
+func suspends(f *logindtest.Logind) int {
+	n := 0
+	for _, c := range f.CallsTo("Manager.Suspend") {
+		if slices.Equal(c.Args, []any{false}) {
+			n++
+		}
+	}
+	return n
+}
+
 func tally(log []string) map[string]int {
 	n := map[string]int{}
 	for _, s := range log {
@@ -396,41 +254,38 @@ func expectLog(t *testing.T, ev *events, want map[string]int) {
 
 func TestAnUnplugSuspendsOnceUntilTheSleepEnds(t *testing.T) {
 	f, ev, send := suspendOnPowerChanges(t)
-	suspends := func() int { return tally(f.seen())["Suspend false"] }
 
 	send(acUnplug...)
 	expectLog(t, ev, map[string]int{"power": 2, "sleep": 1})
-	if n := suspends(); n != 1 {
+	if n := suspends(f); n != 1 {
 		t.Fatalf("the AC and battery uevents of one unplug called Suspend %d times, want 1", n)
 	}
 
-	if err := f.wake(); err != nil {
-		t.Fatal(err)
-	}
+	f.PrepareForSleep(t, false)
 	expectLog(t, ev, map[string]int{"power": 2, "sleep": 1, "wake": 1})
 	send(acUnplug...)
 	expectLog(t, ev, map[string]int{"power": 4, "sleep": 2, "wake": 1})
-	if n := suspends(); n != 2 {
+	if n := suspends(f); n != 2 {
 		t.Fatalf("an unplug after waking called Suspend %d times in all, want 2", n)
 	}
 }
 
 func TestARefusedSuspendLeavesNoSleepPending(t *testing.T) {
 	f, ev, send := suspendOnPowerChanges(t)
-	f.refuse(dbus.NewError(operationInProgress, []any{"There's already a shutdown or sleep operation in progress"}))
+	f.Refuse("Manager.Suspend", dbus.NewError(logind.ErrOperationInProgress, []any{"There's already a shutdown or sleep operation in progress"}))
 	send(acUnplug[0])
 	waitFor(t, "the refusal", func() bool { return len(ev.seen()) == 1 })
-	if got := ev.seen()[0]; !strings.Contains(got, operationInProgress) {
-		t.Fatalf("a refused Suspend reported %q, want logind's %s", got, operationInProgress)
+	if got := ev.seen()[0]; !strings.Contains(got, logind.ErrOperationInProgress) {
+		t.Fatalf("a refused Suspend reported %q, want logind's %s", got, logind.ErrOperationInProgress)
 	}
 
-	f.refuse(nil)
+	f.Refuse("Manager.Suspend", nil)
 	send(acUnplug[0])
 	waitFor(t, "the suspend after the refusal", func() bool { return len(ev.seen()) == 3 })
 	if got := tally(ev.seen()[1:]); !maps.Equal(got, map[string]int{"power": 1, "sleep": 1}) {
 		t.Fatalf("after a refusal: events %v", got)
 	}
-	if n := tally(f.seen())["Suspend false"]; n != 2 {
+	if n := suspends(f); n != 2 {
 		t.Fatalf("logind saw %d Suspend calls, want 2", n)
 	}
 }
