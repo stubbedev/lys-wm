@@ -143,7 +143,8 @@ func (s *Seat) TouchCancel() error {
 			s.touch.framed = append(s.touch.framed, p.surface.Client())
 		}
 	}
-	s.touch.points = nil
+	clear(s.touch.points)
+	s.touch.points = s.touch.points[:0]
 	return s.touchClients((*sw.WlTouch).SendCancel)
 }
 

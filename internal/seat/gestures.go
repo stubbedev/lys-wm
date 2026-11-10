@@ -98,24 +98,24 @@ func (s *Seat) GestureBegin(at time.Duration, kind backend.Gesture, fingers uint
 		return nil
 	}
 	g := &s.gesture
-	var errs []error
+	var errs error
 	switch kind {
 	case backend.Swipe:
 		for _, obj := range r.swipes {
-			errs = append(errs, g.begin(obj))
+			errs = errors.Join(errs, g.begin(obj))
 		}
 	case backend.Pinch:
 		for _, obj := range r.pinches {
-			errs = append(errs, g.begin(obj))
+			errs = errors.Join(errs, g.begin(obj))
 		}
 	case backend.Hold:
 		for _, obj := range r.holds {
-			errs = append(errs, g.begin(obj))
+			errs = errors.Join(errs, g.begin(obj))
 		}
 	default:
 		return fmt.Errorf("seat: gesture %d is neither swipe, pinch nor hold", kind)
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) SwipeUpdate(at time.Duration, dx, dy float64) error {
@@ -123,11 +123,11 @@ func (s *Seat) SwipeUpdate(at time.Duration, dx, dy float64) error {
 	if r == nil || s.gesture.kind != backend.Swipe {
 		return nil
 	}
-	errs := make([]error, 0, len(r.swipes))
+	var errs error
 	for _, g := range r.swipes {
-		errs = append(errs, g.SendUpdate(wire.Millis(at), wire.FixedFromFloat(dx), wire.FixedFromFloat(dy)))
+		errs = errors.Join(errs, g.SendUpdate(wire.Millis(at), wire.FixedFromFloat(dx), wire.FixedFromFloat(dy)))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) PinchUpdate(at time.Duration, dx, dy, scale, rotation float64) error {
@@ -135,11 +135,11 @@ func (s *Seat) PinchUpdate(at time.Duration, dx, dy, scale, rotation float64) er
 	if r == nil || s.gesture.kind != backend.Pinch {
 		return nil
 	}
-	errs := make([]error, 0, len(r.pinches))
+	var errs error
 	for _, g := range r.pinches {
-		errs = append(errs, g.SendUpdate(wire.Millis(at), wire.FixedFromFloat(dx), wire.FixedFromFloat(dy), wire.FixedFromFloat(scale), wire.FixedFromFloat(rotation)))
+		errs = errors.Join(errs, g.SendUpdate(wire.Millis(at), wire.FixedFromFloat(dx), wire.FixedFromFloat(dy), wire.FixedFromFloat(scale), wire.FixedFromFloat(rotation)))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) GestureEnd(at time.Duration, kind backend.Gesture, cancelled bool) error {
@@ -153,20 +153,20 @@ func (s *Seat) GestureEnd(at time.Duration, kind backend.Gesture, cancelled bool
 	if cancelled {
 		flag = 1
 	}
-	var errs []error
+	var errs error
 	switch kind {
 	case backend.Swipe:
 		for _, g := range r.swipes {
-			errs = append(errs, g.SendEnd(serial, ms, flag))
+			errs = errors.Join(errs, g.SendEnd(serial, ms, flag))
 		}
 	case backend.Pinch:
 		for _, g := range r.pinches {
-			errs = append(errs, g.SendEnd(serial, ms, flag))
+			errs = errors.Join(errs, g.SendEnd(serial, ms, flag))
 		}
 	case backend.Hold:
 		for _, g := range r.holds {
-			errs = append(errs, g.SendEnd(serial, ms, flag))
+			errs = errors.Join(errs, g.SendEnd(serial, ms, flag))
 		}
 	}
-	return errors.Join(errs...)
+	return errs
 }

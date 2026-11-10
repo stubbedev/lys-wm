@@ -235,7 +235,7 @@ func (s *Seat) SurfaceDestroyed(target *surface.Surface) error {
 		err = s.listener.KeyboardFocusChanged(nil)
 	}
 	if s.pointer.focus == target {
-		s.pointer.focus, s.pointer.buttons = nil, nil
+		s.pointer.focus, s.pointer.buttons = nil, s.pointer.buttons[:0]
 		err = errors.Join(err, s.listener.PointerFocusChanged(nil))
 	}
 	if sc, ok := s.pointer.cursor.want.(SurfaceCursor); ok && sc.Surface == target {

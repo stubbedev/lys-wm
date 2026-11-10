@@ -105,23 +105,23 @@ func (s *Seat) SetPointerFocus(target *surface.Surface, x, y float64) error {
 	if target == p.focus {
 		return nil
 	}
-	var errs []error
+	var errs error
 	if c, pointers := s.focusPointers(); c != nil {
 		for _, ptr := range pointers {
-			errs = append(errs, ptr.SendLeave(s.display.NextSerial(), p.focus.Resource()))
+			errs = errors.Join(errs, ptr.SendLeave(s.display.NextSerial(), p.focus.Resource()))
 		}
 		if !slices.Contains(p.framed, c) {
 			p.framed = append(p.framed, c)
 		}
 	}
-	p.focus, p.buttons, p.local = target, nil, fixedAt(x, y)
+	p.focus, p.buttons, p.local = target, p.buttons[:0], fixedAt(x, y)
 	if c, pointers := s.focusPointers(); c != nil {
 		p.enterSerial = s.display.NextSerial()
 		for _, ptr := range pointers {
-			errs = append(errs, p.enter(ptr))
+			errs = errors.Join(errs, p.enter(ptr))
 		}
 	}
-	return errors.Join(append(errs, s.listener.PointerFocusChanged(target))...)
+	return errors.Join(errs, s.listener.PointerFocusChanged(target))
 }
 
 func (p *pointerState) enter(ptr *sw.WlPointer) error {

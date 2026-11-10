@@ -105,14 +105,13 @@ func (s *Seat) VirtualKey(v *VirtualKeyboard, code uint32, pressed bool, at time
 
 func (s *Seat) VirtualModifiers(v *VirtualKeyboard, depressed, latched, locked, group uint32) error {
 	v.mods = [4]uint32{depressed, latched, locked, group}
-	kbs := s.focusedKeyboards()
-	var errs []error
-	for _, kb := range kbs {
+	var errs error
+	for _, kb := range s.focusedKeyboards() {
 		if s.keymaps[kb].v == v {
-			errs = append(errs, v.sendModifiers(s, kb))
+			errs = errors.Join(errs, v.sendModifiers(s, kb))
 		}
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 const maxVirtualKeymap = 1 << 22
