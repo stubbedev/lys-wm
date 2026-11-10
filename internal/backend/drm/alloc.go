@@ -9,6 +9,7 @@ import (
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/edid"
 	"github.com/stubbedev/lys-lib/fourcc"
+	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
@@ -17,6 +18,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render/gles"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 )
+
+var ErrNoVulkan = errors.New("drm: no Vulkan driver renders for the card")
 
 type gpuRenderer interface {
 	render.Renderer
@@ -120,13 +123,20 @@ func newVulkanAllocator(dev *kdrm.Device) (*gpuAllocator, error) {
 	}
 	r, err := vulkan.Open(number)
 	if err != nil {
-		return nil, fmt.Errorf("drm: render for %s with Vulkan: %w", dev.Path(), err)
+		return nil, vulkanOpenError(dev.Path(), err)
 	}
 	a := &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: vulkanMemory{r: r}, gpu: r, closeGPU: r.Close}
 	if err := a.probe(); err != nil {
 		return nil, errors.Join(fmt.Errorf("drm: allocate scanout buffers for %s with Vulkan: %w", dev.Path(), err), r.Close())
 	}
 	return a, nil
+}
+
+func vulkanOpenError(path string, err error) error {
+	if errors.Is(err, lgpu.ErrNoVulkan) || errors.Is(err, lgpu.ErrNoDevice) {
+		return fmt.Errorf("%w %s: %w", ErrNoVulkan, path, err)
+	}
+	return fmt.Errorf("drm: render for %s with Vulkan: %w", path, err)
 }
 
 func (a *gpuAllocator) probe() error {

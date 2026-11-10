@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	drmbackend "github.com/stubbedev/lys-wm/internal/backend/drm"
 	"github.com/stubbedev/lys-wm/internal/loop"
 )
 
@@ -90,5 +92,22 @@ func TestTheLidPolicyRunsOnceTheWakeHoldoffPasses(t *testing.T) {
 	run(4 * holdoff)
 	if len(checks) != 1 {
 		t.Fatalf("a sleep that began during the holdoff still ran the check: %d checks", len(checks))
+	}
+}
+
+func TestAPrimaryWithoutVulkanNamesTheCardAndTheWayToGLES(t *testing.T) {
+	missing := fmt.Errorf("drm: card0: %w /dev/dri/card0: vulkan: no Vulkan device draws", drmbackend.ErrNoVulkan)
+	err := withRendererHint(missing)
+	if !errors.Is(err, drmbackend.ErrNoVulkan) {
+		t.Fatalf("%v no longer wraps ErrNoVulkan", err)
+	}
+	for _, want := range []string{"/dev/dri/card0", "--renderer gles"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%v does not say %q", err, want)
+		}
+	}
+	other := errors.New("drm: card0: atomic modesetting refused")
+	if got := withRendererHint(other); got.Error() != other.Error() {
+		t.Errorf("a failure with a Vulkan driver present became %v", got)
 	}
 }

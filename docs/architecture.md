@@ -347,8 +347,8 @@ foreign-toplevel activate all call it. Nothing else mutates WM state.
 
 | Renderer | Selected by | Notes |
 | --- | --- | --- |
-| GLES2 | default for drm and nested | glvnd picks the vendor; GBM, device or surfaceless platform; one configless context per display, no surfaces |
-| Vulkan | `-renderer vulkan` | Peer of GLES in every path, except that on drm it needs a Vulkan driver for the card: lavapipe drives no DRM node, so vkms and virtio-gpu without venus render only with GLES on llvmpipe, which keeps GLES the drm default. On drm it exports scanout buffers itself and loads no GBM, EGL or GLES unless a secondary card has no Vulkan driver (`TestTheVulkanStackScansOutWithoutGBMOrEGLOnHardware`). Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
+| GLES2 | default for nested; `-renderer gles` on drm | glvnd picks the vendor; GBM, device or surfaceless platform; one configless context per display, no surfaces. The drm path for a card without a Vulkan driver |
+| Vulkan | default for drm; `-renderer vulkan` elsewhere | Peer of GLES in every path. On drm it needs a Vulkan driver for the primary card: without one lys-wm stops at startup with `drm.ErrNoVulkan`, naming the card and `-renderer gles`, and never falls back to GLES by itself. lavapipe drives no DRM node, so vkms and virtio-gpu without venus run `-renderer gles` on llvmpipe, as the NixOS VM checks do (`nix/vm.nix`). On drm it exports scanout buffers itself and loads no GBM, EGL or GLES unless a secondary card has no Vulkan driver (`TestTheVulkanStackScansOutWithoutGBMOrEGLOnHardware`). Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
 | Software | default for headless | Reference for every pixel test |
 
 Scanout memory is GBM's under GLES and exported by Vulkan under Vulkan

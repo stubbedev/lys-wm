@@ -108,15 +108,15 @@ work on every install.
 
 | Dependency | Default | Override |
 | --- | --- | --- |
-| EGL | `libEGL.so.1` | `LYS_WM_LIBEGL` |
-| GLES2 | `libGLESv2.so.2` | `LYS_WM_LIBGLESV2` |
-| GBM | `libgbm.so.1` | `LYS_WM_LIBGBM` |
+| Vulkan | `libvulkan.so.1` | `LYS_LIBVULKAN` |
+| EGL (GLES renderer) | `libEGL.so.1` | `LYS_WM_LIBEGL` |
+| GLES2 (GLES renderer) | `libGLESv2.so.2` | `LYS_WM_LIBGLESV2` |
+| GBM (GLES renderer) | `libgbm.so.1` | `LYS_WM_LIBGBM` |
 | libinput | `libinput.so.10` | `LYS_WM_LIBINPUT` |
 | xkeyboard-config | `/usr/share/X11/xkb` | `XKB_CONFIG_ROOT` |
 | PNP IDs (hwdata) | `/usr/share/hwdata/pnp.ids` | `LYS_PNP_IDS` |
 | Tab font | `/usr/share/lys-wm/DejaVuSans.ttf` | `tabs.font` in the config, or `LYS_WM_FONT` |
 | Xwayland | `Xwayland` on `PATH` | `LYS_WM_XWAYLAND` |
-| Vulkan (`--renderer vulkan`) | `libvulkan.so.1` | `LYS_LIBVULKAN` |
 
 The packages symlink the tab font to the distribution's DejaVu Sans; do the
 same or set another font.

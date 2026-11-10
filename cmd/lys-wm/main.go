@@ -140,8 +140,11 @@ func (k rendererKind) String() string {
 func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
 	switch requested {
 	case "":
-		if kind == headlessBackend {
+		switch kind {
+		case headlessBackend:
 			return softRenderer, nil
+		case drmBackend:
+			return vulkanRenderer, nil
 		}
 		return glesRenderer, nil
 	case "soft":
@@ -553,7 +556,7 @@ func run(args []string) (err error) {
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	runtime := flags.String("runtime", "", "runtime overrides merged over the config, which must exist when given (default: "+config.RuntimeFile+" beside the config file, when it exists)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
-	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: gles for the drm and nested backends, soft for headless; drm takes gles or vulkan)")
+	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: vulkan for the drm backend, gles for nested, soft for headless; drm takes gles or vulkan)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
 	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")

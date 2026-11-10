@@ -164,7 +164,7 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: rendering on %s, %s\n", cards[primary].name, why)
 	if err := gpu.WithOwnVendorOnly(driversOf(cards), func() error { return n.add(cards[primary]) }); err != nil {
-		return nil, err
+		return nil, withRendererHint(err)
 	}
 	for i, c := range cards {
 		if i != primary {
@@ -245,6 +245,13 @@ func (n *native) add(g gpuCard) error {
 	}
 	n.cards = append(n.cards, c)
 	return nil
+}
+
+func withRendererHint(err error) error {
+	if errors.Is(err, drmbackend.ErrNoVulkan) {
+		return fmt.Errorf("%w (the drm backend renders with Vulkan unless run with --renderer gles)", err)
+	}
+	return err
 }
 
 func (n *native) drmOptions() drmbackend.Options {

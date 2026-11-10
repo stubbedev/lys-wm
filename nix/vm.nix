@@ -61,7 +61,7 @@ in
         enable = true;
         settings = let
           session = {
-            command = "${pkgs.bash}/bin/bash -c '${config.programs.lys-wm.package}/bin/lys-wm --systemd ${lysWMArgs} 2>&1 | ${pkgs.systemd}/bin/systemd-cat -t lys-wm'";
+            command = "${pkgs.bash}/bin/bash -c '${config.programs.lys-wm.package}/bin/lys-wm --systemd --renderer gles ${lysWMArgs} 2>&1 | ${pkgs.systemd}/bin/systemd-cat -t lys-wm'";
             inherit user;
           };
         in {
