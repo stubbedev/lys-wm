@@ -269,7 +269,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 	}
 	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, paused: opts.Master == WithoutMaster, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
 	if a, ok := alloc.(*gpuAllocator); ok && !a.gpu.NativeFences() {
-		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor in glFinish until the GPU is done", a.gpu))
+		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor until the GPU has finished it", a.gpu))
 	}
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
