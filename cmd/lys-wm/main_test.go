@@ -601,3 +601,28 @@ func TestCheckConfigPrintsNothingWhenItAcceptsTheBuiltInConfig(t *testing.T) {
 		t.Fatalf("a start says it runs the built-in config: %q, %v", notices.String(), err)
 	}
 }
+
+func TestTheRendererComesFromTheFlagThenTheEnvironment(t *testing.T) {
+	env := func(v string) func(string) string {
+		return func(k string) string {
+			if k == rendererEnv {
+				return v
+			}
+			return ""
+		}
+	}
+	for _, c := range []struct {
+		flag, env string
+		want      rendererKind
+	}{{"", "", vulkanRenderer}, {"", "gles", glesRenderer}, {"vulkan", "gles", vulkanRenderer}, {"gles", "", glesRenderer}} {
+		if got, err := rendererFor(c.flag, env(c.env), drmBackend); err != nil || got != c.want {
+			t.Errorf("rendererFor(%q, %s=%q) = %v, %v; want %v", c.flag, rendererEnv, c.env, got, err, c.want)
+		}
+	}
+	if _, err := rendererFor("", env("soft"), drmBackend); err == nil || !strings.Contains(err.Error(), rendererEnv) {
+		t.Errorf("an unusable %s gave %v, want an error naming the variable", rendererEnv, err)
+	}
+	if _, err := rendererFor("gles", env("metal"), drmBackend); err != nil {
+		t.Errorf("the flag did not override %s=metal: %v", rendererEnv, err)
+	}
+}

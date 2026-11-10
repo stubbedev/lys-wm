@@ -101,7 +101,7 @@ func TestAPrimaryWithoutVulkanNamesTheCardAndTheWayToGLES(t *testing.T) {
 	if !errors.Is(err, drmbackend.ErrNoVulkan) {
 		t.Fatalf("%v no longer wraps ErrNoVulkan", err)
 	}
-	for _, want := range []string{"/dev/dri/card0", "--renderer gles"} {
+	for _, want := range []string{"/dev/dri/card0", "--renderer gles", "LYS_WM_RENDERER=gles"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("%v does not say %q", err, want)
 		}

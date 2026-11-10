@@ -137,6 +137,19 @@ func (k rendererKind) String() string {
 	return fmt.Sprintf("renderer%d", k)
 }
 
+const rendererEnv = "LYS_WM_RENDERER"
+
+func rendererFor(flag string, getenv func(string) string, kind backendKind) (rendererKind, error) {
+	if flag != "" {
+		return chooseRenderer(flag, kind)
+	}
+	r, err := chooseRenderer(getenv(rendererEnv), kind)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", rendererEnv, err)
+	}
+	return r, nil
+}
+
 func chooseRenderer(requested string, kind backendKind) (rendererKind, error) {
 	switch requested {
 	case "":
@@ -556,7 +569,7 @@ func run(args []string) (err error) {
 	path := flags.String("config", "", "config file (default: $XDG_CONFIG_HOME/lys-wm/config.yaml)")
 	runtime := flags.String("runtime", "", "runtime overrides merged over the config, which must exist when given (default: "+config.RuntimeFile+" beside the config file, when it exists)")
 	withSystemd := flags.Bool("systemd", false, "export the session environment to D-Bus activation and the systemd user manager, and run "+systemd.Target+" while lys-wm runs")
-	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: vulkan for the drm backend, gles for nested, soft for headless; drm takes gles or vulkan)")
+	rendererName := flags.String("renderer", "", "gles, soft or vulkan (default: $LYS_WM_RENDERER, else vulkan for the drm backend, gles for nested, soft for headless; drm takes gles or vulkan)")
 	requested := flags.String("backend", "", "output and input backend: drm, nested or headless (default: nested when WAYLAND_DISPLAY is set, else drm)")
 	framesPath := flags.String("frame-trace", "", "record every frame's timing to this file as JSON lines; see docs/frame-pacing.md")
 	cpuProfile := flags.String("cpu-profile", "", "write a Go CPU profile to this file while lys-wm runs")
@@ -596,7 +609,7 @@ func run(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	renderer, err := chooseRenderer(*rendererName, kind)
+	renderer, err := rendererFor(*rendererName, os.Getenv, kind)
 	if err != nil {
 		return err
 	}

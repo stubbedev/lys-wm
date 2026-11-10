@@ -249,7 +249,7 @@ func (n *native) add(g gpuCard) error {
 
 func withRendererHint(err error) error {
 	if errors.Is(err, drmbackend.ErrNoVulkan) {
-		return fmt.Errorf("%w (the drm backend renders with Vulkan unless run with --renderer gles)", err)
+		return fmt.Errorf("%w (the drm backend renders with Vulkan unless run with --renderer gles or LYS_WM_RENDERER=gles)", err)
 	}
 	return err
 }

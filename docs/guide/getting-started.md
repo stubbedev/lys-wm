@@ -29,7 +29,7 @@ WAYLAND_DISPLAY=wayland-2 foot
 | `--runtime <file>` | [Runtime overrides](../config#runtime-overrides) merged over the config; must exist. Default `runtime.yaml` beside the config, if present |
 | `--systemd` | Export the session environment to D-Bus activation and the systemd user manager, and run `lys-wm-session.target`; see [Session](../config#session). Not for nested use |
 | `--backend <name>` | `drm`, `nested` or `headless`. Default `nested` when `WAYLAND_DISPLAY` is set, else `drm` |
-| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default `vulkan` on `drm`, `gles` nested, `soft` on headless. `drm` takes only `gles` or `vulkan`; pass `gles` where the GPU has no Vulkan driver |
+| `--renderer <name>` | `gles`, `vulkan` or `soft`. Default `$LYS_WM_RENDERER`, else `vulkan` on `drm`, `gles` nested, `soft` on headless. `drm` takes only `gles` or `vulkan`; pass `gles` (or set `LYS_WM_RENDERER=gles`) where the GPU has no Vulkan driver, as in VMs on virtio-gpu without venus |
 | `--holder` | Run under a holder process so the session can be [upgraded in place](./upgrade) |
 | `--check-config` | Load the config and runtime overrides as a reload would and exit; status 0 and no output when accepted |
 | `--effective-config` | Print every key set, with the layer, file and line it comes from, as JSON, and exit |
