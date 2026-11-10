@@ -124,7 +124,8 @@ func (s *Seat) announceTool(ts *tablet.ZwpTabletSeatV2, t *tabletTool) error {
 	if err != nil {
 		return err
 	}
-	server.Track(res, &t.resources, toolResource{res, ts})
+	r := toolResource{res, ts}
+	server.Track(res, &t.resources, r)
 	errs := []error{res.SendType(toolTypes[t.tool.Type])}
 	if t.tool.Serial != 0 {
 		errs = append(errs, res.SendHardwareSerial(wire.Halves(t.tool.Serial)))
@@ -137,7 +138,11 @@ func (s *Seat) announceTool(ts *tablet.ZwpTabletSeatV2, t *tabletTool) error {
 			errs = append(errs, res.SendCapability(c.send))
 		}
 	}
-	return errors.Join(append(errs, res.SendDone())...)
+	errs = append(errs, res.SendDone())
+	if t.focus != nil && res.Base().Peer() == t.focus.Client() {
+		errs = append(errs, s.enterToolResource(t, r), res.SendFrame(wire.Millis(t.at)))
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Seat) AddTablet(key any, group uintptr, name string, id tabletinput.ID) error {
@@ -259,22 +264,26 @@ func (s *Seat) leaveTool(t *tabletTool) error {
 func (s *Seat) enterTool(t *tabletTool, d *tabletDevice, target *surface.Surface) error {
 	t.focus, t.tablet = target, d
 	t.serial = s.display.NextSerial()
-	return s.eachTool(t, func(res *tablet.ZwpTabletToolV2) error {
-		i := slices.IndexFunc(d.resources, func(r tabletResource) bool {
-			return r.res.Base().Peer() == res.Base().Peer() && slices.ContainsFunc(t.resources, func(tr toolResource) bool { return tr.res == res && tr.seat == r.seat })
-		})
-		if i < 0 {
-			return nil
-		}
-		errs := []error{res.SendProximityIn(t.serial, d.resources[i].res, target.Resource())}
-		if t.down {
-			errs = append(errs, res.SendDown(s.eventSerial(target.Client(), true)))
-		}
-		for _, b := range t.buttons {
-			errs = append(errs, res.SendButton(s.display.NextSerial(), b, tablet.ZwpTabletToolV2ButtonStatePressed))
-		}
-		return errors.Join(errs...)
-	})
+	var errs []error
+	for _, r := range t.focused() {
+		errs = append(errs, s.enterToolResource(t, r))
+	}
+	return errors.Join(errs...)
+}
+
+func (s *Seat) enterToolResource(t *tabletTool, r toolResource) error {
+	i := slices.IndexFunc(t.tablet.resources, func(d tabletResource) bool { return d.seat == r.seat })
+	if i < 0 {
+		return nil
+	}
+	errs := []error{r.res.SendProximityIn(t.serial, t.tablet.resources[i].res, t.focus.Resource())}
+	if t.down {
+		errs = append(errs, r.res.SendDown(s.eventSerial(t.focus.Client(), true)))
+	}
+	for _, b := range t.buttons {
+		errs = append(errs, r.res.SendButton(s.display.NextSerial(), b, tablet.ZwpTabletToolV2ButtonStatePressed))
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Seat) TabletToolMotion(at time.Duration, key any, tool *tabletinput.Tool, target *surface.Surface, x, y float64) error {

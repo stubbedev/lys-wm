@@ -12,6 +12,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
 
+const pointerFrameVersion = 5
+
 type Axis struct {
 	Orientation sw.WlPointerAxis
 	Source      sw.WlPointerAxisSource
@@ -116,10 +118,14 @@ func (s *Seat) SetPointerFocus(target *surface.Surface, x, y float64) error {
 	if c, pointers := s.focusPointers(); c != nil {
 		p.enterSerial = s.display.NextSerial()
 		for _, ptr := range pointers {
-			errs = append(errs, ptr.SendEnter(p.enterSerial, target.Resource(), p.local.x, p.local.y))
+			errs = append(errs, p.enter(ptr))
 		}
 	}
 	return errors.Join(append(errs, s.listener.PointerFocusChanged(target))...)
+}
+
+func (p *pointerState) enter(ptr *sw.WlPointer) error {
+	return ptr.SendEnter(p.enterSerial, p.focus.Resource(), p.local.x, p.local.y)
 }
 
 func (s *Seat) PointerMotion(at time.Duration, x, y float64) error {
@@ -246,7 +252,7 @@ func (s *Seat) PointerFrame() error {
 			continue
 		}
 		for _, ptr := range r.pointers {
-			if ptr.Base().Version() >= 5 {
+			if ptr.Base().Version() >= pointerFrameVersion {
 				errs = errors.Join(errs, ptr.SendFrame())
 			}
 		}
@@ -263,6 +269,16 @@ func (r seatRequests) GetPointer(obj *sw.WlSeat, ptr *sw.WlPointer) (sw.WlPointe
 	}
 	res := s.resources(r.c)
 	track(s, res, &res.pointers, ptr)
+	if p := &s.pointer; p.focus != nil && p.focus.Client() == r.c {
+		if err := p.enter(ptr); err != nil {
+			return nil, err
+		}
+		if ptr.Base().Version() >= pointerFrameVersion {
+			if err := ptr.SendFrame(); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return pointerRequests{s, r.c}, nil
 }
 

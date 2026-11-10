@@ -182,11 +182,13 @@ func (k *keyboardEvents) RepeatInfo(_ *cw.WlKeyboard, rate, delay int32) error {
 }
 
 type client struct {
-	t     *testing.T
-	d     *wlclient.Display
-	seat  *cw.WlSeat
-	comp  *cw.WlCompositor
-	seatE *seatEvents
+	t       *testing.T
+	d       *wlclient.Display
+	reg     *cw.WlRegistry
+	globals registry
+	seat    *cw.WlSeat
+	comp    *cw.WlCompositor
+	seatE   *seatEvents
 }
 
 func (e *env) connect() *client {
@@ -196,10 +198,8 @@ func (e *env) connect() *client {
 		e.t.Fatal(err)
 	}
 	e.t.Cleanup(func() { _ = d.Close() })
-	c := &client{t: e.t, d: d, seatE: &seatEvents{}}
-	globals := registry{}
-	reg, err := d.WlDisplay().GetRegistry(globals)
-	if err != nil {
+	c := &client{t: e.t, d: d, globals: registry{}, seatE: &seatEvents{}}
+	if c.reg, err = d.WlDisplay().GetRegistry(c.globals); err != nil {
 		e.t.Fatal(err)
 	}
 	c.roundtrip()
@@ -209,11 +209,21 @@ func (e *env) connect() *client {
 	if c.comp, err = cw.NewWlCompositor(d, 6); err != nil {
 		e.t.Fatal(err)
 	}
-	if err := errors.Join(reg.Bind(globals["wl_seat"], c.seat), reg.Bind(globals["wl_compositor"], c.comp)); err != nil {
-		e.t.Fatal(err)
-	}
+	c.bind("wl_seat", c.seat)
+	c.bind("wl_compositor", c.comp)
 	c.roundtrip()
 	return c
+}
+
+func (c *client) bind(iface string, res wire.Resource) {
+	c.t.Helper()
+	name, ok := c.globals[iface]
+	if !ok {
+		c.t.Fatalf("the registry advertises no %s", iface)
+	}
+	if err := c.reg.Bind(name, res); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 func (c *client) roundtrip() {

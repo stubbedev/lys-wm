@@ -15,6 +15,12 @@ type touchPoint struct {
 	id      int32
 	surface *surface.Surface
 	serial  uint32
+	at      uint32
+	local   fixedPoint
+}
+
+func (p *touchPoint) down(t *sw.WlTouch) error {
+	return t.SendDown(p.serial, p.at, p.surface.Resource(), p.id, p.local.x, p.local.y)
 }
 
 type touchState struct {
@@ -23,11 +29,18 @@ type touchState struct {
 	cancelled []*server.Client
 }
 
-func (s *Seat) TouchSurface(id int32) *surface.Surface {
-	for _, p := range s.touch.points {
-		if p.id == id {
-			return p.surface
+func (t *touchState) point(id int32) *touchPoint {
+	for i := range t.points {
+		if t.points[i].id == id {
+			return &t.points[i]
 		}
+	}
+	return nil
+}
+
+func (s *Seat) TouchSurface(id int32) *surface.Surface {
+	if p := s.touch.point(id); p != nil {
+		return p.surface
 	}
 	return nil
 }
@@ -66,28 +79,29 @@ func (s *Seat) touchesOf(target *surface.Surface) (*server.Client, []*sw.WlTouch
 }
 
 func (s *Seat) TouchDown(at time.Duration, id int32, target *surface.Surface, x, y float64) error {
-	if s.TouchSurface(id) != nil {
+	if s.touch.point(id) != nil {
 		return nil
 	}
 	c, touches := s.touchesOf(target)
-	serial := s.eventSerial(c, true)
-	s.touch.points = append(s.touch.points, touchPoint{id: id, surface: target, serial: serial})
+	p := touchPoint{id: id, surface: target, serial: s.eventSerial(c, true), at: wire.Millis(at), local: fixedAt(x, y)}
+	s.touch.points = append(s.touch.points, p)
 	var errs error
 	for _, t := range touches {
-		errs = errors.Join(errs, t.SendDown(serial, wire.Millis(at), target.Resource(), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, p.down(t))
 	}
 	return errs
 }
 
 func (s *Seat) TouchMotion(at time.Duration, id int32, x, y float64) error {
-	target := s.TouchSurface(id)
-	if target == nil {
+	p := s.touch.point(id)
+	if p == nil {
 		return nil
 	}
-	_, touches := s.touchesOf(target)
+	p.at, p.local = wire.Millis(at), fixedAt(x, y)
+	_, touches := s.touchesOf(p.surface)
 	var errs error
 	for _, t := range touches {
-		errs = errors.Join(errs, t.SendMotion(wire.Millis(at), id, wire.FixedFromFloat(x), wire.FixedFromFloat(y)))
+		errs = errors.Join(errs, t.SendMotion(p.at, id, p.local.x, p.local.y))
 	}
 	return errs
 }
@@ -163,6 +177,22 @@ func (r seatRequests) GetTouch(obj *sw.WlSeat, t *sw.WlTouch) (sw.WlTouchHandler
 	}
 	res := s.resources(r.c)
 	track(s, res, &res.touches, t)
+	held := false
+	for i := range s.touch.points {
+		p := &s.touch.points[i]
+		if p.surface.Client() != r.c {
+			continue
+		}
+		if err := p.down(t); err != nil {
+			return nil, err
+		}
+		held = true
+	}
+	if held {
+		if err := t.SendFrame(); err != nil {
+			return nil, err
+		}
+	}
 	return touchRequests{}, nil
 }
 

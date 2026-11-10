@@ -280,7 +280,7 @@ func (s *Seat) retire(c *server.Client, out *wire.Conn) error {
 			if err := server.Event(out, p, "leave", func(e *wire.Encoder) { e.Uint(serial); e.Object(f.Resource().Base().ID()) }); err != nil {
 				return err
 			}
-			if p.Base().Version() >= 5 {
+			if p.Base().Version() >= pointerFrameVersion {
 				if err := server.Event(out, p, "frame", nil); err != nil {
 					return err
 				}
