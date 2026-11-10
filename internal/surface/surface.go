@@ -795,14 +795,11 @@ func (s *Surface) destroy() error {
 	if s.sub != nil {
 		s.sub.detach()
 	}
-	for _, child := range s.pendingOrder {
-		if child != s {
+	var orphans []*Surface
+	for _, child := range slices.Concat(s.pendingOrder, s.order) {
+		if child != s && !slices.Contains(orphans, child) {
 			child.sub.parent = nil
-		}
-	}
-	for _, child := range s.order {
-		if child != s {
-			child.sub.parent = nil
+			orphans = append(orphans, child)
 		}
 	}
 	s.order, s.pendingOrder = nil, nil
@@ -811,6 +808,9 @@ func (s *Surface) destroy() error {
 		if h.Destroyed != nil {
 			errs = append(errs, h.Destroyed())
 		}
+	}
+	for _, child := range orphans {
+		errs = append(errs, child.flushDesynchronized())
 	}
 	return errors.Join(errs...)
 }

@@ -106,20 +106,19 @@ func (subcompositorRequests) GetSubsurface(obj *sw.WlSubcompositor, res *sw.WlSu
 	s.sub = sub
 	p.order = append(p.order, s)
 	p.pendingOrder = append(p.pendingOrder, s)
-	server.OnDestroy(res, func() error {
-		sub.destroy()
-		return nil
-	})
+	server.OnDestroy(res, sub.destroy)
 	return subsurfaceRequests{sub}, nil
 }
 
-func (sub *Subsurface) destroy() {
+func (sub *Subsurface) destroy() error {
 	s := sub.surface
 	sub.detach()
-	if s.sub == sub {
-		s.sub = nil
+	if s.sub != sub {
+		return nil
 	}
+	s.sub = nil
 	s.ClearRole(sub)
+	return s.flushDesynchronized()
 }
 
 type subsurfaceRequests struct{ sub *Subsurface }

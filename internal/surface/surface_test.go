@@ -1403,3 +1403,41 @@ func TestAVariableRefreshReachesOnlyFeedbackThatCanSayItIsTheFastest(t *testing.
 		}
 	}
 }
+
+func TestASubsurfaceThatStopsBeingSynchronizedAppliesWhatItCached(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		end  func(e *env, parent *cw.WlSurface, sub *cw.WlSubsurface) error
+	}{
+		{"its wl_subsurface is destroyed", func(_ *env, _ *cw.WlSurface, sub *cw.WlSubsurface) error { return sub.Destroy() }},
+		{"its parent is destroyed", func(_ *env, parent *cw.WlSurface, _ *cw.WlSubsurface) error { return parent.Destroy() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setup(t, 6)
+			parent, child, grandchild := e.surface(), e.surface(), e.surface()
+			sub := e.subsurface(child, parent)
+			grand := e.subsurface(grandchild, child)
+			must(t, grand.SetDesync(), child.Commit(), parent.Commit())
+			e.roundtrip()
+			applied, grandApplied := e.commitCount(child), e.commitCount(grandchild)
+			must(t, child.Damage(0, 0, 1, 1), child.Commit(), grandchild.Damage(3, 3, 1, 1), grandchild.Commit())
+			e.roundtrip()
+			if e.commitCount(child) != applied || e.commitCount(grandchild) != grandApplied {
+				t.Fatal("a synchronized subtree applied before its parent committed")
+			}
+			must(t, tc.end(e, parent, sub))
+			e.roundtrip()
+			if e.commitCount(child) != applied+1 || !e.last(child).damage.Contains(image.Pt(0, 0)) {
+				t.Fatalf("the cached commit did not apply once the surface stopped being synchronized: %d applies, want %d", e.commitCount(child), applied+1)
+			}
+			if e.commitCount(grandchild) != grandApplied+1 || !e.last(grandchild).damage.Contains(image.Pt(3, 3)) {
+				t.Fatal("the desynchronized child of a surface that stopped being synchronized kept its cached commit")
+			}
+			must(t, child.Damage(2, 2, 1, 1), child.Commit())
+			e.roundtrip()
+			if e.commitCount(child) != applied+2 || !e.last(child).damage.Contains(image.Pt(2, 2)) {
+				t.Fatal("a surface that is no longer synchronized did not apply its own commit")
+			}
+		})
+	}
+}
