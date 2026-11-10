@@ -769,7 +769,7 @@ func rigged(t *testing.T, alloc func(*fakeDevice) allocator, master Master) *rig
 	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }, Master: master}); err != nil {
 		t.Fatal(err)
 	}
-	r.b.fenceTime = func(int) (time.Duration, bool, error) { return backend.Now(), true, nil }
+	r.b.fenceTime = func(int) (time.Duration, bool, error) { return 0, false, nil }
 	r.b.now = r.now
 	return r
 }
@@ -2145,39 +2145,42 @@ func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
 
 func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	r := start(t)
-	o := r.lit()
-	r.rec.idle = true
-	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
-		t.Fatal(err)
-	}
-	r.committedSince("the cursor", o, 0)
 	r.pinned = backend.Now()
-	r.dev.flip(t, 10, 2)
-	r.until("the cursor's flip", func() bool { return !o.flipping })
+	o := r.flipFirstFrame()
+	r.rec.idle = true
 	interval := modeOf(o.mode).Interval()
+	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	r.cursorCommit("the cursor", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
 	r.pinned = o.lastFlip + interval/2
-	presents := len(r.rec.presents)
+	frames := r.frames()
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
+	}
+	r.until("the empty frame", func() bool { return r.frames() > frames })
+	refresh := o.lastFlip + interval
+	if o.idleAt != refresh {
+		t.Fatalf("the empty frame reports its refresh at %v after the flip, want the next vblank %v after it", o.idleAt-o.lastFlip, interval)
 	}
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(40, 30)); err != nil {
 		t.Fatal(err)
 	}
-	r.until("the empty frame, its move waiting for the plane latch", func() bool { return o.planesWaiting })
-	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	if o.flipping {
+		t.Fatalf("a cursor move half a refresh before the vblank committed at once: %+v", r.dev.commits)
+	}
+	r.pinned = refresh - backend.PlaneLead
 	if err := o.planesDue(); err != nil {
 		t.Fatal(err)
 	}
-	r.until("the empty frame's refresh", func() bool {
-		return slices.ContainsFunc(r.rec.presents[presents:], func(p backend.Presentation) bool { return p.Idle })
-	})
 	if !o.flipping || o.queued != nil {
 		t.Fatalf("want a cursor-only flip pending at the refresh: flipping %v, queued %v", o.flipping, o.queued != nil)
 	}
-	idle := slices.IndexFunc(r.rec.presents[presents:], func(p backend.Presentation) bool { return p.Idle })
-	if idle < 0 {
-		t.Fatalf("the empty frame's refresh went unreported behind a cursor flip: %+v", r.rec.presents[presents:])
+	presents := len(r.rec.presents)
+	if err := o.paceElapsed(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.rec.presents[presents:]; len(got) != 1 || !got[0].Idle || got[0].Time != refresh {
+		t.Fatalf("the empty frame's refresh behind a cursor flip presented %+v, want one idle presentation at the vblank", got)
 	}
 }
 
