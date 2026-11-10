@@ -2,9 +2,12 @@ package compositor
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
+	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
@@ -12,6 +15,7 @@ import (
 const (
 	waitSweep   = time.Second / 4
 	waitStalled = 2
+	stallDumps  = 8
 )
 
 type waitKind uint8
@@ -44,11 +48,18 @@ type waitEpisode struct {
 	seen    uint64
 }
 
+type stallDump struct {
+	sweep uint64
+	count uint64
+	path  string
+}
+
 type waitWatch struct {
 	timer   *loop.Timer
 	armed   bool
 	sweeps  uint64
 	stalled map[waitKey]waitEpisode
+	dump    stallDump
 }
 
 func waitedOver(sweeps uint64) time.Duration {
@@ -108,6 +119,33 @@ func (c *Compositor) stall(k waitKey, subject string, sweeps uint64) {
 	c.waits.stalled[k] = waitEpisode{subject: subject, born: c.waits.sweeps - sweeps, seen: c.waits.sweeps}
 }
 
+func (c *Compositor) protocolAtStall() string {
+	if !c.display.RecordingProtocol() {
+		return ""
+	}
+	w := &c.waits
+	if w.dump.sweep != w.sweeps {
+		path, err := c.stallDumpPath(w.dump.count % stallDumps)
+		if err == nil {
+			err = c.dumpProtocol(path)
+		}
+		if err != nil {
+			c.report(fmt.Errorf("compositor: dump the protocol of a stall: %w", err))
+			return ""
+		}
+		w.dump = stallDump{sweep: w.sweeps, count: w.dump.count + 1, path: path}
+	}
+	return "; the protocol recorded up to this moment is in " + w.dump.path
+}
+
+func (c *Compositor) stallDumpPath(n uint64) (string, error) {
+	socket, err := ipc.SocketPath(filepath.Dir(c.display.Path()), c.display.Name())
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s.stall-%d.log", strings.TrimSuffix(socket, filepath.Ext(socket)), n), nil
+}
+
 func (c *Compositor) acquireWaiting(s *surface.Surface, acquire, sweeps uint64) {
 	k := waitKey{kind: waitAcquire, surface: s}
 	if sweeps < waitStalled || c.stillStalled(k) {
@@ -115,17 +153,17 @@ func (c *Compositor) acquireWaiting(s *surface.Surface, acquire, sweeps uint64) 
 	}
 	subject := c.describeSurface(s)
 	c.stall(k, subject, sweeps)
-	c.report(fmt.Errorf("compositor: %s has waited over %v for acquire point %d of its syncobj timeline; none of its commits since apply until the client's GPU work signals it", subject, waitedOver(sweeps), acquire))
+	c.report(fmt.Errorf("compositor: %s has waited over %v for acquire point %d of its syncobj timeline; none of its commits since apply until the client's GPU work signals it%s", subject, waitedOver(sweeps), acquire, c.protocolAtStall()))
 }
 
-func (c *Compositor) writerWaiting(b *dmabuf.Buffer, sweeps uint64) {
-	k := waitKey{kind: waitWriter, buffer: b}
+func (c *Compositor) writerWaiting(b *dmabuf.Buffer, s *surface.Surface, sweeps uint64) {
+	k := waitKey{kind: waitWriter, surface: s, buffer: b}
 	if sweeps < waitStalled || c.stillStalled(k) {
 		return
 	}
-	subject := b.String()
+	subject := fmt.Sprintf("%s on %s", b, c.describeSurface(s))
 	c.stall(k, subject, sweeps)
-	c.report(fmt.Errorf("compositor: a commit of %s has waited over %v for its writer's implicit fence; it and every later commit of its surface apply only once the fence signals", subject, waitedOver(sweeps)))
+	c.report(fmt.Errorf("compositor: a commit of %s has waited over %v for its writer's implicit fence; it and every later commit of its surface apply only once the fence signals%s", subject, waitedOver(sweeps), c.protocolAtStall()))
 }
 
 func (c *Compositor) sweepWithheld() bool {
@@ -149,7 +187,7 @@ func (c *Compositor) withheld(b *dmabuf.Buffer, held *scannedOut, sweeps uint64)
 	}
 	subject := fmt.Sprintf("%s, last shown on %s", b, c.describeSurface(held.surface))
 	c.stall(k, subject, sweeps)
-	c.report(fmt.Errorf("compositor: %s, has left its surface over %v ago but not the screen: its %s waits for a display plane to retire it", subject, waitedOver(sweeps), held.owes()))
+	c.report(fmt.Errorf("compositor: %s, has left its surface over %v ago but not the screen: its %s waits for a display plane to retire it%s", subject, waitedOver(sweeps), held.owes(), c.protocolAtStall()))
 }
 
 func (c *Compositor) describeSurface(s *surface.Surface) string {

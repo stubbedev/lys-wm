@@ -423,6 +423,7 @@ func (b *Buffer) String() string {
 
 type planeFence struct {
 	buffer  *Buffer
+	surface *surface.Surface
 	born    uint64
 	plane   int
 	dup     int
@@ -437,7 +438,7 @@ func (f *planeFence) signalled(loop.Events) error {
 	m := f.buffer.m
 	m.awaited = slices.DeleteFunc(m.awaited, func(x *planeFence) bool { return x == f })
 	waiters := f.waiters
-	f.waiters = f.waiters[len(waiters):]
+	f.waiters, f.surface = f.waiters[len(waiters):], nil
 	var errs []error
 	for _, release := range waiters {
 		errs = append(errs, release())
@@ -520,7 +521,7 @@ func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
 			return err
 		}
 		if len(f.waiters) == 0 {
-			if err := b.m.await(f); err != nil {
+			if err := b.m.await(f, c.Surface()); err != nil {
 				return err
 			}
 		}
@@ -529,16 +530,16 @@ func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
 	return nil
 }
 
-func (m *Manager) await(f *planeFence) error {
-	f.born = m.sweeps
+func (m *Manager) await(f *planeFence, s *surface.Surface) error {
+	f.born, f.surface = m.sweeps, s
 	m.awaited = append(m.awaited, f)
 	return m.listener.Awaiting()
 }
 
-func (m *Manager) Sweep(waiting func(b *Buffer, sweeps uint64)) bool {
+func (m *Manager) Sweep(waiting func(b *Buffer, s *surface.Surface, sweeps uint64)) bool {
 	m.sweeps++
 	for _, f := range m.awaited {
-		waiting(f.buffer, m.sweeps-f.born)
+		waiting(f.buffer, f.surface, m.sweeps-f.born)
 	}
 	return len(m.awaited) > 0
 }

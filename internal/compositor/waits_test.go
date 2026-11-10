@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -136,38 +137,132 @@ func onlyReport(t *testing.T, got []string, wants ...string) {
 	}
 }
 
-func TestACommitHeldByItsWritersFenceIsReportedOnceAndWhenItClears(t *testing.T) {
-	w := setupWaits(t)
+type heldCommit struct {
+	surface *cw.WlSurface
+	buffer  *cw.WlBuffer
+	writer  int
+}
+
+func (w *waitRig) holdCommit() heldCommit {
+	w.t.Helper()
 	var p [2]int
-	must(t, unix.Pipe2(p[:], unix.O_CLOEXEC))
-	defer unix.Close(p[0])
-	defer unix.Close(p[1])
+	must(w.t, unix.Pipe2(p[:], unix.O_CLOEXEC))
+	w.t.Cleanup(func() {
+		_ = unix.Close(p[0])
+		_ = unix.Close(p[1])
+	})
 	b := w.buffer(p[0], &releases{})
 	s, err := w.wlComp.CreateSurface(struct{ cw.WlSurfaceHandler }{})
-	must(t, err, s.Attach(b, 0, 0), s.Commit())
+	must(w.t, err, s.Attach(b, 0, 0), s.Commit())
 	w.roundtrip()
+	return heldCommit{surface: s, buffer: b, writer: p[1]}
+}
+
+func (h heldCommit) String() string {
+	return fmt.Sprintf("wl_buffer@%d of pid %d on wl_surface@%d of pid %d", h.buffer.Base().ID(), os.Getpid(), h.surface.Base().ID(), os.Getpid())
+}
+
+func TestACommitHeldByItsWritersFenceIsReportedOnceAndWhenItClears(t *testing.T) {
+	w := setupWaits(t)
+	held := w.holdCommit()
 	w.on(func() {
 		if !w.comp.waits.armed {
 			t.Error("a commit held by its writer did not start the sweeps")
 		}
 	})
 	w.quietSweeps("the writer")
-	buffer := fmt.Sprintf("wl_buffer@%d of pid %d", b.Base().ID(), os.Getpid())
-	onlyReport(t, w.sweep(), buffer, "implicit fence")
+	onlyReport(t, w.sweep(), "a commit of "+held.String()+" has waited", "implicit fence")
 	for range 3 {
 		if got := w.sweep(); len(got) != 0 {
 			t.Fatalf("the same stall reported again: %q", got)
 		}
 	}
-	_, err = unix.Write(p[1], []byte{0})
+	_, err := unix.Write(held.writer, []byte{0})
 	must(t, err)
 	w.waitApplied(1)
-	onlyReport(t, w.sweep(), buffer, "no longer waits for its writer's implicit fence")
+	onlyReport(t, w.sweep(), held.String()+" no longer waits for its writer's implicit fence")
 	w.on(func() {
 		if w.comp.waits.armed {
 			t.Error("the sweeps went on with nothing left to wait for")
 		}
 	})
+}
+
+func (w *waitRig) dumps() (count uint64, prefix string) {
+	w.t.Helper()
+	w.on(func() {
+		w.comp.recorders.dumps.Wait()
+		count = w.comp.waits.dump.count
+		prefix = filepath.Join(filepath.Dir(w.comp.display.Path()), "lys-wm", w.comp.display.Name()+".stall-")
+	})
+	return count, prefix
+}
+
+const dumpNote = "; the protocol recorded up to this moment is in "
+
+func TestAStallWritesTheProtocolRecordedUpToItOnlyWhileProtocolIsRecorded(t *testing.T) {
+	w := setupWaits(t)
+	unrecorded := w.holdCommit()
+	w.quietSweeps("the writer")
+	got := w.sweep()
+	onlyReport(t, got, unrecorded.String())
+	if n, _ := w.dumps(); n != 0 || strings.Contains(got[0], dumpNote) {
+		t.Fatalf("with no protocol recorded, %d dumps were written and the report says %q", n, got[0])
+	}
+
+	w.on(func() { w.comp.display.RecordProtocol(true) })
+	both := []heldCommit{w.holdCommit(), w.holdCommit()}
+	_, prefix := w.dumps()
+	must(t, os.Mkdir(filepath.Dir(prefix), 0o700))
+	w.quietSweeps("the writers")
+	got = w.sweep()
+	n, _ := w.dumps()
+	if len(got) != len(both) || n != 1 {
+		t.Fatalf("two stalls found by one sweep made %d reports and %d dumps, want 2 and 1: %q", len(got), n, got)
+	}
+	path := prefix + "0.log"
+	record, err := os.ReadFile(path)
+	must(t, err)
+	for i, held := range both {
+		if !strings.Contains(got[i], held.String()) || !strings.HasSuffix(got[i], dumpNote+path) {
+			t.Errorf("report %q does not name %s and the dump %s", got[i], held, path)
+		}
+		for _, sent := range []string{
+			fmt.Sprintf("{%d/1} wl_surface@%d.attach(wl_buffer@%d, 0, 0)\n", os.Getpid(), held.surface.Base().ID(), held.buffer.Base().ID()),
+			fmt.Sprintf("{%d/1} wl_surface@%d.commit()\n", os.Getpid(), held.surface.Base().ID()),
+		} {
+			if !strings.Contains(string(record), sent) {
+				t.Errorf("the dump lacks %q:\n%s", sent, record)
+			}
+		}
+	}
+	if early := fmt.Sprintf("wl_surface@%d.commit()", unrecorded.surface.Base().ID()); strings.Contains(string(record), early) {
+		t.Errorf("the dump holds %q, sent before the protocol was recorded", early)
+	}
+	for range 3 {
+		if got := w.sweep(); len(got) != 0 {
+			t.Fatalf("the same stalls reported again: %q", got)
+		}
+	}
+	if n, _ := w.dumps(); n != 1 {
+		t.Fatalf("%d dumps for one stall episode, want 1", n)
+	}
+
+	named := map[string]bool{path: true}
+	for range stallDumps {
+		held := w.holdCommit()
+		w.quietSweeps("the writer")
+		got := w.sweep()
+		onlyReport(t, got, held.String(), dumpNote+prefix)
+		_, file, _ := strings.Cut(got[0], dumpNote)
+		named[file] = true
+	}
+	n, _ = w.dumps()
+	files, err := filepath.Glob(prefix + "*")
+	must(t, err)
+	if n != stallDumps+1 || len(named) != stallDumps || len(files) != stallDumps {
+		t.Fatalf("%d dumps named %d files and left %d, want %d dumps kept in %d files", n, len(named), len(files), stallDumps+1, stallDumps)
+	}
 }
 
 func (w *waitRig) waitApplied(n int) {

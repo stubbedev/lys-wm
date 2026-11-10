@@ -251,6 +251,15 @@ lys-wmctl dispatch debug protocol off   # drop them
   one process can hold several connections with their own object IDs, and its
   time counts in milliseconds from the start given on the first line.
   `LYS_WM_DEBUG=wire` prints the same lines live to stderr.
+- While the protocol is recorded, a stall report also writes that dump by
+  itself. lys-wm reports a commit that has waited over a quarter second for
+  its syncobj acquire point or its writer's implicit fence, and a buffer whose
+  release waits for a display plane, naming the surface, its client and the
+  buffer. The report then ends with the path of the dump taken at that moment:
+  `$XDG_RUNTIME_DIR/lys-wm/<display>.stall-<n>.log`, beside the IPC socket,
+  `<n>` from 0 to 7. One dump is written per stall, stalls found together share
+  it, and the ninth overwrites the first. With recording off, nothing is
+  written.
 
 The trace format is described in [Frame pacing](./frame-pacing#the-trace).
 

@@ -529,6 +529,15 @@ func (awaiter) DamagedPixels() int { return 0 }
 
 func (a awaiter) Await() func() error { return a() }
 
+func (awaiter) Surface() *surface.Surface { return nil }
+
+type committing struct {
+	awaiter
+	to *surface.Surface
+}
+
+func (c committing) Surface() *surface.Surface { return c.to }
+
 // A commit of a buffer whose writer is still at work waits for it, as
 // linux-dmabuf's implicit synchronization promises the client, and one whose
 // writer has finished does not. A pipe's read end stands in for the dmabuf: both
@@ -648,18 +657,20 @@ func TestASweepCountsHowLongAPlaneFenceHoldsItsCommit(t *testing.T) {
 	defer unix.Close(p[1])
 	b := &Buffer{m: e.m, dmabuf: gpu.DMABUF{Planes: []gpu.Plane{{FD: p[0]}}}}
 	released := make(chan struct{})
+	first, second := &surface.Surface{}, &surface.Surface{}
 	type seen struct {
-		buffers []*Buffer
-		sweeps  []uint64
-		busy    bool
+		buffers  []*Buffer
+		surfaces []*surface.Surface
+		sweeps   []uint64
+		busy     bool
 	}
 	sweep := func() seen {
 		t.Helper()
 		got := make(chan seen, 1)
 		if err := e.l.Post(func() error {
 			var s seen
-			s.busy = e.m.Sweep(func(b *Buffer, sweeps uint64) {
-				s.buffers, s.sweeps = append(s.buffers, b), append(s.sweeps, sweeps)
+			s.busy = e.m.Sweep(func(b *Buffer, on *surface.Surface, sweeps uint64) {
+				s.buffers, s.surfaces, s.sweeps = append(s.buffers, b), append(s.surfaces, on), append(s.sweeps, sweeps)
 			})
 			got <- s
 			return nil
@@ -672,8 +683,8 @@ func TestASweepCountsHowLongAPlaneFenceHoldsItsCommit(t *testing.T) {
 		t.Fatalf("a sweep with no commit held found %v", s)
 	}
 	if err := e.l.Post(func() error {
-		for range 2 {
-			if err := b.AwaitWriter(awaiter(func() func() error {
+		for _, to := range []*surface.Surface{first, second} {
+			if err := b.AwaitWriter(committing{to: to, awaiter: func() func() error {
 				return func() error {
 					select {
 					case <-released:
@@ -682,7 +693,7 @@ func TestASweepCountsHowLongAPlaneFenceHoldsItsCommit(t *testing.T) {
 					}
 					return nil
 				}
-			})); err != nil {
+			}}); err != nil {
 				return err
 			}
 		}
@@ -694,6 +705,9 @@ func TestASweepCountsHowLongAPlaneFenceHoldsItsCommit(t *testing.T) {
 		s := sweep()
 		if !s.busy || !slices.Equal(s.buffers, []*Buffer{b}) || !slices.Equal(s.sweeps, []uint64{want + 1}) {
 			t.Fatalf("sweep %d found %d buffers held for %v sweeps, busy %v; want the one buffer once, held for %d", want+1, len(s.buffers), s.sweeps, s.busy, want+1)
+		}
+		if !slices.Equal(s.surfaces, []*surface.Surface{first}) {
+			t.Fatalf("sweep %d names %d surfaces, want only the one whose commit began the wait", want+1, len(s.surfaces))
 		}
 	}
 	e.imp.mu.Lock()

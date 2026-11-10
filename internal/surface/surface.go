@@ -262,6 +262,10 @@ func (u *Update) Buffer() Buffer {
 	return u.s.current.buffer
 }
 
+func (u *Update) Surface() *Surface {
+	return u.s
+}
+
 func (u *Update) Gate(ready func() bool) {
 	u.gates = append(u.gates, ready)
 }

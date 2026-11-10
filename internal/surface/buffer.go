@@ -22,10 +22,11 @@ type Awaited interface {
 }
 
 // Awaiter is a commit an Awaited buffer can keep from taking effect: Await holds
-// it until the returned func is called.
+// it until the returned func is called. Surface is the surface it commits to.
 type Awaiter interface {
 	Await() (release func() error)
 	DamagedPixels() int
+	Surface() *Surface
 }
 
 type Backing struct {

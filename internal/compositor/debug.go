@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime/pprof"
 	"slices"
+	"sync"
 
 	"github.com/stubbedev/lys-lib/atomicfile"
 
@@ -132,6 +133,7 @@ func (c *Compositor) debugOverlay(a wm.DebugOverlayAction) error {
 type debugRecorders struct {
 	trace   *frametrace.Recorder
 	profile *os.File
+	dumps   sync.WaitGroup
 }
 
 func (c *Compositor) debugRecord(a wm.DebugRecordAction) error {
@@ -219,6 +221,7 @@ func (c *Compositor) stopDebugProfile() error {
 }
 
 func (c *Compositor) stopDebugRecorders() error {
+	c.recorders.dumps.Wait()
 	var errs []error
 	if c.recorders.trace != nil {
 		errs = append(errs, c.stopDebugTrace())
@@ -234,14 +237,14 @@ func (c *Compositor) dumpProtocol(path string) error {
 	if err != nil {
 		return fmt.Errorf("compositor: dump the protocol to %s: %w", path, err)
 	}
-	go func() {
+	c.recorders.dumps.Go(func() {
 		if err := atomicfile.WriteFile(path, dump, 0o600); err != nil {
 			_ = c.loop.Post(func() error {
 				c.report(fmt.Errorf("compositor: dump the protocol: %w", err))
 				return nil
 			})
 		}
-	}()
+	})
 	return nil
 }
 
