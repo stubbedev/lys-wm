@@ -59,6 +59,7 @@
 
         # The test suite is pure Go and safe to run in the sandbox.
         doCheck = true;
+        nativeCheckInputs = [pkgs.dbus];
 
         passthru.providedSessions = ["lys-wm"];
 
