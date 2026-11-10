@@ -20,9 +20,11 @@ import (
 )
 
 type scannedOut struct {
-	outputs  int
-	released *server.Client
-	then     []func() error
+	outputs   int
+	surface   *surface.Surface
+	released  *server.Client
+	then      []func() error
+	owedSince uint64
 }
 
 var scanoutFormats = []fourcc.Format{fourcc.XRGB8888, fourcc.XBGR8888, fourcc.XRGB2101010, fourcc.XBGR2101010}
@@ -77,13 +79,18 @@ func (c *Compositor) scanout(o *output.Output, sc *scene, op drawOp, alone bool)
 		return false, err
 	}
 	sc.zeroCopy[0] = op.surface
+	c.holdScannedOut(b, op.surface)
+	return true, nil
+}
+
+func (c *Compositor) holdScannedOut(b *dmabuf.Buffer, s *surface.Surface) {
 	held, ok := c.scannedOut[b]
 	if !ok {
 		held = c.takeScannedOut()
 		c.scannedOut[b] = held
 	}
 	held.outputs++
-	return true, nil
+	held.surface = s
 }
 
 func (c *Compositor) showContentType(o *output.Output, s *surface.Surface, alone bool) {
@@ -198,14 +205,16 @@ func (c *Compositor) OffScreen(b *dmabuf.Buffer, f func() error) error {
 	if !ok {
 		return f()
 	}
+	err := c.owe(held)
 	held.then = append(held.then, f)
-	return nil
+	return err
 }
 
 func (c *Compositor) releaseBuffer(b *dmabuf.Buffer, client *server.Client) error {
 	if held, ok := c.scannedOut[b]; ok {
+		err := c.owe(held)
 		held.released = client
-		return nil
+		return err
 	}
 	return b.Release()
 }

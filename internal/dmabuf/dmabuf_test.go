@@ -40,6 +40,7 @@ type importer struct {
 	gone    []*Buffer
 	plane   gpu.ScanoutTarget
 	surface *surface.Surface
+	awaits  int
 }
 
 func (i *importer) DMABUFFormats() ([]gpu.FormatModifier, error) {
@@ -65,6 +66,13 @@ func (i *importer) SurfaceScanout(s *surface.Surface) gpu.ScanoutTarget {
 	defer i.mu.Unlock()
 	i.surface = s
 	return i.plane
+}
+
+func (i *importer) Awaiting() error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.awaits++
+	return nil
 }
 
 func (*importer) Committed(*surface.Surface) error { return nil }
@@ -627,5 +635,82 @@ func TestAWaitedPlaneKeepsOneDuplicateAcrossCommits(t *testing.T) {
 	}
 	if got := <-dups; got != 1 {
 		t.Fatalf("%d commits duplicated the plane %d times", commits, got)
+	}
+}
+
+func TestASweepCountsHowLongAPlaneFenceHoldsItsCommit(t *testing.T) {
+	e := setup(t, nil)
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(p[0])
+	defer unix.Close(p[1])
+	b := &Buffer{m: e.m, dmabuf: gpu.DMABUF{Planes: []gpu.Plane{{FD: p[0]}}}}
+	released := make(chan struct{})
+	type seen struct {
+		buffers []*Buffer
+		sweeps  []uint64
+		busy    bool
+	}
+	sweep := func() seen {
+		t.Helper()
+		got := make(chan seen, 1)
+		if err := e.l.Post(func() error {
+			var s seen
+			s.busy = e.m.Sweep(func(b *Buffer, sweeps uint64) {
+				s.buffers, s.sweeps = append(s.buffers, b), append(s.sweeps, sweeps)
+			})
+			got <- s
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return <-got
+	}
+	if s := sweep(); s.busy || len(s.buffers) != 0 {
+		t.Fatalf("a sweep with no commit held found %v", s)
+	}
+	if err := e.l.Post(func() error {
+		for range 2 {
+			if err := b.AwaitWriter(awaiter(func() func() error {
+				return func() error {
+					select {
+					case <-released:
+					default:
+						close(released)
+					}
+					return nil
+				}
+			})); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for want := range uint64(3) {
+		s := sweep()
+		if !s.busy || !slices.Equal(s.buffers, []*Buffer{b}) || !slices.Equal(s.sweeps, []uint64{want + 1}) {
+			t.Fatalf("sweep %d found %d buffers held for %v sweeps, busy %v; want the one buffer once, held for %d", want+1, len(s.buffers), s.sweeps, s.busy, want+1)
+		}
+	}
+	e.imp.mu.Lock()
+	awaits := e.imp.awaits
+	e.imp.mu.Unlock()
+	if awaits != 1 {
+		t.Fatalf("the listener heard of %d waits for one plane fence, want 1", awaits)
+	}
+	if _, err := unix.Write(p[1], []byte{0}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not released after the writer finished")
+	}
+	if s := sweep(); s.busy || len(s.buffers) != 0 {
+		t.Fatalf("a sweep after the writer finished found %v", s)
 	}
 }

@@ -3,6 +3,7 @@ package syncobj
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -55,6 +56,8 @@ func (importer) BufferDestroyed(*dmabuf.Buffer) error { return nil }
 
 func (importer) SurfaceScanout(*surface.Surface) gpu.ScanoutTarget { return gpu.ScanoutTarget{} }
 
+func (importer) Awaiting() error { return nil }
+
 type fencer struct{ d *drm.Device }
 
 func (f fencer) SyncFile() (int, error) {
@@ -67,9 +70,17 @@ func (f fencer) SyncFile() (int, error) {
 }
 
 type screen struct {
-	mu   sync.Mutex
-	hold bool
-	held []func() error
+	mu     sync.Mutex
+	hold   bool
+	held   []func() error
+	awaits int
+}
+
+func (s *screen) Awaiting() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.awaits++
+	return nil
 }
 
 func (s *screen) OffScreen(_ *dmabuf.Buffer, f func() error) error {
@@ -479,5 +490,102 @@ func TestASurfaceReusesItsEventFDAcrossCommits(t *testing.T) {
 	}
 	if got := <-made; got != 1 {
 		t.Fatalf("%d commits made %d eventfds", commits, got)
+	}
+}
+
+type acquireWait struct {
+	surface wire.ObjectID
+	acquire uint64
+	sweeps  uint64
+}
+
+func (e *env) sweep() ([]acquireWait, bool) {
+	e.t.Helper()
+	type swept struct {
+		waits []acquireWait
+		busy  bool
+	}
+	got := make(chan swept, 1)
+	if err := e.l.Post(func() error {
+		var s swept
+		s.busy = e.manager.Sweep(func(sf *surface.Surface, acquire, sweeps uint64) {
+			s.waits = append(s.waits, acquireWait{sf.Resource().Base().ID(), acquire, sweeps})
+		})
+		got <- s
+		return nil
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+	s := <-got
+	return s.waits, s.busy
+}
+
+func TestASweepNamesTheSurfaceWaitingOnItsOldestAcquirePoint(t *testing.T) {
+	e := setup(t)
+	acquire, atl := e.timeline()
+	_, rtl := e.timeline()
+	s, ss := e.surface()
+	if waits, busy := e.sweep(); busy || len(waits) != 0 {
+		t.Fatalf("a sweep before any commit found %v", waits)
+	}
+	for _, point := range []uint32{1, 2} {
+		for _, err := range []error{ss.SetAcquirePoint(atl, 0, point), ss.SetReleasePoint(rtl, 0, point), s.Attach(e.dmabuf(), 0, 0), s.Commit()} {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	e.roundtrip()
+	for want := range uint64(3) {
+		waits, busy := e.sweep()
+		if !busy || !slices.Equal(waits, []acquireWait{{s.Base().ID(), 1, want + 1}}) {
+			t.Fatalf("sweep %d found %v, want wl_surface@%d waiting %d sweeps on acquire point 1", want+1, waits, s.Base().ID(), want+1)
+		}
+	}
+	e.scr.mu.Lock()
+	awaits := e.scr.awaits
+	e.scr.mu.Unlock()
+	if awaits != 2 {
+		t.Fatalf("the screen heard of %d acquire waits, want 2", awaits)
+	}
+	if err := e.dev.Signal(acquire, 2); err != nil {
+		t.Fatal(err)
+	}
+	e.waitFor("both commits", func() bool { return e.rec.count() == 2 })
+	if waits, busy := e.sweep(); busy || len(waits) != 0 {
+		t.Fatalf("a sweep after the acquire points signalled found %v", waits)
+	}
+}
+
+type brokenGPU struct{}
+
+func (brokenGPU) SyncFile() (int, error) { return -1, errors.New("the GPU is gone") }
+
+type notAFence struct{}
+
+func (notAFence) SyncFile() (int, error) {
+	return unix.MemfdCreate("not-a-sync-file", unix.MFD_CLOEXEC)
+}
+
+func TestAReleasePointSignalsEvenIfItsGPUFenceCannotBeHad(t *testing.T) {
+	for name, f := range map[string]Fencer{"no fence": brokenGPU{}, "a fence the timeline refuses": notAFence{}} {
+		t.Run(name, func(t *testing.T) {
+			dev := device(t)
+			s, err := dev.CreateSyncobj(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = dev.DestroySyncobj(s) })
+			tl := &timeline{m: &Manager{dev: dev, fencer: f}, handle: s, refs: 2}
+			if err := (&point{t: tl, value: 5}).signalAfterGPU(); err == nil {
+				t.Fatal("the lost GPU fence was not reported")
+			}
+			if v, err := dev.Query(s); err != nil || v != 5 {
+				t.Fatalf("the timeline is at %d, %v, want 5: the client would wait on its release for ever", v, err)
+			}
+			if tl.refs != 1 {
+				t.Fatalf("the point left %d references", tl.refs)
+			}
+		})
 	}
 }

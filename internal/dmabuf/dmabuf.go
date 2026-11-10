@@ -40,6 +40,7 @@ type Importer interface {
 type Listener interface {
 	BufferDestroyed(b *Buffer) error
 	SurfaceScanout(s *surface.Surface) gpu.ScanoutTarget
+	Awaiting() error
 }
 
 type Manager struct {
@@ -54,6 +55,8 @@ type Manager struct {
 	table     int
 	version   uint32
 	surfaces  map[*surface.Surface][]surfaceFeedback
+	awaited   []*planeFence
+	sweeps    uint64
 }
 
 type surfaceFeedback struct {
@@ -379,7 +382,7 @@ func (p *params) Create(obj *sld.ZwpLinuxBufferParamsV1, width, height int32, fo
 	case err != nil:
 		return obj.SendFailed()
 	}
-	buf := &Buffer{m: p.m, dmabuf: b}
+	buf := &Buffer{m: p.m, client: p.c, dmabuf: b}
 	if buf.resource, err = obj.SendCreated(buf); err != nil {
 		return errors.Join(err, closeAll(b))
 	}
@@ -396,7 +399,7 @@ func (p *params) CreateImmed(obj *sld.ZwpLinuxBufferParamsV1, res *sw.WlBuffer, 
 	case err != nil:
 		return nil, fail(obj, sld.ZwpLinuxBufferParamsV1ErrorInvalidWlBuffer, "%v", err)
 	}
-	buf := &Buffer{m: p.m, resource: res, dmabuf: b}
+	buf := &Buffer{m: p.m, client: p.c, resource: res, dmabuf: b}
 	buf.Backing = surface.NewBacking(res, buf.destroyed)
 	return buf, nil
 }
@@ -409,11 +412,18 @@ type Buffer struct {
 	*surface.Backing
 	dmabuf   gpu.DMABUF
 	m        *Manager
+	client   *server.Client
 	resource *sw.WlBuffer
 	fences   []*planeFence
 }
 
+func (b *Buffer) String() string {
+	return fmt.Sprintf("wl_buffer@%d of pid %d", b.resource.Base().ID(), b.client.Creds().Pid)
+}
+
 type planeFence struct {
+	buffer  *Buffer
+	born    uint64
 	plane   int
 	dup     int
 	src     *loop.Source
@@ -424,6 +434,8 @@ type planeFence struct {
 
 func (f *planeFence) signalled(loop.Events) error {
 	f.armed = false
+	m := f.buffer.m
+	m.awaited = slices.DeleteFunc(m.awaited, func(x *planeFence) bool { return x == f })
 	waiters := f.waiters
 	f.waiters = f.waiters[len(waiters):]
 	var errs []error
@@ -455,7 +467,7 @@ func (b *Buffer) distinctFences() error {
 			continue
 		}
 		seen[key] = struct{}{}
-		b.fences = append(b.fences, &planeFence{plane: p.FD, dup: -1})
+		b.fences = append(b.fences, &planeFence{buffer: b, plane: p.FD, dup: -1})
 	}
 	return nil
 }
@@ -507,9 +519,28 @@ func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
 		if err := b.arm(f); err != nil {
 			return err
 		}
+		if len(f.waiters) == 0 {
+			if err := b.m.await(f); err != nil {
+				return err
+			}
+		}
 		f.waiters = append(f.waiters, c.Await())
 	}
 	return nil
+}
+
+func (m *Manager) await(f *planeFence) error {
+	f.born = m.sweeps
+	m.awaited = append(m.awaited, f)
+	return m.listener.Awaiting()
+}
+
+func (m *Manager) Sweep(waiting func(b *Buffer, sweeps uint64)) bool {
+	m.sweeps++
+	for _, f := range m.awaited {
+		waiting(f.buffer, m.sweeps-f.born)
+	}
+	return len(m.awaited) > 0
 }
 
 func (b *Buffer) DMABUF() gpu.DMABUF {

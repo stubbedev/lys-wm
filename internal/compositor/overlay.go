@@ -134,16 +134,10 @@ func (c *Compositor) assignOverlays(o *output.Output, sc *scene, bounds image.Re
 		}
 		return errors.Join(err, setErr)
 	}
-	for _, w := range want {
-		if w.buffer == nil {
-			continue
+	for i, w := range want {
+		if w.buffer != nil {
+			c.holdScannedOut(w.buffer, ops[i].surface)
 		}
-		held, ok := c.scannedOut[w.buffer]
-		if !ok {
-			held = c.takeScannedOut()
-			c.scannedOut[w.buffer] = held
-		}
-		held.outputs++
 	}
 	if want == (overlaysShown{}) {
 		delete(c.overlays, o)

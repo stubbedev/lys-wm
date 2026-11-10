@@ -210,6 +210,8 @@ type Compositor struct {
 	ctms               map[backend.Output]backend.Matrix
 	captureTargets     map[*dmabuf.Buffer]render.ReadTarget
 	dmabuf             *dmabuf.Manager
+	syncobj            *syncobj.Manager
+	waits              waitWatch
 	importer           dmabufRenderer
 	power              *outputpower.Manager
 	gamma              *gammacontrol.Manager
@@ -599,6 +601,9 @@ func (c *Compositor) setup(l *loop.Loop, display *server.Display, b backend.Back
 	if c.hidden.timer, err = l.AddTimer(c.hiddenFrame); err != nil {
 		return err
 	}
+	if c.waits.timer, err = l.AddTimer(c.sweepWaits); err != nil {
+		return err
+	}
 	if c.presence.timer, err = l.AddTimer(c.cursorIdleExpired); err != nil {
 		return err
 	}
@@ -775,7 +780,7 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 		return errors.Join(err, dev.Close())
 	}
 	display.OnClose(dev.Close)
-	_, err = syncobj.New(display, l, dev, r, c)
+	c.syncobj, err = syncobj.New(display, l, dev, r, c)
 	return err
 }
 
@@ -815,6 +820,10 @@ func (c *Compositor) Close() error {
 	if c.hidden.timer != nil {
 		errs = append(errs, c.hidden.timer.Remove())
 		c.hidden.timer = nil
+	}
+	if c.waits.timer != nil {
+		errs = append(errs, c.waits.timer.Remove())
+		c.waits.timer = nil
 	}
 	return errors.Join(errs...)
 }

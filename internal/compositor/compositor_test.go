@@ -94,9 +94,16 @@ type rig struct {
 	client   *wlclient.Display
 	shm      *cw.WlShm
 	wlComp   *cw.WlCompositor
+	registry *cw.WlRegistry
+	globals  registry
 }
 
 func setup(t *testing.T) *rig {
+	t.Helper()
+	return setupWith(t, func(r *spyRenderer) backend.Backend { return fakeBackend{r} }, func(*Config) {})
+}
+
+func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure func(*Config)) *rig {
 	t.Helper()
 	dir := testenv.SocketDir(t)
 	l, err := loop.New()
@@ -108,7 +115,9 @@ func setup(t *testing.T) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.comp, err = New(l, disp, fakeBackend{r.renderer}, PlainConfig(testenv.Keymap(t), testenv.Font(t))); err != nil {
+	cfg := PlainConfig(testenv.Keymap(t), testenv.Font(t))
+	configure(&cfg)
+	if r.comp, err = New(l, disp, back(r.renderer), cfg); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -130,9 +139,8 @@ func setup(t *testing.T) *rig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.client.Close() })
-	globals := registry{}
-	reg, err := r.client.WlDisplay().GetRegistry(globals)
-	if err != nil {
+	r.globals = registry{}
+	if r.registry, err = r.client.WlDisplay().GetRegistry(r.globals); err != nil {
 		t.Fatal(err)
 	}
 	r.roundtrip()
@@ -142,7 +150,7 @@ func setup(t *testing.T) *rig {
 	if r.wlComp, err = cw.NewWlCompositor(r.client, 6); err != nil {
 		t.Fatal(err)
 	}
-	if err := errors.Join(reg.Bind(globals["wl_shm"], r.shm), reg.Bind(globals["wl_compositor"], r.wlComp)); err != nil {
+	if err := errors.Join(r.registry.Bind(r.globals["wl_shm"], r.shm), r.registry.Bind(r.globals["wl_compositor"], r.wlComp)); err != nil {
 		t.Fatal(err)
 	}
 	r.roundtrip()

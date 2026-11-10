@@ -29,6 +29,7 @@ type Fencer interface {
 
 type Screen interface {
 	OffScreen(b *dmabuf.Buffer, f func() error) error
+	Awaiting() error
 }
 
 type Manager struct {
@@ -38,6 +39,21 @@ type Manager struct {
 	screen   Screen
 	surfaces map[*surface.Surface]*syncSurface
 	eventFDs uint64
+	sweeps   uint64
+}
+
+func (m *Manager) Sweep(waiting func(s *surface.Surface, acquire, sweeps uint64)) bool {
+	m.sweeps++
+	busy := false
+	for s, ss := range m.surfaces {
+		if len(ss.waits) == 0 {
+			continue
+		}
+		busy = true
+		w := ss.waits[0]
+		waiting(s, w.acquire.value, m.sweeps-w.born)
+	}
+	return busy
 }
 
 func New(d *server.Display, l *loop.Loop, dev *drm.Device, f Fencer, screen Screen) (*Manager, error) {
@@ -112,12 +128,17 @@ func (p *point) signalAfterGPU() error {
 	}
 	fd, err := p.t.m.fencer.SyncFile()
 	if err != nil {
-		return errors.Join(fmt.Errorf("syncobj: fence a release point: %w", err), p.drop())
+		return errors.Join(fmt.Errorf("syncobj: fence release point %d, signalled at once instead: %w", p.value, err), p.signal())
 	}
 	if fd < 0 {
 		return p.signal()
 	}
-	return errors.Join(p.t.m.dev.ImportSyncFile(p.t.handle, p.value, fd), unix.Close(fd), p.drop())
+	err = p.t.m.dev.ImportSyncFile(p.t.handle, p.value, fd)
+	closed := unix.Close(fd)
+	if err != nil {
+		return errors.Join(fmt.Errorf("syncobj: import the GPU fence into release point %d, signalled at once instead: %w", p.value, err), closed, p.signal())
+	}
+	return errors.Join(closed, p.drop())
 }
 
 type requests struct {
@@ -173,6 +194,7 @@ type wait struct {
 	efd     int
 	acquire *point
 	hold    *surface.Hold
+	born    uint64
 }
 
 func (w *wait) cancel() error {
@@ -316,9 +338,9 @@ func (ss *syncSurface) wait(acquire *point, hold *surface.Hold) error {
 	if err := ss.m.dev.EventFD(acquire.t.handle, acquire.value, w.efd, false); err != nil {
 		return errors.Join(err, w.close(), acquire.drop())
 	}
-	w.acquire, w.hold = acquire, hold
+	w.acquire, w.hold, w.born = acquire, hold, ss.m.sweeps
 	ss.waits = append(ss.waits, w)
-	return nil
+	return ss.m.screen.Awaiting()
 }
 
 func (ss *syncSurface) idleWait() (*wait, error) {
