@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-wm/internal/testenv"
@@ -115,7 +116,7 @@ func systemd(t *testing.T, address, fail string, prior map[string]string) *fakeM
 var env = [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}, {"XDG_CURRENT_DESKTOP", "lys-wm"}, {"LYS_WM_SOCKET", "/run/user/1000/lys-wm/wayland-1.sock"}}
 
 func TestSessionLifecycle(t *testing.T) {
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	m := systemd(t, address, "", map[string]string{"KEEP": "1"})
 	s, err := Start(address, env)
 	if err != nil {
@@ -140,7 +141,7 @@ func TestSessionLifecycle(t *testing.T) {
 }
 
 func TestAFailedStartLeavesNoEnvironment(t *testing.T) {
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	prior := map[string]string{"KEEP": "1", "PATH": "/usr/bin"}
 	m := systemd(t, address, "StartUnit", maps.Clone(prior))
 	if _, err := Start(address, append(slices.Clone(env), [2]string{"PATH", "/nix/bin:/usr/bin"})); err == nil || !strings.Contains(err.Error(), "StartUnit") {
@@ -158,7 +159,7 @@ func TestAFailedStartLeavesNoEnvironment(t *testing.T) {
 }
 
 func TestCloseRestoresWhatTheManagerHadBefore(t *testing.T) {
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	prior := map[string]string{"KEEP": "1", "PATH": "/usr/bin", "XCURSOR_SIZE": "32"}
 	m := systemd(t, address, "", maps.Clone(prior))
 	s, err := Start(address, [][2]string{{"PATH", "/nix/bin:/usr/bin"}, {"XCURSOR_SIZE", "24"}, {"WAYLAND_DISPLAY", "wayland-1"}})
@@ -178,7 +179,7 @@ func TestCloseRestoresWhatTheManagerHadBefore(t *testing.T) {
 }
 
 func TestAnUnreadableManagerEnvironmentFailsTheStart(t *testing.T) {
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	m := systemd(t, address, "Get", map[string]string{"KEEP": "1"})
 	if _, err := Start(address, env); err == nil || !strings.Contains(err.Error(), "user manager's environment") {
 		t.Fatalf("a refused Environment read: %v", err)

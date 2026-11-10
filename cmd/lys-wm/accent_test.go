@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/appearance"
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/render"
-	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
 const (
@@ -105,7 +105,7 @@ func waitForProblem(t *testing.T, socket, want string) {
 }
 
 func TestADesktopAccentChangeReloadsTheConfig(t *testing.T) {
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	socket, path, done := startSessionOnBus(t, "", address)
 	write := func(text string) {
 		t.Helper()

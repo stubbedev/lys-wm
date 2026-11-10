@@ -4,13 +4,8 @@
 package testenv
 
 import (
-	"bufio"
-	"context"
-	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -121,20 +116,6 @@ func Font(t testing.TB) *gtext.Typeface {
 	return f
 }
 
-const busConfig = `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:path=%s</listen>
-  <auth>EXTERNAL</auth>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-`
-
 func SocketDir(t testing.TB) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "lys-wm-")
@@ -147,32 +128,4 @@ func SocketDir(t testing.TB) string {
 		}
 	})
 	return dir
-}
-
-func DBus(t testing.TB) string {
-	t.Helper()
-	daemon := Require(t, "dbus-daemon")
-	dir := SocketDir(t)
-	config := filepath.Join(dir, "bus.conf")
-	if err := os.WriteFile(config, fmt.Appendf(nil, busConfig, filepath.Join(dir, "bus")), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.CommandContext(context.Background(), daemon, "--config-file="+config, "--nofork", "--print-address") //nolint:gosec // the dev shell's dbus-daemon with a config written here
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	})
-	address, err := bufio.NewReader(out).ReadString('\n')
-	if err != nil {
-		t.Fatalf("dbus-daemon printed no address: %v", err)
-	}
-	return strings.TrimSpace(address)
 }

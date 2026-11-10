@@ -4,11 +4,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
 	"github.com/stubbedev/lys-lib/third_party/godbus/prop"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
 const fakeRTTimeMax = 200000
@@ -61,7 +60,7 @@ func (k kitObject) MakeThreadHighPriority(tid uint64, nice int32) *dbus.Error {
 
 func serve(t *testing.T) (string, *fakeKit) {
 	t.Helper()
-	address := testenv.DBus(t)
+	address := dbustest.Start(t).Address
 	conn, err := dbus.Connect(address)
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +162,7 @@ func TestAHighPriorityRequestCarriesTheNiceValue(t *testing.T) {
 }
 
 func TestNoRtkitOnTheBusIsAnError(t *testing.T) {
-	if err := open(t, testenv.DBus(t)).Realtime(unix.Gettid(), 1); err == nil {
+	if err := open(t, dbustest.Start(t).Address).Realtime(unix.Gettid(), 1); err == nil {
 		t.Fatal("a bus without rtkit granted SCHED_RR")
 	}
 }
