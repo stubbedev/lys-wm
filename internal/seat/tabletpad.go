@@ -3,7 +3,6 @@ package seat
 import (
 	"encoding/binary"
 	"errors"
-	"math"
 	"slices"
 	"time"
 
@@ -175,13 +174,13 @@ func (s *Seat) enterPadResource(p *padDevice, r *padResource) error {
 	if d == nil {
 		return nil
 	}
-	i := slices.IndexFunc(d.resources, func(t tabletResource) bool { return t.seat == r.seat })
-	if i < 0 {
+	on := d.resourceOn(r.seat)
+	if on == nil {
 		return nil
 	}
 	r.entered = true
 	serial := s.display.NextSerial()
-	errs := []error{r.res.SendEnter(serial, d.resources[i].res, p.focus.Resource())}
+	errs := []error{r.res.SendEnter(serial, on, p.focus.Resource())}
 	for gi, g := range p.layout.Groups {
 		errs = append(errs, r.groups[gi].res.SendModeSwitch(wire.Millis(p.at), serial, g.Mode))
 	}
@@ -254,21 +253,21 @@ func (s *Seat) padEvent(key any, at time.Duration, group, mode uint32, send func
 	g := &p.layout.Groups[group]
 	switched := g.Mode != mode
 	g.Mode = mode
-	var errs []error
+	var errs error
 	var serial uint32
 	if switched {
 		serial = s.display.NextSerial()
 	}
-	for _, r := range s.focusedPad(p) {
+	for _, r := range p.resources {
 		if !r.entered {
 			continue
 		}
 		if switched {
-			errs = append(errs, r.groups[group].res.SendModeSwitch(wire.Millis(at), serial, mode))
+			errs = errors.Join(errs, r.groups[group].res.SendModeSwitch(wire.Millis(at), serial, mode))
 		}
-		errs = append(errs, send(r))
+		errs = errors.Join(errs, send(r))
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 func (s *Seat) PadButton(key any, e *tabletinput.PadButton) error {
@@ -288,16 +287,16 @@ func (s *Seat) PadRing(key any, e *tabletinput.PadRing) error {
 	}
 	return s.padEvent(key, e.Time, e.Group, e.Mode, func(r *padResource) error {
 		ring := r.groups[e.Group].rings[i]
-		var errs []error
+		var errs error
 		if e.Finger {
-			errs = append(errs, ring.SendSource(tablet.ZwpTabletPadRingV2SourceFinger))
+			errs = ring.SendSource(tablet.ZwpTabletPadRingV2SourceFinger)
 		}
 		if e.Stopped {
-			errs = append(errs, ring.SendStop())
+			errs = errors.Join(errs, ring.SendStop())
 		} else {
-			errs = append(errs, ring.SendAngle(wire.FixedFromFloat(e.Degrees)))
+			errs = errors.Join(errs, ring.SendAngle(wire.FixedFromFloat(e.Degrees)))
 		}
-		return errors.Join(append(errs, ring.SendFrame(wire.Millis(e.Time)))...)
+		return errors.Join(errs, ring.SendFrame(wire.Millis(e.Time)))
 	})
 }
 
@@ -308,16 +307,16 @@ func (s *Seat) PadStrip(key any, e *tabletinput.PadStrip) error {
 	}
 	return s.padEvent(key, e.Time, e.Group, e.Mode, func(r *padResource) error {
 		strip := r.groups[e.Group].strips[i]
-		var errs []error
+		var errs error
 		if e.Finger {
-			errs = append(errs, strip.SendSource(tablet.ZwpTabletPadStripV2SourceFinger))
+			errs = strip.SendSource(tablet.ZwpTabletPadStripV2SourceFinger)
 		}
 		if e.Stopped {
-			errs = append(errs, strip.SendStop())
+			errs = errors.Join(errs, strip.SendStop())
 		} else {
-			errs = append(errs, strip.SendPosition(uint32(math.Round(math.Min(math.Max(e.Position, 0), 1)*65535))))
+			errs = errors.Join(errs, strip.SendPosition(unit(e.Position, 65535)))
 		}
-		return errors.Join(append(errs, strip.SendFrame(wire.Millis(e.Time)))...)
+		return errors.Join(errs, strip.SendFrame(wire.Millis(e.Time)))
 	})
 }
 

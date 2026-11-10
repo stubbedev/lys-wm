@@ -106,14 +106,18 @@ func (e pinchEvents) End(*cpg.ZwpPointerGesturePinchV1, uint32, uint32, int32) e
 
 type tabletSeatEvents struct {
 	ctab.ZwpTabletSeatV2Handler
-	log []string
+	log     []string
+	tablets []*ctab.ZwpTabletV2
+	tools   []*ctab.ZwpTabletToolV2
 }
 
-func (l *tabletSeatEvents) TabletAdded(*ctab.ZwpTabletSeatV2, *ctab.ZwpTabletV2) (ctab.ZwpTabletV2Handler, error) {
+func (l *tabletSeatEvents) TabletAdded(_ *ctab.ZwpTabletSeatV2, tablet *ctab.ZwpTabletV2) (ctab.ZwpTabletV2Handler, error) {
+	l.tablets = append(l.tablets, tablet)
 	return tabletEvents{}, nil
 }
 
-func (l *tabletSeatEvents) ToolAdded(*ctab.ZwpTabletSeatV2, *ctab.ZwpTabletToolV2) (ctab.ZwpTabletToolV2Handler, error) {
+func (l *tabletSeatEvents) ToolAdded(_ *ctab.ZwpTabletSeatV2, tool *ctab.ZwpTabletToolV2) (ctab.ZwpTabletToolV2Handler, error) {
+	l.tools = append(l.tools, tool)
 	return toolEvents{l}, nil
 }
 
