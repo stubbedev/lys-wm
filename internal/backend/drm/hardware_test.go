@@ -210,7 +210,11 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 	if err != nil {
 		t.Skipf("no PNP ID database: %v", err)
 	}
-	b, err := New(l, dev, Options{Paths: gpu.PathsFromEnv(os.Getenv), Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan, Master: WithoutMaster})
+	paths := gpu.PathsFromEnv(os.Getenv)
+	if vulkan {
+		paths = unloadable
+	}
+	b, err := New(l, dev, Options{Paths: paths, Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan, Master: WithoutMaster})
 	if err != nil {
 		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
 	}
@@ -228,7 +232,7 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 		if o.Description() == o.Name() {
 			t.Errorf("%s has no EDID description", o.Name())
 		}
-		t.Logf("%s (%s) on CRTC %d and plane %d with modifiers %v, %+v", o.Name(), o.Description(), o.crtc.id, o.primary.id, o.primary.modifiers, o.State().Mode)
+		t.Logf("%s (%s) on CRTC %d and plane %d with modifiers %v, scanning out %v, %+v", o.Name(), o.Description(), o.crtc.id, o.primary.id, o.primary.modifiers, o.buffers[0].modifier, o.State().Mode)
 		scanoutFrame(t, b, o)
 		cursorImage(t, o)
 		gammaRamps(t, o)
@@ -329,16 +333,13 @@ func TestTenBitScanoutBuffersDrawOnEveryRenderNodeOnHardware(t *testing.T) {
 		t.Skip("no render node")
 	}
 	for _, node := range nodes {
-		for _, stack := range []struct {
-			name string
-			open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
-		}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}} {
+		for _, stack := range gpuStacks {
 			t.Run(filepath.Base(node)+"/"+stack.name, func(t *testing.T) { tenBitOnRenderNode(t, node, stack.open) })
 		}
 	}
 }
 
-func tenBitOnRenderNode(t *testing.T, node string, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) {
+func tenBitOnRenderNode(t *testing.T, node string, open openStack) {
 	unpin := gpu.PinThread()
 	defer func() {
 		if err := unpin(); err != nil {
@@ -358,24 +359,20 @@ func tenBitOnRenderNode(t *testing.T, node string, open func(*kdrm.Device, gpu.P
 		if err != nil {
 			t.Fatal(err)
 		}
-		bo, err := a.gbm.Allocate(size, f, mods, gpu.UseRendering|gpu.UseScanout)
-		if err != nil {
-			t.Logf("%s: GBM allocates no %v scanout buffer with the renderer's %d modifiers: %v", node, f, len(mods), err)
+		d, err := a.mem.drawable(size, f, mods, scannedOut)
+		if errors.Is(err, errUndrawable) {
+			t.Errorf("%s: %v", node, err)
 			continue
 		}
-		target, err := a.gpu.ImportTarget(bo.DMABUF)
 		if err != nil {
-			t.Errorf("%s: GBM allocated a %v buffer with modifier %v, but the renderer cannot draw into it: %v", node, f, bo.Modifier, err)
-			if err := bo.Close(); err != nil {
-				t.Error(err)
-			}
+			t.Logf("%s: no %v scanout buffer the renderer draws into with its %d modifiers: %v", node, f, len(mods), err)
 			continue
 		}
-		testFrame(t, a.gpu, target, fmt.Sprintf("%s %v", node, f))
-		if err := errors.Join(target.Destroy(), bo.Close()); err != nil {
+		testFrame(t, a.gpu, d.target, fmt.Sprintf("%s %v", node, f))
+		if err := d.free(); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("%s draws 10-bit scanout buffers as %v with modifier %v", node, f, bo.Modifier)
+		t.Logf("%s draws 10-bit scanout buffers as %v with modifier %v", node, f, d.buf.Modifier)
 		drawn++
 	}
 	if drawn == 0 {

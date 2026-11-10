@@ -612,26 +612,33 @@ func (f *fakeDevice) flip(t *testing.T, crtc uint32, seq uint32) {
 }
 
 type fakeAlloc struct {
-	formats    []fourcc.Format
-	next       uint32
-	freed      int
-	soft       *soft.Renderer
-	fences     []int
-	buffersFor map[fourcc.Format]int
-	fbFormats  map[uint64]fourcc.Format
+	formats     []fourcc.Format
+	next        uint32
+	freed       int
+	soft        *soft.Renderer
+	fences      []int
+	buffersFor  map[fourcc.Format]int
+	fbFormats   map[uint64]fourcc.Format
+	fbModifiers map[uint64]fourcc.Modifier
+	renders     []fourcc.Modifier
+	offered     [][]fourcc.Modifier
 }
 
 func (a *fakeAlloc) renderer() render.Renderer { return a.soft }
 
 func (a *fakeAlloc) renderable(fourcc.Format) ([]fourcc.Modifier, error) {
+	if a.renders != nil {
+		return a.renders, nil
+	}
 	return []fourcc.Modifier{0, 7, 9}, nil
 }
 
 func (a *fakeAlloc) allocate(size image.Point, l layout) (*scanout, error) {
 	format, modifiers := l.format, l.modifiers
-	if !slices.Equal(modifiers, []fourcc.Modifier{0, 7}) {
+	if len(modifiers) == 0 || slices.ContainsFunc(modifiers, func(m fourcc.Modifier) bool { return m != 0 && m != 7 }) {
 		return nil, fmt.Errorf("allocated with modifiers %v", modifiers)
 	}
+	a.offered = append(a.offered, slices.Clone(modifiers))
 	if limit, limited := a.buffersFor[format]; limited && limit == 0 {
 		return nil, fmt.Errorf("the allocator refuses %v", format)
 	} else if limited {
@@ -639,10 +646,14 @@ func (a *fakeAlloc) allocate(size image.Point, l layout) (*scanout, error) {
 	}
 	a.formats = append(a.formats, format)
 	a.next++
+	fb := 900 + a.next
 	if a.fbFormats != nil {
-		a.fbFormats[uint64(900+a.next)] = format
+		a.fbFormats[uint64(fb)] = format
 	}
-	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: 900 + a.next, fence: a.fence, release: func() error { a.freed++; return nil }}, nil
+	if a.fbModifiers != nil {
+		a.fbModifiers[uint64(fb)] = modifiers[0]
+	}
+	return &scanout{target: soft.NewBuffer(size.X, size.Y), fb: fb, modifier: modifiers[0], fence: a.fence, release: func() error { a.freed++; return nil }}, nil
 }
 
 func (a *fakeAlloc) fence() (int, error) {
@@ -1043,7 +1054,7 @@ func TestTenBitFramesMoveToTheNextFormatWhenTheKernelRefuses(t *testing.T) {
 	if err := o.Commit(deep); err != nil {
 		t.Fatalf("a plane with a second 10-bit format: %v", err)
 	}
-	want := []fourcc.Format{fourcc.XRGB2101010, fourcc.XRGB2101010, fourcc.XBGR2101010, fourcc.XBGR2101010}
+	want := []fourcc.Format{fourcc.XRGB2101010, fourcc.XRGB2101010, fourcc.XRGB2101010, fourcc.XRGB2101010, fourcc.XBGR2101010, fourcc.XBGR2101010}
 	if !slices.Equal(r.alloc.formats, want) || o.State() != deep {
 		t.Fatalf("allocated %v and left state %+v, want %v", r.alloc.formats, o.State(), want)
 	}
@@ -1053,8 +1064,8 @@ func TestTenBitFramesMoveToTheNextFormatWhenTheKernelRefuses(t *testing.T) {
 			tests++
 		}
 	}
-	if tests != 2 {
-		t.Fatalf("%d modesets tested, want one per format", tests)
+	if tests != 3 {
+		t.Fatalf("%d modesets tested, want one per modifier of the refused format and one for the next format", tests)
 	}
 	if len(r.reports) != 1 {
 		t.Fatalf("reports %v, want the refused format named once", r.reports)

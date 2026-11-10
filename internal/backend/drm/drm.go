@@ -1,5 +1,5 @@
 // Package drm is the native backend: one DRM device driven with atomic KMS,
-// scanning out GBM buffers that the GLES or Vulkan renderer draws into.
+// scanning out buffers the Vulkan renderer exports or GBM allocates for GLES.
 package drm
 
 import (
@@ -80,6 +80,7 @@ type scanout struct {
 	target       render.Target
 	client       *clientFB
 	fb           uint32
+	modifier     fourcc.Modifier
 	at           backend.Placement
 	fence        func() (int, error)
 	painted      func(damage render.Region)
@@ -267,7 +268,7 @@ func newBackend(l *loop.Loop, dev device, alloc allocator, opts Options) (*Backe
 		return nil, fmt.Errorf("drm: Options.Master %d is neither HoldsMaster nor WithoutMaster", opts.Master)
 	}
 	b := &Backend{loop: l, dev: dev, alloc: alloc, vendors: opts.Vendors, report: opts.Report, paused: opts.Master == WithoutMaster, events: make([]byte, eventBuffer), clientFBs: map[backend.ScanoutKey]*clientFB{}, unimportable: map[backend.ScanoutKey]error{}, fenceTime: kdrm.SyncFileSignalTime, now: backend.Now}
-	if a, ok := alloc.(*gbmAllocator); ok && !a.gpu.NativeFences() {
+	if a, ok := alloc.(*gpuAllocator); ok && !a.gpu.NativeFences() {
 		opts.Report(fmt.Errorf("drm: %T has no native fences, so every frame blocks the compositor in glFinish until the GPU is done", a.gpu))
 	}
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
@@ -1154,6 +1155,9 @@ func (o *Output) setMode(m kdrm.Mode, d backend.BitDepth, hdr backend.HDRMetadat
 			buffers, restate, err = o.tryLayout(m, d, blob, size, l, next)
 		}
 		if err != nil {
+			l, buffers, restate, err = o.fallDown(m, d, blob, size, l, next, err)
+		}
+		if err != nil {
 			refusals = append(refusals, err)
 			continue
 		}
@@ -1189,9 +1193,49 @@ func (o *Output) tryLayout(m kdrm.Mode, d backend.BitDepth, blob uint32, size im
 	}
 	restate, err := o.testMode(m, d, blob, buffers[0], next)
 	if err != nil {
-		return nil, false, errors.Join(fmt.Errorf("%v frames: %w", l.format, err), o.free(buffers))
+		return nil, false, errors.Join(&modifierRefusal{format: l.format, modifier: buffers[0].modifier, err: err}, o.free(buffers))
 	}
 	return buffers, restate, nil
+}
+
+type modifierRefusal struct {
+	format   fourcc.Format
+	modifier fourcc.Modifier
+	err      error
+}
+
+func (e *modifierRefusal) Error() string {
+	return fmt.Sprintf("%v frames in modifier %v: %v", e.format, e.modifier, e.err)
+}
+
+func (e *modifierRefusal) Unwrap() error {
+	return e.err
+}
+
+func (o *Output) fallDown(m kdrm.Mode, d backend.BitDepth, blob uint32, size image.Point, l layout, next signal, err error) (layout, []*scanout, bool, error) {
+	var refusals []error
+	for {
+		var r *modifierRefusal
+		if !refused(err) || !errors.As(err, &r) {
+			return l, nil, false, errors.Join(append(refusals, err)...)
+		}
+		rest := withoutModifier(l.modifiers, r.modifier)
+		if len(rest) == 0 || len(rest) == len(l.modifiers) {
+			return l, nil, false, errors.Join(append(refusals, err)...)
+		}
+		refusals = append(refusals, err)
+		l.modifiers = rest
+		var buffers []*scanout
+		var restate bool
+		if buffers, restate, err = o.tryLayout(m, d, blob, size, l, next); err == nil {
+			o.b.report(fmt.Errorf("drm: %s scans out %v frames in modifier %v, since the kernel refused the ones the driver preferred: %w", o.Name(), l.format, buffers[0].modifier, errors.Join(refusals...)))
+			return l, buffers, restate, nil
+		}
+	}
+}
+
+func withoutModifier(modifiers []fourcc.Modifier, refused fourcc.Modifier) []fourcc.Modifier {
+	return slices.DeleteFunc(slices.Clone(modifiers), func(m fourcc.Modifier) bool { return m == refused })
 }
 
 func (o *Output) litIn(m kdrm.Mode, d backend.BitDepth) (bool, error) {

@@ -338,20 +338,25 @@ foreign-toplevel activate all call it. Nothing else mutates WM state.
   Vulkan, falling back to GLES on a card without a Vulkan driver.
 - Cards come and go with udev. A removed secondary drops its outputs; losing
   the primary is fatal. Connector names are globally unique across cards.
-- GBM, EGL and Vulkan get their own file on the device (the render node, or a
-  second card file where the stack needs dumb buffers), because GEM handles are
-  per file. KMS imports close their handles once the framebuffer holds a
-  reference.
+- GBM and EGL get their own file on the device (the render node, or a second
+  card file where the stack needs dumb buffers), and the Vulkan driver opens
+  its own, because GEM handles are per file. KMS imports close their handles
+  once the framebuffer holds a reference.
 
 ### Renderers
 
 | Renderer | Selected by | Notes |
 | --- | --- | --- |
 | GLES2 | default for drm and nested | glvnd picks the vendor; GBM, device or surfaceless platform; one configless context per display, no surfaces |
-| Vulkan | `-renderer vulkan` | Peer of GLES in every path. On drm, GBM allocates scanout buffers Vulkan imports. Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
+| Vulkan | `-renderer vulkan` | Peer of GLES in every path, except that on drm it needs a Vulkan driver for the card: lavapipe drives no DRM node, so vkms and virtio-gpu without venus render only with GLES on llvmpipe, which keeps GLES the drm default. On drm it exports scanout buffers itself and loads no GBM, EGL or GLES unless a secondary card has no Vulkan driver (`TestTheVulkanStackScansOutWithoutGBMOrEGLOnHardware`). Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
 | Software | default for headless | Reference for every pixel test |
 
-Scanout memory is always GBM's on both GPU renderers (`gbmAllocator`). Every
+Scanout memory is GBM's under GLES and exported by Vulkan under Vulkan
+(`gpuAllocator` over `gbmMemory` or `vulkanMemory`), in a modifier from the
+primary plane's `IN_FORMATS` the renderer also allocates and draws into. The
+allocator picks among those; when the modeset's test commit refuses its pick,
+the next try drops that modifier, so the list falls down in the driver's order
+before the next format is tried, and the winner is reported. Every
 renderer is pixel-compared against the software renderer by
 `render/rendertest`.
 

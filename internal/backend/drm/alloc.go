@@ -30,15 +30,11 @@ type gpuRenderer interface {
 	Finish() error
 }
 
-type bufferMaker interface {
-	Allocate(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, usage gpu.Usage) (*gpu.Buffer, error)
-}
-
-type gbmAllocator struct {
+type gpuAllocator struct {
 	dev       device
 	path      string
 	modifiers bool
-	gbm       bufferMaker
+	mem       memory
 	gpu       gpuRenderer
 	closeGPU  func() error
 }
@@ -83,106 +79,105 @@ func openStackOnFile(files []func() (*kdrm.Device, error), open func(fd int) (gp
 	return gpuStack{}, errors.Join(errs...)
 }
 
-func newAllocator(dev *kdrm.Device, open func(fd int) (gpuStack, error)) (*gbmAllocator, error) {
+func addFB2Modifiers(dev *kdrm.Device) (bool, error) {
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
-		return nil, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
+		return false, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
+	}
+	return modifiers == 1, nil
+}
+
+func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) {
+	modifiers, err := addFB2Modifiers(dev)
+	if err != nil {
+		return nil, err
 	}
 	files, err := renderFiles(dev)
 	if err != nil {
 		return nil, err
 	}
-	s, err := openStackOnFile(files, open)
-	if err != nil {
-		return nil, fmt.Errorf("drm: rendering for %s: %w", dev.Path(), err)
-	}
-	return &gbmAllocator{dev: dev, path: dev.Path(), modifiers: modifiers == 1, gbm: s.gbm, gpu: s.gpu, closeGPU: s.closeGPU}, nil
-}
-
-func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) {
-	return newAllocator(dev, func(fd int) (gpuStack, error) {
+	s, err := openStackOnFile(files, func(fd int) (gpuStack, error) {
 		stack, err := gles.OnGBM(fd, paths)
 		if err != nil {
 			return gpuStack{}, fmt.Errorf("render with GLES: %w", err)
 		}
 		return gpuStack{gbm: stack.GBM, gpu: stack.Renderer, closeGPU: stack.Close, softwareOnly: stack.SoftwareOnly()}, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("drm: rendering for %s: %w", dev.Path(), err)
+	}
+	return &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: gbmMemory{gbm: s.gbm, gpu: s.gpu}, gpu: s.gpu, closeGPU: s.closeGPU}, nil
 }
 
-func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*gbmAllocator, error) {
+func newVulkanAllocator(dev *kdrm.Device) (*gpuAllocator, error) {
+	modifiers, err := addFB2Modifiers(dev)
+	if err != nil {
+		return nil, err
+	}
 	number, err := dev.Number()
 	if err != nil {
 		return nil, fmt.Errorf("drm: the device number of %s: %w", dev.Path(), err)
 	}
-	return newAllocator(dev, func(fd int) (gpuStack, error) {
-		r, err := vulkan.Open(number)
-		if err != nil {
-			return gpuStack{}, fmt.Errorf("render with Vulkan: %w", err)
-		}
-		lib, err := gpu.LoadGBM(paths)
-		if err != nil {
-			return gpuStack{}, errors.Join(fmt.Errorf("allocate with GBM: %w", err), r.Close())
-		}
-		bo, err := lib.Open(fd)
-		if err != nil {
-			return gpuStack{}, errors.Join(fmt.Errorf("allocate with GBM: %w", err), lib.Close(), r.Close())
-		}
-		closeGPU := func() error {
-			err := r.Close()
-			bo.Close()
-			return errors.Join(err, lib.Close())
-		}
-		return gpuStack{gbm: bo, gpu: r, closeGPU: closeGPU}, nil
-	})
+	r, err := vulkan.Open(number)
+	if err != nil {
+		return nil, fmt.Errorf("drm: render for %s with Vulkan: %w", dev.Path(), err)
+	}
+	a := &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: vulkanMemory{r: r}, gpu: r, closeGPU: r.Close}
+	if err := a.probe(); err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: allocate scanout buffers for %s with Vulkan: %w", dev.Path(), err), r.Close())
+	}
+	return a, nil
 }
 
-func (a *gbmAllocator) renderer() render.Renderer {
-	return a.gpu
-}
-
-func (a *gbmAllocator) renderable(format fourcc.Format) ([]fourcc.Modifier, error) {
-	return a.gpu.RenderableModifiers(format)
-}
-
-func (a *gbmAllocator) allocate(size image.Point, l layout) (*scanout, error) {
-	bo, err := a.gbm.Allocate(size, l.format, l.modifiers, gpu.UseRendering|gpu.UseScanout)
-	if err != nil {
-		return nil, err
-	}
-	target, err := a.gpu.ImportTarget(bo.DMABUF)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: import a %v buffer on %s: %w", bo.Modifier, a.path, err), bo.Close())
-	}
-	id, err := importFB(a.dev, bo.DMABUF, a.modifiers)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.path, err), target.Destroy(), bo.Close())
-	}
-	return &scanout{target: target, fb: id, fence: a.fence, release: func() error {
-		return errors.Join(target.Destroy(), bo.Close())
-	}}, nil
-}
-
-func (a *gbmAllocator) linearTarget(size image.Point, format fourcc.Format) (*gpu.Buffer, render.ReadTarget, error) {
-	bo, err := a.gbm.Allocate(size, format, []fourcc.Modifier{fourcc.Linear}, gpu.UseRendering)
-	if err != nil {
-		return nil, nil, fmt.Errorf("a linear %v buffer on the primary GPU: %w", size, err)
-	}
-	if bo.Modifier != fourcc.Linear {
-		return nil, nil, errors.Join(fmt.Errorf("the primary GPU's linear buffer has modifier %v", bo.Modifier), bo.Close())
-	}
-	target, err := a.gpu.ImportTarget(bo.DMABUF)
-	if err != nil {
-		return nil, nil, errors.Join(fmt.Errorf("the primary GPU renders into no linear buffer: %w", err), bo.Close())
-	}
-	return bo, target, nil
-}
-
-func (a *gbmAllocator) rendersLinear() error {
-	bo, target, err := a.linearTarget(image.Pt(16, 16), scanoutFormat)
+func (a *gpuAllocator) probe() error {
+	mods, err := a.mem.modifiers(scanoutFormat)
 	if err != nil {
 		return err
 	}
-	return errors.Join(target.Destroy(), bo.Close())
+	d, err := a.mem.drawable(image.Pt(16, 16), scanoutFormat, mods, scannedOut)
+	if err != nil {
+		return err
+	}
+	return d.free()
+}
+
+func (a *gpuAllocator) renderer() render.Renderer {
+	return a.gpu
+}
+
+func (a *gpuAllocator) renderable(format fourcc.Format) ([]fourcc.Modifier, error) {
+	return a.mem.modifiers(format)
+}
+
+func (a *gpuAllocator) allocate(size image.Point, l layout) (*scanout, error) {
+	d, err := a.mem.drawable(size, l.format, l.modifiers, scannedOut)
+	if err != nil {
+		return nil, fmt.Errorf("drm: a %v %v scanout buffer on %s: %w", size, l.format, a.path, err)
+	}
+	id, err := importFB(a.dev, d.buf, a.modifiers)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: %s: %w", a.path, err), d.free())
+	}
+	return &scanout{target: d.target, fb: id, modifier: d.buf.Modifier, fence: a.fence, release: d.free}, nil
+}
+
+func (a *gpuAllocator) linearTarget(size image.Point, format fourcc.Format) (drawable, error) {
+	d, err := a.mem.drawable(size, format, []fourcc.Modifier{fourcc.Linear}, drawnOnly)
+	if err != nil {
+		return drawable{}, fmt.Errorf("a linear %v buffer on the primary GPU: %w", size, err)
+	}
+	if d.buf.Modifier != fourcc.Linear {
+		return drawable{}, errors.Join(fmt.Errorf("the primary GPU's linear buffer has modifier %v", d.buf.Modifier), d.free())
+	}
+	return d, nil
+}
+
+func (a *gpuAllocator) rendersLinear() error {
+	d, err := a.linearTarget(image.Pt(16, 16), scanoutFormat)
+	if err != nil {
+		return err
+	}
+	return d.free()
 }
 
 func importFB(dev device, d gpu.DMABUF, withModifiers bool) (uint32, error) {
@@ -233,14 +228,14 @@ func addable(modifier fourcc.Modifier, withModifiers bool) bool {
 	return withModifiers || modifier == fourcc.Invalid || modifier == fourcc.Linear
 }
 
-func (a *gbmAllocator) fence() (int, error) {
+func (a *gpuAllocator) fence() (int, error) {
 	if !a.gpu.NativeFences() {
 		return -1, a.gpu.Finish()
 	}
 	return a.gpu.SyncFile()
 }
 
-func (a *gbmAllocator) close() error {
+func (a *gpuAllocator) close() error {
 	return a.closeGPU()
 }
 
@@ -273,7 +268,7 @@ type Options struct {
 
 func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {
 	if opts.Vulkan {
-		return newVulkanAllocator(dev, opts.Paths)
+		return newVulkanAllocator(dev)
 	}
 	return newGLESAllocator(dev, opts.Paths)
 }

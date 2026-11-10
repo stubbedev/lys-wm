@@ -14,14 +14,25 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 )
 
-func stackOn(t *testing.T, card string, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) *gbmAllocator {
+type openStack func(*kdrm.Device) (*gpuAllocator, error)
+
+func openGLES(dev *kdrm.Device) (*gpuAllocator, error) {
+	return newGLESAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+}
+
+var gpuStacks = []struct {
+	name string
+	open openStack
+}{{"gles", openGLES}, {"vulkan", newVulkanAllocator}}
+
+func stackOn(t *testing.T, card string, open openStack) *gpuAllocator {
 	t.Helper()
 	dev, err := kdrm.Open(card)
 	if err != nil {
 		t.Skipf("cannot open %s: %v", card, err)
 	}
 	t.Cleanup(func() { _ = dev.Close() })
-	a, err := open(dev, gpu.PathsFromEnv(os.Getenv))
+	a, err := open(dev)
 	if err != nil {
 		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
 	}
@@ -93,15 +104,12 @@ func blitPair(t *testing.T, a *blitAllocator, size image.Point) (*scanout, *shar
 }
 
 func TestABlitThroughAVulkanLinearCopyShowsTheFrameOnHardware(t *testing.T) {
-	for _, stack := range []struct {
-		name string
-		open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
-	}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}} {
+	for _, stack := range gpuStacks {
 		t.Run(stack.name, func(t *testing.T) { blitThroughACopy(t, stack.open) })
 	}
 }
 
-func blitThroughACopy(t *testing.T, open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)) {
+func blitThroughACopy(t *testing.T, open openStack) {
 	cards, err := filepath.Glob("/dev/dri/card*")
 	if err != nil {
 		t.Fatal(err)
@@ -174,36 +182,28 @@ type finishOnly struct {
 
 func (finishOnly) NativeFences() bool { return false }
 
-func localTarget(t *testing.T, local *gbmAllocator, size image.Point) render.ReadTarget {
+func localTarget(t *testing.T, local *gpuAllocator, size image.Point) render.ReadTarget {
 	t.Helper()
 	mods, err := local.renderable(scanoutFormat)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bo, err := local.gbm.Allocate(size, scanoutFormat, mods, gpu.UseRendering)
+	d, err := local.mem.drawable(size, scanoutFormat, mods, drawnOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := local.gpu.ImportTarget(bo.DMABUF)
-	if err != nil {
-		t.Fatal(errors.Join(err, bo.Close()))
-	}
 	t.Cleanup(func() {
-		if err := errors.Join(target.Destroy(), bo.Close()); err != nil {
+		if err := d.free(); err != nil {
 			t.Error(err)
 		}
 	})
-	return target
+	return d.target
 }
 
 func TestABlitBetweenTwoStacksOnTheRenderNodeShowsTheFrameOnHardware(t *testing.T) {
 	const node = "/dev/dri/renderD128"
-	stacks := []struct {
-		name string
-		open func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error)
-	}{{"gles", newGLESAllocator}, {"vulkan", newVulkanAllocator}}
-	for _, p := range stacks {
-		for _, l := range stacks {
+	for _, p := range gpuStacks {
+		for _, l := range gpuStacks {
 			for _, native := range []bool{true, false} {
 				name := p.name + " to " + l.name + " handing over with a sync_file"
 				if !native {
@@ -215,7 +215,7 @@ func TestABlitBetweenTwoStacksOnTheRenderNodeShowsTheFrameOnHardware(t *testing.
 	}
 }
 
-func blitBetweenStacks(t *testing.T, node string, openPrimary, openLocal func(*kdrm.Device, gpu.Paths) (*gbmAllocator, error), native bool) {
+func blitBetweenStacks(t *testing.T, node string, openPrimary, openLocal openStack, native bool) {
 	unpin := gpu.PinThread()
 	defer func() {
 		if err := unpin(); err != nil {

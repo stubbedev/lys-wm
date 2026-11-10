@@ -17,8 +17,8 @@ import (
 )
 
 type blitAllocator struct {
-	primary      *gbmAllocator
-	local        *gbmAllocator
+	primary      *gpuAllocator
+	local        *gpuAllocator
 	vk           *lgpu.Device
 	primaryVK    *vulkan.Renderer
 	closeVK      func()
@@ -59,7 +59,7 @@ type shared struct {
 	copy   func() error
 	free   []func() error
 	lin    *gpu.Buffer
-	frame  *gpu.Buffer
+	frame  gpu.DMABUF
 	src    *lgpu.Target
 	dst    *lgpu.Linear
 	on     *lgpu.Device
@@ -107,12 +107,12 @@ func (a *blitAllocator) share(size image.Point, format fourcc.Format) (*shared, 
 	if a.copies() {
 		return a.shareCopied(size, format)
 	}
-	b, target, err := a.primary.linearTarget(size, format)
+	d, err := a.primary.linearTarget(size, format)
 	if err != nil {
 		return nil, err
 	}
-	s := &shared{target: target, free: []func() error{b.Close, target.Destroy}}
-	if err := a.importOnLocal(s, b.DMABUF); err != nil {
+	s := &shared{target: d.target, free: []func() error{d.free}}
+	if err := a.importOnLocal(s, d.buf); err != nil {
 		return s.fail(err)
 	}
 	return s, nil
@@ -120,7 +120,7 @@ func (a *blitAllocator) share(size image.Point, format fourcc.Format) (*shared, 
 
 func (a *blitAllocator) shareCopied(size image.Point, format fourcc.Format) (*shared, error) {
 	s := &shared{}
-	lin, err := a.primary.gbm.Allocate(size, format, nil, gpu.UseLinear)
+	lin, err := a.primary.mem.linear(size, format)
 	if err != nil {
 		return nil, fmt.Errorf("a linear buffer on the primary GPU: %w", err)
 	}
@@ -132,17 +132,12 @@ func (a *blitAllocator) shareCopied(size image.Point, format fourcc.Format) (*sh
 	if err != nil {
 		return s.fail(err)
 	}
-	frame, err := a.primary.gbm.Allocate(size, format, mods, gpu.UseRendering)
+	frame, err := a.primary.mem.drawable(size, format, mods, drawnOnly)
 	if err != nil {
 		return s.fail(fmt.Errorf("a frame on the primary GPU: %w", err))
 	}
-	s.free = append(s.free, frame.Close)
-	target, err := a.primary.gpu.ImportTarget(frame.DMABUF)
-	if err != nil {
-		return s.fail(fmt.Errorf("render into the frame on the primary GPU: %w", err))
-	}
-	s.target, s.free = target, append(s.free, target.Destroy)
-	s.lin, s.frame = lin, frame
+	s.target, s.free = frame.target, append(s.free, frame.free)
+	s.lin, s.frame = lin, frame.buf
 	s.free = append(s.free, func() error { s.dropCopy(); return nil })
 	if err := a.importCopy(s); err != nil {
 		return s.fail(err)
@@ -277,11 +272,12 @@ func (a *blitAllocator) allocate(size image.Point, l layout) (*scanout, error) {
 		return nil, errors.Join(fmt.Errorf("drm: a %v frame shared with %s: %w", size, a.local.path, err), out.free(a.local.dev))
 	}
 	return &scanout{
-		target:  s.target,
-		fb:      out.fb,
-		fence:   a.local.fence,
-		prepare: func() error { return a.blit(s, out.target, size) },
-		release: func() error { return errors.Join(s.release(), out.release()) },
+		target:   s.target,
+		fb:       out.fb,
+		modifier: out.modifier,
+		fence:    a.local.fence,
+		prepare:  func() error { return a.blit(s, out.target, size) },
+		release:  func() error { return errors.Join(s.release(), out.release()) },
 	}, nil
 }
 

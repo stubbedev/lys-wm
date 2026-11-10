@@ -11,7 +11,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
-func bootDisplayOnly(t *testing.T, setup func(*fakeDevice)) (*rig, *gbmAllocator) {
+func bootDisplayOnly(t *testing.T, setup func(*fakeDevice)) (*rig, *gpuAllocator) {
 	t.Helper()
 	linear := fakeStack(&blitWorld{memory: map[int]*soft.Buffer{}}, "primary", true)
 	r := boot(t, func(dev *fakeDevice) allocator {
