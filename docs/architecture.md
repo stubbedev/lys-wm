@@ -298,6 +298,19 @@ One typed `wm.Action` set and one `wm.Dispatch`. Keybinds,
 `lys-wmctl dispatch`, the IPC socket and protocol requests such as
 foreign-toplevel activate all call it. Nothing else mutates WM state.
 
+## Input objects
+
+- A tablet tool is in proximity of a surface only through a tool object whose
+  tablet seat still holds the tablet: `proximity_in` names the tablet, and no
+  motion, tip, button or frame reaches a tool object before it. A client left
+  with no such object is not the tool's focus and gets the pointer instead.
+- Buttons belong to the seat's pointer, not to one `wl_pointer`: a release
+  goes to every `wl_pointer` of the focused client, the one made after the
+  press and entered since included, as wlroots sends it. `wl_pointer.enter`
+  carries no buttons and the protocol pairs no release with a press, so a
+  client that replaces its `wl_pointer` under a held button still learns that
+  the button was let go.
+
 ## Content updates
 
 - Each `wl_surface.commit` makes a content update. Extensions attach gates it
