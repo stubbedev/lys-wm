@@ -166,6 +166,7 @@ def pick_in_overlay(label, ran):
                 raise AssertionError(f"the portal asked for the click-to-pick overlay sharing {label}, but none dimmed the desktop within {CHOOSER_APPEARS_S} s; the request: {call}")
             machine.sleep(1)
     except Exception:
+        report_failure()
         print(f"the request left unanswered: {call}")
         machine.screenshot("no-overlay")
         raise
@@ -225,6 +226,7 @@ def capture(name, source, cursor, label, shows="", pointer=None):
         print(machine.succeed(f"cat /tmp/{name}.log"))
         machine.succeed(f"grep -qx 0 /tmp/{name}.status")
     except Exception:
+        report_failure()
         print(machine.execute(f"cat /tmp/{name}.log")[1])
         dump("animation")
         raise
@@ -336,6 +338,7 @@ def share(app, label, confirms):
     try:
         machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"waiting\"))'", timeout=PAGE_LOADS_S)
     except Exception as e:
+        report_failure()
         dump(app)
         crashed = machine.execute(f"grep -c 'Network service crashed' /tmp/{app}.log")[1].strip()
         raise AssertionError(f"{app} did not load the test page within {PAGE_LOADS_S} s; {stolen(started)} meanwhile; its network service crashed {crashed} times") from e
@@ -349,6 +352,7 @@ def share(app, label, confirms):
         answer(label, ran, lambda: machine.execute(finished)[0] == 0, confirm)
         machine.wait_until_succeeds(finished, timeout=params["seconds"] + CHOOSER_APPEARS_S)
     except Exception:
+        report_failure()
         dump(app)
         title = next((w["title"] for w in windows() if w["id"] == shown["id"]), "closed")
         print(f"{app} did not finish sharing {label}: {title}; {stalled_side()}")
@@ -445,6 +449,7 @@ def tear_off_and_redock():
     try:
         machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e 'any(.[]; .title | startswith(\"tab-\"))'", timeout=PAGE_LOADS_S)
     except Exception:
+        report_failure()
         machine.screenshot("tabs-loading")
         dump("tabs")
         raise
@@ -466,6 +471,7 @@ def tear_off_and_redock():
     try:
         machine.wait_until_succeeds(as_alice("lys-wmctl windows") + " | jq -e '[.[] | select(.title | startswith(\"tab-\"))] | length == 1'", timeout=30)
     except Exception:
+        report_failure()
         machine.screenshot("tab-redock")
         dump("tabs")
         print(f"during the redock drag: {redock}")

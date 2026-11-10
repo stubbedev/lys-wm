@@ -53,10 +53,11 @@ in
         notify = launch "notify" "${pkgs.libnotify}/bin/notify-send upgrade hello";
         xterm = launch "xterm" "${pkgs.xterm}/bin/xterm";
       };
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(compile(open("${./upgrade.py}").read(), "${./upgrade.py}", "exec"))
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./upgrade.py];
     timeout = 600;
   }

@@ -43,6 +43,7 @@ def suspends_once(why, change):
     try:
         machine.wait_until_succeeds(f"test $({SUSPENDS}) -gt {before}", timeout=30)
     except Exception:
+        report_failure()
         print(machine.execute("journalctl -b --no-pager -t lys-wm -u systemd-logind")[1])
         raise
     machine.sleep(duration=SETTLE)

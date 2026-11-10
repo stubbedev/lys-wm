@@ -119,9 +119,10 @@ in
         page_source = "${./screencast.html}";
         inherit launchers portal seconds;
       };
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(open("${./screencast-test.py}").read())
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./screencast-test.py];
   }

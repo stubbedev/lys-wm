@@ -37,11 +37,12 @@ in
         systemd-suspend.serviceConfig.ExecStart = ["" "${pkgs.util-linux}/bin/logger -t ${suspendTag} suspend"];
       };
     };
-    extraTest = run: ''
-      lid_fifo = "${lidFifo}"
-      suspend_tag = "${suspendTag}"
-      external_card = "${externalCard}"
-      lys_wmctl_outputs = ${builtins.toJSON (run "lys-wmctl outputs")}
-      exec(open("${./lid.py}").read())
-    '';
+    extraTest = run:
+      ''
+        lid_fifo = "${lidFifo}"
+        suspend_tag = "${suspendTag}"
+        external_card = "${externalCard}"
+        lys_wmctl_outputs = ${builtins.toJSON (run "lys-wmctl outputs")}
+      ''
+      + import ./vm-scripts.nix [./lid.py];
   }

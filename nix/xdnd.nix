@@ -25,10 +25,10 @@ in
           wayland-target = launch "wayland-target" (dragon "wayland" "--target --and-exit --print-path");
         };
       };
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(open("${./xwayland-lib.py}").read())
-      exec(open("${./xdnd.py}").read())
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./xwayland-lib.py ./xdnd.py];
   }

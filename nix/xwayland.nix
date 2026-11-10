@@ -40,10 +40,10 @@ in
           Virtual-2 = feh "checker-plain";
         };
       };
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(open("${./xwayland-lib.py}").read())
-      exec(open("${./xwayland.py}").read())
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./xwayland-lib.py ./xwayland.py];
   }

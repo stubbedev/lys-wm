@@ -1,5 +1,4 @@
 import json
-import traceback
 
 RUNTIME = "/run/user/1000"
 
@@ -158,6 +157,6 @@ try:
     assert layout(first) == layout(second), f"headless: {second}, was {first}"
     machine.succeed(f"kill -0 {first[0]['pid']}")
 except Exception:
-    traceback.print_exc()
+    report_failure()
     dump()
     raise

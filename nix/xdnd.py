@@ -40,6 +40,7 @@ def drop_case(source_name, target_name, path):
         drag_between(source, target)
         dropped(f"/tmp/{target_name}.log", path)
     except Exception:
+        report_failure()
         dump([f"/tmp/{source_name}.log", f"/tmp/{target_name}.log"])
         raise
     print(f"{source_name} dropped {path} into {target_name}")

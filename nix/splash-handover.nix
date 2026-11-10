@@ -28,8 +28,9 @@ in
         };
       };
     };
-    extraTest = run: ''
-      lys_wmctl_outputs = ${builtins.toJSON (run "lys-wmctl outputs")}
-      exec(open("${./splash-handover.py}").read())
-    '';
+    extraTest = run:
+      ''
+        lys_wmctl_outputs = ${builtins.toJSON (run "lys-wmctl outputs")}
+      ''
+      + import ./vm-scripts.nix [./splash-handover.py];
   }

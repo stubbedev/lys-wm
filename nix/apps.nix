@@ -67,9 +67,10 @@ in
         windows = builtins.attrNames windows;
         launchers = builtins.mapAttrs launch (windows // others);
       };
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(open("${./apps.py}").read())
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./apps.py];
   }

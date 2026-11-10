@@ -70,10 +70,10 @@ in
           xwindows = import ./xwindows.nix pkgs;
         }
         // apps.${app}.params);
-    in ''
-      import json
-      params = json.loads(${builtins.toJSON params})
-      exec(open("${./xwayland-lib.py}").read())
-      exec(open("${apps.${app}.script}").read())
-    '';
+    in
+      ''
+        import json
+        params = json.loads(${builtins.toJSON params})
+      ''
+      + import ./vm-scripts.nix [./xwayland-lib.py apps.${app}.script];
   }

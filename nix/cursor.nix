@@ -13,7 +13,5 @@ import ./vm.nix {
     boot.extraModprobeConfig = "options vkms enable_cursor=0";
     environment.systemPackages = [pkgs.drm_info];
   };
-  extraTest = _: ''
-    exec(open("${./cursor.py}").read())
-  '';
+  extraTest = _: import ./vm-scripts.nix [./cursor.py];
 }

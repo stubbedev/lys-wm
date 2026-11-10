@@ -19,5 +19,6 @@ try:
     assert_physical_root()
     steam()
 except Exception:
+    report_failure()
     dump(["/tmp/steam.log"])
     raise

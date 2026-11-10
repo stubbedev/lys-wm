@@ -75,5 +75,6 @@ try:
             raise AssertionError(f"the pointer at logical {lx},{ly} put the X pointer at {seen[-1]}, want {want}") from None
         print(f"{name}: the pointer at logical {lx},{ly} is at {got} in X, want {want}")
 except Exception:
+    report_failure()
     dump(["/tmp/checker-hidpi.log", "/tmp/checker-plain.log"])
     raise

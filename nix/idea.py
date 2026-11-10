@@ -161,5 +161,6 @@ try:
     settings(main)
     find_in_files(main, frame)
 except Exception:
+    report_failure()
     dump(["/tmp/idea.log"])
     raise

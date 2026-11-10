@@ -152,5 +152,6 @@ try:
         errors = protocol_errors(name)
         assert not errors, f"{name} hit a protocol error: {errors}"
 except Exception:
+    report_failure()
     dump()
     raise
