@@ -96,7 +96,7 @@ func TestSessionLockCoversTheDesktopAndTakesTheKeyboard(t *testing.T) {
 	if err := errors.Join(l.lock.UnlockAndDestroy(), l.c.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}
-	r.h.Eventually("the desktop back", showing(150, 90, [3]byte{0, 0, 0xff}))
+	r.h.Eventually("the desktop back", showing(150, 90, [3]byte{0xff, 0xff, 0}))
 	r.expect("kb_enter win")
 }
 
