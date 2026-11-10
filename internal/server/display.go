@@ -61,6 +61,8 @@ type Display struct {
 	restored   *restoring
 	ackFloor   uint32
 	journaling bool
+	recording  bool
+	lastClient uint64
 }
 
 func New(l *loop.Loop, opts Options) (*Display, error) {

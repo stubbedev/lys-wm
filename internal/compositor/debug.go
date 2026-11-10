@@ -8,6 +8,8 @@ import (
 	"runtime/pprof"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/atomicfile"
+
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -225,6 +227,22 @@ func (c *Compositor) stopDebugRecorders() error {
 		errs = append(errs, c.stopDebugProfile())
 	}
 	return errors.Join(errs...)
+}
+
+func (c *Compositor) dumpProtocol(path string) error {
+	dump, err := c.display.AppendProtocol(nil)
+	if err != nil {
+		return fmt.Errorf("compositor: dump the protocol to %s: %w", path, err)
+	}
+	go func() {
+		if err := atomicfile.WriteFile(path, dump, 0o600); err != nil {
+			_ = c.loop.Post(func() error {
+				c.report(fmt.Errorf("compositor: dump the protocol: %w", err))
+				return nil
+			})
+		}
+	}()
+	return nil
 }
 
 func writeHeapProfile(path string) error {

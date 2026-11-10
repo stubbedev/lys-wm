@@ -1061,8 +1061,8 @@ var Actions = []ActionSpec{
 		parse:   parseZoom,
 	},
 	{
-		Name: "debug", Args: "<damage|opaque|planes> [toggle|on|off], <trace|profile> <start <file>|stop>, heap <file>",
-		Summary: "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once.",
+		Name: "debug", Args: "<damage|opaque|planes|protocol> [toggle|on|off], protocol dump <file>, <trace|profile> <start <file>|stop>, heap <file>",
+		Summary: "Debugging a running session, bound to nothing by default. `damage` fills each frame's damage with a tint that fades over 8 frames; `opaque` tints what the culler takes as opaque; `planes` tints every composited frame, so whatever shows untinted went to direct scanout or an overlay plane. `trace` records the frame trace of `-frame-trace` to an absolute path, `profile` a Go CPU profile, and `heap` writes a heap profile once. `protocol` keeps the most recent Wayland messages of every client in memory, and `protocol dump` writes them to an absolute path, oldest first, in the `WAYLAND_DEBUG` format.",
 		parse:   parseDebug,
 	},
 	{

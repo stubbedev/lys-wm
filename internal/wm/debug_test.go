@@ -16,6 +16,9 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 		DebugRecordAction{Recording: DebugProfile, Path: "/tmp/cpu.pprof"},
 		DebugRecordAction{Recording: DebugProfile, Stop: true},
 		DebugRecordAction{Recording: DebugHeap, Path: "/tmp/heap.pprof"},
+		DebugProtocolAction{Mode: SwitchOn},
+		DebugProtocolAction{Mode: SwitchOff},
+		DebugProtocolDumpAction{Path: "/tmp/a wire.log"},
 	} {
 		got, err := ParseAction(a.String())
 		if err != nil || got != a {
@@ -25,8 +28,11 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 	if got, err := ParseAction("debug damage"); err != nil || got != (DebugOverlayAction{Overlay: DebugDamage, Mode: SwitchToggle}) {
 		t.Errorf("debug damage parsed to %#v, %v", got, err)
 	}
+	if got, err := ParseAction("debug protocol"); err != nil || got != (DebugProtocolAction{Mode: SwitchToggle}) {
+		t.Errorf("debug protocol parsed to %#v, %v", got, err)
+	}
 	for text, want := range map[string]string{
-		"debug":                     "needs damage, opaque, planes",
+		"debug":                     "needs damage, opaque, planes, protocol",
 		"debug colours":             `"colours" is not damage`,
 		"debug damage sideways":     `"sideways" is not toggle, on or off`,
 		"debug trace start":         `the file "" is not an absolute path`,
@@ -34,6 +40,9 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 		"debug trace stop now":      `trace stop takes nothing more`,
 		"debug profile pause":       `profile takes start <file> or stop`,
 		"debug heap":                `the file "" is not an absolute path`,
+		"debug protocol dump":       `the file "" is not an absolute path`,
+		"debug protocol dump a.log": `the file "a.log" is not an absolute path`,
+		"debug protocol loud":       `"loud" is not toggle, on or off`,
 	} {
 		if _, err := ParseAction(text); !errors.Is(err, ErrBadAction) || !strings.Contains(err.Error(), want) {
 			t.Errorf("ParseAction(%q) = %v, want %q", text, err, want)

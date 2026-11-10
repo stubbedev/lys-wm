@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -32,6 +31,8 @@ type Client struct {
 	journal    journal
 	inerts     int
 	restoring  bool
+	serial     uint64
+	recorded   *protocolRing
 }
 
 func (d *Display) AddClient(fd int) (*Client, error) {
@@ -57,9 +58,9 @@ func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
 		journal: journal{policies: d.policies, records: map[wire.ObjectID]*record{}},
 	}
 	c.conn.DeferSendErrors()
-	if d.trace != nil {
-		c.conn.SetTracer(c.trace)
-	}
+	d.lastClient++
+	c.serial = d.lastClient
+	c.watchProtocol()
 	if c.wlDisplay, err = sw.NewWlDisplay(c, 1, 1, displayRequests{c}); err != nil {
 		return nil, err
 	}
@@ -295,31 +296,4 @@ func (c *Client) destroy() error {
 		return fmt.Errorf("server: tear down the client of pid %d: %w", c.creds.Pid, err)
 	}
 	return nil
-}
-
-func (c *Client) trace(incoming bool, id wire.ObjectID, opcode wire.Opcode, body []byte) {
-	d := c.display
-	b := fmt.Appendf(d.traceBuf[:0], "[%10.3f] {%d} ", float64(time.Since(d.start).Microseconds())/1000, c.creds.Pid)
-	if !incoming {
-		b = append(b, " -> "...)
-	}
-	r, ok := c.objects[id]
-	if !ok {
-		b = fmt.Appendf(b, "unknown@%d.%d(?)\n", id, opcode)
-	} else {
-		iface := r.Base().Interface()
-		specs := iface.Requests
-		if !incoming {
-			specs = iface.Events
-		}
-		if int(opcode) < len(specs) {
-			b = fmt.Appendf(b, "%s@%d.%s(", iface.Name, id, specs[opcode].Name)
-			b = wire.AppendArgs(b, specs[opcode].Args, body)
-			b = append(b, ")\n"...)
-		} else {
-			b = fmt.Appendf(b, "%s@%d.%d(?)\n", iface.Name, id, opcode)
-		}
-	}
-	d.traceBuf = b
-	_, _ = d.trace.Write(b)
 }

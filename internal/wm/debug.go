@@ -43,10 +43,20 @@ type (
 		Stop      bool
 		Path      string
 	}
+	DebugProtocolAction struct {
+		Mode Switch
+	}
+	DebugProtocolDumpAction struct {
+		Path string
+	}
 )
 
-func (DebugOverlayAction) isEffect() {}
-func (DebugRecordAction) isEffect()  {}
+func (DebugOverlayAction) isEffect()      {}
+func (DebugRecordAction) isEffect()       {}
+func (DebugProtocolAction) isEffect()     {}
+func (DebugProtocolDumpAction) isEffect() {}
+
+const debugTargets = "damage, opaque, planes, protocol, trace, profile or heap"
 
 func (a DebugOverlayAction) String() string {
 	return "debug " + a.Overlay.String() + " " + a.Mode.String()
@@ -70,9 +80,28 @@ func (a DebugRecordAction) apply(s State, _ Settings) (State, []Effect, error) {
 	return emit(s, a)
 }
 
+func (a DebugProtocolAction) String() string {
+	return "debug protocol " + a.Mode.String()
+}
+
+func (a DebugProtocolAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func (a DebugProtocolDumpAction) String() string {
+	return "debug protocol dump " + a.Path
+}
+
+func (a DebugProtocolDumpAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
 func parseDebug(spec ActionSpec, args []string, rest string) (Action, error) {
 	if len(args) == 0 {
-		return nil, badArgs(spec, "needs damage, opaque, planes, trace, profile or heap")
+		return nil, badArgs(spec, "needs "+debugTargets)
+	}
+	if args[0] == "protocol" {
+		return parseDebugProtocol(spec, args[1:], strings.TrimSpace(strings.TrimPrefix(rest, args[0])))
 	}
 	if o, ok := parseEnum[DebugOverlay](debugOverlays, args[0]); ok {
 		mode, err := optionalSwitch(spec, args[1:])
@@ -83,7 +112,7 @@ func parseDebug(spec ActionSpec, args []string, rest string) (Action, error) {
 	}
 	r, ok := parseEnum[DebugRecording](debugRecordings, args[0])
 	if !ok {
-		return nil, badArgs(spec, "%q is not damage, opaque, planes, trace, profile or heap", args[0])
+		return nil, badArgs(spec, "%q is not "+debugTargets, args[0])
 	}
 	rest = strings.TrimSpace(strings.TrimPrefix(rest, args[0]))
 	if r == DebugHeap {
@@ -102,6 +131,18 @@ func parseDebug(spec ActionSpec, args []string, rest string) (Action, error) {
 		return DebugRecordAction{Recording: r, Path: path}, err
 	}
 	return nil, badArgs(spec, "%s takes start <file> or stop, not %q", r, rest)
+}
+
+func parseDebugProtocol(spec ActionSpec, args []string, rest string) (Action, error) {
+	if len(args) > 0 && args[0] == "dump" {
+		path, err := debugPath(spec, strings.TrimSpace(strings.TrimPrefix(rest, args[0])))
+		return DebugProtocolDumpAction{Path: path}, err
+	}
+	mode, err := optionalSwitch(spec, args)
+	if err != nil {
+		return nil, err
+	}
+	return DebugProtocolAction{Mode: mode}, nil
 }
 
 func debugPath(spec ActionSpec, path string) (string, error) {

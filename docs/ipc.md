@@ -230,6 +230,9 @@ lys-wmctl dispatch debug trace stop     # same format as -frame-trace; see Frame
 lys-wmctl dispatch debug profile start /tmp/cpu.pprof
 lys-wmctl dispatch debug profile stop
 lys-wmctl dispatch debug heap /tmp/heap.pprof
+lys-wmctl dispatch debug protocol on    # keep each client's recent Wayland messages in memory
+lys-wmctl dispatch debug protocol dump /tmp/wire.log
+lys-wmctl dispatch debug protocol off   # drop them
 ```
 
 - Overlays take `on`, `off` or `toggle` (default). They are drawn after the
@@ -237,6 +240,17 @@ lys-wmctl dispatch debug heap /tmp/heap.pprof
   last tint fades. `debug planes` never takes a window off direct scanout.
 - Paths must be absolute. Only one trace and one profile at a time; a trace
   started with `-frame-trace` cannot be stopped here.
+- `debug protocol on` records the last 4096 messages each client sent and was
+  sent, so a client that stops responding can be looked at after the fact
+  without having run it under `WAYLAND_DEBUG`. A message keeps the first 128
+  bytes of its arguments; anything longer shows as `<truncated>`. Recording
+  costs nothing while off, and a client that disconnects takes its record with
+  it, as does an [upgrade](./guide/upgrade).
+- `debug protocol dump` writes every connected client's record, oldest first,
+  in the `WAYLAND_DEBUG` format. Each line is tagged `{pid/connection}`, since
+  one process can hold several connections with their own object IDs, and its
+  time counts in milliseconds from the start given on the first line.
+  `LYS_WM_DEBUG=wire` prints the same lines live to stderr.
 
 The trace format is described in [Frame pacing](./frame-pacing#the-trace).
 
