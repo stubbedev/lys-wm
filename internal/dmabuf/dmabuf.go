@@ -418,7 +418,7 @@ type Buffer struct {
 }
 
 func (b *Buffer) String() string {
-	return fmt.Sprintf("wl_buffer@%d of pid %d", b.resource.Base().ID(), b.client.Creds().Pid)
+	return fmt.Sprintf("wl_buffer@%d of pid %d", b.resource.Base().ID(), b.client.Creds().PID)
 }
 
 type planeFence struct {

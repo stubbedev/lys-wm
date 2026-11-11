@@ -191,7 +191,7 @@ func (c *Compositor) withheld(b *dmabuf.Buffer, held *scannedOut, sweeps uint64)
 }
 
 func (c *Compositor) describeSurface(s *surface.Surface) string {
-	d := fmt.Sprintf("wl_surface@%d of pid %d", s.Resource().Base().ID(), s.Client().Creds().Pid)
+	d := fmt.Sprintf("wl_surface@%d of pid %d", s.Resource().Base().ID(), s.Client().Creds().PID)
 	if w := c.windowWithSurface(s.Root()); w != nil {
 		return fmt.Sprintf("%s (app_id %q)", d, w.top.AppID())
 	}

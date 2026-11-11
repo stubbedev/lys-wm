@@ -348,7 +348,7 @@ func TestPeerCredentials(t *testing.T) {
 	h.registry(h.connect())
 	h.on(func() {
 		creds := h.disp.clients[0].Creds()
-		if int(creds.Pid) != os.Getpid() || int(creds.Uid) != os.Getuid() {
+		if int(creds.PID) != os.Getpid() || int(creds.UID) != os.Getuid() {
 			t.Errorf("creds = %+v, want pid %d uid %d", creds, os.Getpid(), os.Getuid())
 		}
 	})

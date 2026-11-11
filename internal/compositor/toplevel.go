@@ -60,7 +60,7 @@ type xdgToplevel struct {
 }
 
 func (t xdgToplevel) pid() int32 {
-	return t.Surface().Client().Creds().Pid
+	return t.Surface().Client().Creds().PID
 }
 
 func (t xdgToplevel) sandboxed() bool {

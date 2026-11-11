@@ -294,7 +294,7 @@ func (m *Manager) Busy() string {
 		}
 		for _, s := range surfaces {
 			if len(s.queue) > 0 {
-				return fmt.Sprintf("wl_surface@%d of pid %d has a commit waiting", s.resource.Base().ID(), c.Creds().Pid)
+				return fmt.Sprintf("wl_surface@%d of pid %d has a commit waiting", s.resource.Base().ID(), c.Creds().PID)
 			}
 		}
 	}

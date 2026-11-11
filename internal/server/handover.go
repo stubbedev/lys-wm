@@ -134,7 +134,7 @@ func (d *Display) Unkeepable(skip func(*Client) bool) []Unkeepable {
 			}
 		}
 		for _, why := range slices.Sorted(maps.Keys(reasons)) {
-			out = append(out, Unkeepable{PID: c.creds.Pid, Reason: why})
+			out = append(out, Unkeepable{PID: c.creds.PID, Reason: why})
 		}
 	}
 	for _, sb := range d.sandboxes {
@@ -369,7 +369,7 @@ func (d *Display) Snapshot(t *handover.FDs, skip func(*Client) bool) (*State, ma
 		}
 		cs, err := c.snapshot(t)
 		if err != nil {
-			return nil, nil, fmt.Errorf("server: the client of pid %d: %w", c.creds.Pid, err)
+			return nil, nil, fmt.Errorf("server: the client of pid %d: %w", c.creds.PID, err)
 		}
 		kept[c] = len(st.Clients)
 		st.Clients = append(st.Clients, cs)
@@ -412,7 +412,7 @@ func (c *Client) snapshot(t *handover.FDs) (ClientState, error) {
 	}
 	extra, extraFDs := retire.Recorded()
 	cs := ClientState{
-		FD: t.Add(c.conn.FD()), PID: c.creds.Pid, LastID: uint32(s.next - 1), TempFirst: uint32(first),
+		FD: t.Add(c.conn.FD()), PID: c.creds.PID, LastID: uint32(s.next - 1), TempFirst: uint32(first),
 		Stream: stream, StreamFDs: t.AddOwned(streamFDs), In: in, InFDs: t.AddAll(inFDs),
 		Out: append(out, extra...), OutFDs: t.AddAll(append(outFDs, extraFDs...)),
 	}
@@ -430,7 +430,7 @@ type restoring struct {
 
 func (d *Display) restoreFailed(c *Client, err error) {
 	if d.restored != nil && d.restored.failed == nil {
-		d.restored.failed = fmt.Errorf("server: rebuild the client of pid %d: %w", c.creds.Pid, err)
+		d.restored.failed = fmt.Errorf("server: rebuild the client of pid %d: %w", c.creds.PID, err)
 	}
 }
 
@@ -555,7 +555,7 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 				continue
 			}
 			if err := f(); err != nil {
-				d.report(fmt.Errorf("server: release the client of pid %d: %w", clients[i].creds.Pid, err))
+				d.report(fmt.Errorf("server: release the client of pid %d: %w", clients[i].creds.PID, err))
 				errs = append(errs, clients[i].destroy())
 			}
 		}

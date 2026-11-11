@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-lib/peercred"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -17,7 +18,7 @@ type Client struct {
 	display    *Display
 	conn       *wire.Conn
 	source     *loop.Source
-	creds      unix.Ucred
+	creds      peercred.Credentials
 	objects    map[wire.ObjectID]wire.Resource
 	lastID     wire.ObjectID
 	reserved   map[wire.ObjectID]struct{}
@@ -40,9 +41,9 @@ func (d *Display) AddClient(fd int) (*Client, error) {
 }
 
 func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
-	creds, err := unix.GetsockoptUcred(fd, unix.SOL_SOCKET, unix.SO_PEERCRED)
+	creds, err := peercred.OfFD(fd)
 	if err != nil {
-		return nil, fmt.Errorf("server: SO_PEERCRED on client fd %d: %w", fd, err)
+		return nil, fmt.Errorf("server: add the client of fd %d: %w", fd, err)
 	}
 	if err := unix.SetNonblock(fd, true); err != nil {
 		return nil, fmt.Errorf("server: make client fd %d non-blocking: %w", fd, err)
@@ -50,7 +51,7 @@ func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
 	c := &Client{
 		display: d,
 		conn:    wire.NewConn(fd),
-		creds:   *creds,
+		creds:   creds,
 		objects: map[wire.ObjectID]wire.Resource{},
 		hooks:   map[wire.ObjectID][]func() error{},
 		lastID:  wire.FirstServerID - 1,
@@ -111,7 +112,7 @@ func (c *Client) Fail(err error) error {
 	return c.display.loop.Post(func() error { return c.fail(err) })
 }
 
-func (c *Client) Creds() unix.Ucred {
+func (c *Client) Creds() peercred.Credentials {
 	return c.creds
 }
 
@@ -293,7 +294,7 @@ func (c *Client) destroy() error {
 	errs = append(errs, c.source.Remove(), c.conn.Close())
 	c.display.removeClient(c)
 	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("server: tear down the client of pid %d: %w", c.creds.Pid, err)
+		return fmt.Errorf("server: tear down the client of pid %d: %w", c.creds.PID, err)
 	}
 	return nil
 }

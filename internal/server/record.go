@@ -63,7 +63,7 @@ func (r *protocolRing) all() iter.Seq[*recordedMessage] {
 }
 
 func appendMessage(b []byte, at time.Duration, c *Client, incoming bool, iface *wire.Interface, id wire.ObjectID, opcode wire.Opcode, body []byte) []byte {
-	b = fmt.Appendf(b, "[%10.3f] {%d/%d} ", float64(at.Microseconds())/1000, c.creds.Pid, c.serial)
+	b = fmt.Appendf(b, "[%10.3f] {%d/%d} ", float64(at.Microseconds())/1000, c.creds.PID, c.serial)
 	if !incoming {
 		b = append(b, " -> "...)
 	}
