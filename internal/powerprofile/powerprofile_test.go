@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/dbusx"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 )
@@ -38,7 +39,12 @@ func runDaemon(t *testing.T, address string, s service, profile string) *daemon 
 func (d *daemon) set(profile string) {
 	d.t.Helper()
 	d.profile.Store(profile)
-	if err := d.conn.Emit(d.s.path, propsIface+".PropertiesChanged", d.s.name, map[string]dbus.Variant{activeProfile: dbus.MakeVariant(profile)}, []string{}); err != nil {
+	d.emit(map[string]dbus.Variant{activeProfile: dbus.MakeVariant(profile)})
+}
+
+func (d *daemon) emit(changed map[string]dbus.Variant, extra ...any) {
+	d.t.Helper()
+	if err := d.conn.Emit(d.s.path, propsIface+".PropertiesChanged", append([]any{d.s.name, changed, []string{}}, extra...)...); err != nil {
 		d.t.Fatal(err)
 	}
 }
@@ -144,5 +150,55 @@ func TestNoDaemonIsNoPowerSaver(t *testing.T) {
 	r.until("the daemon's power-saver", r.changes(1))
 	if len(r.saver) != 1 || !r.saver[0] || len(r.errors) != 0 {
 		t.Fatalf("changes %v and errors %v, want one change to power-saver: another interface's signal and a balanced daemon change nothing", r.saver, r.errors)
+	}
+}
+
+func TestOnlyTheDaemonChangesTheProfile(t *testing.T) {
+	bus := dbustest.Start(t)
+	d := runDaemon(t, bus.Address, services[0], "balanced")
+	r := watch(t, bus.Address)
+	stranger, err := dbus.Connect(bus.Address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stranger.Close()
+	if err := stranger.Emit(services[0].path, propsIface+".PropertiesChanged", services[0].name, map[string]dbus.Variant{activeProfile: dbus.MakeVariant(powerSaver)}, []string{}); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := stranger.BusObject().Call("org.freedesktop.DBus.GetId", 0).Store(&id); err != nil {
+		t.Fatal(err)
+	}
+	d.emit(map[string]dbus.Variant{activeProfile: dbus.MakeVariant(int32(1))})
+	r.until("the daemon's profile that is not a string", func() bool { return len(r.errors) >= 1 })
+	if len(r.saver) != 0 || len(r.errors) != 1 {
+		t.Fatalf("changes %v and errors %v, want no change from another peer's PropertiesChanged in the daemon's name, and one error for the daemon's", r.saver, r.errors)
+	}
+}
+
+func TestTheDescriptorsOfAPropertiesChangedAreClosed(t *testing.T) {
+	bus := dbustest.Start(t)
+	d := runDaemon(t, bus.Address, services[0], "balanced")
+	r := watch(t, bus.Address)
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	read, write := p[0], p[1]
+	defer unix.Close(read)
+	fd := dbus.UnixFD(write)
+	d.emit(map[string]dbus.Variant{"Handle": dbus.MakeVariant(fd)}, fd)
+	d.profile.Store(powerSaver)
+	d.emit(map[string]dbus.Variant{activeProfile: dbus.MakeVariant(powerSaver), "Handle": dbus.MakeVariant(fd)}, fd)
+	r.until("power-saver", r.changes(1))
+	if err := unix.Close(write); err != nil {
+		t.Fatal(err)
+	}
+	fds := []unix.PollFd{{Fd: int32(read), Events: unix.POLLIN}}
+	if n, err := unix.Poll(fds, 10_000); err != nil || n != 1 || fds[0].Revents&unix.POLLHUP == 0 {
+		t.Fatalf("poll the pipe = %d, %v, events %#x; want a hangup, every descriptor the watcher was handed for its write end closed", n, err, fds[0].Revents)
+	}
+	if len(r.saver) != 1 || !r.saver[0] || len(r.errors) != 0 {
+		t.Fatalf("changes %v and errors %v, want one change to power-saver", r.saver, r.errors)
 	}
 }
