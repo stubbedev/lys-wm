@@ -52,6 +52,7 @@ func (d *daemon) emit(changed map[string]dbus.Variant, extra ...any) {
 type run struct {
 	t      *testing.T
 	l      *loop.Loop
+	w      *Watcher
 	saver  []bool
 	errors []error
 }
@@ -90,7 +91,7 @@ func watch(t *testing.T, address string) *run {
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	r := &run{t: t, l: l}
-	w, err := Watch(l, address, func(saver bool) error {
+	r.w, err = Watch(l, address, func(saver bool) error {
 		r.saver = append(r.saver, saver)
 		return nil
 	}, func(err error) { r.errors = append(r.errors, err) })
@@ -98,7 +99,7 @@ func watch(t *testing.T, address string) *run {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := w.Close(); err != nil {
+		if err := r.w.Close(); err != nil {
 			t.Error(err)
 		}
 	})
@@ -107,6 +108,10 @@ func watch(t *testing.T, address string) *run {
 
 func (r *run) changes(n int) func() bool {
 	return func() bool { return len(r.saver) >= n }
+}
+
+func (r *run) holds(i int) func() bool {
+	return func() bool { return r.w.profiles[i].owned }
 }
 
 func TestTheWatcherFollowsTheActiveProfile(t *testing.T) {
@@ -145,7 +150,9 @@ func TestNoDaemonIsNoPowerSaver(t *testing.T) {
 	if err := stranger.Emit(services[0].path, propsIface+".PropertiesChanged", "org.example.Other", map[string]dbus.Variant{activeProfile: dbus.MakeVariant(powerSaver)}, []string{}); err != nil {
 		t.Fatal(err)
 	}
+	<-r.w.read
 	d := runDaemon(t, bus.Address, services[0], "balanced")
+	r.until("the daemon's balanced profile read", r.holds(0))
 	d.set("power-saver")
 	r.until("the daemon's power-saver", r.changes(1))
 	if len(r.saver) != 1 || !r.saver[0] || len(r.errors) != 0 {
@@ -180,6 +187,7 @@ func TestTheDescriptorsOfAPropertiesChangedAreClosed(t *testing.T) {
 	bus := dbustest.Start(t)
 	d := runDaemon(t, bus.Address, services[0], "balanced")
 	r := watch(t, bus.Address)
+	r.until("the daemon's balanced profile read", r.holds(0))
 	var p [2]int
 	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
 		t.Fatal(err)
