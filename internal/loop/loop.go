@@ -459,8 +459,8 @@ func (l *Loop) Run() error {
 		return ErrClosed
 	}
 	l.stopped = false
-	woke := time.Now()
-	defer func() { l.busy += time.Since(woke) }()
+	woke := l.elapsed()
+	defer func() { l.busy += l.elapsed() - woke }()
 	for !l.stopped {
 		if err := l.flushBeforeIdle(); err != nil {
 			return err
@@ -476,9 +476,9 @@ func (l *Loop) Run() error {
 		if l.stopped {
 			break
 		}
-		l.busy += time.Since(woke)
+		l.busy += l.elapsed() - woke
 		n, err := l.poll()
-		woke = time.Now()
+		woke = l.elapsed()
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}

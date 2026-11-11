@@ -430,22 +430,25 @@ func TestCloseReleasesEverything(t *testing.T) {
 }
 
 func TestBusyCountsWorkButNotWaiting(t *testing.T) {
-	l := newLoop(t)
+	l, clock := newManual(t, time.Second)
 	const work, wait = 30 * time.Millisecond, 60 * time.Millisecond
-	timer, err := l.AddTimer(func() error {
-		time.Sleep(work)
+	armed(t, l, wait, func() error {
+		clock.Set(clock.Now() + work)
 		l.Stop()
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := timer.Arm(wait); err != nil {
-		t.Fatal(err)
-	}
+	clock.WhenDry(func() {
+		next, ok := clock.NextTimer()
+		if !ok {
+			t.Error("the loop ran dry with no timer armed")
+			l.Stop()
+			return
+		}
+		clock.Set(next)
+	})
 	run(t, l)
-	if busy := l.Busy(); busy < work || busy >= wait {
-		t.Fatalf("busy %v after %v of work and %v of waiting", busy, work, wait)
+	if busy := l.Busy(); busy != work {
+		t.Fatalf("busy %v after %v of work and %v of waiting, want %v", busy, work, wait, work)
 	}
 }
 
