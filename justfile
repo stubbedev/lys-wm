@@ -35,9 +35,11 @@ hardware_tests := "TestAlphaCut|TestABlurAlphaThreshold|TestACaptureRepaintsOnly
 pace backend="headless" renderer="vulkan" rounds="10" args="":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ -e /run/opengl-driver ]]; then
-        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    if [[ "${LYS_WM_CONTAINER-}" != 1 && {{quote(backend)}} != drm ]]; then
+        echo "pace: the {{backend}} backend renders on the GPU beside the session; run it as \`just docker pace\`, or with backend=drm from a text console" >&2
+        exit 1
     fi
+    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
@@ -160,9 +162,11 @@ pace-gate renderer="gles":
 pace-baseline:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ -e /run/opengl-driver ]]; then
-        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    if [[ "${LYS_WM_CONTAINER-}" != 1 ]]; then
+        echo "pace-baseline: it measures the GPU; run it as \`just docker pace-baseline\`" >&2
+        exit 1
     fi
+    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
     just write-baselines
 
 # The same on the dev shell's software rasterisers, under gles/software and

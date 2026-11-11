@@ -7,14 +7,12 @@ animation through a real client and the IPC socket, and reports per step.
 ## Running it
 
 ```sh
-just pace                         # headless, Vulkan, this machine's GPU
-just pace headless gles
-just pace headless vulkan 30 "-json report.json -scenarios move,genie"
+just docker pace                  # headless, Vulkan, on the host's GPU in a container
 just pace drm vulkan              # real page flips, from a text console
-just docker pace                  # headless on the host's GPU, in a container
+just pace drm gles 30 "-json report.json -scenarios move,genie"
 ```
 
-`just pace` runs no tests first; `just docker hardware` runs the hardware tests,
+`just pace` refuses the headless backend outside the container, where it would render on the GPU beside the session; with `drm` it takes the display and runs from a text console. It runs no tests first; `just docker hardware` runs the hardware tests,
 then pacing, and stops if the tests fail.
 
 | Flag | Default | Effect |
