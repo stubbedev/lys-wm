@@ -1,12 +1,14 @@
 package compositor
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/xcursor"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
 func TestAnExecDoesItsSyscallsOffTheLoop(t *testing.T) {
@@ -16,7 +18,7 @@ func TestAnExecDoesItsSyscallsOffTheLoop(t *testing.T) {
 	}
 	defer l.Close()
 	entered, release := make(chan struct{}), make(chan struct{})
-	c := &Compositor{loop: l, lookPath: func(string) (string, error) {
+	c := &Compositor{loop: l, execOutput: ExecOutput{Stdout: os.Stdout, Stderr: os.Stderr}, lookPath: func(string) (string, error) {
 		close(entered)
 		<-release
 		return "/bin/true", nil
@@ -120,5 +122,21 @@ func TestACursorMissShowsWhatIsThereAndLoadsOffTheLoop(t *testing.T) {
 	}
 	if _, ok := c.pointers[cursorKey{"text", 24}]; !ok {
 		t.Fatal("the loaded cursor never reached the cache")
+	}
+}
+
+func TestExecsWriteToTheProcessOutputUnlessTheConfigNamesAnother(t *testing.T) {
+	cfg := PlainConfig(testenv.Keymap(t), testenv.Font(t))
+	if cfg.ExecOutput != (ExecOutput{Stdout: os.Stdout, Stderr: os.Stderr}) {
+		t.Fatalf("the plain config execs with %+v, want the process's stdout and stderr", cfg.ExecOutput)
+	}
+	if _, err := validate(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for name, missing := range map[string]ExecOutput{"stdout": {Stderr: os.Stderr}, "stderr": {Stdout: os.Stdout}} {
+		cfg.ExecOutput = missing
+		if _, err := validate(cfg); err == nil {
+			t.Errorf("a config naming no %s for its execs is accepted", name)
+		}
 	}
 }

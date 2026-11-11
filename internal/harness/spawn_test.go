@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -38,34 +37,18 @@ func TestSpawnedCommandsReportHowTheyExited(t *testing.T) {
 
 func TestSpawnedCommandsWriteToTheCompositorsStderr(t *testing.T) {
 	t.Parallel()
-	h := Start(t, small)
 	read, write, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = read.Close() })
-	var stderr *os.File
-	h.Do(func(*headless.Backend, *compositor.Compositor) error {
-		stderr, os.Stderr = os.Stderr, write
-		return nil
-	})
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.ExecOutput.Stderr = write }, small)
 	h.dispatch("exec echo spawned-to-stderr >&2")
 	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
 		c.WaitForExecs()
-		os.Stderr = stderr
 		return write.Close()
 	})
-	lines := make(chan string, 1)
-	go func() {
-		line, _ := bufio.NewReader(read).ReadString('\n')
-		lines <- line
-	}()
-	select {
-	case line := <-lines:
-		if strings.TrimSpace(line) != "spawned-to-stderr" {
-			t.Fatalf("the compositor's stderr got %q", line)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the spawned command's stderr never reached the compositor's")
+	if line, err := bufio.NewReader(read).ReadString('\n'); strings.TrimSpace(line) != "spawned-to-stderr" {
+		t.Fatalf("the file the compositor execs with as stderr got %q (%v)", line, err)
 	}
 }

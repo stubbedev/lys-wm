@@ -689,6 +689,10 @@ none of this runs. [Upgrade](./guide/upgrade) is the user guide.
   (`host_skip` in the justfile), so a run beside a desktop session never opens
   a card; `just hardware` refuses to run outside the container `just docker
   hardware` builds, and `vm-seat` runs the seat tests.
+- Commands the compositor execs write to `Config.ExecOutput`, which
+  `PlainConfig` sets to the process's stdout and stderr. A test that reads an
+  exec's output names a pipe there: the harness tests share one process and
+  run in parallel, so none replaces `os.Stderr` or another process global.
 - The dev shell points EGL at llvmpipe (`__EGL_VENDOR_LIBRARY_DIRS`,
   `LIBGL_ALWAYS_SOFTWARE=1`) and `VK_DRIVER_FILES` at lavapipe. Unset them to
   test on the machine's driver.

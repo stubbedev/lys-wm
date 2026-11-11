@@ -151,9 +151,9 @@ func (c *Compositor) spawn(command string, target launchTarget) error {
 }
 
 func (c *Compositor) spawnWith(command string, env []string, started func(pid int)) {
-	stdout, stderr := os.Stdout, os.Stderr
+	output := c.execOutput
 	c.execs.Run(func() {
-		cmd, err := c.startCommand(command, env, stdout, stderr)
+		cmd, err := c.startCommand(command, env, output)
 		if err == nil {
 			pid := cmd.Process.Pid
 			go c.reap(command, cmd)
@@ -172,14 +172,14 @@ func (c *Compositor) WaitForExecs() {
 	c.execs.Wait()
 }
 
-func (c *Compositor) startCommand(command string, env []string, stdout, stderr *os.File) (*exec.Cmd, error) {
+func (c *Compositor) startCommand(command string, env []string, output ExecOutput) (*exec.Cmd, error) {
 	sh, err := c.lookPath("sh")
 	if err != nil {
 		return nil, fmt.Errorf("exec %q: %w", command, err)
 	}
 	cmd := exec.CommandContext(context.Background(), sh, "-c", command) //nolint:gosec // binds and lys-wmctl dispatch run the user's own commands
 	cmd.Env = env
-	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.Stdout, cmd.Stderr = output.Stdout, output.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("exec %q: %w", command, err)

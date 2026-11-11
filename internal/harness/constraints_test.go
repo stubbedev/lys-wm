@@ -187,6 +187,7 @@ func TestConfinedPointerStaysInItsRegion(t *testing.T) {
 	if x, _ := r.cursor(); x != 20 {
 		t.Fatalf("a confined cursor reached x %v left of the region", x)
 	}
+	r.w.Stop()
 	corner, err := r.c.Compositor.CreateRegion()
 	if err != nil {
 		t.Fatal(err)

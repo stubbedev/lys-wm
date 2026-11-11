@@ -73,6 +73,7 @@ type Config struct {
 	WM              wm.Settings
 	Binds           []binds.Bind
 	Report          func(error)
+	ExecOutput      ExecOutput
 	Decor           Decor
 	Font            *gtext.Typeface
 	Icons           *icontheme.Theme
@@ -101,6 +102,11 @@ type Config struct {
 	ClientHotkeys   bool
 	CursorBehavior  CursorBehavior
 	DeviceOutputs   map[string]wm.OutputMatch
+}
+
+type ExecOutput struct {
+	Stdout *os.File
+	Stderr *os.File
 }
 
 type Hooks struct {
@@ -156,6 +162,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		WM:             PlainSettings(),
 		Swallow:        Swallow{Proc: procFS},
 		Report:         func(err error) { fmt.Fprintln(os.Stderr, "lys-wm:", err) },
+		ExecOutput:     ExecOutput{Stdout: os.Stdout, Stderr: os.Stderr},
 		Decor:          PlainDecor(),
 		Font:           font,
 		Icons:          icontheme.New("", nil),
@@ -354,6 +361,7 @@ type Compositor struct {
 	hdrHold            time.Duration
 	overlayWork        overlayWork
 	lookPath           func(string) (string, error)
+	execOutput         ExecOutput
 	execs              loop.Serial
 	cursorLoader       func(theme *xcursor.Theme, name string, px int) (xcursor.Image, error)
 	cursorsLoading     map[cursorKey]struct{}
@@ -443,6 +451,9 @@ func validate(cfg Config) (binds.Map, error) {
 	if cfg.Report == nil {
 		return binds.Map{}, errors.New("compositor: Config.Report is nil")
 	}
+	if cfg.ExecOutput.Stdout == nil || cfg.ExecOutput.Stderr == nil {
+		return binds.Map{}, errors.New("compositor: Config.ExecOutput names no file for an exec's stdout or stderr")
+	}
 	if cfg.Font == nil {
 		return binds.Map{}, errors.New("compositor: Config.Font is nil")
 	}
@@ -498,6 +509,7 @@ func (c *Compositor) adopt(cfg Config, m binds.Map) {
 	}
 	c.cursors, c.settings, c.rules, c.decor, c.font = cfg.Cursor, cfg.WM, cfg.Rules, cfg.Decor, cfg.Font
 	c.report, c.seatConfig, c.outputRules = cfg.Report, cfg.Seat, cfg.Outputs
+	c.execOutput = cfg.ExecOutput
 	c.adoptBinds(m)
 	c.virtualConfig = cfg.VirtualOutputs
 	c.deviceOutputs = cfg.DeviceOutputs

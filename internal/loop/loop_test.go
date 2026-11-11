@@ -172,10 +172,10 @@ func TestTimer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	start := time.Now()
 	if err := timer.Arm(time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
 	run(t, l)
 	if fires != 3 || time.Since(start) < 3*time.Millisecond {
 		t.Fatalf("timer fired %d times in %v, want 3 re-armed one-shots", fires, time.Since(start))
