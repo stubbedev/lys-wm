@@ -683,12 +683,18 @@ none of this runs. [Upgrade](./guide/upgrade) is the user guide.
   clients from the dev shell. `just test` sets `LYS_WM_HEADLESS=1`, turning a
   missing tool into a failure (`testenv`). `just gates`, which CI runs, runs
   the suite under the race detector with the same setting.
+- Tests that open the machine's DRM cards or render on its GPU carry
+  `OnHardware`, `WithoutMaster` or `OnARenderNode` in their names, and those
+  that take DRM master `OnASeat`. `just test` and `just race` skip all four
+  (`host_skip` in the justfile), so a run beside a desktop session never opens
+  a card; `just hardware` refuses to run outside the container `just docker
+  hardware` builds, and `vm-seat` runs the seat tests.
 - The dev shell points EGL at llvmpipe (`__EGL_VENDOR_LIBRARY_DIRS`,
   `LIBGL_ALWAYS_SOFTWARE=1`) and `VK_DRIVER_FILES` at lavapipe. Unset them to
   test on the machine's driver.
 - dmabuf paths need `/dev/udmabuf` on lavapipe, so they run in the
-  `vm-gpu-tests` NixOS check; `just hardware` runs them on a real GPU with both
-  renderers. `vm-xdnd` drags files between Wayland and X both ways.
+  `vm-gpu-tests` NixOS check; `just docker hardware` runs them on a real GPU
+  with both renderers. `vm-xdnd` drags files between Wayland and X both ways.
 - Frame pacing is gated by `lys-wm-pace` ([Frame pacing](./frame-pacing)).
 
 ## Reference implementations

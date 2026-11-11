@@ -267,7 +267,7 @@ func riggedOnAFileWithoutMaster(t *testing.T, master Master) *rig {
 	}, master)
 }
 
-func TestABackendStartedWithoutMasterLightsOutputsWithoutTestingTheirModes(t *testing.T) {
+func TestABackendThatIsNotMasterLightsOutputsWithoutTestingTheirModes(t *testing.T) {
 	r := riggedOnAFileWithoutMaster(t, WithoutMaster)
 	if err := r.b.Start(r.rec); err != nil {
 		t.Fatalf("starting without master: %v", err)

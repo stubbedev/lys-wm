@@ -14,8 +14,8 @@ just pace drm vulkan              # real page flips, from a text console
 just docker pace                  # headless on the host's GPU, in a container
 ```
 
-`just pace` runs no tests first; `just hardware` runs the hardware tests, then
-pacing, and stops if the tests fail.
+`just pace` runs no tests first; `just docker hardware` runs the hardware tests,
+then pacing, and stops if the tests fail.
 
 | Flag | Default | Effect |
 | --- | --- | --- |
@@ -96,7 +96,8 @@ reported in one run.
 | RSS growth (1024 KiB, fixed) | Smallest per-round rise in resident size after 2 warm-up rounds; needs at least 5 rounds | A leak that repeats with the animation |
 
 `just pace-gate gles` and `just pace-gate vulkan` run the gate on the dev
-shell's software rasterisers, as CI does; `just hardware` runs it on the GPU.
+shell's software rasterisers, as CI does; `just docker hardware` runs it on the
+GPU.
 A change that is meant to cost more updates the limits and commits them:
 `just pace-baseline-software` writes the software sets,
 `just docker pace-baseline` the GPU sets from the host's GPU. Limits are the measured value

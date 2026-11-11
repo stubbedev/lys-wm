@@ -13,9 +13,18 @@ gates: plain race pace-gates
 # Every gate but the race detector.
 plain: fmt-check tidy-check check vuln
 
+# The tests that open the machine's DRM card nodes or render on its GPU. They
+# run only in the container `just docker hardware` builds, never beside a
+# desktop session.
+card_tests := "OnHardware|WithoutMaster|OnARenderNode"
+
+# What every recipe that tests ./... leaves out: the card tests, and the tests
+# that take DRM master on a seat, which only the vm-seat check runs.
+host_skip := card_tests + "|OnASeat"
+
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
-hardware_tests := "TestAlphaCut|TestABlurAlphaThreshold|TestACaptureRepaintsOnlyTheDamage|TestACommitThatChangesNothing|TestZoom|TestTheViewFollows|TestCapturesShowTheUnzoomed|TestScanoutStopsWhileZoomed|TestAFloatingWindowDraggedToAnEdge|TestATiledWindowDragged|TestThePreviewBlurs|TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|OnHardware|WithoutMaster|TestAStackOnARenderNode|TestDMABUFClientsOnTheGPURenderers|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestColorParity|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGPURenderers|TestAScreencopyIntoADMABUF|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding|TestReadRowsWritesOnlyThoseRows|TestAnAsyncReadSeesTheFrameItWasStartedAfter|TestNestedLysWMRendersWithVulkan|TestATranslucentWindowBlurs|TestXRayBlur|TestABlurRegion|TestARegionIsClipped|TestARuleOffTurnsBlur|TestADecorationBlurLeaves|TestXRayAppliesToBlur|TestASubsurfaceRegion|TestAnAlphaModifierFadesTheBlur|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|TestBordersAndTabBars|TestRoundedWindowsAndBorders|TestATranslucentBorder|TestAFloatingWindowCasts|TestAGradientBorder|TestInactiveWindows|TestADimAround|TestAMovedWindow|TestWindowsPopIn|TestAWorkspaceSwitch|TestBorderColours|TestAGoo|TestAMorphing|TestAnElastic|TestAGenie|TestScreenShaders|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAShader|TestWindowedVideosGoToOverlayPlanes|TestScaledAndLetterboxedFullscreenDMABUFsScanOut"
+hardware_tests := "TestAlphaCut|TestABlurAlphaThreshold|TestACaptureRepaintsOnlyTheDamage|TestACommitThatChangesNothing|TestZoom|TestTheViewFollows|TestCapturesShowTheUnzoomed|TestScanoutStopsWhileZoomed|TestAFloatingWindowDraggedToAnEdge|TestATiledWindowDragged|TestThePreviewBlurs|TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|" + card_tests + "|TestDMABUFClientsOnTheGPURenderers|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestColorParity|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGPURenderers|TestAScreencopyIntoADMABUF|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding|TestReadRowsWritesOnlyThoseRows|TestAnAsyncReadSeesTheFrameItWasStartedAfter|TestNestedLysWMRendersWithVulkan|TestATranslucentWindowBlurs|TestXRayBlur|TestABlurRegion|TestARegionIsClipped|TestARuleOffTurnsBlur|TestADecorationBlurLeaves|TestXRayAppliesToBlur|TestASubsurfaceRegion|TestAnAlphaModifierFadesTheBlur|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|TestBordersAndTabBars|TestRoundedWindowsAndBorders|TestATranslucentBorder|TestAFloatingWindowCasts|TestAGradientBorder|TestInactiveWindows|TestADimAround|TestAMovedWindow|TestWindowsPopIn|TestAWorkspaceSwitch|TestBorderColours|TestAGoo|TestAMorphing|TestAnElastic|TestAGenie|TestScreenShaders|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAShader|TestWindowedVideosGoToOverlayPlanes|TestScaledAndLetterboxedFullscreenDMABUFsScanOut"
 
 # Measure how smoothly the animations reach the screen; docs/frame-pacing.md
 # has the columns. Refuses a software rasteriser unless args has
@@ -41,9 +50,14 @@ pace backend="headless" renderer="vulkan" rounds="10" args="":
 # lys-wm in a private runtime dir, with Xwayland off, runs es2gears_wayland and
 # reports its frame rate, and lys-wm-pace plays the animations, reports late
 # frames and fails when a step's per-frame counts pass cmd/lys-wm-pace/baseline.json.
+# Its tests open the DRM card nodes, so it runs only as `just docker hardware`.
 hardware:
     #!/usr/bin/env bash
     set -euo pipefail
+    if [[ "${LYS_WM_CONTAINER-}" != 1 ]]; then
+        echo "hardware: its tests open the DRM card nodes; run it as \`just docker hardware\`" >&2
+        exit 1
+    fi
     unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
@@ -206,7 +220,7 @@ docker recipe="gates" memory="10g":
     docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${gpu[@]}" \
         --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 --shm-size 1g \
         -v /nix/store:/nix/store:ro -v "$dir/env.sh:/env.sh:ro" -v "$dir/passwd:/etc/passwd:ro" -v "$dir/group:/etc/group:ro" -v "$PWD:/src" -v lys-wm-go:/go -w /src -e SSL_CERT_FILE="$certs" \
-        debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker "$recipe"
+        debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp LYS_WM_CONTAINER=1 && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker "$recipe"
 
 # Run a NixOS VM test that needs the network, which the Nix build sandbox
 # does not give checks, in a container with /dev/kvm and its own network:
@@ -233,7 +247,7 @@ fuzz duration="5m":
 # needs cgo; the binaries lys-wm ships keep CGO_ENABLED=0. LYS_WM_HEADLESS=1
 # turns a missing dev-shell program into a failure instead of a skip.
 race:
-    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race ${LYS_TEST_ARGS--count=1} ./...
+    CGO_ENABLED=1 LYS_WM_HEADLESS=1 go test -race -skip '{{host_skip}}' ${LYS_TEST_ARGS--count=1} ./...
     cd third_party/xgb && CGO_ENABLED=1 go test -race ${LYS_TEST_ARGS--count=1} ./...
 
 # Run every release gate in order: vet, lint, test, build.
@@ -259,7 +273,7 @@ lint:
 # headless backend and drives real clients included. LYS_WM_HEADLESS=1 turns a
 # missing dev-shell program into a failure instead of a skip.
 test:
-    LYS_WM_HEADLESS=1 go test ${LYS_TEST_ARGS--count=1} ./...
+    LYS_WM_HEADLESS=1 go test -skip '{{host_skip}}' ${LYS_TEST_ARGS--count=1} ./...
 
 # Compile-check every package; the output is discarded.
 build:
