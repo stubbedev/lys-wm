@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,6 +221,60 @@ func TestADownPenStaysOnItsSurface(t *testing.T) {
 		&tabletinput.Motion{Time: 5 * time.Millisecond, Tool: pen, Axes: at(0.91, 0.5)})
 	left.c.DispatchUntil("the lifted pen left left", func() bool { return slices.Contains(ll.log, "proximity_out") })
 	right.c.DispatchUntil("the lifted pen entered right", func() bool { return slices.Contains(rl.log, "proximity_in right") })
+}
+
+func TestAPenLiftedOffAnyTabletSurfaceHoversOverTheNextOne(t *testing.T) {
+	t.Parallel()
+	for name, overAPlainClient := range map[string]bool{"over the empty desktop": false, "over a client without the tablet protocol": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := Start(t, small)
+			var plain *party
+			if overAPlainClient {
+				plain = join(t, h, "plain")
+			}
+			gone := join(t, h, "gone")
+			gl := tabletSeat(t, gone)
+			addTablet(h)
+			tablet(h, &tabletinput.Proximity{Time: time.Millisecond, Tool: pen, In: true, Axes: at(0.9, 0.5)},
+				&tabletinput.Tip{Time: 2 * time.Millisecond, Tool: pen, Down: true, Axes: pressed(0.9, 0.5, 1)},
+				&tabletinput.Button{Time: 3 * time.Millisecond, Tool: pen, Button: 0x14b, Pressed: true})
+			gone.c.DispatchUntil("the pen down on gone with its button held", func() bool {
+				return slices.Contains(gl.log, "proximity_in gone") && slices.Contains(gl.log, "down") && slices.Contains(gl.log, "button 0x14b 1")
+			})
+			send(t, gone.w.Destroy)
+			gone.c.Sync()
+			tablet(h, &tabletinput.Button{Time: 4 * time.Millisecond, Tool: pen, Button: 0x14b},
+				&tabletinput.Tip{Time: 5 * time.Millisecond, Tool: pen, Axes: at(0.9, 0.5)})
+			next := join(t, h, "next")
+			nl := tabletSeat(t, next)
+			tablet(h, &tabletinput.Motion{Time: 6 * time.Millisecond, Tool: pen, Axes: at(0.9, 0.5)},
+				&tabletinput.Motion{Time: 7 * time.Millisecond, Tool: pen, Axes: at(0.1, 0.5)})
+			next.c.DispatchUntil("the hovering pen over next", func() bool {
+				return slices.Contains(nl.log, "proximity_in next") && slices.Contains(nl.log, "frame")
+			})
+			next.c.Sync()
+			if slices.Contains(nl.log, "down") || slices.Contains(nl.log, "button 0x14b 1") {
+				t.Fatalf("a pen lifted and released off any tablet surface reached the next one still held: %q", nl.log)
+			}
+			h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+				if c.Seat().TabletToolDown(pen) {
+					return errors.New("the seat holds the lifted pen's tip down")
+				}
+				return nil
+			})
+			if plain == nil {
+				return
+			}
+			if !slices.Contains(nl.log, "proximity_out") {
+				t.Fatalf("the hovering pen moved off next and stayed on it: %q", nl.log)
+			}
+			plain.c.Sync()
+			if slices.ContainsFunc(plain.in.Log, func(s string) bool { return strings.HasPrefix(s, "button ") }) {
+				t.Fatalf("a client without the tablet protocol got a click for a tip it never saw pressed: %q", plain.in.Log)
+			}
+		})
+	}
 }
 
 func TestAPenClicksForAClientWithoutTheTabletProtocol(t *testing.T) {

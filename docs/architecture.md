@@ -309,6 +309,11 @@ foreign-toplevel activate all call it. Nothing else mutates WM state.
   tablet seat still holds the tablet: `proximity_in` names the tablet, and no
   motion, tip, button or frame reaches a tool object before it. A client left
   with no such object is not the tool's focus and gets the pointer instead.
+- A tool's tip and buttons are held on the seat for as long as the device holds
+  them, and the surface the tool enters is told of them with `proximity_in`. A
+  tip or button let go while the tool has no focus (its surface destroyed
+  mid-stroke, the tool over a client without the tablet protocol) is let go on
+  the seat too, so the next surface gets a hovering tool, not a stroke.
 - Buttons belong to the seat's pointer, not to one `wl_pointer`: a release
   goes to every `wl_pointer` of the focused client, the one made after the
   press and entered since included, as wlroots sends it. `wl_pointer.enter`

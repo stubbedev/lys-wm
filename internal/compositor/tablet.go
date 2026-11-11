@@ -101,22 +101,17 @@ func (c *Compositor) tabletMove(d backend.Device, at time.Duration, tool *tablet
 }
 
 func (c *Compositor) tabletTip(at time.Duration, tool *tabletinput.Tool, down bool) error {
-	if !down && slices.Contains(c.tabletButtons[tool], btnLeft) {
-		return c.emulateTabletButton(at, tool, btnLeft, false)
+	if !down {
+		return errors.Join(c.releaseEmulatedTabletButton(at, tool, btnLeft), c.seat.TabletToolTip(tool, false))
 	}
 	target := c.seat.TabletToolFocus(tool)
 	if target == nil {
-		if down {
-			return c.emulateTabletButton(at, tool, btnLeft, true)
-		}
-		return nil
+		return c.emulateTabletButton(at, tool, btnLeft, true)
 	}
-	if down {
-		if err := c.clickFocus(target); err != nil {
-			return err
-		}
+	if err := c.clickFocus(target); err != nil {
+		return err
 	}
-	return c.seat.TabletToolTip(tool, down)
+	return c.seat.TabletToolTip(tool, true)
 }
 
 func (c *Compositor) tabletButton(at time.Duration, tool *tabletinput.Tool, button uint32, pressed bool) error {
@@ -124,16 +119,20 @@ func (c *Compositor) tabletButton(at time.Duration, tool *tabletinput.Tool, butt
 	if !ok {
 		emulated = button
 	}
-	if !pressed && slices.Contains(c.tabletButtons[tool], emulated) {
-		return c.emulateTabletButton(at, tool, emulated, false)
+	if !pressed {
+		return errors.Join(c.releaseEmulatedTabletButton(at, tool, emulated), c.seat.TabletToolButton(tool, button, false))
 	}
 	if c.seat.TabletToolFocus(tool) == nil {
-		if pressed {
-			return c.emulateTabletButton(at, tool, emulated, true)
-		}
+		return c.emulateTabletButton(at, tool, emulated, true)
+	}
+	return c.seat.TabletToolButton(tool, button, true)
+}
+
+func (c *Compositor) releaseEmulatedTabletButton(at time.Duration, tool *tabletinput.Tool, button uint32) error {
+	if !slices.Contains(c.tabletButtons[tool], button) {
 		return nil
 	}
-	return c.seat.TabletToolButton(tool, button, pressed)
+	return c.emulateTabletButton(at, tool, button, false)
 }
 
 func (c *Compositor) emulateTabletButton(at time.Duration, tool *tabletinput.Tool, button uint32, pressed bool) error {
