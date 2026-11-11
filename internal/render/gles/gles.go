@@ -574,12 +574,12 @@ func (r *Renderer) externalOnly(b gpu.DMABUF) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for _, m := range mods {
-		if m.Modifier == b.Modifier {
-			return m.ExternalOnly, nil
-		}
+	sampledAs := b.Modifier
+	if sampledAs == fourcc.Invalid {
+		sampledAs = fourcc.Linear
 	}
-	return false, nil
+	i := slices.IndexFunc(mods, func(m gpu.ModifierSupport) bool { return m.Modifier == sampledAs })
+	return i >= 0 && mods[i].ExternalOnly, nil
 }
 
 func (r *Renderer) DMABUFFormats() ([]gpu.FormatModifier, error) {

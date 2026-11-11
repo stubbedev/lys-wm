@@ -446,10 +446,6 @@ func TestVulkanSharesLinearBytesWithAHostOfImplicitModifiers(t *testing.T) {
 }
 
 func TestAnEGLHostImportsThoseBytesWithNoModifier(t *testing.T) {
-	r := testenv.Vulkan(t)
-	if !r.Device().Exports() {
-		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
-	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	display, err := testenv.GPU(t).Surfaceless()
@@ -470,6 +466,10 @@ func TestAnEGLHostImportsThoseBytesWithNoModifier(t *testing.T) {
 			t.Error(err)
 		}
 	}()
+	r := testenv.Vulkan(t)
+	if !r.Device().Exports() {
+		t.Skip("this Vulkan device shares no dmabufs; lavapipe needs /dev/udmabuf")
+	}
 	s := &vulkanStack{r: r}
 	modifiers, err := s.modifiers(hostTaking(fourcc.Invalid))
 	if err != nil {

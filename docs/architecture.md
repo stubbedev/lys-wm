@@ -383,6 +383,21 @@ before the next format is tried, and the winner is reported. Every
 renderer is pixel-compared against the software renderer by
 `render/rendertest`.
 
+A client dmabuf that names no modifier is sampled under GLES the way the
+display samples the linear one: through `GL_TEXTURE_EXTERNAL_OES` where
+`eglQueryDmaBufModifiersEXT` lists linear as external-only, as NVIDIA does
+(`TestAnEGLHostImportsThoseBytesWithNoModifier`). A dmabuf query that returns
+`EGL_FALSE` and leaves `EGL_SUCCESS` is outside
+`EGL_EXT_image_dma_buf_import_modifiers`, which names an error for every
+failure and returns `EGL_TRUE` with a count of zero for a format with no
+modifiers; it is reported as `gpu.ErrUnsupported`, naming the vendor and the
+query, and the compositor then offers no `zwp_linux_dmabuf_v1`. NVIDIA's EGL
+does this, and fails `eglCreateImageKHR` the same way, in a process that
+brought up NVIDIA's Vulkan driver before it first initialised EGL; a process
+that initialised EGL first imports on every later display. The nested
+package's test therefore opens its EGL host before its Vulkan device, and
+`just docker hardware` selects no Vulkan test of that package ahead of it.
+
 ### Scanout and planes
 
 - **Direct scanout** (`compositor/scanout.go`): when the culled frame below the

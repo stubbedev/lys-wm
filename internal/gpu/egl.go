@@ -86,6 +86,9 @@ func (e *EGLError) Is(target error) bool {
 }
 
 func (e *EGLError) Error() string {
+	if e.Code == eglSuccess {
+		return fmt.Sprintf("gpu: %s failed and set no EGL error", e.Op)
+	}
 	name, ok := eglErrorNames[e.Code]
 	if !ok {
 		name = fmt.Sprintf("0x%x", e.Code)
@@ -201,7 +204,7 @@ func (l *Library) proc(s symbol) error {
 	return nil
 }
 
-func (l *Library) fail(op string) error {
+func (l *Library) fail(op string) *EGLError {
 	return &EGLError{Op: op, Code: l.egl.getError()}
 }
 
@@ -421,17 +424,25 @@ func (d *Display) DMABUFFormats() ([]fourcc.Format, error) {
 	}
 	var n int32
 	if d.lib.egl.queryDMABUFFormats(d.dpy, 0, nil, &n) != eglTrue {
-		return nil, d.lib.fail("eglQueryDmaBufFormatsEXT")
+		return nil, d.dmabufQueryFailed("eglQueryDmaBufFormatsEXT")
 	}
 	formats := make([]int32, n)
 	if n > 0 && d.lib.egl.queryDMABUFFormats(d.dpy, n, &formats[0], &n) != eglTrue {
-		return nil, d.lib.fail("eglQueryDmaBufFormatsEXT")
+		return nil, d.dmabufQueryFailed("eglQueryDmaBufFormatsEXT")
 	}
 	out := make([]fourcc.Format, n)
 	for i, f := range formats[:n] {
 		out[i] = fourcc.Format(f) //nolint:gosec // EGL returns DRM fourccs in an EGLint
 	}
 	return out, nil
+}
+
+func (d *Display) dmabufQueryFailed(op string) error {
+	err := d.lib.fail(op)
+	if err.Code != eglSuccess {
+		return err
+	}
+	return fmt.Errorf("%w: %s lists EGL_EXT_image_dma_buf_import_modifiers and its queries do not work: %w", ErrUnsupported, d.Vendor(), err)
 }
 
 func (d *Display) DMABUFModifiers(format fourcc.Format) ([]ModifierSupport, error) {
@@ -441,7 +452,7 @@ func (d *Display) DMABUFModifiers(format fourcc.Format) ([]ModifierSupport, erro
 	f := int32(format) //nolint:gosec // EGL takes DRM fourccs as an EGLint
 	var n int32
 	if d.lib.egl.queryDMABUFMods(d.dpy, f, 0, nil, nil, &n) != eglTrue {
-		return nil, d.lib.fail("eglQueryDmaBufModifiersEXT")
+		return nil, d.dmabufQueryFailed(fmt.Sprintf("eglQueryDmaBufModifiersEXT(%v)", format))
 	}
 	if n == 0 {
 		return nil, nil
@@ -449,7 +460,7 @@ func (d *Display) DMABUFModifiers(format fourcc.Format) ([]ModifierSupport, erro
 	mods := make([]uint64, n)
 	external := make([]uint32, n)
 	if d.lib.egl.queryDMABUFMods(d.dpy, f, n, &mods[0], &external[0], &n) != eglTrue {
-		return nil, d.lib.fail("eglQueryDmaBufModifiersEXT")
+		return nil, d.dmabufQueryFailed(fmt.Sprintf("eglQueryDmaBufModifiersEXT(%v)", format))
 	}
 	out := make([]ModifierSupport, n)
 	for i := range out {
