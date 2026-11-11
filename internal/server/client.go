@@ -6,9 +6,9 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/peercred"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-lib/peercred"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/wire"
