@@ -125,9 +125,10 @@ func TestDamagedRowsMergeIntoTheSpansACopyMoves(t *testing.T) {
 }
 
 func TestAnOffLoopCopyMovesOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *testing.T) {
-	primary := &asyncPrimary{Renderer: soft.New(), waiting: make(chan struct{})}
-	close(primary.waiting)
+	primary := asyncPrimaryOf(soft.New())
+	primary.finish()
 	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r.copiesOffLoop(primary)
 	o := r.b.Outputs()[0]
 	size := modeOf(o.mode).Size
 	pitch := size.X * 4

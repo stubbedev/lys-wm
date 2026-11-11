@@ -6,8 +6,6 @@ import (
 	"time"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
-
-	"github.com/stubbedev/lys-wm/internal/backend"
 )
 
 func modesets(commits []commit) int {
@@ -28,7 +26,7 @@ func (r *rig) pacedFrame(o *Output) (aimed time.Duration) {
 	}
 	r.committedSince("a frame", o, n)
 	aimed = o.aimedAt
-	r.pinned = aimed
+	r.at(aimed)
 	r.dev.flip(r.t, 10, uint32(len(r.dev.commits)))
 	r.until("the flip", func() bool { return !o.flipping })
 	return aimed
@@ -36,17 +34,16 @@ func (r *rig) pacedFrame(o *Output) (aimed time.Duration) {
 
 func TestACappedOutputAimsEachFrameAWholeNumberOfRefreshesOn(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	o.CapFrameRate(30)
 	for range 4 {
 		flip := o.lastFlip
-		r.pinned = flip + time.Millisecond
+		r.at(flip + time.Millisecond)
 		if wait := o.frameWait(); wait <= interval/2 {
 			t.Fatalf("a 60 Hz output capped at 30 Hz waits %v after a flip, want longer than an uncapped frame's %v", wait, interval/2-time.Millisecond)
 		}
-		r.pinned = flip + interval
+		r.at(flip + interval)
 		if aimed := r.pacedFrame(o); aimed != flip+2*interval {
 			t.Fatalf("a capped frame aimed at %v after the last flip, want two refreshes, %v", aimed-flip, 2*interval)
 		}
@@ -56,7 +53,7 @@ func TestACappedOutputAimsEachFrameAWholeNumberOfRefreshesOn(t *testing.T) {
 	}
 	o.CapFrameRate(0)
 	flip := o.lastFlip
-	r.pinned = flip + interval/2
+	r.at(flip + interval/2)
 	if aimed := r.pacedFrame(o); aimed != flip+interval {
 		t.Fatalf("uncapped, a frame aimed at %v after the last flip, want the next refresh, %v", aimed-flip, interval)
 	}
@@ -76,7 +73,7 @@ func TestACappedOutputStillMovesTheCursorEveryRefresh(t *testing.T) {
 	r.dev.commits = nil
 	const moves = 6
 	for i := range moves {
-		r.until("the latch", func() bool { return o.planesWait() <= 0 })
+		r.elapse(o.planesWait())
 		r.cursorCommit("the move", o, func() error { return c.MoveCursor(image.Pt(100+i, 50)) })
 	}
 	if len(r.dev.commits) != moves || modesets(r.dev.commits) != 0 {
@@ -93,7 +90,7 @@ func TestUnderVRRACapIsAMinimumFrameInterval(t *testing.T) {
 	r.nextFrame(o)
 	r.nextFrame(o)
 	o.CapFrameRate(30)
-	r.pinned = o.lastFlip + time.Millisecond
+	r.at(o.lastFlip + time.Millisecond)
 	if wait, want := o.frameWait(), time.Second/30-time.Millisecond; wait != want {
 		t.Fatalf("under VRR a 30 Hz cap waits %v a millisecond after a flip, want %v", wait, want)
 	}

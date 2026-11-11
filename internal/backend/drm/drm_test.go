@@ -112,6 +112,7 @@ type fakeDevice struct {
 	overlayZpos       uint64
 	refuseOverlay     bool
 	probeGate         chan struct{}
+	probeGateOpen     bool
 	probesOnLoop      syncatomic.Int64
 	loopGoroutine     string
 	refuseModesets    bool
@@ -223,6 +224,15 @@ func (f *fakeDevice) Resources() (kdrm.Resources, error) {
 		res.Connectors = nil
 	}
 	return res, nil
+}
+
+func (f *fakeDevice) probeGated() bool {
+	return f.probeGate != nil && !f.probeGateOpen
+}
+
+func (f *fakeDevice) openProbeGate() {
+	f.probeGateOpen = true
+	close(f.probeGate)
 }
 
 func (f *fakeDevice) Connector(id uint32) (kdrm.Connector, error) {
@@ -725,15 +735,23 @@ func (r *recorder) DeviceRemoved(backend.Device) error        { return nil }
 func (r *recorder) Input(backend.Device, backend.Event) error { return nil }
 
 type rig struct {
-	t       *testing.T
-	l       *loop.Loop
-	dev     *fakeDevice
-	alloc   *fakeAlloc
-	b       *Backend
-	rec     *recorder
-	reports []error
-	pinned  time.Duration
+	t        *testing.T
+	l        *loop.Loop
+	clock    *loop.Manual
+	dev      *fakeDevice
+	alloc    *fakeAlloc
+	b        *Backend
+	rec      *recorder
+	reports  []error
+	awaited  func() bool
+	waits    uint64
+	met      bool
+	stuck    bool
+	overdue  bool
+	offLoops []func() bool
 }
+
+const rigEpoch = time.Hour
 
 func start(t *testing.T) *rig {
 	t.Helper()
@@ -757,12 +775,15 @@ func rigged(t *testing.T, alloc func(*fakeDevice) allocator, master Master) *rig
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = unix.Close(p[0]), unix.Close(p[1]) })
-	l, err := loop.New()
+	l, clock, err := loop.NewManual(rigEpoch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = l.Close() })
-	r := &rig{t: t, l: l, dev: &fakeDevice{events: p[0], write: p[1], connected: true}, rec: &recorder{}}
+	r := &rig{t: t, l: l, clock: clock, dev: &fakeDevice{events: p[0], write: p[1], connected: true}, rec: &recorder{}}
+	l.BeforeWait(r.ask)
+	clock.WhenDry(r.dry)
+	r.offLoops = []func() bool{func() bool { return r.b.probing && !r.dev.probeGated() }}
 	r.dev.now = r.now
 	a := alloc(r.dev)
 	r.alloc, _ = a.(*fakeAlloc)
@@ -785,27 +806,63 @@ func (r *rig) hotplug() error {
 
 func (r *rig) settle() {
 	r.t.Helper()
-	timer, err := r.l.AddTimer(func() error {
-		r.l.Stop()
-		return nil
-	})
+	r.elapse(20 * time.Millisecond)
+}
+
+func (r *rig) elapse(d time.Duration) {
+	r.t.Helper()
+	end := r.now() + d
+	timer, err := r.l.AddTimer(func() error { return nil })
 	if err != nil {
 		r.t.Fatal(err)
 	}
 	defer timer.Remove()
-	if err := timer.Arm(20 * time.Millisecond); err != nil {
+	if err := timer.Arm(d); err != nil {
 		r.t.Fatal(err)
 	}
-	if err := r.l.Run(); err != nil {
-		r.t.Fatal(err)
-	}
+	r.until(fmt.Sprintf("%v to pass", d), func() bool { return r.now() >= end })
 }
 
 func (r *rig) now() time.Duration {
-	if r.pinned != 0 {
-		return r.pinned
+	return r.clock.Now()
+}
+
+func (r *rig) at(now time.Duration) {
+	r.t.Helper()
+	if now < r.now() {
+		r.t.Fatalf("the rig's clock is at %v and does not run back to %v", r.now(), now)
 	}
-	return backend.Now()
+	r.clock.Set(now)
+}
+
+func (r *rig) advance(d time.Duration) {
+	r.t.Helper()
+	r.at(r.now() + d)
+}
+
+func (r *rig) ask() error {
+	if r.awaited != nil && r.awaited() {
+		r.awaited, r.met = nil, true
+		r.l.Stop()
+	}
+	return nil
+}
+
+func (r *rig) offLoop() bool {
+	return slices.ContainsFunc(r.offLoops, func(running func() bool) bool { return running() })
+}
+
+func (r *rig) dry() {
+	if r.offLoop() {
+		return
+	}
+	next, armed := r.clock.NextTimer()
+	if !armed {
+		r.stuck = true
+		r.l.Stop()
+		return
+	}
+	r.clock.Set(next)
 }
 
 func (r *rig) until(what string, done func() bool) {
@@ -817,13 +874,34 @@ func (r *rig) until(what string, done func() bool) {
 
 func (r *rig) runUntil(what string, done func() bool) error {
 	r.t.Helper()
-	met, err := loopUntil(r.l, done)
+	r.awaited, r.met, r.stuck, r.overdue = done, false, false, false
+	r.waits++
+	wait := r.waits
+	watchdog := time.AfterFunc(loopWait, func() {
+		_ = r.l.Post(func() error {
+			if wait == r.waits && r.awaited != nil {
+				r.overdue = true
+				r.l.Stop()
+			}
+			return nil
+		})
+	})
+	err := r.l.Run()
+	watchdog.Stop()
+	r.awaited = nil
 	if err != nil {
 		return err
 	}
-	if !met {
-		r.t.Fatalf("waited %v for %s: %d commits, %d presents, reports %v, log %v", loopWait, what, len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
+	state := fmt.Sprintf("%d commits, %d presents, reports %v, log %v", len(r.dev.commits), len(r.rec.presents), r.reports, r.rec.log)
+	switch {
+	case r.met:
+		return nil
+	case r.stuck:
+		r.t.Fatalf("%s never came: at %v the loop has no source ready, no timer armed and nothing running off it: %s", what, r.now()-rigEpoch, state)
+	case r.overdue:
+		r.t.Fatalf("waited %v for %s, with work off the loop that never returned: %s", loopWait, what, state)
 	}
+	r.t.Fatalf("the loop stopped before %s: %s", what, state)
 	return nil
 }
 
@@ -853,6 +931,15 @@ func loopUntil(l *loop.Loop, done func() bool) (bool, error) {
 
 func TestTheRigTakesTheAnswerAConditionGaveOnce(t *testing.T) {
 	r := start(t)
+	var tick *loop.Timer
+	tick, err := r.l.AddTimer(func() error { return tick.Arm(time.Millisecond) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tick.Remove()
+	if err := tick.Arm(time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
 	asked := 0
 	r.until("a condition that holds for one instant", func() bool {
 		asked++
@@ -860,6 +947,31 @@ func TestTheRigTakesTheAnswerAConditionGaveOnce(t *testing.T) {
 	})
 	if asked != 3 {
 		t.Fatalf("the condition was asked %d times; a condition on the clock can be true only once", asked)
+	}
+}
+
+func TestTheRigsClockPassesOnlyAsItsTimersFallDue(t *testing.T) {
+	r := start(t)
+	began := r.now()
+	r.settle()
+	if passed := r.now() - began; passed != 20*time.Millisecond {
+		t.Fatalf("settling took %v on the rig's clock, want 20ms", passed)
+	}
+	var fired time.Duration
+	timer, err := r.l.AddTimer(func() error {
+		fired = r.now()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer timer.Remove()
+	if err := timer.Arm(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	r.until("a timer an hour away", func() bool { return fired != 0 })
+	if want := began + 20*time.Millisecond + time.Hour; fired != want || r.now() != want {
+		t.Fatalf("a timer an hour away fired %v after the rig started, with its clock at %v, want both at %v", fired-began, r.now()-began, want-began)
 	}
 }
 
@@ -1262,8 +1374,19 @@ func TestPowerAndWake(t *testing.T) {
 func (r *rig) lit() *Output {
 	r.t.Helper()
 	o := r.flipFirstFrame()
-	r.until("the first flip's latch", func() bool { return o.planesWait() <= 0 })
+	r.elapse(o.planesWait())
 	return o
+}
+
+func (r *rig) refreshStart(o *Output) (vblank time.Duration) {
+	r.t.Helper()
+	interval := modeOf(o.mode).Interval()
+	last := o.lastFlip
+	if r.now() > last+time.Millisecond {
+		last, _ = backend.NextVblank(last, r.now(), interval)
+	}
+	r.at(last + time.Millisecond)
+	return last + interval
 }
 
 func (r *rig) flipFirstFrame() *Output {
@@ -1424,10 +1547,9 @@ func TestCursorChangesDuringAFrameJoinIt(t *testing.T) {
 
 func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	half := modeOf(o.mode).Interval() / 2
-	r.pinned += 2*half - backend.PlaneLead
+	r.advance(2*half - backend.PlaneLead)
 	if err := r.setCursor(o, image.Point{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1436,7 +1558,6 @@ func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	}
 	r.dev.flip(t, 10, 2)
 	r.until("the cursor flip", func() bool { return !o.flipping })
-	time.Sleep(2 * half)
 	r.dev.commits = nil
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(5, 5)); err != nil {
@@ -1445,14 +1566,15 @@ func TestACursorMoveWaitsForTheLatchSoAFrameCarriesIt(t *testing.T) {
 	if len(r.dev.commits) != 0 {
 		t.Fatalf("a cursor move right after a flip committed at once: %+v", r.dev.commits)
 	}
+	drawn := r.frames()
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
-	r.settle()
-	if len(r.dev.commits) != 0 {
-		t.Fatalf("a frame requested before the latch committed: %+v", r.dev.commits)
+	r.elapse(half - time.Millisecond)
+	if len(r.dev.commits) != 0 || r.frames() != drawn {
+		t.Fatalf("a frame requested before the latch drew %d frames and committed: %+v", r.frames()-drawn, r.dev.commits)
 	}
-	r.pinned += half
+	r.at(o.lastFlip + 2*half - backend.PlaneLead)
 	r.until("the frame after the latch", func() bool { return o.flipping && o.late == nil })
 	var flips []commit
 	for _, c := range r.dev.commits {
@@ -2046,7 +2168,7 @@ func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
 	}
 	o := r.b.Outputs()[0]
 	cp, _ := o.CursorPlane()
-	r.pinned = o.lastFlip + modeOf(o.mode).Interval() - backend.PlaneLead
+	r.at(o.lastFlip + modeOf(o.mode).Interval() - backend.PlaneLead)
 	if err := errors.Join(cp.MoveCursor(image.Pt(31, 20)), cp.MoveCursor(image.Pt(32, 20))); err != nil {
 		t.Fatal(err)
 	}
@@ -2074,10 +2196,10 @@ func TestTheLatchFollowsMeasuredRenderTimeAndGrowsAMarginAfterAMiss(t *testing.T
 	r := start(t)
 	o := r.b.Outputs()[0]
 	interval := modeOf(o.mode).Interval()
-	o.lastFlip = backend.Now()
+	o.lastFlip = r.now()
 	half := func() time.Duration {
-		next, _ := backend.NextVblank(o.lastFlip, backend.Now(), interval)
-		return next - o.budget.Latch(o.lastFlip, backend.Now(), interval)
+		next, _ := backend.NextVblank(o.lastFlip, r.now(), interval)
+		return next - o.budget.Latch(o.lastFlip, r.now(), interval)
 	}
 	if got := half(); got != interval/2 {
 		t.Fatalf("an output with no measurements latches %v before the vblank, want half a refresh %v", got, interval/2)
@@ -2145,13 +2267,12 @@ func TestSteadyFramesSkipTheTestCommitUntilThePlanesChange(t *testing.T) {
 
 func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	r.rec.idle = true
 	interval := modeOf(o.mode).Interval()
-	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	r.at(o.lastFlip + interval - backend.PlaneLead)
 	r.cursorCommit("the cursor", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
-	r.pinned = o.lastFlip + interval/2
+	r.at(o.lastFlip + interval/2)
 	frames := r.frames()
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
@@ -2168,7 +2289,7 @@ func TestAnEmptyFramesCallbacksSurviveACursorFlip(t *testing.T) {
 	if o.flipping {
 		t.Fatalf("a cursor move half a refresh before the vblank committed at once: %+v", r.dev.commits)
 	}
-	r.pinned = refresh - backend.PlaneLead
+	r.at(refresh - backend.PlaneLead)
 	if err := o.planesDue(); err != nil {
 		t.Fatal(err)
 	}
@@ -2694,7 +2815,7 @@ func TestAHotplugProbesOffTheLoopAndAppliesTheResultOnIt(t *testing.T) {
 	if err := r.b.Hotplug(); err != nil {
 		t.Fatal(err)
 	}
-	close(gate)
+	r.dev.openProbeGate()
 	r.until("the second probe a hotplug during the first asks for", func() bool { return !r.b.probing && !r.b.probeAgain })
 	if n := r.dev.probesOnLoop.Load(); n != 0 {
 		t.Fatalf("%d connector probes ran on the loop goroutine", n)
@@ -2706,8 +2827,27 @@ func TestAHotplugProbesOffTheLoopAndAppliesTheResultOnIt(t *testing.T) {
 
 type asyncPrimary struct {
 	*soft.Renderer
-	reads   int
-	waiting chan struct{}
+	reads    int
+	released int
+	finished bool
+	waiting  chan struct{}
+}
+
+func asyncPrimaryOf(r *soft.Renderer) *asyncPrimary {
+	return &asyncPrimary{Renderer: r, waiting: make(chan struct{})}
+}
+
+func (p *asyncPrimary) finish() {
+	p.finished = true
+	close(p.waiting)
+}
+
+func (p *asyncPrimary) copying() bool {
+	return p.finished && p.reads > p.released
+}
+
+func (r *rig) copiesOffLoop(p *asyncPrimary) {
+	r.offLoops = append(r.offLoops, p.copying)
 }
 
 func (p *asyncPrimary) AsyncReads() bool { return true }
@@ -2739,27 +2879,31 @@ func (t *asyncTarget) ReadAsync() (render.PendingRead, error) {
 	if err := t.Read(pix, size.X*4); err != nil {
 		return nil, err
 	}
-	return &pendingCopy{pix: pix, stride: size.X * 4, waiting: t.p.waiting}, nil
+	return &pendingCopy{pix: pix, stride: size.X * 4, p: t.p}, nil
 }
 
 type pendingCopy struct {
-	pix     []byte
-	stride  int
-	waiting chan struct{}
+	pix    []byte
+	stride int
+	p      *asyncPrimary
 }
 
 func (p *pendingCopy) Wait() error {
-	<-p.waiting
+	<-p.p.waiting
 	return nil
 }
 
 func (p *pendingCopy) Map() ([]byte, int, error) { return p.pix, p.stride, nil }
 
-func (p *pendingCopy) Release() error { return nil }
+func (p *pendingCopy) Release() error {
+	p.p.released++
+	return nil
+}
 
 func TestACopiedFrameCommitsOnlyOnceTheReadFinishedOffTheLoop(t *testing.T) {
-	primary := &asyncPrimary{Renderer: soft.New(), waiting: make(chan struct{})}
+	primary := asyncPrimaryOf(soft.New())
 	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r.copiesOffLoop(primary)
 	o := r.b.Outputs()[0]
 	n := len(r.dev.commits)
 	if err := o.ScheduleFrame(); err != nil {
@@ -2770,7 +2914,7 @@ func TestACopiedFrameCommitsOnlyOnceTheReadFinishedOffTheLoop(t *testing.T) {
 	if len(r.dev.commits) != n {
 		t.Fatalf("%d commits while the copy was still waiting on the GPU", len(r.dev.commits)-n)
 	}
-	close(primary.waiting)
+	primary.finish()
 	r.committedSince("the copied frame", o, n)
 	if got := r.b.SyncReads(); got != 0 {
 		t.Fatalf("%d synchronous reads on the loop", got)

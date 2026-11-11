@@ -4,7 +4,6 @@ import (
 	"errors"
 	"image"
 	"testing"
-	"time"
 
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -29,20 +28,16 @@ func testCommits(commits []commit) int {
 func (r *rig) shownCursor(o *Output, hotspot image.Point) *cursor {
 	r.t.Helper()
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, hotspot) })
-	r.until("the latch after the first cursor", func() bool { return o.planesWait() <= 0 })
+	r.elapse(o.planesWait())
 	return o.cursor
 }
 
 func (r *rig) frameWithCursorAt(o *Output, at image.Point) commit {
 	r.t.Helper()
-	defer func(clock time.Duration) { r.pinned = clock }(r.pinned)
-	interval := modeOf(o.mode).Interval()
-	vblank := o.lastFlip + interval
-	o.budget = backend.RenderBudget{}
-	r.pinned = o.lastFlip + time.Millisecond
+	vblank := r.refreshStart(o)
 	return r.cursorCommit("the frame", o, func() error {
 		err := errors.Join(o.ScheduleFrame(), o.cursor.MoveCursor(at))
-		r.pinned = vblank - backend.PlaneLead
+		r.at(vblank - backend.PlaneLead)
 		return err
 	})
 }
@@ -55,7 +50,7 @@ func TestCursorMotionIssuesOneAtomicRequestPerRefresh(t *testing.T) {
 	const refreshes = 8
 	for i := range refreshes {
 		at := image.Pt(100+3*i, 50)
-		r.until("the latch", func() bool { return o.planesWait() <= 0 })
+		r.elapse(o.planesWait())
 		shown := r.cursorCommit("the move", o, func() error { return c.MoveCursor(at) })
 		if _, got, _ := cursorAt(shown); got != at.Sub(image.Pt(4, 6)) {
 			t.Fatalf("the move to %v put the plane at %v", at, got)

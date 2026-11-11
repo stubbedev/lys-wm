@@ -8,7 +8,6 @@ import (
 	kdrm "github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/fourcc"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 )
 
@@ -83,19 +82,17 @@ func TestAnOutputWithoutVRRCapableKeepsAFixedRefresh(t *testing.T) {
 
 func TestUnderAdaptiveSyncTheFrameClockKeepsNoFixedInterval(t *testing.T) {
 	r := bootVRR(t, true)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
-	r.pinned = o.lastFlip + time.Millisecond
+	r.at(o.lastFlip + time.Millisecond)
 	if o.frameWait() <= 0 || o.planesWait() <= 0 {
 		t.Fatalf("at a fixed refresh, right after a flip the frame waits %v and the planes %v, want both held for the next vblank", o.frameWait(), o.planesWait())
 	}
 	if err := o.SetAdaptiveSync(true); err != nil {
 		t.Fatal(err)
 	}
-	r.pinned = 0
 	r.nextFrame(o)
-	r.pinned = o.lastFlip + time.Millisecond
+	r.at(o.lastFlip + time.Millisecond)
 	if wait := o.frameWait(); wait != 0 {
 		t.Fatalf("under adaptive sync, a millisecond after a flip the frame waits %v of a %v refresh, want none", wait, interval)
 	}
@@ -143,7 +140,6 @@ func bootVRRCursor(t *testing.T) *vrrCursorRun {
 	if want := time.Second / 48; o.vrrHold != want {
 		t.Fatalf("an EDID ranging 48-144 Hz holds the cursor %v, want %v", o.vrrHold, want)
 	}
-	r.pinned = o.lastFlip
 	r.dev.commits = nil
 	return &vrrCursorRun{r: r, o: o, c: c}
 }
@@ -152,7 +148,7 @@ func (v *vrrCursorRun) play(ms int, frameEvery int) {
 	r, o, c := v.r, v.o, v.c
 	buffers := [2]*fakeBuffer{clientBuffer(7, fourcc.Linear), clientBuffer(8, fourcc.Linear)}
 	for tick := 1; tick <= ms; tick++ {
-		r.pinned += time.Millisecond
+		r.advance(time.Millisecond)
 		if o.flipping {
 			r.dev.flip(r.t, 10, uint32(tick))
 			r.until("the flip", func() bool { return !o.flipping })
@@ -173,7 +169,7 @@ func (v *vrrCursorRun) play(ms int, frameEvery int) {
 		if !flipping && !o.filled && !o.flipping {
 			v.immediateMisses++
 		}
-		if o.planesWaiting && r.pinned >= o.lastFlip+o.vrrHold {
+		if o.planesWaiting && r.now() >= o.lastFlip+o.vrrHold {
 			if err := o.planesDue(); err != nil {
 				r.t.Fatal(err)
 			}
@@ -185,7 +181,7 @@ func (v *vrrCursorRun) play(ms int, frameEvery int) {
 				v.frames++
 			default:
 				v.cursorOnly++
-				v.cursorAt = append(v.cursorAt, r.pinned)
+				v.cursorAt = append(v.cursorAt, r.now())
 			}
 		}
 	}

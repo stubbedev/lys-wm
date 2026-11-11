@@ -62,6 +62,7 @@ type Loop struct {
 	closed   bool
 	wakeups  int
 	epoch    time.Time
+	manual   *Manual
 	timers   []*Timer
 	due      []*Timer
 	seq      uint64
@@ -95,6 +96,51 @@ func New() (*Loop, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+type Manual struct {
+	loop *Loop
+	now  time.Duration
+	dry  func()
+}
+
+func NewManual(start time.Duration) (*Loop, *Manual, error) {
+	l, err := New()
+	if err != nil {
+		return nil, nil, err
+	}
+	l.manual = &Manual{loop: l, now: start}
+	return l, l.manual, nil
+}
+
+func (m *Manual) Now() time.Duration {
+	return m.now
+}
+
+func (m *Manual) Set(now time.Duration) {
+	m.now = now
+}
+
+func (m *Manual) NextTimer() (time.Duration, bool) {
+	return m.loop.nextDeadline()
+}
+
+func (m *Manual) WhenDry(f func()) {
+	m.dry = f
+}
+
+func (l *Loop) elapsed() time.Duration {
+	if l.manual != nil {
+		return l.manual.now
+	}
+	return time.Since(l.epoch)
+}
+
+func (l *Loop) deadline(d time.Duration) time.Duration {
+	if l.manual != nil {
+		return l.manual.now + max(d, 0)
+	}
+	return time.Since(l.epoch) + max(d, 1)
 }
 
 func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error) (token, error) {
@@ -203,7 +249,7 @@ func (t *Timer) Arm(d time.Duration) error {
 	}
 	l := t.loop
 	l.seq++
-	t.at, t.seq, t.armed = time.Since(l.epoch)+max(d, 1), l.seq, true
+	t.at, t.seq, t.armed = l.deadline(d), l.seq, true
 	return nil
 }
 
@@ -239,7 +285,7 @@ func (l *Loop) nextDeadline() (time.Duration, bool) {
 }
 
 func (l *Loop) fireTimers() (bool, error) {
-	now := time.Since(l.epoch)
+	now := l.elapsed()
 	l.due = l.due[:0]
 	for _, t := range l.timers {
 		if t.armed && t.at <= now {
@@ -431,13 +477,7 @@ func (l *Loop) Run() error {
 			break
 		}
 		l.busy += time.Since(woke)
-		block := time.Duration(-1)
-		if len(l.idle) > 0 {
-			block = 0
-		} else if at, ok := l.nextDeadline(); ok {
-			block = max(at-time.Since(l.epoch), 0)
-		}
-		n, err := l.wait(block)
+		n, err := l.poll()
 		woke = time.Now()
 		if errors.Is(err, unix.EINTR) {
 			continue
@@ -458,6 +498,41 @@ func (l *Loop) Run() error {
 		}
 	}
 	return nil
+}
+
+func (l *Loop) poll() (int, error) {
+	if l.manual != nil {
+		return l.pollManual()
+	}
+	block := time.Duration(-1)
+	if len(l.idle) > 0 {
+		block = 0
+	} else if at, ok := l.nextDeadline(); ok {
+		block = max(at-time.Since(l.epoch), 0)
+	}
+	return l.wait(block)
+}
+
+func (l *Loop) runnable() bool {
+	if len(l.idle) > 0 {
+		return true
+	}
+	at, ok := l.nextDeadline()
+	return ok && at <= l.manual.now
+}
+
+func (l *Loop) pollManual() (int, error) {
+	n, err := l.wait(0)
+	if n != 0 || err != nil || l.runnable() {
+		return n, err
+	}
+	if l.manual.dry != nil {
+		l.manual.dry()
+	}
+	if l.stopped || l.runnable() {
+		return 0, nil
+	}
+	return l.wait(-1)
 }
 
 func (l *Loop) dispatch() error {

@@ -53,7 +53,7 @@ Everything lives under `internal/` except the commands.
 | `anim` | Easings, springs, tweens and the per-event animation table; pure |
 | `binds` | Typed chords (keycode from the first layout, button or scroll direction), submaps and bind flags, matched to `wm` actions |
 | `config` | The typed config, its validation and reload |
-| `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox |
+| `loop` | The event loop: fd sources, timers, signals, idle queue, mailbox; a manual clock for tests |
 | `wire` | Message codec, fd passing, the object runtime generated bindings build on |
 | `scanner` | Generates `protocol/{server,client}/...` from the XML pinned in `protocol/protocols.json` |
 | `protocol/...` | Generated bindings, one package per protocol and side; never edited by hand |
@@ -695,6 +695,13 @@ none of this runs. [Upgrade](./guide/upgrade) is the user guide.
 - dmabuf paths need `/dev/udmabuf` on lavapipe, so they run in the
   `vm-gpu-tests` NixOS check; `just docker hardware` runs them on a real GPU
   with both renderers. `vm-xdnd` drags files between Wayland and X both ways.
+- The DRM backend's tests run a fake device on a loop from `loop.NewManual`,
+  whose clock stands still unless a test sets it: with nothing ready and no
+  work off the loop on its way back, the rig moves it to the next armed timer,
+  and a wait that nothing left can end fails at once. No such test reads the
+  wall clock, so latches, flips and missed vblanks land the same on a loaded
+  machine; a timer armed for no time at all is due at once, as one always is
+  by the time a real loop looks.
 - Frame pacing is gated by `lys-wm-pace` ([Frame pacing](./frame-pacing)).
 
 ## Reference implementations

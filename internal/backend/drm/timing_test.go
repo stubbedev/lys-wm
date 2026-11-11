@@ -13,7 +13,6 @@ import (
 
 func TestACursorOnlyCommitLeadsTheVblankByThePlaneLead(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	for range 32 {
@@ -22,10 +21,10 @@ func TestACursorOnlyCommitLeadsTheVblankByThePlaneLead(t *testing.T) {
 	if o.budget.Budget(interval) != interval {
 		t.Fatalf("the budget is %v, want a whole refresh", o.budget.Budget(interval))
 	}
-	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	r.at(o.lastFlip + interval - backend.PlaneLead)
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
 	vblank := o.lastFlip + interval
-	r.pinned = vblank - interval/2
+	r.at(vblank - interval/2)
 	r.dev.commits = nil
 	cp, _ := o.CursorPlane()
 	if err := cp.MoveCursor(image.Pt(20, 30)); err != nil {
@@ -34,7 +33,7 @@ func TestACursorOnlyCommitLeadsTheVblankByThePlaneLead(t *testing.T) {
 	if len(r.dev.commits) != 0 || o.planesWait() != interval/2-backend.PlaneLead {
 		t.Fatalf("half a refresh before the vblank a cursor move committed %+v and waits %v, want it held until the plane lead", r.dev.commits, o.planesWait())
 	}
-	r.pinned = vblank - backend.PlaneLead
+	r.at(vblank - backend.PlaneLead)
 	r.until("the cursor move at the plane lead", func() bool { return o.flipping })
 	if _, at, _ := cursorAt(r.dev.commits[len(r.dev.commits)-1]); at != image.Pt(16, 24) {
 		t.Fatalf("the move committed the cursor at %v", at)
@@ -59,8 +58,8 @@ func TestAPlaneLatchFiringPastItsVblankCommitsInThatRefresh(t *testing.T) {
 	const refreshes = 6
 	slipped := 0
 	for i := range refreshes {
-		vblank := o.lastFlip + interval
-		r.pinned = vblank - interval/2
+		vblank := r.refreshStart(o)
+		r.at(vblank - interval/2)
 		at := image.Pt(100+3*i, 50)
 		if err := c.MoveCursor(at); err != nil {
 			t.Fatal(err)
@@ -68,20 +67,20 @@ func TestAPlaneLatchFiringPastItsVblankCommitsInThatRefresh(t *testing.T) {
 		if !o.planesWaiting {
 			t.Fatalf("refresh %d: a move half a refresh before the vblank did not wait for the plane latch: %d commits", i, len(r.dev.commits))
 		}
-		r.pinned = vblank + time.Millisecond
+		r.at(vblank + time.Millisecond)
 		n := len(r.dev.commits)
 		if err := o.planesDue(); err != nil {
 			t.Fatal(err)
 		}
 		if len(r.dev.commits) == n {
 			slipped++
-			r.pinned = vblank + interval - backend.PlaneLead
+			r.at(vblank + interval - backend.PlaneLead)
 			r.until("the slipped latch", func() bool { return len(r.dev.commits) > n })
 		}
 		if _, got, _ := cursorAt(r.dev.commits[len(r.dev.commits)-1]); got != at.Sub(image.Pt(4, 6)) {
 			t.Fatalf("refresh %d: the late latch put the plane at %v", i, got)
 		}
-		r.pinned = vblank + interval
+		r.at(vblank + interval)
 		r.dev.flip(t, 10, uint32(len(r.dev.commits)+1))
 		r.until("the late latch's flip", func() bool { return !o.flipping })
 	}
@@ -92,13 +91,12 @@ func TestAPlaneLatchFiringPastItsVblankCommitsInThatRefresh(t *testing.T) {
 
 func TestAFrameCommitCarriesTheCursorAsOfThePlaneLead(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
-	r.pinned = o.lastFlip + interval - backend.PlaneLead
+	r.at(o.lastFlip + interval - backend.PlaneLead)
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
 	vblank := o.lastFlip + interval
-	r.pinned = vblank - interval/2
+	r.at(vblank - interval/2)
 	r.dev.commits = nil
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
@@ -114,7 +112,7 @@ func TestAFrameCommitCarriesTheCursorAsOfThePlaneLead(t *testing.T) {
 	if len(r.dev.commits) != 0 {
 		t.Fatalf("a cursor move during a recorded frame committed alone: %+v", r.dev.commits)
 	}
-	r.pinned = vblank - backend.PlaneLead
+	r.at(vblank - backend.PlaneLead)
 	r.until("the frame's commit at the plane lead", func() bool { return o.flipping && o.late == nil })
 	frame := r.dev.commits[len(r.dev.commits)-1]
 	if _, at, _ := cursorAt(frame); frame.values[[2]uint32{40, propFB}] == 0 || frame.values[[2]uint32{40, propInFence}] != uint64(r.alloc.fences[len(r.alloc.fences)-1]) || at != image.Pt(16, 24) {
@@ -124,9 +122,8 @@ func TestAFrameCommitCarriesTheCursorAsOfThePlaneLead(t *testing.T) {
 
 func TestAFrameWithoutACursorCommitsAtOnce(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
-	r.pinned = o.lastFlip + modeOf(o.mode).Interval()/2
+	r.at(o.lastFlip + modeOf(o.mode).Interval()/2)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
@@ -243,23 +240,22 @@ func (r *rig) idleUntilTheCRTCDrifts(o *Output) time.Duration {
 		}
 		return kdrm.Vblank{Sequence: 1001, Time: drifted, Active: true}, nil
 	}
-	r.pinned = drifted + time.Millisecond
+	r.at(drifted + time.Millisecond)
 	return drifted
 }
 
 func TestTheFirstFrameAfterIdleAimsAtTheCRTCsVblank(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	vblank := r.idleUntilTheCRTCDrifts(o)
 	if wait := o.planesWait(); wait != interval-time.Millisecond-backend.PlaneLead {
 		t.Fatalf("after idle the planes wait %v, want the plane lead before the CRTC's next vblank, %v", wait, interval-time.Millisecond-backend.PlaneLead)
 	}
-	if wait, want := o.frameWait(), o.budget.Latch(vblank, r.pinned, interval)-r.pinned; wait != want {
+	if wait, want := o.frameWait(), o.budget.Latch(vblank, r.now(), interval)-r.now(); wait != want {
 		t.Fatalf("after idle the frame waits %v, want %v before the CRTC's next vblank", wait, want)
 	}
-	r.pinned = vblank + interval/2 + time.Millisecond
+	r.at(vblank + interval/2 + time.Millisecond)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
@@ -274,13 +270,12 @@ func TestTheFirstFrameAfterIdleAimsAtTheCRTCsVblank(t *testing.T) {
 
 func TestFramesWithinARefreshOfTheirFlipReadNoVblank(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	r.dev.vblank = func(uint32) (kdrm.Vblank, error) {
 		return kdrm.Vblank{Sequence: 1, Time: o.lastFlip, Active: true}, nil
 	}
-	r.pinned = o.lastFlip + interval/2 + time.Millisecond
+	r.at(o.lastFlip + interval/2 + time.Millisecond)
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}
@@ -292,15 +287,14 @@ func TestFramesWithinARefreshOfTheirFlipReadNoVblank(t *testing.T) {
 
 func TestADriverWithoutAVblankSequenceExtrapolatesAndIsAskedOnce(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	flip := o.lastFlip
-	r.pinned = flip + 1000*interval + 4*time.Millisecond
+	r.at(flip + 1000*interval + 4*time.Millisecond)
 	if wait := o.planesWait(); wait != interval-4*time.Millisecond-backend.PlaneLead {
 		t.Fatalf("without a vblank sequence the planes wait %v, want the extrapolated %v", wait, interval-4*time.Millisecond-backend.PlaneLead)
 	}
-	r.pinned += 10 * interval
+	r.advance(10 * interval)
 	o.planesWait()
 	if r.dev.vblankReads != 1 || r.reports != nil || o.lastFlip != flip {
 		t.Fatalf("a driver without a vblank sequence was asked %d times, reports %v, last flip moved %v", r.dev.vblankReads, r.reports, o.lastFlip-flip)
@@ -309,7 +303,6 @@ func TestADriverWithoutAVblankSequenceExtrapolatesAndIsAskedOnce(t *testing.T) {
 
 func TestAPoweredOnCRTCIsNotAskedForItsVblankBeforeItsModeset(t *testing.T) {
 	r := start(t)
-	r.pinned = backend.Now()
 	o := r.flipFirstFrame()
 	interval := modeOf(o.mode).Interval()
 	r.dev.vblank = func(uint32) (kdrm.Vblank, error) {
@@ -322,7 +315,7 @@ func TestAPoweredOnCRTCIsNotAskedForItsVblankBeforeItsModeset(t *testing.T) {
 	if err := o.Commit(backend.OutputState{Power: backend.PoweredOn, Mode: mode}); err != nil {
 		t.Fatal(err)
 	}
-	r.pinned = o.lastFlip + 100*interval
+	r.at(o.lastFlip + 100*interval)
 	o.frameWait()
 	o.planesWait()
 	if r.dev.vblankReads != 0 || r.reports != nil || o.unanchored {
