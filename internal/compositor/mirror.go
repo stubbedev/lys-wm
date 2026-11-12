@@ -82,31 +82,39 @@ func (c *Compositor) scheduleMirrorsOf(o *output.Output) error {
 }
 
 func (c *Compositor) mirrorFrame(m *mirror) error {
-	f, err := m.out.BeginFrame()
-	if err != nil {
-		return err
-	}
-	size := m.out.State().Mode.Size
-	whole := image.Rectangle{Max: size}
-	p, err := f.Renderer.Begin(f.Target, render.Region{whole})
-	if err != nil {
-		m.out.AbortFrame()
-		return err
-	}
-	p.Clear(letterbox)
-	if src := c.mirrorSource(m); src != nil {
+	return letterboxFrame(m.out, func(p render.Pass, size image.Point) {
+		src := c.mirrorSource(m)
+		if src == nil {
+			return
+		}
 		if sc := c.sceneOf(src); sc.composed != nil {
 			from := sc.composed.Size()
 			upright := m.transform.Size(size)
 			p.DrawTexture(sc.composed.Texture(), render.FRect{W: float64(from.X), H: float64(from.Y)}, m.transform.Rect(letterboxed(from, upright), upright), m.transform, 1, render.Mask{})
 			m.draws++
 		}
-	}
-	if err := p.End(); err != nil {
-		m.out.AbortFrame()
+	})
+}
+
+func letterboxFrame(out backend.Output, draw func(p render.Pass, size image.Point)) error {
+	f, err := out.BeginFrame()
+	if err != nil {
 		return err
 	}
-	return m.out.Present(render.Region{whole})
+	size := out.State().Mode.Size
+	whole := image.Rectangle{Max: size}
+	p, err := f.Renderer.Begin(f.Target, render.Region{whole})
+	if err != nil {
+		out.AbortFrame()
+		return err
+	}
+	p.Clear(letterbox)
+	draw(p, size)
+	if err := p.End(); err != nil {
+		out.AbortFrame()
+		return err
+	}
+	return out.Present(render.Region{whole})
 }
 
 func letterboxed(content, into image.Point) image.Rectangle {
@@ -145,11 +153,7 @@ func (c *Compositor) applyMirrorRules() error {
 			errs = append(errs, err)
 			continue
 		}
-		if rule.Disabled {
-			c.disabled = append(c.disabled, b)
-			continue
-		}
-		errs = append(errs, c.enable(b, rule))
+		errs = append(errs, c.place(b, rule))
 	}
 	return errors.Join(errs...)
 }

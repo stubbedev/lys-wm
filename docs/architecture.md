@@ -199,7 +199,7 @@ Everything else is scoped and reported through `Config.Report`:
 
 | Scope | Failure | Recovery |
 | --- | --- | --- |
-| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. Commits failing for `StallAfter` stall the output ([The lid](#the-lid)). |
+| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. Commits failing for `SustainedFor` stall the output ([The lid](#the-lid)). |
 | Planes between frames | Cursor or gamma commit rejected | Reported once, state stays dirty and is committed again. A cursor refused with `EINVAL`/`ERANGE` moves into the frame. |
 | Client | A failing request | A request meeting an error `backend.Fatal` accepts stops the compositor, naming the client. Any other error, a client resource's own failure included, is sent to that client as `wl_display.error` and kills only it (`server.Client`, #428); a failed capture sends `failed`. |
 | Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs. A protocol error for a client already gone is dropped; an error `backend.Fatal` accepts reaches the loop; anything else is reported once with the client and the object. |
@@ -279,7 +279,8 @@ Workspaces follow Hyprland:
   Floating windows move with their workspace. A replugged output shows the
   focused workspace if it is coming home, and focus follows it; the receiver
   goes back to the workspace it showed before. After the last output goes, the
-  next one shows what it showed.
+  next one shows what it showed. An output that stops displaying (its commits
+  stalled, [The lid](#the-lid)) goes and comes back the same way.
 - Workspace rules are resolved to connector names whenever outputs change:
   bound workspaces live on their output, `default` is shown first,
   `persistent` is never dropped, a name is a second address. Selector rules
@@ -605,14 +606,36 @@ output is not enough: after an undock a connector can stay listed while every
 commit to it fails with `EBUSY` (#436).
 
 - A backend output tracks its commits in `backend.Commits`. Every failed
-  commit (frame, modeset, cursor or colour planes) starts or extends a streak;
-  one that takes ends it. A streak that has lasted `StallAfter` (1 s) at a
-  failed commit stalls the output: one such commit is about 60 frame retries,
-  far past a transient `EBUSY`, and the panel is dark for at most a second.
-  A lost device never stalls; the session ends instead.
+  commit (frame, modeset, cursor or colour planes) starts or extends a failing
+  streak; one that takes ends it. A failing streak that has lasted
+  `SustainedFor` (1 s) at a failed commit stalls the output: one such commit
+  is about 60 frame retries, far past a transient `EBUSY`, and the panel is
+  dark for at most a second. A lost device never stalls; the session ends
+  instead.
+- Recovery is the mirror image: a stalled output displays again only after a
+  streak of commits that all took has lasted `SustainedFor`, judged at a
+  commit that takes. A failed commit ends that streak, so an output that fails
+  for a second, takes one commit and fails again stays stalled instead of
+  flipping the panel about once a second.
 - The stall and the recovery are reported once each, and reach the compositor
   as `OutputChanged` from an idle callback, never inside a frame; the
   compositor re-applies the output rules and the lid policy.
+- For placement a stalled output is a lost one. `compositor.place` is the one
+  decision for where an enabled backend output goes: an output that does not
+  display leaves the layout through the same `disable` an unplugged output
+  takes, so `wm.RemoveOutput` moves its workspaces with the takeover rule of
+  [Workspaces](#workspaces), its layer surfaces close and its `wl_output`
+  global is withdrawn: clients see what they see on an unplug, and nothing is
+  drawn for a screen nobody sees. A "not displaying" state inside the wm was
+  rejected: every path that walks the layout (areas, layers, input, capture)
+  would need a second case for an output that is listed but empty.
+- A stalled output stays enabled and held apart (`Compositor.stalled`, a head
+  that is off in wlr-output-management). It is drawn a letterboxed probe frame
+  at its frame rate, which is what gives `backend.Commits` the commits it
+  judges; a failed probe is that verdict's input, not a dropped frame. Once it
+  displays it comes back through `enable`, as a replugged output does: its
+  workspaces go home, and the panel's rule, applied after the externals, turns
+  the panel off again under a closed lid.
 - On a stall the drm backend probes its connectors again, as on a hotplug
   uevent, so a connector that left without one is removed. Removing an output
   whose disabling commit fails is reported, not fatal.

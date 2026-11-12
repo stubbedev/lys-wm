@@ -2405,7 +2405,7 @@ func (o *Output) commitFailed(err error) error {
 }
 
 func (o *Output) commitTook() {
-	if recovery := o.commits.Took(o.Name()); recovery != nil {
+	if recovery := o.commits.Took(o.Name(), o.b.now()); recovery != nil {
 		o.b.report(fmt.Errorf("drm: %w", recovery))
 		o.b.loop.Idle(o.stallChanged)
 	}

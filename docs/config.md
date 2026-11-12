@@ -146,10 +146,12 @@ modes and turning every output off are refused. While the lid is closed and
 another output is on and displaying, `eDP-*` panels are off and their
 workspaces move to the other outputs; with no other output they stay on. An
 output displays while it is on and its commits take: one whose every commit
-has failed for a second (a dock that went away without telling, say) stops
-counting, its connector is read again, and the panel comes back even with the
-lid closed, until a commit to it takes again. The lid state at startup comes
-from logind, later changes from libinput.
+has failed for a second (a dock that went away without telling, say) is
+treated as unplugged until every commit to it has taken for a second. Its
+workspaces and windows move to the outputs left, as when it is unplugged,
+clients no longer see it, its connector is read again, and the panel comes
+back even with the lid closed. Once it displays again its workspaces return.
+The lid state at startup comes from logind, later changes from libinput.
 
 ### HDR
 

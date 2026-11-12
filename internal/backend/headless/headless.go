@@ -321,6 +321,7 @@ type Output struct {
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
+	takePresents   int
 	commits        backend.Commits
 	loseInFrame    bool
 	inherited      bool
@@ -585,10 +586,11 @@ func (o *Output) Present(damage render.Region) error {
 		return backend.Broken("headless: present on %s without BeginFrame", o.name)
 	}
 	o.inFrame = false
-	if o.failPresents != nil {
+	if o.failPresents != nil && o.takePresents == 0 {
 		o.commitFailed(o.failPresents)
 		return o.failPresents
 	}
+	o.takePresents = max(o.takePresents-1, 0)
 	o.commitTook()
 	o.drawn = true
 	o.damage = append(o.damage[:0], damage...)
@@ -790,6 +792,10 @@ func (o *Output) FailPresents(err error) {
 	o.failPresents = err
 }
 
+func (o *Output) TakePresents(n int) {
+	o.takePresents = n
+}
+
 func (o *Output) Stalled() bool {
 	return o.commits.Stalled()
 }
@@ -802,7 +808,7 @@ func (o *Output) commitFailed(err error) {
 }
 
 func (o *Output) commitTook() {
-	if recovery := o.commits.Took(o.name); recovery != nil {
+	if recovery := o.commits.Took(o.name, now()); recovery != nil {
 		o.backend.report(fmt.Errorf("headless: %w", recovery))
 		o.backend.loop.Idle(o.stallChanged)
 	}

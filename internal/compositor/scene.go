@@ -22,6 +22,9 @@ func (c *Compositor) Frame(b backend.Output) error {
 		if m := c.mirrorOf(b); m != nil {
 			return c.mirrorFrame(m)
 		}
+		if slices.Contains(c.stalled, b) {
+			return c.probeFrame(b)
+		}
 		return backend.Broken("compositor: frame on unknown output %s", b.Name())
 	}
 	if c.parked {

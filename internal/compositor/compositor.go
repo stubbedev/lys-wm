@@ -288,6 +288,7 @@ type Compositor struct {
 	seatConfig         seat.Config
 	outputRules        OutputRules
 	disabled           []backend.Output
+	stalled            []backend.Output
 	virtualOutputs     []virtualOutput
 	virtualConfig      []VirtualOutput
 	mirrors            []*mirror
@@ -857,6 +858,9 @@ func (c *Compositor) scheduleAll() error {
 		if e := c.schedule(o); e != nil {
 			err = errors.Join(err, e)
 		}
+	}
+	for _, b := range c.stalled {
+		err = errors.Join(err, b.ScheduleFrame())
 	}
 	return err
 }

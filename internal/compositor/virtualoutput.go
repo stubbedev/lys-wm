@@ -111,7 +111,7 @@ func (c *Compositor) outputNamed(name string) bool {
 	if slices.ContainsFunc(c.outputs, func(o *output.Output) bool { return o.Backend().Name() == name }) {
 		return true
 	}
-	return slices.ContainsFunc(c.disabled, func(b backend.Output) bool { return b.Name() == name })
+	return slices.ContainsFunc(c.unplaced(), func(b backend.Output) bool { return b.Name() == name })
 }
 
 func (c *Compositor) freeVirtualName() string {

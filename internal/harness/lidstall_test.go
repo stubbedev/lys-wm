@@ -3,14 +3,18 @@ package harness
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
+	"github.com/stubbedev/lys-wm/internal/ipc"
+	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
@@ -53,8 +57,8 @@ func TestWithTheLidClosedAnExternalOutputThatStopsTakingCommitsBringsThePanelBac
 		o := b.Outputs()[panel]
 		return o.State().Enabled() && o.Presents() > presents
 	})
-	if n := len(testclient.Connect(t, h.Socket()).Outputs); n != 2 {
-		t.Errorf("%d outputs advertised with the external one stalled, want the panel too", n)
+	if n := len(testclient.Connect(t, h.Socket()).Outputs); n != 1 {
+		t.Errorf("%d outputs advertised with the external one stalled, want the panel alone, as after DP-1 is removed", n)
 	}
 	failCommitsOn(t, h, "DP-1", nil)
 	h.Eventually("the panel off again once the external output takes commits", func(b *headless.Backend, _ *compositor.Compositor) bool {
@@ -96,5 +100,68 @@ func TestTheLidSuspendsALaptopWhoseExternalOutputStoppedTakingCommits(t *testing
 		}
 		return nil
 	})
+	expectDroppedFrames(t, got, "DP-1")
+}
+
+func TestAWindowOnAStalledOutputMovesToThePanelAndBackOnceTheOutputDisplaysForTheBound(t *testing.T) {
+	t.Parallel()
+	got := &reports{}
+	h := startedWithOutputs(t, func(c *compositor.Config) {
+		lidClosed(c)
+		c.Report = got.report
+	}, "eDP-1", "DP-1")
+	expectLit(t, h, "docked with the lid closed", map[string]bool{"eDP-1": false, "DP-1": true})
+	c := testclient.Connect(t, h.Socket())
+	w := c.Window("form", fillGreen)
+	c.DispatchUntil("the form to map", w.Mapped)
+	request(t, c, func() error { return w.Toplevel.SetFullscreen(nil) })
+	shownOn := func(when, output string) {
+		t.Helper()
+		h.settled(c, "the form fullscreen and focused on "+output+" "+when, func(x ipc.Window) bool {
+			return x.Fullscreen && x.Focused && x.Output == output
+		}, "form")
+		h.Eventually("the form drawn on "+output+" "+when, showingOn(outputIndex(t, h, output), 5, 5, greenColor))
+		c.DispatchUntil("the form activated at the size of "+output+" "+when, func() bool {
+			return w.Size == small.Size && slices.Contains(w.States, cxdg.XdgToplevelStateActivated)
+		})
+	}
+	shownOn("once mapped", "DP-1")
+
+	failCommitsOn(t, h, "DP-1", fmt.Errorf("commit: %w", unix.EBUSY))
+	shownOn("after DP-1 stalled", "eDP-1")
+	expectLit(t, h, "with DP-1 stalled", map[string]bool{"eDP-1": true})
+
+	external := outputIndex(t, h, "DP-1")
+	for cycle := range 2 {
+		var presents uint64
+		h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+			o := b.Outputs()[external]
+			presents = o.Presents()
+			o.TakePresents(1)
+			return nil
+		})
+		h.Eventually("one probe frame taken on DP-1", func(b *headless.Backend, _ *compositor.Compositor) bool {
+			return b.Outputs()[external].Presents() > presents
+		})
+		for end := time.Now().Add(backend.SustainedFor + backend.SustainedFor/4); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+			var flapped string
+			h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
+				switch x, _ := windowNamed(comp, "form"); {
+				case !b.Outputs()[external].Stalled():
+					flapped = "DP-1 counts as displaying again"
+				case x.Output != "eDP-1":
+					flapped = "the form is on " + x.Output
+				}
+				return nil
+			})
+			if flapped != "" {
+				t.Fatalf("cycle %d: after one probe frame that took between failing runs, %s", cycle, flapped)
+			}
+		}
+	}
+
+	failCommitsOn(t, h, "DP-1", nil)
+	shownOn("after DP-1 displayed again", "DP-1")
+	expectLit(t, h, "with DP-1 displaying again", map[string]bool{"eDP-1": false, "DP-1": true})
 	expectDroppedFrames(t, got, "DP-1")
 }

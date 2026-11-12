@@ -23,20 +23,20 @@ func (r *rig) framesFailing(err error) *Output {
 	return o
 }
 
-func TestAnOutputWhoseCommitsKeepFailingStopsCountingAsDisplayingUntilOneTakes(t *testing.T) {
+func TestAnOutputWhoseCommitsKeepFailingStopsCountingAsDisplayingUntilTheyTakeForTheBound(t *testing.T) {
 	r := start(t)
 	o := r.framesFailing(unix.EBUSY)
 	failing := r.now()
 	early := false
 	r.until("the output to stall", func() bool {
-		early = early || o.Stalled() && r.now()-failing < backend.StallAfter
+		early = early || o.Stalled() && r.now()-failing < backend.SustainedFor
 		return o.Stalled()
 	})
 	r.until("the stall to reach the handler", func() bool { return r.rec.changed > 0 })
 	r.settle()
 	switch {
 	case early:
-		t.Fatalf("%s stalled before its commits had failed for %v", o.Name(), backend.StallAfter)
+		t.Fatalf("%s stalled before its commits had failed for %v", o.Name(), backend.SustainedFor)
 	case r.rec.dropped < 2:
 		t.Fatalf("%s stalled after %d refused frames", o.Name(), r.rec.dropped)
 	case backend.Displays(o) || r.rec.changed != 1:
@@ -47,11 +47,31 @@ func TestAnOutputWhoseCommitsKeepFailingStopsCountingAsDisplayingUntilOneTakes(t
 		t.Fatalf("a connector the re-probe found connected was removed: %v", r.rec.log)
 	}
 	r.dev.failCommits = nil
-	r.until("a commit to take again", func() bool { return !o.Stalled() })
-	r.until("the recovery to reach the handler", func() bool { return r.rec.changed > 1 })
-	if !backend.Displays(o) || r.rec.changed != 2 || len(r.reports) != 2 || !strings.Contains(r.reports[1].Error(), "DP-1 takes commits again") {
-		t.Fatalf("after a commit took: displays %v, %d changes, reports %v", backend.Displays(o), r.rec.changed, r.reports)
+	taking := r.now()
+	for seq := uint32(2); o.Stalled(); seq++ {
+		if r.now()-taking > 2*backend.SustainedFor {
+			t.Fatalf("%s still stalled after taking commits for %v", o.Name(), r.now()-taking)
+		}
+		r.tookFrame(o, seq)
 	}
+	if took := r.now() - taking; took < backend.SustainedFor {
+		t.Fatalf("%s recovered after taking commits for %v, want %v", o.Name(), took, backend.SustainedFor)
+	}
+	r.until("the recovery to reach the handler", func() bool { return r.rec.changed > 1 })
+	if !backend.Displays(o) || r.rec.changed != 2 || len(r.reports) != 2 || !strings.Contains(r.reports[1].Error(), "DP-1 has taken every commit for") {
+		t.Fatalf("after commits took for %v: displays %v, %d changes, reports %v", backend.SustainedFor, backend.Displays(o), r.rec.changed, r.reports)
+	}
+}
+
+func (r *rig) tookFrame(o *Output, seq uint32) {
+	r.t.Helper()
+	if err := o.ScheduleFrame(); err != nil {
+		r.t.Fatal(err)
+	}
+	r.until("the frame to commit", func() bool { return o.flipping })
+	r.elapse(o.paceInterval())
+	r.dev.flip(r.t, 10, seq)
+	r.until("its flip", func() bool { return !o.flipping })
 }
 
 func TestATransientRefusedCommitDoesNotStallTheOutput(t *testing.T) {
@@ -65,7 +85,7 @@ func TestATransientRefusedCommitDoesNotStallTheOutput(t *testing.T) {
 		r.until("its flip", func() bool { return !o.flipping })
 	}
 	took(2)
-	r.elapse(2 * backend.StallAfter)
+	r.elapse(2 * backend.SustainedFor)
 	r.dev.failCommits = unix.EBUSY
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
@@ -74,7 +94,7 @@ func TestATransientRefusedCommitDoesNotStallTheOutput(t *testing.T) {
 	took(3)
 	r.settle()
 	if o.Stalled() || r.rec.changed != 0 || len(r.reports) != 0 {
-		t.Fatalf("two refused commits %v apart, each followed by one that took: stalled %v, %d changes, reports %v", 2*backend.StallAfter, o.Stalled(), r.rec.changed, r.reports)
+		t.Fatalf("two refused commits %v apart, each followed by one that took: stalled %v, %d changes, reports %v", 2*backend.SustainedFor, o.Stalled(), r.rec.changed, r.reports)
 	}
 }
 

@@ -13,7 +13,7 @@ func (c *Compositor) capFrameRates() {
 	for _, o := range c.outputs {
 		c.capFrameRate(o.Backend())
 	}
-	for _, b := range c.disabled {
+	for _, b := range c.unplaced() {
 		c.capFrameRate(b)
 	}
 }

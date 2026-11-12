@@ -278,14 +278,35 @@ func (c *Compositor) addOutput(b backend.Output) error {
 	if _, _, err := c.commitOutput(b, rule); err != nil {
 		c.report(err)
 	}
-	if !b.State().Enabled() {
+	return c.place(b, rule)
+}
+
+func (c *Compositor) place(b backend.Output, rule OutputRule) error {
+	switch {
+	case !b.State().Enabled():
 		c.disabled = append(c.disabled, b)
 		return c.outputConfig.Changed()
-	}
-	if rule.Mirror != nil {
+	case rule.Mirror != nil:
 		return c.addMirror(b, rule)
+	case !backend.Displays(b):
+		c.stalled = append(c.stalled, b)
+		return errors.Join(c.outputConfig.Changed(), b.ScheduleFrame())
 	}
 	return c.enable(b, rule)
+}
+
+func (c *Compositor) unplaced() []backend.Output {
+	return slices.Concat(c.disabled, c.stalled)
+}
+
+func (c *Compositor) probeFrame(b backend.Output) error {
+	if c.parked {
+		return nil
+	}
+	if err := letterboxFrame(b, func(render.Pass, image.Point) {}); backend.Fatal(err) {
+		return err
+	}
+	return b.ScheduleFrame()
 }
 
 func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
@@ -327,9 +348,11 @@ func (c *Compositor) OutputRemoved(b backend.Output) error {
 }
 
 func (c *Compositor) removeOutput(b backend.Output) error {
-	if i := slices.Index(c.disabled, b); i >= 0 {
-		c.disabled = slices.Delete(c.disabled, i, i+1)
-		return c.outputConfig.Changed()
+	for _, held := range []*[]backend.Output{&c.disabled, &c.stalled} {
+		if i := slices.Index(*held, b); i >= 0 {
+			*held = slices.Delete(*held, i, i+1)
+			return c.outputConfig.Changed()
+		}
 	}
 	o, err := c.knownOutput(b, "removal of")
 	if err != nil {
@@ -394,13 +417,13 @@ func (c *Compositor) disable(o *output.Output) error {
 }
 
 func (c *Compositor) Heads() []outputmanagement.Head {
-	heads := make([]outputmanagement.Head, 0, len(c.outputs)+len(c.disabled))
+	heads := make([]outputmanagement.Head, 0, len(c.outputs)+len(c.disabled)+len(c.stalled))
 	for _, o := range c.outputs {
 		b := o.Backend()
 		as, ok := b.(backend.AdaptiveSync)
 		heads = append(heads, outputmanagement.Head{Output: b, Enabled: true, Mode: b.State().Mode, Position: o.Position(), Scale: o.Scale(), Transform: o.Transform(), AdaptiveSync: ok && as.AdaptiveSync()})
 	}
-	for _, b := range c.disabled {
+	for _, b := range c.unplaced() {
 		heads = append(heads, outputmanagement.Head{Output: b})
 	}
 	slices.SortFunc(heads, func(a, b outputmanagement.Head) int { return strings.Compare(a.Output.Name(), b.Output.Name()) })
@@ -461,6 +484,9 @@ func (c *Compositor) Configure(heads []outputmanagement.HeadConfig, apply bool) 
 }
 
 func (c *Compositor) OutputDamaged(b backend.Output) error {
+	if slices.Contains(c.stalled, b) {
+		return b.ScheduleFrame()
+	}
 	o, err := c.knownOutput(b, "damage on")
 	if err != nil {
 		return err
@@ -471,20 +497,26 @@ func (c *Compositor) OutputDamaged(b backend.Output) error {
 
 func (c *Compositor) OutputChanged(b backend.Output) error {
 	c.stateChanged()
-	err := errors.Join(c.outputChanged(b), c.dockChanged(b))
+	err := c.outputChanged(b)
 	c.applyLidPolicy()
 	return err
 }
 
 func (c *Compositor) outputChanged(b backend.Output) error {
-	if slices.Contains(c.disabled, b) || c.mirrorOf(b) != nil {
-		return nil
+	switch {
+	case slices.Contains(c.stalled, b):
+		return c.applyOutputRules()
+	case slices.Contains(c.disabled, b) || c.mirrorOf(b) != nil:
+		return c.dockChanged(b)
 	}
 	o, err := c.knownOutput(b, "change of")
 	if err != nil {
 		return err
 	}
-	return c.outputResized(o)
+	if !backend.Displays(b) {
+		return c.applyOutputRules()
+	}
+	return errors.Join(c.outputResized(o), c.dockChanged(b))
 }
 
 func (c *Compositor) outputResized(o *output.Output) error {
@@ -527,6 +559,11 @@ func (c *Compositor) applyOutputRulesOf(which func(backend.Output) bool) []error
 			errs = append(errs, c.applyDisabledRule(b))
 		}
 	}
+	for _, b := range slices.Clone(c.stalled) {
+		if which(b) {
+			errs = append(errs, c.applyStalledRule(b))
+		}
+	}
 	return errs
 }
 
@@ -547,6 +584,9 @@ func (c *Compositor) applyEnabledRule(o *output.Output) error {
 		}
 		return errors.Join(err, c.addMirror(b, rule))
 	}
+	if !backend.Displays(b) {
+		return errors.Join(c.disable(o), c.place(b, rule))
+	}
 	changed, recolored, err := c.commitOutput(b, rule)
 	switch {
 	case changed || o.Scale() != rule.scale() || o.Transform() != rule.Transform:
@@ -562,14 +602,23 @@ func (c *Compositor) applyDisabledRule(b backend.Output) error {
 	if rule.Disabled {
 		return nil
 	}
+	return c.replace(b, rule, &c.disabled)
+}
+
+func (c *Compositor) applyStalledRule(b backend.Output) error {
+	rule := c.outputRule(b)
+	if !rule.Disabled && rule.Mirror == nil && !backend.Displays(b) {
+		return nil
+	}
+	return c.replace(b, rule, &c.stalled)
+}
+
+func (c *Compositor) replace(b backend.Output, rule OutputRule, from *[]backend.Output) error {
 	if _, _, err := c.commitOutput(b, rule); err != nil {
 		return err
 	}
-	c.disabled = slices.DeleteFunc(c.disabled, func(x backend.Output) bool { return x == b })
-	if rule.Mirror != nil {
-		return c.addMirror(b, rule)
-	}
-	return c.enable(b, rule)
+	*from = slices.DeleteFunc(*from, func(x backend.Output) bool { return x == b })
+	return c.place(b, rule)
 }
 
 func (i Insets) inset(r image.Rectangle) image.Rectangle {
