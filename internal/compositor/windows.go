@@ -180,7 +180,7 @@ func maxScale(outputs []*output.Output) output.Scale {
 func (c *Compositor) scaleOver(r image.Rectangle) output.Scale {
 	var s output.Scale
 	for _, o := range c.outputs {
-		if o.Logical().Overlaps(r) {
+		if o.Logical().Overlaps(r) || r.Min.In(o.Logical()) {
 			s = max(s, o.Scale())
 		}
 	}
@@ -520,12 +520,9 @@ func (c *Compositor) floatArea(t toplevel) image.Rectangle {
 }
 
 func floatSize(t toplevel, ruled image.Point) image.Point {
-	size := ruled
-	if size == (image.Point{}) {
-		size = t.Geometry().Size()
-	}
 	minimum, maximum := t.sizeLimits()
-	return wm.Limits{Min: minimum, Max: maximum}.Fit(size)
+	limits := wm.Limits{Min: minimum, Max: maximum}
+	return limits.FitRequest(wm.Requested(ruled).Or(wm.Requested(t.Geometry().Size())).Or(limits.Fixed()))
 }
 
 func (c *Compositor) frameLimits(w *window) wm.Limits {

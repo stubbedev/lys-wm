@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	cld "github.com/stubbedev/lys-wm/internal/protocol/client/linuxdmabuf"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -77,7 +78,7 @@ type waitRig struct {
 func setupWaits(t *testing.T) *waitRig {
 	t.Helper()
 	rep := &reports{}
-	r := setupWith(t, func(s *spyRenderer) backend.Backend { return rendererBackend{importingRenderer{s}} }, func(cfg *Config) { cfg.Report = rep.add })
+	r := setupWith(t, func(_ *loop.Loop, s *spyRenderer) backend.Backend { return rendererBackend{importingRenderer{s}} }, func(cfg *Config) { cfg.Report = rep.add })
 	w := &waitRig{rig: r, reports: rep}
 	r.on(func() {
 		must(t, r.comp.waits.timer.Remove())

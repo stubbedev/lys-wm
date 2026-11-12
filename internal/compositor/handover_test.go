@@ -86,7 +86,7 @@ func (r *rig) handOver() *rig {
 	}
 	next := boot(r.t, func(l *loop.Loop, opts server.Options) (*server.Display, error) {
 		return server.Adopt(l, opts, st.Display, fds)
-	}, func(s *spyRenderer) backend.Backend { return fakeBackend{s} }, func(*Config) {})
+	}, func(_ *loop.Loop, s *spyRenderer) backend.Backend { return fakeBackend{s} }, func(*Config) {})
 	var release func() error
 	next.on(func() { release, err = next.comp.AdoptHandover(st, fds) })
 	if err != nil {
@@ -105,7 +105,7 @@ func TestAnUpgradeKeepsAClientsInputObjectsThoughTheNextCompositorsDevicesComeLa
 	old := boot(t, func(l *loop.Loop, opts server.Options) (*server.Display, error) {
 		opts.RuntimeDir = dir
 		return server.New(l, opts)
-	}, func(s *spyRenderer) backend.Backend { return fakeBackend{s} }, func(*Config) {})
+	}, func(_ *loop.Loop, s *spyRenderer) backend.Backend { return fakeBackend{s} }, func(*Config) {})
 	old.on(func() { old.comp.display.KeepHandoverJournal() })
 	old.plug()
 	old.connect()

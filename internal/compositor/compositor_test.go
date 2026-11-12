@@ -99,10 +99,10 @@ type rig struct {
 
 func setup(t *testing.T) *rig {
 	t.Helper()
-	return setupWith(t, func(r *spyRenderer) backend.Backend { return fakeBackend{r} }, func(*Config) {})
+	return setupWith(t, func(_ *loop.Loop, r *spyRenderer) backend.Backend { return fakeBackend{r} }, func(*Config) {})
 }
 
-func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure func(*Config)) *rig {
+func setupWith(t *testing.T, back func(*loop.Loop, *spyRenderer) backend.Backend, configure func(*Config)) *rig {
 	t.Helper()
 	dir := testenv.SocketDir(t)
 	r := boot(t, func(l *loop.Loop, opts server.Options) (*server.Display, error) {
@@ -113,7 +113,7 @@ func setupWith(t *testing.T, back func(*spyRenderer) backend.Backend, configure 
 	return r
 }
 
-func boot(t *testing.T, open func(*loop.Loop, server.Options) (*server.Display, error), back func(*spyRenderer) backend.Backend, configure func(*Config)) *rig {
+func boot(t *testing.T, open func(*loop.Loop, server.Options) (*server.Display, error), back func(*loop.Loop, *spyRenderer) backend.Backend, configure func(*Config)) *rig {
 	t.Helper()
 	l, err := loop.New()
 	if err != nil {
@@ -126,7 +126,7 @@ func boot(t *testing.T, open func(*loop.Loop, server.Options) (*server.Display, 
 	}
 	cfg := PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	configure(&cfg)
-	if r.comp, err = New(l, disp, back(r.renderer), cfg); err != nil {
+	if r.comp, err = New(l, disp, back(l, r.renderer), cfg); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

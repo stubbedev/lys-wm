@@ -130,6 +130,46 @@ func TestLimitsFit(t *testing.T) {
 	}
 }
 
+func TestLimitsFitARequestLeavingUnknownAxesToTheClient(t *testing.T) {
+	limits := Limits{Min: image.Pt(480, 320), Max: image.Pt(800, 600)}
+	for name, c := range map[string]struct {
+		request Request
+		want    image.Point
+	}{
+		"unknown":                          {Requested(image.Point{}), image.Point{}},
+		"below the minimum":                {Requested(image.Pt(200, 100)), image.Pt(480, 320)},
+		"above the maximum":                {Requested(image.Pt(900, 700)), image.Pt(800, 600)},
+		"within the limits":                {Requested(image.Pt(760, 520)), image.Pt(760, 520)},
+		"only a width":                     {Requested(image.Pt(200, 0)), image.Pt(480, 0)},
+		"only a height":                    {Requested(image.Pt(0, 700)), image.Pt(0, 600)},
+		"a negative axis":                  {Requested(image.Pt(-5, 700)), image.Pt(0, 600)},
+		"a width filled from fallback":     {Requested(image.Pt(0, 400)).Or(Requested(image.Pt(900, 100))), image.Pt(800, 400)},
+		"a fallback that is unknown":       {Requested(image.Pt(0, 400)).Or(Requested(image.Point{})), image.Pt(0, 400)},
+		"a known axis keeps over fallback": {Requested(image.Pt(500, 400)).Or(Requested(image.Pt(900, 100))), image.Pt(500, 400)},
+	} {
+		if got := limits.FitRequest(c.request); got != c.want {
+			t.Errorf("%s: %v.FitRequest(%+v) = %v, want %v", name, limits, c.request, got, c.want)
+		}
+	}
+	for name, c := range map[string]struct {
+		limits Limits
+		want   image.Point
+	}{
+		"no limits":                 {Limits{}, image.Point{}},
+		"a range":                   {limits, image.Point{}},
+		"a fixed size":              {Limits{Min: image.Pt(60, 40), Max: image.Pt(60, 40)}, image.Pt(60, 40)},
+		"a fixed width":             {Limits{Min: image.Pt(300, 320), Max: image.Pt(300, 0)}, image.Pt(300, 0)},
+		"a maximum below a minimum": {Limits{Min: image.Pt(300, 0), Max: image.Pt(200, 0)}, image.Point{}},
+	} {
+		if got := c.limits.FitRequest(Requested(image.Point{}).Or(c.limits.Fixed())); got != c.want {
+			t.Errorf("%s: an unknown size falling back to %v's fixed axes fits to %v, want %v", name, c.limits, got, c.want)
+		}
+	}
+	if got := (Limits{}).FitRequest(Requested(image.Pt(0, 400))); got != image.Pt(0, 400) {
+		t.Errorf("no limits fit a request of only a 400 height to %v", got)
+	}
+}
+
 func TestFloatingWindowsKeepTheirLimits(t *testing.T) {
 	area := image.Rect(0, 0, 1000, 600)
 	limits := Limits{Min: image.Pt(300, 200), Max: image.Pt(600, 400)}

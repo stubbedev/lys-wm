@@ -11,14 +11,68 @@ type Limits struct {
 }
 
 func (l Limits) Fit(size image.Point) image.Point {
-	axis := func(v, lo, hi int) int {
-		v = max(v, lo)
-		if hi > 0 {
-			v = min(v, max(hi, lo))
-		}
-		return v
+	return image.Pt(fitAxis(size.X, l.Min.X, l.Max.X), fitAxis(size.Y, l.Min.Y, l.Max.Y))
+}
+
+func fitAxis(v, lo, hi int) int {
+	v = max(v, lo)
+	if hi > 0 {
+		v = min(v, max(hi, lo))
 	}
-	return image.Pt(axis(size.X, l.Min.X, l.Max.X), axis(size.Y, l.Min.Y, l.Max.Y))
+	return v
+}
+
+type span struct {
+	px    int
+	known bool
+}
+
+func known(px int) span {
+	return span{px: px, known: true}
+}
+
+type Request struct {
+	w, h span
+}
+
+func Requested(size image.Point) Request {
+	axis := func(v int) span {
+		if v <= 0 {
+			return span{}
+		}
+		return known(v)
+	}
+	return Request{w: axis(size.X), h: axis(size.Y)}
+}
+
+func (r Request) Or(fallback Request) Request {
+	axis := func(s, fallback span) span {
+		if s.known {
+			return s
+		}
+		return fallback
+	}
+	return Request{w: axis(r.w, fallback.w), h: axis(r.h, fallback.h)}
+}
+
+func (l Limits) Fixed() Request {
+	axis := func(lo, hi int) span {
+		if lo <= 0 || lo != hi {
+			return span{}
+		}
+		return known(lo)
+	}
+	return Request{w: axis(l.Min.X, l.Max.X), h: axis(l.Min.Y, l.Max.Y)}
+}
+
+func (l Limits) FitRequest(r Request) image.Point {
+	axis := func(s span, lo, hi int) int {
+		if !s.known {
+			return 0
+		}
+		return fitAxis(s.px, lo, hi)
+	}
+	return image.Pt(axis(r.w, l.Min.X, l.Max.X), axis(r.h, l.Min.Y, l.Max.Y))
 }
 
 const minFloating = 32
