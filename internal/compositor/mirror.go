@@ -82,7 +82,7 @@ func (c *Compositor) scheduleMirrorsOf(o *output.Output) error {
 }
 
 func (c *Compositor) mirrorFrame(m *mirror) error {
-	return letterboxFrame(m.out, func(p render.Pass, size image.Point) {
+	return c.letterbox(m.out, func(p render.Pass, size image.Point) {
 		src := c.mirrorSource(m)
 		if src == nil {
 			return
@@ -94,6 +94,14 @@ func (c *Compositor) mirrorFrame(m *mirror) error {
 			m.draws++
 		}
 	})
+}
+
+func (c *Compositor) letterbox(b backend.Output, draw func(p render.Pass, size image.Point)) error {
+	if err := letterboxFrame(b, draw); err != nil {
+		return c.dropFrame(b, err, b.ScheduleFrame)
+	}
+	c.drew(b)
+	return nil
 }
 
 func letterboxFrame(out backend.Output, draw func(p render.Pass, size image.Point)) error {
@@ -151,7 +159,6 @@ func (c *Compositor) applyMirrorRules() error {
 		errs = append(errs, c.dropMirror(m))
 		if _, _, err := c.commitOutput(b, rule); err != nil {
 			errs = append(errs, err)
-			continue
 		}
 		errs = append(errs, c.place(b, rule))
 	}

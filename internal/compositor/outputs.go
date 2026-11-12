@@ -256,11 +256,107 @@ func (c *Compositor) output(b backend.Output) *output.Output {
 	return nil
 }
 
-func (c *Compositor) knownOutput(b backend.Output, event string) (*output.Output, error) {
-	if o := c.output(b); o != nil {
-		return o, nil
+type placement interface {
+	frame(c *Compositor, b backend.Output) error
+	damaged(c *Compositor, b backend.Output) error
+	changed(c *Compositor, b backend.Output) error
+	removed(c *Compositor, b backend.Output) error
+}
+
+type liveOutput struct{ *output.Output }
+
+func (l liveOutput) frame(c *Compositor, _ backend.Output) error {
+	return c.liveFrame(l.Output)
+}
+
+func (l liveOutput) damaged(c *Compositor, _ backend.Output) error {
+	c.sceneOf(l.Output).invalidate()
+	return c.schedule(l.Output)
+}
+
+func (l liveOutput) changed(c *Compositor, b backend.Output) error {
+	if !backend.Displays(b) {
+		return c.reapplyOutputRules()
 	}
-	return nil, fmt.Errorf("compositor: %s unknown output %s", event, b.Name())
+	return errors.Join(c.outputResized(l.Output), c.dockChanged(b))
+}
+
+func (l liveOutput) removed(c *Compositor, _ backend.Output) error {
+	return c.disable(l.Output)
+}
+
+func (m *mirror) frame(c *Compositor, _ backend.Output) error {
+	return c.mirrorFrame(m)
+}
+
+func (*mirror) damaged(_ *Compositor, b backend.Output) error {
+	return b.ScheduleFrame()
+}
+
+func (*mirror) changed(c *Compositor, b backend.Output) error {
+	return c.dockChanged(b)
+}
+
+func (m *mirror) removed(c *Compositor, _ backend.Output) error {
+	return c.dropMirror(m)
+}
+
+type stalledOutput struct{}
+
+func (stalledOutput) frame(c *Compositor, b backend.Output) error {
+	return c.probeFrame(b)
+}
+
+func (stalledOutput) damaged(_ *Compositor, b backend.Output) error {
+	return b.ScheduleFrame()
+}
+
+func (stalledOutput) changed(c *Compositor, _ backend.Output) error {
+	return c.reapplyOutputRules()
+}
+
+func (stalledOutput) removed(c *Compositor, b backend.Output) error {
+	unhold(&c.stalled, b)
+	return c.outputConfig.Changed()
+}
+
+type disabledOutput struct{}
+
+func (disabledOutput) frame(*Compositor, backend.Output) error {
+	return nil
+}
+
+func (disabledOutput) damaged(*Compositor, backend.Output) error {
+	return nil
+}
+
+func (disabledOutput) changed(c *Compositor, b backend.Output) error {
+	return c.dockChanged(b)
+}
+
+func (disabledOutput) removed(c *Compositor, b backend.Output) error {
+	unhold(&c.disabled, b)
+	return c.outputConfig.Changed()
+}
+
+func unhold(from *[]backend.Output, b backend.Output) {
+	*from = slices.DeleteFunc(*from, func(x backend.Output) bool { return x == b })
+}
+
+func (c *Compositor) placed(b backend.Output, event string) (placement, error) {
+	if o := c.output(b); o != nil {
+		return liveOutput{o}, nil
+	}
+	if m := c.mirrorOf(b); m != nil {
+		return m, nil
+	}
+	switch {
+	case slices.Contains(c.stalled, b):
+		return stalledOutput{}, nil
+	case slices.Contains(c.disabled, b):
+		return disabledOutput{}, nil
+	}
+	return nil, backend.Broken("compositor: %s unknown output %s", event, b.Name())
 }
 
 func (c *Compositor) outputLive(o *output.Output) bool {
@@ -284,6 +380,7 @@ func (c *Compositor) addOutput(b backend.Output) error {
 func (c *Compositor) place(b backend.Output, rule OutputRule) error {
 	switch {
 	case !b.State().Enabled():
+		delete(c.dropped, b)
 		c.disabled = append(c.disabled, b)
 		return c.outputConfig.Changed()
 	case rule.Mirror != nil:
@@ -300,10 +397,7 @@ func (c *Compositor) unplaced() []backend.Output {
 }
 
 func (c *Compositor) probeFrame(b backend.Output) error {
-	if c.parked {
-		return nil
-	}
-	if err := letterboxFrame(b, func(render.Pass, image.Point) {}); backend.Fatal(err) {
+	if err := c.letterbox(b, func(render.Pass, image.Point) {}); err != nil {
 		return err
 	}
 	return b.ScheduleFrame()
@@ -339,26 +433,14 @@ func (c *Compositor) enable(b backend.Output, rule OutputRule) error {
 
 func (c *Compositor) OutputRemoved(b backend.Output) error {
 	c.stateChanged()
-	if m := c.mirrorOf(b); m != nil {
-		return c.dropMirror(m)
-	}
-	err := errors.Join(c.removeOutput(b), c.dockChanged(b))
-	c.applyLidPolicy()
-	return err
-}
-
-func (c *Compositor) removeOutput(b backend.Output) error {
-	for _, held := range []*[]backend.Output{&c.disabled, &c.stalled} {
-		if i := slices.Index(*held, b); i >= 0 {
-			*held = slices.Delete(*held, i, i+1)
-			return c.outputConfig.Changed()
-		}
-	}
-	o, err := c.knownOutput(b, "removal of")
+	p, err := c.placed(b, "removal of")
 	if err != nil {
 		return err
 	}
-	return c.disable(o)
+	delete(c.dropped, b)
+	err = errors.Join(p.removed(c, b), c.dockChanged(b))
+	c.applyLidPolicy()
+	return err
 }
 
 func (c *Compositor) disable(o *output.Output) error {
@@ -388,7 +470,6 @@ func (c *Compositor) disable(o *output.Output) error {
 	if c.colorManager != nil {
 		c.colorManager.OutputRemoved(o)
 	}
-	delete(c.dropped, o)
 	delete(c.switches, o)
 	delete(c.scratchSlideOf, o)
 	delete(c.peeks, o)
@@ -484,39 +565,22 @@ func (c *Compositor) Configure(heads []outputmanagement.HeadConfig, apply bool) 
 }
 
 func (c *Compositor) OutputDamaged(b backend.Output) error {
-	if slices.Contains(c.stalled, b) {
-		return b.ScheduleFrame()
-	}
-	o, err := c.knownOutput(b, "damage on")
+	p, err := c.placed(b, "damage on")
 	if err != nil {
 		return err
 	}
-	c.sceneOf(o).invalidate()
-	return c.schedule(o)
+	return p.damaged(c, b)
 }
 
 func (c *Compositor) OutputChanged(b backend.Output) error {
 	c.stateChanged()
-	err := c.outputChanged(b)
-	c.applyLidPolicy()
-	return err
-}
-
-func (c *Compositor) outputChanged(b backend.Output) error {
-	switch {
-	case slices.Contains(c.stalled, b):
-		return c.applyOutputRules()
-	case slices.Contains(c.disabled, b) || c.mirrorOf(b) != nil:
-		return c.dockChanged(b)
-	}
-	o, err := c.knownOutput(b, "change of")
+	p, err := c.placed(b, "change of")
 	if err != nil {
 		return err
 	}
-	if !backend.Displays(b) {
-		return c.applyOutputRules()
-	}
-	return errors.Join(c.outputResized(o), c.dockChanged(b))
+	err = p.changed(c, b)
+	c.applyLidPolicy()
+	return err
 }
 
 func (c *Compositor) outputResized(o *output.Output) error {
@@ -528,14 +592,22 @@ func (c *Compositor) outputResized(o *output.Output) error {
 }
 
 func (c *Compositor) SetOutputScale(b backend.Output, scale output.Scale) error {
-	o, err := c.knownOutput(b, "scale for")
+	p, err := c.placed(b, "scale for")
 	if err != nil {
 		return err
+	}
+	o, ok := p.(liveOutput)
+	if !ok {
+		return fmt.Errorf("compositor: scale for output %s, which is not in the layout", b.Name())
 	}
 	if err := o.Update(o.Position(), scale, o.Transform()); err != nil {
 		return err
 	}
-	return c.outputResized(o)
+	return c.outputResized(o.Output)
+}
+
+func (c *Compositor) reapplyOutputRules() error {
+	return c.recovered(c.applyOutputRules())
 }
 
 func (c *Compositor) applyOutputRules() error {
@@ -574,8 +646,7 @@ func (c *Compositor) applyEnabledRule(o *output.Output) error {
 		if _, _, err := c.commitOutput(b, rule); err != nil {
 			return err
 		}
-		c.disabled = append(c.disabled, b)
-		return c.disable(o)
+		return errors.Join(c.disable(o), c.place(b, rule))
 	}
 	if rule.Mirror != nil {
 		err := c.disable(o)
@@ -617,7 +688,7 @@ func (c *Compositor) replace(b backend.Output, rule OutputRule, from *[]backend.
 	if _, _, err := c.commitOutput(b, rule); err != nil {
 		return err
 	}
-	*from = slices.DeleteFunc(*from, func(x backend.Output) bool { return x == b })
+	unhold(from, b)
 	return c.place(b, rule)
 }
 

@@ -17,22 +17,18 @@ import (
 )
 
 func (c *Compositor) Frame(b backend.Output) error {
-	o := c.output(b)
-	if o == nil {
-		if m := c.mirrorOf(b); m != nil {
-			return c.mirrorFrame(m)
-		}
-		if slices.Contains(c.stalled, b) {
-			return c.probeFrame(b)
-		}
-		return backend.Broken("compositor: frame on unknown output %s", b.Name())
+	p, err := c.placed(b, "frame on")
+	if err != nil || c.parked {
+		return err
 	}
-	if c.parked {
-		return nil
-	}
+	return p.frame(c, b)
+}
+
+func (c *Compositor) liveFrame(o *output.Output) error {
 	if c.frames == nil {
 		return c.frame(o)
 	}
+	b := o.Backend()
 	c.frames.Begin(b.Name())
 	err := c.frame(o)
 	c.frames.End(b.Name(), c.animating(o, c.frameTime), c.frameCost(o))
@@ -85,13 +81,13 @@ func (c *Compositor) frame(o *output.Output) error {
 		}
 	}
 	if err := c.render(o); err != nil {
-		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
+		return c.dropLiveFrame(o, err)
 	}
 	if err := errors.Join(c.redrawThumb(o), c.redrawSwitcherThumbs(o)); err != nil {
-		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
+		return c.dropLiveFrame(o, err)
 	}
 	if err := c.checkGPU(); err != nil {
-		return c.dropFrame(o, fmt.Errorf("compositor: frame on %s: %w", b.Name(), err))
+		return c.dropLiveFrame(o, err)
 	}
 	if err := c.finishClosing(o, c.frameTime); err != nil {
 		return err
@@ -117,14 +113,21 @@ func (c *Compositor) frame(o *output.Output) error {
 			return err
 		}
 	}
-	if n := c.dropped[o]; n > 0 {
-		delete(c.dropped, o)
-		c.report(fmt.Errorf("compositor: %s draws again after %d dropped frames", b.Name(), n))
-	}
+	c.drew(b)
 	return errors.Join(c.updateEntered(o), c.updateInhibition(), c.fifo.Latched(c.shown[o]))
 }
 
-func (c *Compositor) dropFrame(o *output.Output, err error) error {
+func (c *Compositor) dropLiveFrame(o *output.Output, err error) error {
+	b := o.Backend()
+	return c.dropFrame(b, err, func() error {
+		c.frames.Drop(b.Name())
+		c.sceneOf(o).invalidate()
+		return c.schedule(o)
+	})
+}
+
+func (c *Compositor) dropFrame(b backend.Output, err error, retry func() error) error {
+	err = fmt.Errorf("compositor: frame on %s: %w", b.Name(), err)
 	if backend.Fatal(err) {
 		return err
 	}
@@ -135,13 +138,18 @@ func (c *Compositor) dropFrame(o *output.Output, err error) error {
 			c.report(rerr)
 		}
 	}
-	c.frames.Drop(o.Backend().Name())
-	if c.dropped[o] == 0 {
+	if c.dropped[b] == 0 {
 		c.report(fmt.Errorf("%w; dropping frames until one draws", err))
 	}
-	c.dropped[o]++
-	c.sceneOf(o).invalidate()
-	return c.schedule(o)
+	c.dropped[b]++
+	return retry()
+}
+
+func (c *Compositor) drew(b backend.Output) {
+	if n := c.dropped[b]; n > 0 {
+		delete(c.dropped, b)
+		c.report(fmt.Errorf("compositor: %s draws again after %d dropped frames", b.Name(), n))
+	}
 }
 
 func (c *Compositor) updateInhibition() error {

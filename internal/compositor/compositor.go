@@ -268,7 +268,7 @@ type Compositor struct {
 	labels             map[*output.Output]map[labelKey]*label
 	stops              map[render.BorderStops]render.Texture
 	scenes             map[*output.Output]*scene
-	dropped            map[*output.Output]int
+	dropped            map[backend.Output]int
 	inherited          map[*output.Output]*loop.Timer
 	inheritTimeout     time.Duration
 	outputResources    []*sw.WlOutput
@@ -560,7 +560,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		scenes:         map[*output.Output]*scene{},
 		hdrSwitches:    map[backend.Output]*hdrSwitch{},
 		profiles:       map[backend.Output]*profile{},
-		dropped:        map[*output.Output]int{},
+		dropped:        map[backend.Output]int{},
 		inherited:      map[*output.Output]*loop.Timer{},
 		loop:           l,
 		display:        display,
@@ -861,6 +861,9 @@ func (c *Compositor) scheduleAll() error {
 	}
 	for _, b := range c.stalled {
 		err = errors.Join(err, b.ScheduleFrame())
+	}
+	for _, m := range c.mirrors {
+		err = errors.Join(err, m.out.ScheduleFrame())
 	}
 	return err
 }

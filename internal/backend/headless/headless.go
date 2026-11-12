@@ -321,6 +321,7 @@ type Output struct {
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
+	failCommits    error
 	takePresents   int
 	commits        backend.Commits
 	loseInFrame    bool
@@ -481,6 +482,9 @@ func (o *Output) HDRCapabilities() (edid.HDR, error) {
 func (o *Output) Commit(s backend.OutputState) error {
 	if o.removed {
 		return fmt.Errorf("headless: commit to removed output %s", o.name)
+	}
+	if o.failCommits != nil {
+		return fmt.Errorf("headless: commit to %s: %w", o.name, o.failCommits)
 	}
 	if s.Enabled() && s.Depth == backend.Depth10 && o.backend.shallow {
 		return fmt.Errorf("headless: %s: %w", o.name, backend.ErrDepthUnsupported)
@@ -790,6 +794,10 @@ func (o *Output) ContentType() wm.ContentType {
 
 func (o *Output) FailPresents(err error) {
 	o.failPresents = err
+}
+
+func (o *Output) FailCommits(err error) {
+	o.failCommits = err
 }
 
 func (o *Output) TakePresents(n int) {

@@ -187,8 +187,8 @@ errors lys-wm's own code types:
   a client's resource (a dmabuf, a syncobj, an shm pool, a buffer exported by
   another GPU) never ends the session.
 - **Broken invariant**: `backend.Broken`, a bug that should crash loudly: a
-  frame on an unknown output, `BeginFrame` with a frame in progress, `Present`
-  without one, a DRM event read failing other than with `EAGAIN` or `EINTR`
+  frame, damage, change or removal for an output the compositor never placed,
+  `BeginFrame` with a frame in progress, `Present` without one, a DRM event read failing other than with `EAGAIN` or `EINTR`
   (`ENODEV` there is the device gone).
 
 Also fatal, returned to the loop directly rather than through a scoped path: a
@@ -199,7 +199,8 @@ Everything else is scoped and reported through `Config.Report`:
 
 | Scope | Failure | Recovery |
 | --- | --- | --- |
-| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. Commits failing for `SustainedFor` stall the output ([The lid](#the-lid)). |
+| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) on a live output, a mirror or a stalled output's probe | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. Commits failing for `SustainedFor` stall the output ([The lid](#the-lid)); a stalled mirror stays a mirror and keeps retrying. |
+| Output events | A backend's add, change, damage or removal of an output, whichever of live, mirror, stalled or disabled the compositor placed it as (`placement` in `compositor/outputs.go`, one method per event); output rules reapplied after a change, a stall or the lid, failing to commit a mode or power state | Every placement handles every event: damage schedules a live output, a mirror or a probe and does nothing on a disabled one, as the DRM backend's `Wake` and `Resume` damage every output. A refused rule commit is reported and the output stays as it was, still placed by its state; the next output or lid event applies the rules again. A configuration a client or the config file applies gets the error back instead. |
 | Planes between frames | Cursor or gamma commit rejected | Reported once, state stays dirty and is committed again. A cursor refused with `EINVAL`/`ERANGE` moves into the frame. |
 | Client | A failing request | A request meeting an error `backend.Fatal` accepts stops the compositor, naming the client. Any other error, a client resource's own failure included, is sent to that client as `wl_display.error` and kills only it (`server.Client`, #428); a failed capture sends `failed`. |
 | Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs. A protocol error for a client already gone is dropped; an error `backend.Fatal` accepts reaches the loop; anything else is reported once with the client and the object. |

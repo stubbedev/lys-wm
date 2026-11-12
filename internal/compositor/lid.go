@@ -56,7 +56,7 @@ func (c *Compositor) lidSwitched(closed bool) error {
 		return nil
 	}
 	c.lidClosed = closed
-	err := c.applyOutputRules()
+	err := c.reapplyOutputRules()
 	c.applyLidPolicy()
 	return err
 }
@@ -65,7 +65,7 @@ func (c *Compositor) dockChanged(b backend.Output) error {
 	if !c.lidClosed || internalPanel(b.Name()) {
 		return nil
 	}
-	return c.applyOutputRules()
+	return c.reapplyOutputRules()
 }
 
 func (c *Compositor) lidSuspended(err error) error {
