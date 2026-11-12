@@ -68,8 +68,8 @@ func TestUnderReducedMotionAReleasedSwipeOnlyCrossFades(t *testing.T) {
 	if got := r.active(); got != 2 {
 		t.Fatalf("a flick left workspace %d showing", got)
 	}
-	last := swipeRed
-	for step := 0; last != swipeBlue; step++ {
+	last := redColor
+	for step := 0; last != blueColor; step++ {
 		if step > 400 {
 			t.Fatalf("still at %v after %d frames", last, step)
 		}

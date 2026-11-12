@@ -82,7 +82,7 @@ func (c *Compositor) configuredRule(b backend.Output) OutputRule {
 
 func (c *Compositor) outputRule(b backend.Output) OutputRule {
 	rule := c.configuredRule(b)
-	if c.lidClosed && internalPanel(b.Name()) {
+	if internalPanel(b.Name()) && c.clamshell() {
 		rule.Disabled = true
 	}
 	return rule
@@ -269,6 +269,10 @@ func (c *Compositor) outputLive(o *output.Output) bool {
 
 func (c *Compositor) OutputAdded(b backend.Output) error {
 	c.stateChanged()
+	return errors.Join(c.addOutput(b), c.dockChanged(b))
+}
+
+func (c *Compositor) addOutput(b backend.Output) error {
 	c.capFrameRate(b)
 	rule := c.outputRule(b)
 	if _, _, err := c.commitOutput(b, rule); err != nil {
@@ -317,19 +321,21 @@ func (c *Compositor) OutputRemoved(b backend.Output) error {
 	if m := c.mirrorOf(b); m != nil {
 		return c.dropMirror(m)
 	}
+	err := errors.Join(c.removeOutput(b), c.dockChanged(b))
+	c.applyLidPolicy()
+	return err
+}
+
+func (c *Compositor) removeOutput(b backend.Output) error {
 	if i := slices.Index(c.disabled, b); i >= 0 {
 		c.disabled = slices.Delete(c.disabled, i, i+1)
-		err := c.outputConfig.Changed()
-		c.applyLidPolicy()
-		return err
+		return c.outputConfig.Changed()
 	}
 	o, err := c.knownOutput(b, "removal of")
 	if err != nil {
 		return err
 	}
-	err = c.disable(o)
-	c.applyLidPolicy()
-	return err
+	return c.disable(o)
 }
 
 func (c *Compositor) disable(o *output.Output) error {

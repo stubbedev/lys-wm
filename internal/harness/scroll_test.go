@@ -61,7 +61,7 @@ func TestAnOffScreenColumnGetsFramesAtTheHiddenRateAndScrollingConfiguresNothing
 		cfg.HiddenFrame = hiddenFrame
 	}, tall)
 	s := openStrip(t, h)
-	h.Eventually("blue and green in view, red scrolled off", both(showing(20, 60, swipeBlue), showing(140, 60, swipeGreen)))
+	h.Eventually("blue and green in view, red scrolled off", both(showing(20, 60, blueColor), showing(140, 60, greenColor)))
 	if s.windows[0].Size != s.windows[1].Size {
 		t.Fatalf("the columns are %v and %v, want equal widths", s.windows[0].Size, s.windows[1].Size)
 	}
@@ -72,7 +72,7 @@ func TestAnOffScreenColumnGetsFramesAtTheHiddenRateAndScrollingConfiguresNothing
 
 	before := s.configures()
 	h.ctl("center")
-	h.Eventually("green in the middle", both(showing(60, 60, swipeGreen), showing(20, 60, swipeBlue)))
+	h.Eventually("green in the middle", both(showing(60, 60, greenColor), showing(20, 60, blueColor)))
 	s.settle()
 	h.ctl("center")
 	if after := s.configures(); after != before {
@@ -104,23 +104,23 @@ func TestAViewSwipeTracksTheFingersAndSettlesOnAColumnEdge(t *testing.T) {
 	r.c = s.c
 	r.h.ctl("focuswindow " + idOf(r.h, "red"))
 	r.settle()
-	r.h.Eventually("red and blue in view", both(showing(20, 60, swipeRed), showing(140, 60, swipeBlue)))
+	r.h.Eventually("red and blue in view", both(showing(20, 60, redColor), showing(140, 60, blueColor)))
 	s.settle()
 	before := s.configures()
 
 	r.begin()
 	r.swipe(-60, 0)
-	r.h.Eventually("the strip moved with the fingers at once", both(showing(10, 60, swipeRed), showing(50, 60, swipeBlue), showing(150, 60, swipeGreen)))
+	r.h.Eventually("the strip moved with the fingers at once", both(showing(10, 60, redColor), showing(50, 60, blueColor), showing(150, 60, greenColor)))
 	if after := s.configures(); after != before {
 		t.Fatalf("tracking the fingers sent configures: %v then %v", before, after)
 	}
 	r.rest()
 	r.end(false)
-	r.h.Eventually("the spring starting where the fingers left the strip", both(showing(10, 60, swipeRed), showing(50, 60, swipeBlue)))
+	r.h.Eventually("the spring starting where the fingers left the strip", both(showing(10, 60, redColor), showing(50, 60, blueColor)))
 	r.at(*r.now + 60*time.Millisecond)
-	r.h.Eventually("red sliding out with the spring, still drawn while it is on screen", both(showing(4, 60, swipeRed), showing(16, 60, swipeBlue), showing(150, 60, swipeGreen)))
+	r.h.Eventually("red sliding out with the spring, still drawn while it is on screen", both(showing(4, 60, redColor), showing(16, 60, blueColor), showing(150, 60, greenColor)))
 	r.settle()
-	r.h.Eventually("blue settled on the left edge, green beside it", both(showing(5, 60, swipeBlue), showing(150, 60, swipeGreen)))
+	r.h.Eventually("blue settled on the left edge, green beside it", both(showing(5, 60, blueColor), showing(150, 60, greenColor)))
 	if w, _ := windowTitled(r.h, "blue"); !w.Focused {
 		t.Fatalf("the column the view settled on is not focused: %+v", w)
 	}

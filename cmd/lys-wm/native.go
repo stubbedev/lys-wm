@@ -35,6 +35,7 @@ type broker interface {
 	TakeDevice(path string) (int, session.Device, error)
 	ReleaseDevice(d session.Device) error
 	InhibitLidSwitch() (*os.File, error)
+	LidClosed() (bool, error)
 	Suspend() error
 	SwitchTo(vt uint32) error
 	Close() error
@@ -61,6 +62,7 @@ type native struct {
 	report      func(error)
 	vulkan      bool
 	lid         *os.File
+	lidClosed   bool
 	power       func()
 	wake        *loop.Timer
 	holdoff     time.Duration
@@ -151,6 +153,11 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 			err = errors.Join(err, n.Close())
 		}
 	}()
+	if closed, lidErr := n.logind.LidClosed(); lidErr != nil {
+		report(fmt.Errorf("%w; lys-wm takes the lid as open until libinput reports it", lidErr))
+	} else {
+		n.lidClosed = closed
+	}
 	if n.vendors, err = edid.LoadVendors(edid.PNPPath(getenv)); err != nil {
 		return nil, err
 	}

@@ -47,6 +47,27 @@ func (c *Compositor) lidWantsSleep() bool {
 	return c.lidClosed && !c.docked()
 }
 
+func (c *Compositor) clamshell() bool {
+	return c.lidClosed && c.docked()
+}
+
+func (c *Compositor) lidSwitched(closed bool) error {
+	if closed == c.lidClosed {
+		return nil
+	}
+	c.lidClosed = closed
+	err := c.applyOutputRules()
+	c.applyLidPolicy()
+	return err
+}
+
+func (c *Compositor) dockChanged(b backend.Output) error {
+	if !c.lidClosed || internalPanel(b.Name()) {
+		return nil
+	}
+	return c.applyOutputRules()
+}
+
 func (c *Compositor) lidSuspended(err error) error {
 	if err != nil {
 		c.report(fmt.Errorf("compositor: the lid policy could not suspend: %w", err))
@@ -64,7 +85,7 @@ func (c *Compositor) lidSettled() {
 }
 
 func (c *Compositor) docked() bool {
-	external := func(name string) bool { return !internalPanel(name) }
-	return slices.ContainsFunc(c.outputs, func(o *output.Output) bool { return external(o.Backend().Name()) }) ||
-		slices.ContainsFunc(c.disabled, func(b backend.Output) bool { return external(b.Name()) })
+	shows := func(b backend.Output) bool { return !internalPanel(b.Name()) && !c.configuredRule(b).Disabled }
+	return slices.ContainsFunc(c.outputs, func(o *output.Output) bool { return shows(o.Backend()) }) ||
+		slices.ContainsFunc(c.disabled, shows)
 }

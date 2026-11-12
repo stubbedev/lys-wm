@@ -68,40 +68,41 @@ var (
 )
 
 type Config struct {
-	Seat            seat.Config
-	Cursor          CursorConfig
-	WM              wm.Settings
-	Binds           []binds.Bind
-	Report          func(error)
-	ExecOutput      ExecOutput
-	Decor           Decor
-	Font            *gtext.Typeface
-	Icons           *icontheme.Theme
-	Rules           []wm.Rule
-	Swallow         Swallow
-	Outputs         OutputRules
-	VirtualOutputs  []VirtualOutput
-	ColorManagement bool
-	Tearing         bool
-	Hooks           Hooks
-	InheritTimeout  time.Duration
-	HoldBound       time.Duration
-	HiddenFrame     time.Duration
-	PowerSaverRate  int
-	HDRHold         time.Duration
-	HoldOpening     bool
-	Animations      anim.Table
-	LayerRules      []wm.LayerRule
-	WorkspaceRules  []WorkspaceRule
-	Gestures        Gestures
-	HotCorners      HotCorners
-	Overview        OverviewStyle
-	Switcher        SwitcherStyle
-	Slower          map[render.Speed]Effects
-	Clock           func() time.Duration
-	ClientHotkeys   bool
-	CursorBehavior  CursorBehavior
-	DeviceOutputs   map[string]wm.OutputMatch
+	Seat             seat.Config
+	Cursor           CursorConfig
+	WM               wm.Settings
+	Binds            []binds.Bind
+	Report           func(error)
+	ExecOutput       ExecOutput
+	Decor            Decor
+	Font             *gtext.Typeface
+	Icons            *icontheme.Theme
+	Rules            []wm.Rule
+	Swallow          Swallow
+	Outputs          OutputRules
+	VirtualOutputs   []VirtualOutput
+	ColorManagement  bool
+	Tearing          bool
+	Hooks            Hooks
+	LidClosedAtStart bool
+	InheritTimeout   time.Duration
+	HoldBound        time.Duration
+	HiddenFrame      time.Duration
+	PowerSaverRate   int
+	HDRHold          time.Duration
+	HoldOpening      bool
+	Animations       anim.Table
+	LayerRules       []wm.LayerRule
+	WorkspaceRules   []WorkspaceRule
+	Gestures         Gestures
+	HotCorners       HotCorners
+	Overview         OverviewStyle
+	Switcher         SwitcherStyle
+	Slower           map[render.Speed]Effects
+	Clock            func() time.Duration
+	ClientHotkeys    bool
+	CursorBehavior   CursorBehavior
+	DeviceOutputs    map[string]wm.OutputMatch
 }
 
 type ExecOutput struct {
@@ -582,6 +583,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 		usable:         map[*output.Output]image.Rectangle{},
 		nextWindow:     1,
 		hooks:          cfg.Hooks,
+		lidClosed:      cfg.LidClosedAtStart,
 	}
 	c.adopt(cfg, m)
 	if err := c.setup(l, display, b, cfg); err != nil {

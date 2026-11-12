@@ -15,12 +15,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-var (
-	zoomRed    = [3]byte{0xff, 0, 0}
-	zoomGreen  = [3]byte{0, 0xff, 0}
-	zoomBlue   = [3]byte{0, 0, 0xff}
-	zoomYellow = [3]byte{0xff, 0xff, 0}
-)
+var zoomYellow = [3]byte{0xff, 0xff, 0}
 
 func zoomConfig(cfg *compositor.Config) {
 	cfg.WM.Gaps = wm.Gaps{}
@@ -34,18 +29,18 @@ func TestZoomMagnifiesAroundThePointerOnEveryRenderer(t *testing.T) {
 		c := testclient.Connect(t, h.Socket())
 		w := c.Window("quadrants", quadrants)
 		c.DispatchUntil("the window to map", w.Mapped)
-		h.Eventually("the window", showing(10, 90, zoomBlue))
+		h.Eventually("the window", showing(10, 90, blueColor))
 		movePointer(h, 40, 25)
 		h.Eventually("the pointer", showing(120, 75, zoomYellow))
 		h.dispatch("zoom set 2")
 		h.Eventually("the top left quadrant filling more of the output", func(b *headless.Backend, comp *compositor.Compositor) bool {
 			snap := snapshot(b.Outputs()[0])
-			return pixel(snap, 110, 60) == zoomRed && pixel(snap, 130, 60) == zoomGreen && pixel(snap, 20, 90) == zoomBlue && pixel(snap, 150, 90) == zoomYellow
+			return pixel(snap, 110, 60) == redColor && pixel(snap, 130, 60) == greenColor && pixel(snap, 20, 90) == blueColor && pixel(snap, 150, 90) == zoomYellow
 		})
 		h.dispatch("zoom reset")
 		h.Eventually("the whole window back", func(b *headless.Backend, comp *compositor.Compositor) bool {
 			snap := snapshot(b.Outputs()[0])
-			return pixel(snap, 70, 40) == zoomRed && pixel(snap, 90, 40) == zoomGreen && pixel(snap, 70, 60) == zoomBlue && pixel(snap, 90, 60) == zoomYellow
+			return pixel(snap, 70, 40) == redColor && pixel(snap, 90, 40) == greenColor && pixel(snap, 70, 60) == blueColor && pixel(snap, 90, 60) == zoomYellow
 		})
 	})
 }
@@ -62,7 +57,7 @@ func TestTheViewFollowsThePointerAndWhatItPointsAtIsWhatClientsSee(t *testing.T)
 		r.expect("motion 40,25", "frame")
 		r.h.Eventually("red under the pointer, four times as big", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			snap := snapshot(b.Outputs()[0])
-			return pixel(snap, 10, 90) == zoomRed && pixel(snap, 150, 10) == zoomRed
+			return pixel(snap, 10, 90) == redColor && pixel(snap, 150, 10) == redColor
 		})
 		r.inject(func(b *headless.Backend, o *headless.Output) error {
 			return errors.Join(b.Pointer().MoveTo(o, 0.75, 0.75), b.Pointer().Frame())
@@ -95,7 +90,7 @@ func TestZoomOnAFractionalOutputKeepsTheTipOverTheContent(t *testing.T) {
 		h.dispatch("zoom set 3")
 		h.Eventually("green around the tip and nothing else", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			snap := snapshot(b.Outputs()[0])
-			return pixel(snap, 10, 140) == zoomGreen && pixel(snap, 230, 10) == zoomGreen
+			return pixel(snap, 10, 140) == greenColor && pixel(snap, 230, 10) == greenColor
 		})
 	})
 }
@@ -109,7 +104,7 @@ func TestUnderZoomAFingerTouchesWhatItLandsOn(t *testing.T) {
 	})
 	r.expect("motion 0,0", "frame")
 	r.h.dispatch("zoom set 2")
-	r.h.Eventually("the top left of the window across the output", showing(150, 90, zoomRed))
+	r.h.Eventually("the top left of the window across the output", showing(150, 90, redColor))
 	r.inject(func(b *headless.Backend, o *headless.Output) error {
 		return errors.Join(b.Touch().Down(1, o, 0.5, 0.5), b.Touch().Frame())
 	})
@@ -135,10 +130,10 @@ func TestZoomSpringsAndSettlesThenCostsNoFrames(t *testing.T) {
 	w := c.Window("quadrants", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	movePointer(h, 80, 50)
-	h.Eventually("the window", showing(10, 90, zoomBlue))
+	h.Eventually("the window", showing(10, 90, blueColor))
 	before := presents(h)
 	h.dispatch("zoom set 8")
-	h.Eventually("the view at eight times", showing(2, 2, zoomRed))
+	h.Eventually("the view at eight times", showing(2, 2, redColor))
 	settle(t, h)
 	if n := presents(h); n-before < 3 {
 		t.Errorf("the zoom took only %d frames, so it did not animate", n-before)
@@ -151,7 +146,7 @@ func TestZoomSpringsAndSettlesThenCostsNoFrames(t *testing.T) {
 		t.Errorf("a settled zoom drew %d more frames with nothing moving", n-settled)
 	}
 	h.dispatch("zoom reset")
-	h.Eventually("the whole window back", showing(10, 90, zoomBlue))
+	h.Eventually("the whole window back", showing(10, 90, blueColor))
 	settle(t, h)
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 		if got := comp.Snapshot().Outputs[0].Zoom; got != 0 {
@@ -175,11 +170,11 @@ func TestReducedMotionZoomsAtOnce(t *testing.T) {
 	w := c.Window("quadrants", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	movePointer(h, 80, 50)
-	h.Eventually("the window", showing(10, 90, zoomBlue))
+	h.Eventually("the window", showing(10, 90, blueColor))
 	settle(t, h)
 	frames := presents(h)
 	h.dispatch("zoom set 2")
-	h.Eventually("the zoom", showing(2, 2, zoomRed))
+	h.Eventually("the zoom", showing(2, 2, redColor))
 	settle(t, h)
 	if n := presents(h); n-frames > 2 {
 		t.Errorf("reduced motion took %d frames to zoom", n-frames)
@@ -252,7 +247,7 @@ func TestCapturesShowTheUnzoomedScreen(t *testing.T) {
 		c.DispatchUntil("the window to map", w.Mapped)
 		movePointer(h, 40, 25)
 		h.dispatch("zoom set 4")
-		h.Eventually("the zoom", showing(150, 10, zoomRed))
+		h.Eventually("the zoom", showing(150, 10, redColor))
 		settle(t, h)
 		mgr, err := cwsc.NewZwlrScreencopyManagerV1(c.Display, 3)
 		if err != nil {
@@ -265,7 +260,7 @@ func TestCapturesShowTheUnzoomedScreen(t *testing.T) {
 			t.Fatal("the capture failed")
 		}
 		at := func(x, y int) [3]byte { return rgbAt(pix, int(f.stride), x, y) }
-		if at(120, 25) != zoomGreen || at(40, 75) != zoomBlue || at(120, 75) != zoomYellow || at(10, 40) != zoomRed {
+		if at(120, 25) != greenColor || at(40, 75) != blueColor || at(120, 75) != zoomYellow || at(10, 40) != redColor {
 			t.Errorf("the capture shows %v %v %v %v, not the four quadrants", at(120, 25), at(40, 75), at(120, 75), at(10, 40))
 		}
 	})
@@ -324,7 +319,7 @@ func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
 	}, small)
 	c, log := gestureClient(t, h, "quadrants")
 	movePointer(h, 80, 50)
-	h.Eventually("the window", showing(10, 90, zoomBlue))
+	h.Eventually("the window", showing(10, 90, blueColor))
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		p := b.Pointer()
 		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 2, 0), p.GestureEnd(backend.Pinch, false))
@@ -342,7 +337,7 @@ func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
 		p := b.Pointer()
 		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 2, 0))
 	})
-	h.Eventually("the view following the fingers", showing(2, 2, zoomRed))
+	h.Eventually("the view following the fingers", showing(2, 2, redColor))
 	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 		if err := b.Pointer().GestureEnd(backend.Pinch, false); err != nil {
 			return err
@@ -353,7 +348,7 @@ func TestAPinchWithItsModifierZoomsAndTheClientSeesNothing(t *testing.T) {
 		p := b.Pointer()
 		return errors.Join(p.GestureBegin(backend.Pinch, 2), p.Pinch(0, 0, 0.25, 0), p.GestureEnd(backend.Pinch, false))
 	})
-	h.Eventually("back at one when the fingers pinch in", showing(10, 90, zoomBlue))
+	h.Eventually("back at one when the fingers pinch in", showing(10, 90, blueColor))
 	h.key(keySuper, false)
 	settle(t, h)
 	c.Sync()

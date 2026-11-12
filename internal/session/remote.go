@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	HolderProtocol = 1
+	HolderProtocol = 2
 	maxHolderMsg   = 64 << 10
 	holderTimeout  = 15 * time.Second
 )
@@ -28,6 +28,7 @@ const (
 	OpTake      HolderOp = "take"
 	OpRelease   HolderOp = "release"
 	OpInhibit   HolderOp = "inhibit"
+	OpLid       HolderOp = "lid"
 	OpSuspend   HolderOp = "suspend"
 	OpSwitchTo  HolderOp = "switch"
 	OpSpawn     HolderOp = "spawn"
@@ -278,6 +279,11 @@ func (h *Holder) InhibitLidSwitch() (*os.File, error) {
 		return nil, fmt.Errorf("session: the holder took the inhibitor with %d fds", len(fds))
 	}
 	return os.NewFile(uintptr(fds[0]), "logind-lid-inhibitor"), nil
+}
+
+func (h *Holder) LidClosed() (bool, error) {
+	reply, _, err := h.call(HolderMsg{Op: OpLid})
+	return reply.On, err
 }
 
 func (h *Holder) Suspend() error {

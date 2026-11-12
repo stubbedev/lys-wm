@@ -270,13 +270,10 @@ func (c *Compositor) input(d backend.Device, e backend.Event) error {
 	case *tabletinput.Proximity, *tabletinput.Motion, *tabletinput.Tip, *tabletinput.Button, *tabletinput.PadButton, *tabletinput.PadRing, *tabletinput.PadStrip, *tabletinput.PadDial:
 		return c.tabletInput(d, e)
 	case backend.Switch:
-		if e.Kind != backend.SwitchLid || e.On == c.lidClosed {
+		if e.Kind != backend.SwitchLid {
 			return nil
 		}
-		c.lidClosed = e.On
-		err := c.applyOutputRules()
-		c.applyLidPolicy()
-		return err
+		return c.lidSwitched(e.On)
 	}
 	return nil
 }

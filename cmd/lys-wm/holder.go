@@ -130,6 +130,8 @@ func (h *holder) handle(w *holderWorker, m session.HolderMsg, fds []int) error {
 			defer f.Close()
 			out = []int{int(f.Fd())}
 		}
+	case session.OpLid:
+		reply.On, err = h.lg.LidClosed()
 	case session.OpSuspend:
 		err = h.lg.Suspend()
 	case session.OpSwitchTo:

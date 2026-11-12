@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync/atomic"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/logind"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
@@ -194,6 +195,20 @@ func (lg *Logind) InhibitLidSwitch() (*os.File, error) {
 		return nil, fmt.Errorf("session: %w", err)
 	}
 	return f, nil
+}
+
+func (lg *Logind) LidClosed() (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), logind.CallTimeout)
+	defer cancel()
+	var v dbus.Variant
+	if err := lg.conn.Object(logind.BusName, logind.ManagerPath).CallWithContext(ctx, dbusx.PropertiesInterface+".Get", 0, logind.ManagerInterface, "LidClosed").Store(&v); err != nil {
+		return false, fmt.Errorf("session: read logind's Manager.LidClosed: %w", err)
+	}
+	var closed bool
+	if err := v.Store(&closed); err != nil {
+		return false, fmt.Errorf("session: decode logind's Manager.LidClosed %s: %w", v.Signature(), err)
+	}
+	return closed, nil
 }
 
 func (lg *Logind) Suspend() error {

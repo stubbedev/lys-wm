@@ -142,7 +142,7 @@ func TestThreeFingersOnTheScreenDriveWorkspaces(t *testing.T) {
 	for _, x := range []float64{0.45, 0.375, 0.25} {
 		f.move(8*time.Millisecond, ids, []float64{x, x, x}, ys)
 	}
-	r.h.Eventually("both workspaces a quarter along", both(showing(100, 30, swipeRed), showing(130, 30, swipeBlue)))
+	r.h.Eventually("both workspaces a quarter along", both(showing(100, 30, redColor), showing(130, 30, blueColor)))
 	for _, x := range []float64{0.1, -0.1} {
 		f.move(8*time.Millisecond, ids, []float64{x, x, x}, ys)
 	}
@@ -217,7 +217,7 @@ func TestTouchpadDriveMoveDropsTheWindowUnderThePointerIntoTheTree(t *testing.T)
 	c.DispatchUntil("left to map", left.Mapped)
 	right := c.Window("right", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("right to map", right.Mapped)
-	h.Eventually("left on the left, right on the right", both(showing(20, 60, swipeRed), showing(140, 60, swipeBlue)))
+	h.Eventually("left on the left, right on the right", both(showing(20, 60, redColor), showing(140, 60, blueColor)))
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		return errors.Join(b.Pointer().MoveTo(b.Outputs()[0], 0.125, 0.5), b.Pointer().Frame())
 	})
@@ -233,7 +233,7 @@ func TestTouchpadDriveMoveDropsTheWindowUnderThePointerIntoTheTree(t *testing.T)
 		return nil
 	})
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureEnd(backend.Swipe, false) })
-	h.Eventually("the windows swapped in the tree", both(showing(20, 20, swipeBlue), showing(140, 20, swipeRed), func(_ *headless.Backend, comp *compositor.Compositor) bool {
+	h.Eventually("the windows swapped in the tree", both(showing(20, 20, blueColor), showing(140, 20, redColor), func(_ *headless.Backend, comp *compositor.Compositor) bool {
 		return !comp.Dragging()
 	}))
 }
@@ -272,7 +272,7 @@ func touchWindowRig(t *testing.T, drive binds.Drive) (*Harness, *fingers) {
 	c.DispatchUntil("left to map", left.Mapped)
 	right := c.Window("right", testclient.Fill(0xff, 0, 0))
 	c.DispatchUntil("right to map", right.Mapped)
-	h.Eventually("left on the left, right on the right", both(showing(20, 20, swipeRed), showing(140, 20, swipeBlue)))
+	h.Eventually("left on the left, right on the right", both(showing(20, 20, redColor), showing(140, 20, blueColor)))
 	return h, &fingers{h: h, at: time.Hour}
 }
 
@@ -304,7 +304,7 @@ func TestThreeFingersOnTheScreenMoveTheWindowUnderThemIntoTheTree(t *testing.T) 
 		return nil
 	})
 	f.up(ids...)
-	h.Eventually("the windows swapped in the tree", both(showing(20, 20, swipeBlue), showing(140, 20, swipeRed), func(_ *headless.Backend, c *compositor.Compositor) bool {
+	h.Eventually("the windows swapped in the tree", both(showing(20, 20, blueColor), showing(140, 20, redColor), func(_ *headless.Backend, c *compositor.Compositor) bool {
 		return !c.Dragging()
 	}))
 }

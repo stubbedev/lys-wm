@@ -112,7 +112,7 @@ func TestAPinnedWindowStaysPutWhileASwipeMovesTheWorkspaces(t *testing.T) {
 	r.h.Eventually("pip drawn at rest", showing(70, 50, green))
 	r.begin()
 	r.swipe(-80, 0)
-	r.h.Eventually("the workspaces halfway with pip in place", both(showing(40, 30, swipeRed), showing(120, 30, swipeBlue), showing(70, 50, green)))
+	r.h.Eventually("the workspaces halfway with pip in place", both(showing(40, 30, redColor), showing(120, 30, blueColor), showing(70, 50, green)))
 	r.end(false)
 	r.settle()
 	r.h.Eventually("workspace 2 shown with pip", both(showingWorkspace(2), showing(70, 50, green)))

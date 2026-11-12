@@ -75,7 +75,7 @@ Everything lives under `internal/` except the commands.
 | `shell`, `seat`, `data`, `output`, `dmabuf`, ... | One package per Wayland protocol family, named after it; its package comment says what it implements |
 | `xkb` | Keymaps through lys-lib's `xkb`, served as sealed memfds |
 | `xwayland`, `xsync` | Xwayland, the X11 window manager, selection and Xdnd bridges; X SYNC counters for `_NET_WM_SYNC_REQUEST` |
-| `session` | logind, udev, libinput: device access, hotplug, VT switching, the lid inhibitor and AC state; the holder protocol (`remote.go`) |
+| `session` | logind, udev, libinput: device access, hotplug, VT switching, the lid state and inhibitor, AC state; the holder protocol (`remote.go`) |
 | `tabletinput` | Tablet tools and pads from libinput to the compositor |
 | `handover` | Moves kernel objects and state to the next lys-wm process |
 | `ipc` | The IPC socket and event stream |

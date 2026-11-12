@@ -16,12 +16,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-var (
-	swipeRed   = [3]byte{0xff, 0, 0}
-	swipeBlue  = [3]byte{0, 0, 0xff}
-	swipeGreen = [3]byte{0, 0xff, 0}
-)
-
 const swipeSettled = 30 * time.Second
 
 type swipeRig struct {
@@ -84,12 +78,12 @@ func (r *swipeRig) redBlue() {
 	r.t.Helper()
 	red := r.c.Window("red", testclient.Fill(0, 0, 0xff))
 	r.c.DispatchUntil("red to map", red.Mapped)
-	r.h.Eventually("red shown", showing(80, 30, swipeRed))
+	r.h.Eventually("red shown", showing(80, 30, redColor))
 	r.workspace(2, "2", func(c *testclient.Client) *testclient.Window { return c.Window("blue", testclient.Fill(0xff, 0, 0)) })
-	r.h.Eventually("blue shown", showing(80, 30, swipeBlue))
+	r.h.Eventually("blue shown", showing(80, 30, blueColor))
 	r.h.dispatch("workspace 1")
 	r.settle()
-	r.h.Eventually("red shown again", showing(80, 30, swipeRed))
+	r.h.Eventually("red shown again", showing(80, 30, redColor))
 }
 
 func (r *swipeRig) begin() {
@@ -150,23 +144,23 @@ func TestASwipeTracksTheFingersAndCommits(t *testing.T) {
 		r.redBlue()
 		r.begin()
 		r.swipe(-40, 0)
-		r.h.Eventually("both workspaces a quarter along", both(showing(100, 30, swipeRed), showing(130, 30, swipeBlue)))
+		r.h.Eventually("both workspaces a quarter along", both(showing(100, 30, redColor), showing(130, 30, blueColor)))
 		r.expectNoMoreFrames()
 		if got := r.active(); got != 1 {
 			t.Fatalf("tracking switched to workspace %d", got)
 		}
 		r.at(*r.now + time.Hour)
 		r.swipe(-60, 0)
-		r.h.Eventually("the same place however late the frame", both(showing(50, 30, swipeRed), showing(70, 30, swipeBlue)))
+		r.h.Eventually("the same place however late the frame", both(showing(50, 30, redColor), showing(70, 30, blueColor)))
 		r.rest()
 		r.end(false)
 		if got := r.active(); got != 2 {
 			t.Fatalf("past half stays on workspace %d", got)
 		}
 		r.at(*r.now + 50*time.Millisecond)
-		r.h.Eventually("the spring under way, both still drawn", both(showing(5, 30, swipeRed), showing(100, 30, swipeBlue)))
+		r.h.Eventually("the spring under way, both still drawn", both(showing(5, 30, redColor), showing(100, 30, blueColor)))
 		r.settle()
-		r.h.Eventually("the second workspace in place", showing(5, 30, swipeBlue))
+		r.h.Eventually("the second workspace in place", showing(5, 30, blueColor))
 		r.expectNoMoreFrames()
 	})
 }
@@ -178,14 +172,14 @@ func TestASwipeShortOfHalfGoesBack(t *testing.T) {
 		r.redBlue()
 		r.begin()
 		r.swipe(-60, 0)
-		r.h.Eventually("tracking", showing(110, 30, swipeBlue))
+		r.h.Eventually("tracking", showing(110, 30, blueColor))
 		r.rest()
 		r.end(false)
 		if got := r.active(); got != 1 {
 			t.Fatalf("a short swipe went to workspace %d", got)
 		}
 		r.settle()
-		r.h.Eventually("the first workspace back in place", showing(155, 30, swipeRed))
+		r.h.Eventually("the first workspace back in place", showing(155, 30, redColor))
 		r.expectNoMoreFrames()
 	})
 }
@@ -231,7 +225,7 @@ func TestACancelledSwipeGoesBack(t *testing.T) {
 		t.Fatalf("a cancelled swipe ended on workspace %d", got)
 	}
 	r.settle()
-	r.h.Eventually("back in place", showing(155, 30, swipeRed))
+	r.h.Eventually("back in place", showing(155, 30, redColor))
 }
 
 func TestASwipeRubberBandsAtTheEnds(t *testing.T) {
@@ -244,9 +238,9 @@ func TestASwipeRubberBandsAtTheEnds(t *testing.T) {
 			r.swipe(20, 0)
 		}
 		bg := [3]byte{compositor.Background.R, compositor.Background.G, compositor.Background.B}
-		r.h.Eventually("some of the way against the resistance", both(showing(5, 30, bg), showing(100, 30, swipeRed)))
+		r.h.Eventually("some of the way against the resistance", both(showing(5, 30, bg), showing(100, 30, redColor)))
 		r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-			if got := pixel(snapshot(b.Outputs()[0]), 40, 30); got != swipeRed {
+			if got := pixel(snapshot(b.Outputs()[0]), 40, 30); got != redColor {
 				t.Errorf("two whole workspaces of travel moved the window past a fifth of the output, showing %v", got)
 			}
 			return nil
@@ -257,7 +251,7 @@ func TestASwipeRubberBandsAtTheEnds(t *testing.T) {
 			t.Fatalf("the first workspace rubber-banded to %d", got)
 		}
 		r.settle()
-		r.h.Eventually("sprung back", showing(5, 30, swipeRed))
+		r.h.Eventually("sprung back", showing(5, 30, redColor))
 		r.expectNoMoreFrames()
 	})
 }
@@ -269,10 +263,10 @@ func TestASwipeAcrossAWholeWorkspaceWalksOn(t *testing.T) {
 	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
 	r.h.dispatch("workspace 1")
 	r.settle()
-	r.h.Eventually("red", showing(80, 30, swipeRed))
+	r.h.Eventually("red", showing(80, 30, redColor))
 	r.begin()
 	r.swipe(-200, 0)
-	r.h.Eventually("the second and third workspaces", both(showing(50, 30, swipeBlue), showing(150, 30, swipeGreen)))
+	r.h.Eventually("the second and third workspaces", both(showing(50, 30, blueColor), showing(150, 30, greenColor)))
 	if got := r.active(); got != 2 {
 		t.Fatalf("crossing the second workspace left %d active", got)
 	}
@@ -294,7 +288,7 @@ func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
 		r.rest()
 		r.end(false)
 		r.at(*r.now + 50*time.Millisecond)
-		r.h.Eventually("the settle under way", both(showing(5, 30, swipeRed), showing(100, 30, swipeBlue)))
+		r.h.Eventually("the settle under way", both(showing(5, 30, redColor), showing(100, 30, blueColor)))
 		var held *[3]byte
 		r.begin()
 		r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -309,14 +303,14 @@ func TestANewSwipeGrabsASettlingOneWhereItIs(t *testing.T) {
 			r.swipe(20, 0)
 		}
 		r.h.Rendered(0)
-		r.h.Eventually("the fingers bringing the first workspace back past its rest", both(showing(40, 30, swipeRed), showing(100, 30, swipeRed)))
+		r.h.Eventually("the fingers bringing the first workspace back past its rest", both(showing(40, 30, redColor), showing(100, 30, redColor)))
 		r.rest()
 		r.end(false)
 		if got := r.active(); got != 1 {
 			t.Fatalf("swiping back mid-settle ended on workspace %d", got)
 		}
 		r.settle()
-		r.h.Eventually("the first workspace in place", showing(155, 30, swipeRed))
+		r.h.Eventually("the first workspace in place", showing(155, 30, redColor))
 		r.expectNoMoreFrames()
 	})
 }
@@ -328,7 +322,7 @@ func TestASwipeGrabbedBackPastWhereItCameFromHidesWhereItWasGoing(t *testing.T) 
 	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
 	r.h.dispatch("workspace 2")
 	r.settle()
-	r.h.Eventually("blue", showing(80, 30, swipeBlue))
+	r.h.Eventually("blue", showing(80, 30, blueColor))
 	r.begin()
 	r.swipe(-100, 0)
 	r.rest()
@@ -337,11 +331,11 @@ func TestASwipeGrabbedBackPastWhereItCameFromHidesWhereItWasGoing(t *testing.T) 
 		t.Fatalf("committed to workspace %d", got)
 	}
 	r.at(*r.now + 50*time.Millisecond)
-	r.h.Eventually("the settle under way", both(showing(5, 30, swipeBlue), showing(100, 30, swipeGreen)))
+	r.h.Eventually("the settle under way", both(showing(5, 30, blueColor), showing(100, 30, greenColor)))
 	r.begin()
 	r.swipe(160, 0)
 	r.h.Rendered(0)
-	r.h.Eventually("the first and second workspaces, the third gone", both(showing(30, 30, swipeRed), showing(100, 30, swipeBlue)))
+	r.h.Eventually("the first and second workspaces, the third gone", both(showing(30, 30, redColor), showing(100, 30, blueColor)))
 	if got := r.active(); got != 2 {
 		t.Fatalf("swiping past where it came from left %d active", got)
 	}
@@ -362,7 +356,7 @@ func TestASwipeThatGrabsThenGoesNowhereSettlesWhereItWasGoing(t *testing.T) {
 		t.Fatalf("on workspace %d", got)
 	}
 	r.settle()
-	r.h.Eventually("the second workspace in place", showing(5, 30, swipeBlue))
+	r.h.Eventually("the second workspace in place", showing(5, 30, blueColor))
 	r.expectNoMoreFrames()
 }
 
@@ -372,7 +366,7 @@ func TestASwipeRespectsNaturalScrollOff(t *testing.T) {
 	r.redBlue()
 	r.begin()
 	r.swipe(100, 0)
-	r.h.Eventually("fingers right moving the content left", showing(100, 30, swipeBlue))
+	r.h.Eventually("fingers right moving the content left", showing(100, 30, blueColor))
 	r.rest()
 	r.end(false)
 	if got := r.active(); got != 2 {
@@ -390,7 +384,7 @@ func TestASwipeDrivesSlidevert(t *testing.T) {
 		r.redBlue()
 		r.begin()
 		r.swipe(0, -30)
-		r.h.Eventually("both workspaces a quarter up", both(showing(20, 80, swipeRed), showing(20, 100, swipeBlue)))
+		r.h.Eventually("both workspaces a quarter up", both(showing(20, 80, redColor), showing(20, 100, blueColor)))
 		r.swipe(0, -50)
 		r.rest()
 		r.end(false)
@@ -398,7 +392,7 @@ func TestASwipeDrivesSlidevert(t *testing.T) {
 			t.Fatalf("on workspace %d", got)
 		}
 		r.settle()
-		r.h.Eventually("the second workspace in place", showing(20, 5, swipeBlue))
+		r.h.Eventually("the second workspace in place", showing(20, 5, blueColor))
 		r.expectNoMoreFrames()
 	})
 }
@@ -410,13 +404,13 @@ func TestAKeySwitchWhileTrackingEndsTheGesture(t *testing.T) {
 	r.workspace(3, "3", func(c *testclient.Client) *testclient.Window { return c.Window("green", testclient.Fill(0, 0xff, 0)) })
 	r.h.dispatch("workspace 1")
 	r.settle()
-	r.h.Eventually("red", showing(80, 30, swipeRed))
+	r.h.Eventually("red", showing(80, 30, redColor))
 	r.begin()
 	r.swipe(-40, 0)
-	r.h.Eventually("tracking", showing(130, 30, swipeBlue))
+	r.h.Eventually("tracking", showing(130, 30, blueColor))
 	r.h.dispatch("workspace 3")
 	r.settle()
-	r.h.Eventually("the third workspace in place", showing(80, 30, swipeGreen))
+	r.h.Eventually("the third workspace in place", showing(80, 30, greenColor))
 	r.expectNoMoreFrames()
 	r.swipe(-500, 0)
 	r.swipe(300, 0)
@@ -424,11 +418,11 @@ func TestAKeySwitchWhileTrackingEndsTheGesture(t *testing.T) {
 	if got := r.active(); got != 3 {
 		t.Fatalf("the rest of the gesture moved to workspace %d", got)
 	}
-	r.h.Eventually("still the third workspace", showing(80, 30, swipeGreen))
+	r.h.Eventually("still the third workspace", showing(80, 30, greenColor))
 	r.expectNoMoreFrames()
 	r.h.dispatch("workspace 1")
 	r.settle()
-	r.h.Eventually("keys still work afterwards", showing(80, 30, swipeRed))
+	r.h.Eventually("keys still work afterwards", showing(80, 30, redColor))
 	r.begin()
 	r.swipe(-100, 0)
 	r.rest()
@@ -444,14 +438,14 @@ func TestAKeySwitchToTheWorkspaceBeingSwipedToCarriesOnFromThere(t *testing.T) {
 	r.redBlue()
 	r.begin()
 	r.swipe(-40, 0)
-	r.h.Eventually("tracking", showing(130, 30, swipeBlue))
+	r.h.Eventually("tracking", showing(130, 30, blueColor))
 	r.h.dispatch("workspace 2")
-	r.h.Eventually("still where the fingers left it", showing(130, 30, swipeBlue))
+	r.h.Eventually("still where the fingers left it", showing(130, 30, blueColor))
 	r.settle()
-	r.h.Eventually("the second workspace in place", showing(5, 30, swipeBlue))
+	r.h.Eventually("the second workspace in place", showing(5, 30, blueColor))
 	r.swipe(100, 0)
 	r.end(false)
-	r.h.Eventually("the late fingers ignored", showing(5, 30, swipeBlue))
+	r.h.Eventually("the late fingers ignored", showing(5, 30, blueColor))
 }
 
 func TestAKeyboardActionWhileTrackingRuns(t *testing.T) {
@@ -564,18 +558,18 @@ func TestAHiddenTabIsNotDrawnWhileSwiping(t *testing.T) {
 	blue := r.c.Window("blue", testclient.Fill(0xff, 0, 0))
 	r.c.DispatchUntil("blue to map", blue.Mapped)
 	r.c.DispatchUntil("blue in the tab", func() bool { return blue.Logical != image.Point{} })
-	r.h.Eventually("the blue tab on top", showing(80, 30, swipeBlue))
+	r.h.Eventually("the blue tab on top", showing(80, 30, blueColor))
 	r.h.dispatch("focus left")
-	r.h.Eventually("the green tab on top", showing(80, 30, swipeGreen))
+	r.h.Eventually("the green tab on top", showing(80, 30, greenColor))
 	r.h.dispatch("workspace 1")
 	r.settle()
-	r.h.Eventually("red", showing(80, 30, swipeRed))
+	r.h.Eventually("red", showing(80, 30, redColor))
 	r.begin()
 	r.swipe(-80, 0)
-	r.h.Eventually("only the focused tab peeking in", both(showing(40, 30, swipeRed), showing(120, 30, swipeGreen)))
-	r.h.Eventually("the tab bar moved with its workspace", showing(40, 5, swipeRed))
+	r.h.Eventually("only the focused tab peeking in", both(showing(40, 30, redColor), showing(120, 30, greenColor)))
+	r.h.Eventually("the tab bar moved with its workspace", showing(40, 5, redColor))
 	r.h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
-		if got := pixel(snapshot(b.Outputs()[0]), 120, 5); got == swipeRed || got == swipeGreen {
+		if got := pixel(snapshot(b.Outputs()[0]), 120, 5); got == redColor || got == greenColor {
 			t.Errorf("no tab bar over the incoming workspace, showing %v", got)
 		}
 		return nil
