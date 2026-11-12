@@ -326,3 +326,25 @@ func TestDestroyingABufferAfterItsIconIsFine(t *testing.T) {
 	}
 	eventuallyIcon(t, h, "iconic", func(i *ipc.Icon) bool { return i != nil && slices.Equal(i.Sizes, []int{16}) })
 }
+
+func TestLeavingWithABufferStillInAnIconDoesNotStopTheCompositor(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	gone := testclient.Connect(t, h.Socket())
+	m := iconManager(t, gone)
+	w := gone.Window("iconic", quadrants)
+	gone.DispatchUntil("the window to map", w.Mapped)
+	older := gone.Buffer(image.Pt(16, 16), 0, testclient.Fill(0, 0xff, 0))
+	icon, err := m.CreateIcon()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(icon.AddBuffer(older, 1), gone.Display.Roundtrip()); err != nil {
+		t.Fatal(err)
+	}
+	if err := gone.Display.Close(); err != nil {
+		t.Fatal(err)
+	}
+	survives(t, h)
+	h.Eventually("the leaving client's window gone", mappedToplevels(1))
+}

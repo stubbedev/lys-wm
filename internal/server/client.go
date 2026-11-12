@@ -99,7 +99,12 @@ func (c *Client) runHooks(id wire.ObjectID) error {
 	delete(c.hooks, id)
 	var errs []error
 	for _, f := range hooks {
-		errs = append(errs, f())
+		err := f()
+		var pe *wire.ProtocolError
+		if c.gone && errors.As(err, &pe) {
+			continue
+		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
