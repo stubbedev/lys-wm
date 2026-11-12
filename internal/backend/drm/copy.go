@@ -251,7 +251,8 @@ func stacksFor(opts Options) []namedStack {
 	if !opts.Vulkan {
 		return []namedStack{glesStack}
 	}
-	return []namedStack{{"Vulkan", newVulkanAllocator}, glesStack}
+	vulkanStack := namedStack{"Vulkan", func(dev *kdrm.Device) (*gpuAllocator, error) { return newVulkanAllocator(dev, opts.Paths) }}
+	return []namedStack{vulkanStack, glesStack}
 }
 
 func openLocal(dev *kdrm.Device, stacks []namedStack) (*gpuAllocator, namedStack, error) {

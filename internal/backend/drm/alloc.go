@@ -112,7 +112,7 @@ func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) 
 	return &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: gbmMemory{gbm: s.gbm, gpu: s.gpu}, gpu: s.gpu, closeGPU: s.closeGPU}, nil
 }
 
-func newVulkanAllocator(dev *kdrm.Device) (*gpuAllocator, error) {
+func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) {
 	modifiers, err := addFB2Modifiers(dev)
 	if err != nil {
 		return nil, err
@@ -121,15 +121,39 @@ func newVulkanAllocator(dev *kdrm.Device) (*gpuAllocator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("drm: the device number of %s: %w", dev.Path(), err)
 	}
+	files, err := renderFiles(dev)
+	if err != nil {
+		return nil, err
+	}
 	r, err := vulkan.Open(number)
 	if err != nil {
 		return nil, vulkanOpenError(dev.Path(), err)
 	}
-	a := &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: vulkanMemory{r: r}, gpu: r, closeGPU: r.Close}
+	s, err := openStackOnFile(files, func(fd int) (gpuStack, error) { return gbmOn(fd, paths) })
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("drm: scanout buffers for %s: %w", dev.Path(), err), r.Close())
+	}
+	closeGPU := func() error { return errors.Join(r.Close(), s.closeGPU()) }
+	a := &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: gbmMemory{gbm: s.gbm, gpu: r}, gpu: r, closeGPU: closeGPU}
 	if err := a.probe(); err != nil {
-		return nil, errors.Join(fmt.Errorf("drm: allocate scanout buffers for %s with Vulkan: %w", dev.Path(), err), r.Close())
+		return nil, errors.Join(fmt.Errorf("drm: allocate scanout buffers for %s with Vulkan: %w", dev.Path(), err), closeGPU())
 	}
 	return a, nil
+}
+
+func gbmOn(fd int, paths gpu.Paths) (gpuStack, error) {
+	lib, err := gpu.LoadGBM(paths)
+	if err != nil {
+		return gpuStack{}, err
+	}
+	g, err := lib.Open(fd)
+	if err != nil {
+		return gpuStack{}, errors.Join(err, lib.Close())
+	}
+	return gpuStack{gbm: g, closeGPU: func() error {
+		g.Close()
+		return lib.Close()
+	}}, nil
 }
 
 func vulkanOpenError(path string, err error) error {
@@ -148,7 +172,11 @@ func (a *gpuAllocator) probe() error {
 	if err != nil {
 		return err
 	}
-	return d.free()
+	id, err := importFB(a.dev, d.buf, a.modifiers)
+	if err != nil {
+		return errors.Join(fmt.Errorf("%s takes no framebuffer from a %v scanout buffer: %w", a.path, d.buf.Modifier, err), d.free())
+	}
+	return errors.Join(a.dev.RemoveFB(id), d.free())
 }
 
 func (a *gpuAllocator) renderer() render.Renderer {
@@ -278,7 +306,7 @@ type Options struct {
 
 func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {
 	if opts.Vulkan {
-		return newVulkanAllocator(dev)
+		return newVulkanAllocator(dev, opts.Paths)
 	}
 	return newGLESAllocator(dev, opts.Paths)
 }

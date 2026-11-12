@@ -16,13 +16,13 @@ import (
 
 var unloadable = gpu.Paths{EGL: "/nonexistent/libEGL.so.1", GLESv2: "/nonexistent/libGLESv2.so.2", GBM: "/nonexistent/libgbm.so.1"}
 
-func TestVulkanExportsScanoutBuffersOnEveryRenderNodeOnHardware(t *testing.T) {
-	nodes, err := filepath.Glob("/dev/dri/renderD*")
+func TestVulkanRendersIntoScanoutBuffersOnEveryCardOnHardware(t *testing.T) {
+	nodes, err := filepath.Glob("/dev/dri/card*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(nodes) == 0 {
-		t.Skip("no render node")
+		t.Skip("no card node")
 	}
 	for _, node := range nodes {
 		t.Run(filepath.Base(node), func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestVulkanExportsScanoutBuffersOnEveryRenderNodeOnHardware(t *testing.T) {
 				t.Skipf("cannot open %s: %v", node, err)
 			}
 			defer dev.Close()
-			a, err := newVulkanAllocator(dev)
+			a, err := openVulkan(dev)
 			if err != nil {
 				t.Skipf("no Vulkan driver drives %s here (unset VK_DRIVER_FILES on a GPU machine): %v", node, err)
 			}
@@ -46,7 +46,7 @@ func TestVulkanExportsScanoutBuffersOnEveryRenderNodeOnHardware(t *testing.T) {
 					t.Fatal(errors.Join(fmt.Errorf("%s: a scanout buffer in one of %v: %w", node, offered, err), a.close()))
 				}
 				if !slices.Contains(offered, d.buf.Modifier) {
-					t.Fatal(errors.Join(fmt.Errorf("%s exported modifier %v, not one of the %v offered", node, d.buf.Modifier, offered), d.free(), a.close()))
+					t.Fatal(errors.Join(fmt.Errorf("%s allocated modifier %v, not one of the %v offered", node, d.buf.Modifier, offered), d.free(), a.close()))
 				}
 				testFrame(t, a.gpu, d.target, fmt.Sprintf("%s %v", node, d.buf.Modifier))
 				if err := d.free(); err != nil {

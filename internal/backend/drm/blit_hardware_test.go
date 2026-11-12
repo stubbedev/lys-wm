@@ -20,10 +20,14 @@ func openGLES(dev *kdrm.Device) (*gpuAllocator, error) {
 	return newGLESAllocator(dev, gpu.PathsFromEnv(os.Getenv))
 }
 
+func openVulkan(dev *kdrm.Device) (*gpuAllocator, error) {
+	return newVulkanAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+}
+
 var gpuStacks = []struct {
 	name string
 	open openStack
-}{{"gles", openGLES}, {"vulkan", newVulkanAllocator}}
+}{{"gles", openGLES}, {"vulkan", openVulkan}}
 
 func stackOn(t *testing.T, card string, open openStack) *gpuAllocator {
 	t.Helper()

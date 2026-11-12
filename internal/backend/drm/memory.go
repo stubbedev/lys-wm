@@ -9,7 +9,6 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
-	"github.com/stubbedev/lys-wm/internal/render/vulkan"
 )
 
 type bufferMaker interface {
@@ -64,29 +63,4 @@ func (m gbmMemory) drawable(size image.Point, format fourcc.Format, modifiers []
 
 func (m gbmMemory) linear(size image.Point, format fourcc.Format) (*gpu.Buffer, error) {
 	return m.gbm.Allocate(size, format, nil, gpu.UseLinear)
-}
-
-type vulkanMemory struct {
-	r *vulkan.Renderer
-}
-
-func (m vulkanMemory) modifiers(format fourcc.Format) ([]fourcc.Modifier, error) {
-	return m.r.ExportModifiers(format)
-}
-
-func (m vulkanMemory) drawable(size image.Point, format fourcc.Format, modifiers []fourcc.Modifier, _ bufferUse) (drawable, error) {
-	target, shared, err := m.r.NewExportedTarget(size, format, modifiers)
-	if err != nil {
-		return drawable{}, err
-	}
-	return drawable{target: target, buf: shared.DMABUF, free: func() error { return errors.Join(target.Destroy(), shared.Close()) }}, nil
-}
-
-func (m vulkanMemory) linear(size image.Point, format fourcc.Format) (*gpu.Buffer, error) {
-	b, err := m.r.Device().NewBuffer(size.X, size.Y, format, []fourcc.Modifier{fourcc.Linear})
-	if err != nil {
-		return nil, fmt.Errorf("vulkan: a linear %v %v buffer to copy into: %w", size, format, err)
-	}
-	defer b.Close()
-	return gpu.FromDmabuf(b.Dmabuf()).Dup()
 }
