@@ -302,7 +302,7 @@ func (c *Compositor) install(a wm.Arrangement, now time.Duration) error {
 			continue
 		}
 		c.stack = append(c.stack, w)
-		rect := content(p.Rect, p.Layer, c.frameBorder(c.decision(w), p.Look), c.titlebarHeight(w.top, p.Layer))
+		rect := c.insets(w.top, c.decision(w), p.Look, p.Layer).content(p.Rect)
 		moved := rect != w.rect
 		switch {
 		case c.overview != nil:
@@ -374,15 +374,6 @@ func (c *Compositor) animating(o *output.Output, now time.Duration) bool {
 	})
 }
 
-func content(tile image.Rectangle, layer wm.PlacementLayer, border, bar int) image.Rectangle {
-	if layer == wm.LayerFullscreen {
-		return tile
-	}
-	r := tile.Inset(border)
-	r.Min.Y = min(r.Min.Y+bar, r.Max.Y)
-	return r
-}
-
 func sameState(a, b shell.State) bool {
 	return a.Size == b.Size && a.Bounds == b.Bounds && slices.Equal(a.States, b.States)
 }
@@ -418,7 +409,7 @@ func (c *Compositor) ToplevelInitialCommit(st *shell.Toplevel) error {
 	for _, p := range s.Arrange(c.spacing()).Windows {
 		if p.ID == c.nextWindow {
 			d, _ := c.ruled(t)
-			return t.apply(c.wanted(content(p.Rect, p.Layer, c.borderWidthOf(&d), c.titlebarHeight(t, p.Layer)), p, true))
+			return t.apply(c.wanted(c.insets(t, &d, p.Look, p.Layer).content(p.Rect), p, true))
 		}
 	}
 	return fmt.Errorf("compositor: the window manager did not place new window %d", c.nextWindow)
@@ -496,8 +487,7 @@ func (c *Compositor) openingArea(t toplevel, o wm.Opening) image.Rectangle {
 }
 
 func (c *Compositor) floatRect(t toplevel, d wm.Decision, area image.Rectangle) image.Rectangle {
-	border := c.borderWidthOf(&d)
-	size := floatSize(t, d.Size.In(area.Size())).Add(image.Pt(2*border, 2*border))
+	size := c.insets(t, &d, wm.WorkspaceLook{}, wm.LayerFloating).frameSize(floatSize(t, d.Size.In(area.Size())))
 	switch d.Position.Kind {
 	case wm.PositionCursor:
 		at := c.cursor.pixel().Sub(size.Div(2))
@@ -529,15 +519,16 @@ func (c *Compositor) frameLimits(w *window) wm.Limits {
 	minimum, maximum := w.top.sizeLimits()
 	d := c.decision(w)
 	minimum, maximum = ruledLimits(d, minimum, maximum)
-	frame := 2 * c.borderWidthOf(d)
+	insets := c.insets(w.top, d, wm.WorkspaceLook{}, wm.LayerFloating)
 	framed := func(p image.Point) image.Point {
-		if p.X > 0 {
-			p.X += frame
+		f := insets.frameSize(p)
+		if p.X <= 0 {
+			f.X = p.X
 		}
-		if p.Y > 0 {
-			p.Y += frame
+		if p.Y <= 0 {
+			f.Y = p.Y
 		}
-		return p
+		return f
 	}
 	return wm.Limits{Min: framed(minimum), Max: framed(maximum)}
 }

@@ -133,7 +133,7 @@ func (c *Compositor) sendGoal(a wm.Arrangement) ([]*window, error) {
 		if w == nil {
 			return awaited, errUnknownWindow(p.ID)
 		}
-		w.goal = content(p.Rect, p.Layer, c.frameBorder(c.decision(w), p.Look), c.titlebarHeight(w.top, p.Layer))
+		w.goal = c.insets(w.top, c.decision(w), p.Look, p.Layer).content(p.Rect)
 		goal := c.wanted(w.goal, p, hasFocus && focused == w.id)
 		goal.minimized = p.Minimized
 		if c.interaction != nil && w.top.stale() && w.top.resizes(goal) {

@@ -11,8 +11,29 @@ import (
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
-func (c *Compositor) borderWidthOf(d *wm.Decision) int {
-	return c.frameBorder(d, wm.WorkspaceLook{})
+type frameInsets struct {
+	border, bar int
+}
+
+func (c *Compositor) insets(t toplevel, d *wm.Decision, look wm.WorkspaceLook, layer wm.PlacementLayer) frameInsets {
+	if layer == wm.LayerFullscreen {
+		return frameInsets{}
+	}
+	return frameInsets{border: c.frameBorder(d, look), bar: c.titlebarHeight(t, layer)}
+}
+
+func (f frameInsets) content(outer image.Rectangle) image.Rectangle {
+	r := outer.Inset(f.border)
+	r.Min.Y = min(r.Min.Y+f.bar, r.Max.Y)
+	return r
+}
+
+func (f frameInsets) frame(content image.Rectangle) image.Rectangle {
+	return image.Rectangle{Min: content.Min.Sub(image.Pt(f.border, f.border+f.bar)), Max: content.Max.Add(image.Pt(f.border, f.border))}
+}
+
+func (f frameInsets) frameSize(content image.Point) image.Point {
+	return f.frame(image.Rectangle{Max: content}).Size()
 }
 
 func (c *Compositor) borderWidth(w *window) int {

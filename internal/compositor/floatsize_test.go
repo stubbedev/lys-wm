@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
+	cxd "github.com/stubbedev/lys-wm/internal/protocol/client/xdgdecoration"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -50,6 +51,17 @@ func (s *scales) PreferredBufferScale(_ *cw.WlSurface, factor int32) error {
 	return nil
 }
 
+const (
+	floatBorder = 3
+	floatBar    = 20
+)
+
+type decorationModes struct{}
+
+func (decorationModes) Configure(*cxd.ZxdgToplevelDecorationV1, cxd.ZxdgToplevelDecorationV1Mode) error {
+	return nil
+}
+
 type floater struct {
 	r       *rig
 	surface *cw.WlSurface
@@ -69,7 +81,12 @@ func floatingRig(t *testing.T) (*rig, *cxdg.XdgWmBase) {
 		}
 		return b
 	}, func(cfg *Config) {
-		cfg.Rules = []wm.Rule{{Match: wm.Match{AppID: regexp.MustCompile(`^floater$`)}, Mode: wm.RuleFloat}}
+		cfg.Rules = []wm.Rule{
+			{Match: wm.Match{AppID: regexp.MustCompile(`^floater$`)}, Mode: wm.RuleFloat},
+			{Match: wm.Match{AppID: regexp.MustCompile(`^sized$`)}, Mode: wm.RuleFloat, Size: wm.Px(640, 480)},
+		}
+		cfg.Decor.BorderWidth = floatBorder
+		cfg.Decor.Titlebar.Floating, cfg.Decor.Titlebar.Height = true, floatBar
 	})
 	var err error
 	r.on(func() { err = r.comp.SetOutputScale(b.Outputs()[0], 240) })
@@ -92,6 +109,40 @@ func (r *rig) floater(base *cxdg.XdgWmBase, setup func(*floater) error) *floater
 	must(r.t, f.top.SetAppID("floater"), setup(f), f.surface.Commit())
 	r.roundtrip()
 	return f
+}
+
+func (f *floater) serverDecorated() error {
+	m, err := cxd.NewZxdgDecorationManagerV1(f.r.client, 1)
+	if err != nil {
+		return err
+	}
+	if err := f.r.registry.Bind(f.r.globals["zxdg_decoration_manager_v1"], m); err != nil {
+		return err
+	}
+	_, err = m.GetToplevelDecoration(decorationModes{}, f.top)
+	return err
+}
+
+func (f *floater) floatingFrame() image.Point {
+	f.r.t.Helper()
+	var size image.Point
+	f.r.on(func() {
+		w := f.r.comp.findWindow(func(*window) bool { return true })
+		if w == nil {
+			f.r.t.Error("the window did not map")
+			return
+		}
+		rect, floats := f.r.comp.wm.FloatingRect(w.id)
+		if !floats {
+			f.r.t.Error("the window does not float")
+		}
+		size = rect.Size()
+	})
+	return size
+}
+
+func (f *floater) last() image.Point {
+	return f.seen.sizes[len(f.seen.sizes)-1]
 }
 
 func (f *floater) initial() image.Point {
@@ -121,21 +172,52 @@ func TestAFloatingWindowWithAMinimumAndNoSizeChoosesItsOwnSize(t *testing.T) {
 		t.Fatalf("the initial configure on a scale 2 output prefers buffer scale %d", f.scale.buffer)
 	}
 	f.draw(image.Pt(760, 520))
-	if last := f.seen.sizes[len(f.seen.sizes)-1]; last != image.Pt(760, 520) {
+	if last := f.last(); last != image.Pt(760, 520) {
 		t.Fatalf("a window that chose 760x520 was configured to %v", last)
 	}
-	r.on(func() {
-		w := r.comp.findWindow(func(*window) bool { return true })
-		if w == nil {
-			t.Error("the window did not map")
-			return
+	if got, want := f.floatingFrame(), image.Pt(760+2*floatBorder, 520+2*floatBorder); got != want {
+		t.Errorf("the window maps floating at %v, want the %v it chose framed", got, want)
+	}
+}
+
+func TestAFloatingWindowIsConfiguredAtTheSizeItAskedForWithOrWithoutATitlebar(t *testing.T) {
+	for titling, bar := range map[string]int{"with a titlebar": floatBar, "without a titlebar": 0} {
+		for source, c := range map[string]struct {
+			appID                 string
+			geometry, fixed, want image.Point
+		}{
+			"its own geometry": {"floater", image.Pt(500, 400), image.Point{}, image.Pt(500, 400)},
+			"a rule's size":    {"sized", image.Point{}, image.Point{}, image.Pt(640, 480)},
+			"its fixed size":   {"floater", image.Point{}, image.Pt(300, 200), image.Pt(300, 200)},
+		} {
+			t.Run(titling+" sized by "+source, func(t *testing.T) {
+				r, base := floatingRig(t)
+				f := r.floater(base, func(f *floater) error {
+					err := f.top.SetAppID(c.appID)
+					if c.geometry != (image.Point{}) {
+						err = errors.Join(err, f.xdg.SetWindowGeometry(0, 0, int32(c.geometry.X), int32(c.geometry.Y)))
+					}
+					if c.fixed != (image.Point{}) {
+						err = errors.Join(err, f.top.SetMinSize(int32(c.fixed.X), int32(c.fixed.Y)), f.top.SetMaxSize(int32(c.fixed.X), int32(c.fixed.Y)))
+					}
+					if bar > 0 {
+						err = errors.Join(err, f.serverDecorated())
+					}
+					return err
+				})
+				if got := f.initial(); got != c.want {
+					t.Fatalf("the initial configure is %v, want the %v asked for", got, c.want)
+				}
+				f.draw(c.want)
+				if got := f.last(); got != c.want {
+					t.Fatalf("the mapped window is configured to %v, want the %v asked for", got, c.want)
+				}
+				if got, want := f.floatingFrame(), c.want.Add(image.Pt(2*floatBorder, 2*floatBorder+bar)); got != want {
+					t.Errorf("the window floats in a frame of %v, want %v around the %v asked for", got, want, c.want)
+				}
+			})
 		}
-		rect, floats := r.comp.wm.FloatingRect(w.id)
-		border := 2 * r.comp.borderWidthOf(r.comp.decision(w))
-		if want := image.Pt(760+border, 520+border); !floats || rect.Size() != want {
-			t.Errorf("the window maps floating %v at %v, want the %v it chose framed", floats, rect.Size(), want)
-		}
-	})
+	}
 }
 
 func TestAFloatingWindowsKnownSizeKeepsWithinItsLimits(t *testing.T) {

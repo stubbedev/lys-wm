@@ -260,8 +260,7 @@ func (c *Compositor) XWindowRequest(w *xwayland.Window, r xwayland.Request) erro
 		if !c.wm.Floats(win.id) {
 			return nil
 		}
-		rect := c.fromX(r.Rect)
-		return c.update(c.wm.SetFloatingRect(win.id, rect.Inset(-c.borderWidth(win))))
+		return c.update(c.wm.SetFloatingRect(win.id, c.insets(win.top, c.decision(win), win.wsLook, wm.LayerFloating).frame(c.fromX(r.Rect))))
 	}
 	return nil
 }
