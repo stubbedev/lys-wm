@@ -154,6 +154,7 @@ Everything else is scoped and reported through `Config.Report`:
 | Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. |
 | Planes between frames | Cursor or gamma commit rejected | Reported once, state stays dirty and is committed again. A cursor refused with `EINVAL`/`ERANGE` moves into the frame. |
 | Client | A failing request | Kills that client (`server.Client`); a failed capture sends `failed`. |
+| Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs; the error is reported once with the client and the object. A protocol error for a client already gone is dropped; only an error `backend.Fatal` accepts reaches the loop. |
 
 ### GPU reset
 

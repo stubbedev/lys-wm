@@ -369,7 +369,7 @@ func (d *Display) Snapshot(t *handover.FDs, skip func(*Client) bool) (*State, ma
 		}
 		cs, err := c.snapshot(t)
 		if err != nil {
-			return nil, nil, fmt.Errorf("server: the client of pid %d: %w", c.creds.PID, err)
+			return nil, nil, fmt.Errorf("server: %v: %w", c, err)
 		}
 		kept[c] = len(st.Clients)
 		st.Clients = append(st.Clients, cs)
@@ -430,7 +430,7 @@ type restoring struct {
 
 func (d *Display) restoreFailed(c *Client, err error) {
 	if d.restored != nil && d.restored.failed == nil {
-		d.restored.failed = fmt.Errorf("server: rebuild the client of pid %d: %w", c.creds.PID, err)
+		d.restored.failed = fmt.Errorf("server: rebuild %v: %w", c, err)
 	}
 }
 
@@ -542,7 +542,9 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 		if d.restored.failed != nil {
 			return nil, d.restored.failed
 		}
-		c.dropTemps(wire.ObjectID(cs.TempFirst), wire.ObjectID(cs.LastID))
+		if err := c.dropTemps(wire.ObjectID(cs.TempFirst), wire.ObjectID(cs.LastID)); err != nil {
+			return nil, err
+		}
 		c.restoring = false
 		feeds = append(feeds, c.releaser(cs, t))
 	}
@@ -555,7 +557,7 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 				continue
 			}
 			if err := f(); err != nil {
-				d.report(fmt.Errorf("server: release the client of pid %d: %w", clients[i].creds.PID, err))
+				d.report(fmt.Errorf("server: release %v: %w", clients[i], err))
 				errs = append(errs, clients[i].destroy())
 			}
 		}
@@ -587,19 +589,21 @@ func (d *Display) Restore(st *State, t *handover.FDs) (func() error, error) {
 	}, nil
 }
 
-func (c *Client) dropTemps(first, last wire.ObjectID) {
+func (c *Client) dropTemps(first, last wire.ObjectID) error {
 	c.registries = slices.DeleteFunc(c.registries, func(r *sw.WlRegistry) bool {
 		return r.Base().ID() >= first && r.Base().ID() <= last
 	})
+	var errs []error
 	for _, id := range slices.Sorted(maps.Keys(c.objects)) {
 		if id >= first && id <= last {
 			r := c.objects[id]
 			r.Base().MarkRemoved()
-			_ = c.runHooks(id)
+			errs = append(errs, c.runHooks(id)...)
 			delete(c.objects, id)
 			c.journal.removed(id)
 		}
 	}
+	return c.settle("drop the handover's temporary objects of", errs)
 }
 
 func (c *Client) releaser(cs *ClientState, t *handover.FDs) func() error {

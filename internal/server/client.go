@@ -9,10 +9,16 @@ import (
 	"github.com/stubbedev/lys-lib/peercred"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
+
+type destroyHooks struct {
+	of  wire.Resource
+	run []func() error
+}
 
 type Client struct {
 	display    *Display
@@ -24,7 +30,7 @@ type Client struct {
 	reserved   map[wire.ObjectID]struct{}
 	wlDisplay  *sw.WlDisplay
 	registries []*sw.WlRegistry
-	hooks      map[wire.ObjectID][]func() error
+	hooks      map[wire.ObjectID]*destroyHooks
 	writable   bool
 	dropping   bool
 	gone       bool
@@ -53,7 +59,7 @@ func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
 		conn:    wire.NewConn(fd),
 		creds:   creds,
 		objects: map[wire.ObjectID]wire.Resource{},
-		hooks:   map[wire.ObjectID][]func() error{},
+		hooks:   map[wire.ObjectID]*destroyHooks{},
 		lastID:  wire.FirstServerID - 1,
 		context: context,
 		journal: journal{policies: d.policies, records: map[wire.ObjectID]*record{}},
@@ -75,7 +81,12 @@ func (d *Display) addClient(fd int, context *SecurityContext) (*Client, error) {
 func OnDestroy(r wire.Resource, f func() error) {
 	c := clientOf(r)
 	id := r.Base().ID()
-	c.hooks[id] = append(c.hooks[id], f)
+	h, ok := c.hooks[id]
+	if !ok {
+		h = &destroyHooks{of: r}
+		c.hooks[id] = h
+	}
+	h.run = append(h.run, f)
 }
 
 func Track[T comparable](r wire.Resource, list *[]T, x T) {
@@ -94,19 +105,58 @@ func clientOf(r wire.Resource) *Client {
 	return c
 }
 
-func (c *Client) runHooks(id wire.ObjectID) error {
-	hooks := c.hooks[id]
+func (c *Client) runHooks(id wire.ObjectID) []error {
+	h, ok := c.hooks[id]
+	if !ok {
+		return nil
+	}
 	delete(c.hooks, id)
 	var errs []error
-	for _, f := range hooks {
-		err := f()
-		var pe *wire.ProtocolError
-		if c.gone && errors.As(err, &pe) {
-			continue
+	for _, f := range h.run {
+		if err := f(); err != nil {
+			errs = append(errs, fmt.Errorf("destroy %s@%d: %w", h.of.Base().Interface().Name, id, err))
 		}
-		errs = append(errs, err)
 	}
-	return errors.Join(errs...)
+	return errs
+}
+
+func (c *Client) settle(doing string, errs []error) error {
+	var fatal, reported []error
+	for _, err := range errs {
+		switch {
+		case err == nil, c.gone && addressedToTheClient(err):
+		case backend.Fatal(err):
+			fatal = append(fatal, err)
+		default:
+			reported = append(reported, err)
+		}
+	}
+	if len(reported) > 0 {
+		c.display.report(fmt.Errorf("server: %s %v: %w", doing, c, errors.Join(reported...)))
+	}
+	if len(fatal) > 0 {
+		return fmt.Errorf("server: %s %v: %w", doing, c, errors.Join(fatal...))
+	}
+	return nil
+}
+
+func addressedToTheClient(err error) bool {
+	switch e := err.(type) { //nolint:errorlint // every error in the tree is examined, not just the first match
+	case *wire.ProtocolError:
+		return true
+	case interface{ Unwrap() []error }:
+		return !slices.ContainsFunc(e.Unwrap(), func(err error) bool { return !addressedToTheClient(err) })
+	case interface{ Unwrap() error }:
+		return addressedToTheClient(e.Unwrap())
+	}
+	return false
+}
+
+func (c *Client) String() string {
+	if c.context != nil && c.context.AppID != "" {
+		return fmt.Sprintf("the client of pid %d (%s)", c.creds.PID, c.context.AppID)
+	}
+	return fmt.Sprintf("the client of pid %d", c.creds.PID)
 }
 
 func (c *Client) Fail(err error) error {
@@ -154,13 +204,13 @@ func (c *Client) Remove(id wire.ObjectID) error {
 		return fmt.Errorf("server: remove unknown object %d", id)
 	}
 	r.Base().MarkRemoved()
-	hooks := c.runHooks(id)
+	errs := c.runHooks(id)
 	delete(c.objects, id)
 	c.journal.removed(id)
 	if !id.ServerSide() && !c.gone {
-		return errors.Join(hooks, c.wlDisplay.SendDeleteID(uint32(id)))
+		errs = append(errs, c.wlDisplay.SendDeleteID(uint32(id)))
 	}
-	return hooks
+	return errors.Join(errs...)
 }
 
 func (c *Client) NewID() (wire.ObjectID, error) {
@@ -292,14 +342,11 @@ func (c *Client) destroy() error {
 	c.gone = true
 	var errs []error
 	for _, id := range slices.Sorted(maps.Keys(c.hooks)) {
-		errs = append(errs, c.runHooks(id))
+		errs = append(errs, c.runHooks(id)...)
 	}
 	_ = c.conn.Flush()
 	c.journal.close()
 	errs = append(errs, c.source.Remove(), c.conn.Close())
 	c.display.removeClient(c)
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("server: tear down the client of pid %d: %w", c.creds.PID, err)
-	}
-	return nil
+	return c.settle("tear down", errs)
 }

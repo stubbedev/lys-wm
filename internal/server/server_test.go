@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
@@ -22,11 +24,15 @@ import (
 )
 
 type harness struct {
-	t     *testing.T
-	loop  *loop.Loop
-	disp  *Display
-	dir   string
-	trace *bytes.Buffer
+	t       *testing.T
+	loop    *loop.Loop
+	disp    *Display
+	dir     string
+	trace   *bytes.Buffer
+	report  func(error)
+	stopped chan struct{}
+	ran     error
+	ending  bool
 }
 
 func start(t *testing.T) *harness {
@@ -35,16 +41,24 @@ func start(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{t: t, loop: l, dir: testenv.SocketDir(t), trace: &bytes.Buffer{}}
-	if h.disp, err = New(l, Options{RuntimeDir: h.dir, Trace: h.trace, Report: func(err error) { t.Error(err) }}); err != nil {
+	h := &harness{t: t, loop: l, dir: testenv.SocketDir(t), trace: &bytes.Buffer{}, report: func(err error) { t.Error(err) }, stopped: make(chan struct{})}
+	if h.disp, err = New(l, Options{RuntimeDir: h.dir, Trace: h.trace, Report: func(err error) { h.report(err) }}); err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- l.Run() }()
+	go func() {
+		h.ran = l.Run()
+		close(h.stopped)
+	}()
 	t.Cleanup(func() {
-		h.on(func() { l.Stop() })
-		if err := <-done; err != nil {
-			t.Errorf("Run: %v", err)
+		if err := l.Post(func() error {
+			l.Stop()
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+		<-h.stopped
+		if h.ran != nil && !h.ending {
+			t.Errorf("Run: %v", h.ran)
 		}
 		if err := h.disp.Close(); err != nil {
 			t.Errorf("Display.Close: %v", err)
@@ -65,7 +79,36 @@ func (h *harness) on(f func()) {
 	}); err != nil {
 		h.t.Fatal(err)
 	}
-	<-ran
+	select {
+	case <-ran:
+	case <-h.stopped:
+		h.t.Fatalf("the loop stopped: %v", h.ran)
+	}
+}
+
+func (h *harness) ended() error {
+	h.t.Helper()
+	select {
+	case <-h.stopped:
+		h.ending = true
+		return h.ran
+	case <-time.After(5 * time.Second):
+		h.t.Fatal("the loop is still running")
+		return nil
+	}
+}
+
+func (h *harness) reports() func() []error {
+	var got []error
+	h.on(func() { h.report = func(err error) { got = append(got, err) } })
+	return func() []error {
+		if h.ending {
+			return slices.Clone(got)
+		}
+		var out []error
+		h.on(func() { out = slices.Clone(got) })
+		return out
+	}
 }
 
 func (h *harness) connect() *wlclient.Display {
@@ -514,14 +557,125 @@ func TestFailingDestroyHooksAreReported(t *testing.T) {
 	if err := errors.Join(reg.Bind(1, first), reg.Bind(1, second), d.Roundtrip()); err != nil {
 		t.Fatal(err)
 	}
+	reported := h.reports()
 	h.on(func() {
 		if err := h.disp.clients[0].Remove(first.Base().ID()); !errors.Is(err, broken) {
 			t.Errorf("Remove = %v, want the hook's error", err)
 		}
-		if err := h.disp.Close(); !errors.Is(err, broken) {
-			t.Errorf("Close = %v, want the hook's error from tearing the client down", err)
+		if err := h.disp.Close(); err != nil {
+			t.Errorf("Close = %v, want the hook's error reported, not returned", err)
 		}
 	})
+	if got := reported(); len(got) != 1 || !errors.Is(got[0], broken) || !strings.Contains(got[0].Error(), fmt.Sprintf("wl_compositor@%d", second.Base().ID())) {
+		t.Errorf("reported %v, want the hook's error from tearing the client down", got)
+	}
+}
+
+func hookedCompositors(h *harness, hooks ...func() error) {
+	h.on(func() {
+		if _, err := h.disp.AddGlobal(sw.WlCompositorInterface, 6, func(c *Client, id wire.ObjectID, version uint32) error {
+			comp, err := sw.NewWlCompositor(c, id, version, releasable{})
+			if err != nil {
+				return err
+			}
+			for _, f := range hooks {
+				OnDestroy(comp, f)
+			}
+			return nil
+		}); err != nil {
+			h.t.Error(err)
+		}
+	})
+}
+
+func bindCompositors(t *testing.T, h *harness, d *wlclient.Display, n int) []*cw.WlCompositor {
+	t.Helper()
+	reg, _ := h.registry(d)
+	comps := make([]*cw.WlCompositor, n)
+	for i := range comps {
+		var err error
+		if comps[i], err = cw.NewWlCompositor(d, 6); err != nil {
+			t.Fatal(err)
+		}
+		if err := reg.Bind(1, comps[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Roundtrip(); err != nil {
+		t.Fatal(err)
+	}
+	return comps
+}
+
+func TestAFailingDestroyHookOfALeavingClientIsReportedAndOthersAreStillServed(t *testing.T) {
+	h := start(t)
+	broken := errors.New("hook failed")
+	var after int
+	hookedCompositors(h, func() error { return broken }, func() error { after++; return nil })
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.on(func() {
+		if _, err := h.disp.addClient(fds[0], &SecurityContext{Engine: "test", AppID: "org.example.Leaving"}); err != nil {
+			t.Error(err)
+		}
+	})
+	leaving, err := wlclient.FromFD(fds[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	staying := h.connect()
+	gone := bindCompositors(t, h, leaving, 2)
+	bindCompositors(t, h, staying, 1)
+	reported := h.reports()
+	if err := leaving.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h.waitClients(1)
+	got := reported()
+	if len(got) != 1 || !errors.Is(got[0], broken) {
+		t.Fatalf("reported %v, want the hook's error once", got)
+	}
+	for _, want := range []string{
+		fmt.Sprintf("pid %d", os.Getpid()),
+		"org.example.Leaving",
+		fmt.Sprintf("wl_compositor@%d", gone[0].Base().ID()),
+		fmt.Sprintf("wl_compositor@%d", gone[1].Base().ID()),
+	} {
+		if !strings.Contains(got[0].Error(), want) {
+			t.Errorf("reported %q, want it to name %q", got[0], want)
+		}
+	}
+	h.on(func() {
+		if after != 2 {
+			t.Errorf("%d of the hooks after the failing ones ran, want 2", after)
+		}
+	})
+	bindCompositors(t, h, staying, 1)
+	bindCompositors(t, h, h.connect(), 1)
+}
+
+func TestAFatalDestroyHookOfALeavingClientStopsTheCompositor(t *testing.T) {
+	h := start(t)
+	var after int
+	hookedCompositors(h, func() error { return fmt.Errorf("%w: lost while a surface let go", backend.ErrDeviceLost) }, func() error { after++; return nil })
+	d := h.connect()
+	bindCompositors(t, h, d, 2)
+	reported := h.reports()
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err := h.ended()
+	if !errors.Is(err, backend.ErrDeviceLost) || !strings.Contains(err.Error(), fmt.Sprintf("tear down the client of pid %d", os.Getpid())) {
+		t.Fatalf("Run = %v, want the device loss from tearing the client down", err)
+	}
+	if after != 2 {
+		t.Errorf("%d of the hooks after the fatal ones ran, want 2", after)
+	}
+	if got := reported(); len(got) != 0 {
+		t.Errorf("reported %v, want the fatal error returned, not reported", got)
+	}
 }
 
 func TestPrivateGlobalsAndSocketpairClients(t *testing.T) {
@@ -776,5 +930,25 @@ func TestQueuedEventsReachTheSocketBeforeIdleWorkRuns(t *testing.T) {
 	h.on(func() {})
 	if waiting <= 0 {
 		t.Fatalf("%d bytes on the client's socket when idle work ran, want the queued event", waiting)
+	}
+}
+
+func TestOnlyProtocolErrorsOfALeavingClientGoUnreported(t *testing.T) {
+	h := start(t)
+	broken := errors.New("hook failed")
+	hookedCompositors(h,
+		func() error { return wire.NewProtocolError(1, 0, "addressed to the client alone") },
+		func() error { return errors.Join(wire.NewProtocolError(1, 0, "joined"), broken) },
+	)
+	d := h.connect()
+	bindCompositors(t, h, d, 1)
+	reported := h.reports()
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h.waitClients(0)
+	got := reported()
+	if len(got) != 1 || !errors.Is(got[0], broken) || strings.Contains(got[0].Error(), "addressed to the client alone") {
+		t.Fatalf("reported %v, want only the internal error joined to a protocol error", got)
 	}
 }
