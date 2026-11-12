@@ -11,7 +11,7 @@ import (
 
 func TestTheProbeTurnsAScanoutBufferIntoAFramebufferAndRemovesIt(t *testing.T) {
 	a := fakeStack(&blitWorld{memory: map[int]*soft.Buffer{}}, "card", true)
-	dev := a.dev.(*fakeDevice)
+	dev := a.dev.kernel.(*fakeDevice)
 	if err := a.probe(); err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestTheProbeTurnsAScanoutBufferIntoAFramebufferAndRemovesIt(t *testing.T) {
 
 func TestTheProbeFailsWhenTheCardTakesNoFramebufferFromAScanoutBuffer(t *testing.T) {
 	a := fakeStack(&blitWorld{memory: map[int]*soft.Buffer{}}, "card", true)
-	a.dev.(*fakeDevice).refuseAddFB = true
+	a.dev.kernel.(*fakeDevice).refuseAddFB = true
 	if err := a.probe(); !errors.Is(err, unix.EINVAL) {
 		t.Fatalf("probe() = %v, want the card's EINVAL: an allocator whose buffers never reach the screen must not pass", err)
 	}

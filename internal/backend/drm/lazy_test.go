@@ -14,7 +14,7 @@ func TestASecondaryHoldsItsRenderStackOnlyWhileItDrivesAnOutput(t *testing.T) {
 	var lazy *lazyBlit
 	stack := func(dev *fakeDevice) *blitAllocator {
 		local := fakeStack(world, "local", true)
-		local.dev, local.closeGPU = dev, func() error { closed++; return nil }
+		local.dev, local.closeGPU = device{kernel: dev}, func() error { closed++; return nil }
 		return &blitAllocator{primary: primary, local: local}
 	}
 	r := boot(t, func(dev *fakeDevice) allocator {
@@ -64,7 +64,7 @@ func bootRenderCapable(t *testing.T, refuseLinear bool) (*rig, *blitWorld, *int)
 		}
 		stack := func() *blitAllocator {
 			local := fakeStack(world, "local", true)
-			local.dev = dev
+			local.dev = device{kernel: dev}
 			return &blitAllocator{primary: primary, local: local}
 		}
 		lazy, err := newLazyBlit(stack(), func() (*blitAllocator, error) {
@@ -74,7 +74,7 @@ func bootRenderCapable(t *testing.T, refuseLinear bool) (*rig, *blitWorld, *int)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return &linearFirst{dev: dev, primary: primary, own: lazy, ownHow: "a GPU blit"}
+		return &linearFirst{dev: device{kernel: dev}, primary: primary, own: lazy, ownHow: "a GPU blit"}
 	})
 	return r, world, &opened
 }
@@ -115,7 +115,7 @@ func TestAPoweredOffSecondaryClosesItsRenderStackAndOpensItForItsNextFrame(t *te
 	var lazy *lazyBlit
 	stack := func(dev *fakeDevice) *blitAllocator {
 		local := fakeStack(world, "local", true)
-		local.dev, local.closeGPU = dev, func() error { closed++; return nil }
+		local.dev, local.closeGPU = device{kernel: dev}, func() error { closed++; return nil }
 		return &blitAllocator{primary: primary, local: local}
 	}
 	r := boot(t, func(dev *fakeDevice) allocator {

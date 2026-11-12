@@ -114,7 +114,7 @@ func (r *fakeRenderer) Finish() error {
 
 func fakeStack(world *blitWorld, name string, native bool) *gpuAllocator {
 	r := &fakeRenderer{Renderer: soft.New(), world: world, name: name, native: native, mainError: errors.New("this fake opens no Vulkan device")}
-	return &gpuAllocator{dev: &fakeDevice{}, path: "/dev/dri/" + name, mem: gbmMemory{gbm: fakeGBM{world}, gpu: r}, gpu: r, closeGPU: func() error { return nil }}
+	return &gpuAllocator{dev: device{kernel: &fakeDevice{}}, path: "/dev/dri/" + name, mem: gbmMemory{gbm: fakeGBM{world}, gpu: r}, gpu: r, closeGPU: func() error { return nil }}
 }
 
 func TestABlitShowsTheFrameThePrimaryDrewWhicheverRendererEachCardRuns(t *testing.T) {
@@ -170,11 +170,11 @@ func TestABlitShowsTheFrameThePrimaryDrewWhicheverRendererEachCardRuns(t *testin
 func TestASecondaryStaysOnTheFirstStackItsCardRuns(t *testing.T) {
 	world := &blitWorld{memory: map[int]*soft.Buffer{}}
 	primary := &Backend{alloc: fakeStack(world, "primary", true)}
-	dev := kdrm.FromFD(-1, "/dev/dri/card1")
-	vulkanStack := namedStack{"Vulkan", func(*kdrm.Device) (*gpuAllocator, error) { return fakeStack(world, "local", true), nil }}
-	noVulkan := namedStack{"Vulkan", func(*kdrm.Device) (*gpuAllocator, error) { return nil, errors.New("no Vulkan driver") }}
-	glesStack := namedStack{"GLES", func(*kdrm.Device) (*gpuAllocator, error) { return fakeStack(world, "local", true), nil }}
-	noGLES := namedStack{"GLES", func(*kdrm.Device) (*gpuAllocator, error) { return nil, errors.New("no EGL vendor") }}
+	dev := device{kernel: kdrm.FromFD(-1, "/dev/dri/card1")}
+	vulkanStack := namedStack{"Vulkan", func(device) (*gpuAllocator, error) { return fakeStack(world, "local", true), nil }}
+	noVulkan := namedStack{"Vulkan", func(device) (*gpuAllocator, error) { return nil, errors.New("no Vulkan driver") }}
+	glesStack := namedStack{"GLES", func(device) (*gpuAllocator, error) { return fakeStack(world, "local", true), nil }}
+	noGLES := namedStack{"GLES", func(device) (*gpuAllocator, error) { return nil, errors.New("no EGL vendor") }}
 	unlinear := fakeStack(world, "primary", true)
 	unlinear.gpu.(*fakeRenderer).unlinear = true
 	for _, c := range []struct {

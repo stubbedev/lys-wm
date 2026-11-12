@@ -18,7 +18,7 @@ reasonable Go alternative exists, and then it is loaded at runtime with
 | Keymaps and keyboard state | lys-lib's `xkb`, pure Go |
 | Wayland wire protocol | in-repo codec (`wire`) and generator (`scanner`) |
 | DRM/KMS ioctls, pixel formats, EDID | lys-lib's `drm`, `fourcc`, `edid` |
-| epoll, timerfd, signalfd, memfd | `golang.org/x/sys/unix` |
+| epoll, memfd | `golang.org/x/sys/unix` |
 | logind, systemd, D-Bus | lys-lib's `third_party/godbus` |
 | udev | netlink, read directly |
 | X11 window manager | `github.com/jezek/xgb`, built from `third_party/xgb` (a `go.mod` replace) |
@@ -136,25 +136,36 @@ min) before asking again.
 ## Errors that end the session
 
 `Loop.Run` returns the first error a callback returns, and `lys-wm` exits with
-it. `backend.Fatal` decides which errors may reach it:
+it. `backend.Fatal` is the one predicate that decides which errors may reach
+it from a scoped path (frames, planes, clients, transactions). It accepts only
+errors lys-wm's own code types:
 
-- **Device gone**: `ENODEV` from any ioctl, or `backend.ErrDeviceLost`
-  (nested backend's host gone, GPU resetting too often).
+- **Device gone**: `backend.ErrDeviceLost`, wrapped where the condition arises
+  on lys-wm's own devices. Every ioctl the DRM backend issues on its card goes
+  through `backend/drm`'s `device`, which turns an `ENODEV` into
+  `ErrDeviceLost`, naming the card, once the card confirms it by answering
+  `ENODEV` to a capability query too. The nested backend's host connection
+  hanging up or refusing a write, and a GPU reset too often, are wrapped the
+  same way. A raw `ENODEV` says nothing about whose fd it came from: one from
+  a client's resource (a dmabuf, a syncobj, an shm pool, a buffer exported by
+  another GPU) never ends the session.
 - **Broken invariant**: `backend.Broken`, a bug that should crash loudly: a
   frame on an unknown output, `BeginFrame` with a frame in progress, `Present`
-  without one.
+  without one, a DRM event read failing other than with `EAGAIN` or `EINTR`
+  (`ENODEV` there is the device gone).
 
-Also fatal: a failed `timerfd` or `epoll` call, a DRM read error other than
-`EAGAIN`, a failed modeset on resume.
+Also fatal, returned to the loop directly rather than through a scoped path: a
+failed `epoll_wait` or mailbox read in `Loop.Run`, a DRM event read error, a
+failed rescan when a device resumes.
 
 Everything else is scoped and reported through `Config.Report`:
 
 | Scope | Failure | Recovery |
 | --- | --- | --- |
-| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. |
+| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. |
 | Planes between frames | Cursor or gamma commit rejected | Reported once, state stays dirty and is committed again. A cursor refused with `EINVAL`/`ERANGE` moves into the frame. |
-| Client | A failing request | Kills that client (`server.Client`); a failed capture sends `failed`. |
-| Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs; the error is reported once with the client and the object. A protocol error for a client already gone is dropped; only an error `backend.Fatal` accepts reaches the loop. |
+| Client | A failing request | A request meeting an error `backend.Fatal` accepts stops the compositor, naming the client. Any other error, a client resource's own failure included, is sent to that client as `wl_display.error` and kills only it (`server.Client`, #428); a failed capture sends `failed`. |
+| Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs. A protocol error for a client already gone is dropped; an error `backend.Fatal` accepts reaches the loop; anything else is reported once with the client and the object. |
 
 ### GPU reset
 
@@ -557,6 +568,9 @@ logind.
   while read is skipped; any other read error leaves the state unknown and does
   not suspend.
 - After a wake the policy runs again once `lidHoldoff` (30 s) passes.
+- The policy also runs once at startup, after every card's connectors are
+  known, so a session started lid-closed, undocked and on battery suspends
+  (#431).
 
 ## Xwayland
 

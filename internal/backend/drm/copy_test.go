@@ -18,7 +18,7 @@ func bootDisplayOnly(t *testing.T, setup func(*fakeDevice)) (*rig, *gpuAllocator
 		if setup != nil {
 			setup(dev)
 		}
-		return &linearFirst{dev: dev, primary: linear, own: &copyAllocator{dev: dev, primary: linear.gpu}, ownHow: "a CPU copy"}
+		return &linearFirst{dev: device{kernel: dev}, primary: linear, own: &copyAllocator{dev: device{kernel: dev}, primary: linear.gpu}, ownHow: "a CPU copy"}
 	})
 	return r, linear
 }
@@ -127,7 +127,7 @@ func TestDamagedRowsMergeIntoTheSpansACopyMoves(t *testing.T) {
 func TestAnOffLoopCopyMovesOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *testing.T) {
 	primary := asyncPrimaryOf(soft.New())
 	primary.finish()
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: primary} })
 	r.copiesOffLoop(primary)
 	o := r.b.Outputs()[0]
 	size := modeOf(o.mode).Size
@@ -207,7 +207,7 @@ func (t *countingTarget) ReadRows(pix []byte, stride int, rows render.Rows) erro
 
 func TestASynchronousCopyReadsBackOnlyTheRowsPaintedSinceItsBufferWasLastCopied(t *testing.T) {
 	primary := &countingPrimary{Renderer: soft.New()}
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: primary} })
 	o := r.b.Outputs()[0]
 	size := modeOf(o.mode).Size
 	row := size.X * 4

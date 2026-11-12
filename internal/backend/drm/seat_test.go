@@ -178,7 +178,7 @@ func onASeat(t *testing.T, driver string) (*seat, *Output) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alloc, err := newGLESAllocator(dev, paths)
+	alloc, err := newGLESAllocator(device{kernel: dev}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func onASeat(t *testing.T, driver string) (*seat, *Output) {
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	s := &seat{t: t, l: l, dev: &seatDevice{Device: dev}, h: &seatHandler{}}
-	if s.b, err = newBackend(l, s.dev, alloc, Options{Paths: paths, Vendors: vendors, Report: func(err error) { s.reports = append(s.reports, err) }, Master: HoldsMaster}); err != nil {
+	if s.b, err = newBackend(l, device{kernel: s.dev}, alloc, Options{Paths: paths, Vendors: vendors, Report: func(err error) { s.reports = append(s.reports, err) }, Master: HoldsMaster}); err != nil {
 		t.Fatal(errors.Join(err, alloc.close()))
 	}
 	t.Cleanup(func() {

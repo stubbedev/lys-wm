@@ -173,7 +173,7 @@ func (b *Backend) readHost(ev loop.Events) error {
 		}
 	}
 	if ev&(loop.Hangup|loop.Error) != 0 {
-		return errors.New("nested: host connection hung up")
+		return fmt.Errorf("%w: nested: the host connection hung up", backend.ErrDeviceLost)
 	}
 	return nil
 }
@@ -183,7 +183,7 @@ func (b *Backend) flush() error {
 		return nil
 	}
 	if err := b.host.Conn().Err(); err != nil {
-		return fmt.Errorf("nested: write to host: %w", err)
+		return fmt.Errorf("%w: nested: write to the host: %w", backend.ErrDeviceLost, err)
 	}
 	err := b.host.Conn().Flush()
 	switch {
@@ -194,7 +194,7 @@ func (b *Backend) flush() error {
 		}
 		return nil
 	case err != nil:
-		return fmt.Errorf("nested: flush to host: %w", err)
+		return fmt.Errorf("%w: nested: flush to the host: %w", backend.ErrDeviceLost, err)
 	}
 	if b.writable {
 		b.writable = false

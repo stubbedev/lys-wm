@@ -17,7 +17,8 @@ func TestOnlyAGoneDeviceOrABrokenInvariantIsFatalAndAGPUResetIsRecoverable(t *te
 		err          error
 		fatal, reset bool
 	}{
-		{err: fmt.Errorf("drm: commit the frame: %w", unix.ENODEV), fatal: true},
+		{err: fmt.Errorf("%w: drm: /dev/dri/card0 no longer answers: %w", backend.ErrDeviceLost, unix.ENODEV), fatal: true},
+		{err: fmt.Errorf("dmabuf: import a client's buffer: %w", unix.ENODEV)},
 		{err: fmt.Errorf("%w: nested: host gone", backend.ErrDeviceLost), fatal: true},
 		{err: backend.Broken("present without BeginFrame"), fatal: true},
 		{err: fmt.Errorf("gles: render pass: %w", &gpu.EGLError{Op: "eglMakeCurrent", Code: 0x300E}), reset: true},

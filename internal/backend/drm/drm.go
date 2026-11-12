@@ -51,31 +51,6 @@ const (
 	eventBuffer   = 1024
 )
 
-type device interface {
-	FD() int
-	Number() (uint64, error)
-	Cap(capability uint64) (uint64, error)
-	Resources() (kdrm.Resources, error)
-	Connector(id uint32) (kdrm.Connector, error)
-	Encoder(id uint32) (kdrm.Encoder, error)
-	Planes() ([]uint32, error)
-	Plane(id uint32) (kdrm.Plane, error)
-	Properties(object, kind uint32) (map[string]kdrm.Property, error)
-	PropertyInfo(id uint32) (kdrm.PropertyInfo, error)
-	Blob(id uint32) ([]byte, error)
-	CreateBlob(data []byte) (uint32, error)
-	DestroyBlob(id uint32) error
-	CreateDumb(size image.Point) (kdrm.Dumb, error)
-	DestroyDumb(b kdrm.Dumb) error
-	AddFB2(fb kdrm.FB) (uint32, error)
-	PrimeFDToHandle(fd int) (uint32, error)
-	CloseHandle(handle uint32) error
-	RemoveFB(id uint32) error
-	CloseFB(id uint32) error
-	Commit(r *kdrm.Request, flags uint32, userData uint64) error
-	CRTCSequence(crtc uint32) (kdrm.Vblank, error)
-}
-
 type scanout struct {
 	target       render.Target
 	client       *clientFB
@@ -893,14 +868,14 @@ func (b *Backend) Outputs() []*Output {
 
 func (b *Backend) readEvents(loop.Events) error {
 	for {
-		n, err := unix.Read(b.dev.FD(), b.events)
+		n, err := b.dev.readEvents(b.events)
 		switch {
 		case errors.Is(err, unix.EAGAIN):
 			return nil
 		case errors.Is(err, unix.EINTR):
 			continue
 		case err != nil:
-			return fmt.Errorf("drm: read events: %w", err)
+			return err
 		case n == 0:
 			return nil
 		}

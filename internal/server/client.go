@@ -125,7 +125,7 @@ func (c *Client) settle(doing string, errs []error) error {
 	for _, err := range errs {
 		switch {
 		case err == nil, c.gone && addressedToTheClient(err):
-		case compositorFatal(err):
+		case backend.Fatal(err):
 			fatal = append(fatal, err)
 		default:
 			reported = append(reported, err)
@@ -142,10 +142,6 @@ func (c *Client) settle(doing string, errs []error) error {
 
 func (c *Client) while(doing string, err error) error {
 	return fmt.Errorf("server: %s %v: %w", doing, c, err)
-}
-
-func compositorFatal(err error) bool {
-	return errors.Is(err, backend.ErrDeviceLost) || errors.Is(err, backend.ErrBroken)
 }
 
 func addressedToTheClient(err error) bool {
@@ -290,7 +286,7 @@ func (c *Client) fail(err error) error {
 	if c.restoring {
 		c.display.restoreFailed(c, err)
 	}
-	if compositorFatal(err) {
+	if backend.Fatal(err) {
 		return c.while("serve", err)
 	}
 	c.tell(err)

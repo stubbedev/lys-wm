@@ -17,11 +17,11 @@ import (
 type openStack func(*kdrm.Device) (*gpuAllocator, error)
 
 func openGLES(dev *kdrm.Device) (*gpuAllocator, error) {
-	return newGLESAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+	return newGLESAllocator(device{kernel: dev}, gpu.PathsFromEnv(os.Getenv))
 }
 
 func openVulkan(dev *kdrm.Device) (*gpuAllocator, error) {
-	return newVulkanAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+	return newVulkanAllocator(device{kernel: dev}, gpu.PathsFromEnv(os.Getenv))
 }
 
 var gpuStacks = []struct {

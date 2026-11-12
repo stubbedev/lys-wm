@@ -59,7 +59,6 @@ func TestALostDeviceOrABrokenInvariantEndsTheSession(t *testing.T) {
 		name string
 		err  error
 	}{
-		{"ENODEV", fmt.Errorf("commit: %w", unix.ENODEV)},
 		{"device lost", fmt.Errorf("%w: host gone", backend.ErrDeviceLost)},
 		{"invariant", backend.Broken("a frame in progress twice")},
 	} {

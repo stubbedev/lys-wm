@@ -22,7 +22,7 @@ func planesOn(fds ...int) gpu.DMABUF {
 
 func TestAFramebufferKeepsNoGEMHandlesOpen(t *testing.T) {
 	dev := &fakeDevice{}
-	id, err := importFB(dev, planesOn(7, 7, 8), true)
+	id, err := importFB(device{kernel: dev}, planesOn(7, 7, 8), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestAFramebufferKeepsNoGEMHandlesOpen(t *testing.T) {
 
 func TestARefusedFramebufferLeavesNoHandlesOpen(t *testing.T) {
 	dev := &fakeDevice{refuseAddFB: true}
-	if _, err := importFB(dev, planesOn(7), true); !errors.Is(err, unix.EINVAL) {
+	if _, err := importFB(device{kernel: dev}, planesOn(7), true); !errors.Is(err, unix.EINVAL) {
 		t.Fatalf("importFB = %v, want the refusal", err)
 	}
 	if len(dev.openHandles) != 0 {
@@ -46,7 +46,7 @@ func TestARefusedFramebufferLeavesNoHandlesOpen(t *testing.T) {
 
 func TestAHandleThatWillNotCloseUndoesTheFramebuffer(t *testing.T) {
 	dev := &fakeDevice{refuseCloseHandle: true}
-	if _, err := importFB(dev, planesOn(7), true); !errors.Is(err, unix.EIO) {
+	if _, err := importFB(device{kernel: dev}, planesOn(7), true); !errors.Is(err, unix.EIO) {
 		t.Fatalf("importFB = %v, want the close failure", err)
 	}
 	if len(dev.removedFBs) != 1 {
@@ -57,7 +57,7 @@ func TestAHandleThatWillNotCloseUndoesTheFramebuffer(t *testing.T) {
 func TestAClientFramebufferThatWillNotGoIsReportedNotFatal(t *testing.T) {
 	var reported []error
 	dev := &fakeDevice{refuseRemoveFB: true}
-	cf := &clientFB{dev: dev, report: func(err error) { reported = append(reported, err) }, fb: 701}
+	cf := &clientFB{dev: device{kernel: dev}, report: func(err error) { reported = append(reported, err) }, fb: 701}
 	cf.remove()
 	if len(reported) != 1 || !errors.Is(reported[0], unix.EBUSY) {
 		t.Fatalf("reported %v", reported)

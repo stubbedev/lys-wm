@@ -233,8 +233,9 @@ func NewSecondary(l *loop.Loop, dev *kdrm.Device, primary *Backend, opts Options
 	if err := atomic(dev); err != nil {
 		return nil, "", err
 	}
-	alloc, how := secondaryAllocator(dev, primary, stacksFor(opts), canRender)
-	b, err := newBackend(l, dev, alloc, opts)
+	own := device{kernel: dev}
+	alloc, how := secondaryAllocator(own, primary, stacksFor(opts), canRender)
+	b, err := newBackend(l, own, alloc, opts)
 	if err != nil {
 		return nil, "", errors.Join(err, alloc.close())
 	}
@@ -243,19 +244,19 @@ func NewSecondary(l *loop.Loop, dev *kdrm.Device, primary *Backend, opts Options
 
 type namedStack struct {
 	name string
-	open func(dev *kdrm.Device) (*gpuAllocator, error)
+	open func(dev device) (*gpuAllocator, error)
 }
 
 func stacksFor(opts Options) []namedStack {
-	glesStack := namedStack{"GLES", func(dev *kdrm.Device) (*gpuAllocator, error) { return newGLESAllocator(dev, opts.Paths) }}
+	glesStack := namedStack{"GLES", func(dev device) (*gpuAllocator, error) { return newGLESAllocator(dev, opts.Paths) }}
 	if !opts.Vulkan {
 		return []namedStack{glesStack}
 	}
-	vulkanStack := namedStack{"Vulkan", func(dev *kdrm.Device) (*gpuAllocator, error) { return newVulkanAllocator(dev, opts.Paths) }}
+	vulkanStack := namedStack{"Vulkan", func(dev device) (*gpuAllocator, error) { return newVulkanAllocator(dev, opts.Paths) }}
 	return []namedStack{vulkanStack, glesStack}
 }
 
-func openLocal(dev *kdrm.Device, stacks []namedStack) (*gpuAllocator, namedStack, error) {
+func openLocal(dev device, stacks []namedStack) (*gpuAllocator, namedStack, error) {
 	var errs []error
 	for _, s := range stacks {
 		a, err := s.open(dev)
@@ -267,7 +268,7 @@ func openLocal(dev *kdrm.Device, stacks []namedStack) (*gpuAllocator, namedStack
 	return nil, namedStack{}, errors.Join(errs...)
 }
 
-func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
+func secondaryAllocator(dev device, primary *Backend, stacks []namedStack, canRender bool) (allocator, string) {
 	cpu := &copyAllocator{dev: dev, primary: primary.Renderer()}
 	p, ok := primary.alloc.(*gpuAllocator)
 	if !ok {
@@ -277,7 +278,7 @@ func secondaryAllocator(dev *kdrm.Device, primary *Backend, stacks []namedStack,
 	return linearFirstOr(dev, p, own, how)
 }
 
-func ownBuffers(dev *kdrm.Device, p *gpuAllocator, cpu *copyAllocator, stacks []namedStack, canRender bool) (allocator, string) {
+func ownBuffers(dev device, p *gpuAllocator, cpu *copyAllocator, stacks []namedStack, canRender bool) (allocator, string) {
 	name := filepath.Base(dev.Path())
 	if !canRender {
 		return cpu, cpu.named("a CPU copy, since " + name + " has no render node")
@@ -315,7 +316,7 @@ func ownBuffers(dev *kdrm.Device, p *gpuAllocator, cpu *copyAllocator, stacks []
 	return lazy, how + ", opened only while " + name + " drives an output"
 }
 
-func linearFirstOr(dev *kdrm.Device, primary *gpuAllocator, own allocator, ownHow string) (allocator, string) {
+func linearFirstOr(dev device, primary *gpuAllocator, own allocator, ownHow string) (allocator, string) {
 	if err := primary.rendersLinear(); err != nil {
 		return own, fmt.Sprintf("%s; %v", ownHow, err)
 	}

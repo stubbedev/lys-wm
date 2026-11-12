@@ -226,7 +226,7 @@ func TestACursorDrawnOnTheCPURendersIntoItsBufferWithoutAReadback(t *testing.T) 
 
 func TestAGPURendererWithoutAsyncReadsLeavesADrawnCursorToTheFrame(t *testing.T) {
 	gpu := struct{ render.Renderer }{soft.New()}
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: gpu} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: gpu} })
 	o := r.lit()
 	before := r.b.SyncReads()
 	if err := r.setCursor(o, image.Point{}); !errors.Is(err, backend.ErrCursorReadback) {

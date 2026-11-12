@@ -10,7 +10,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/edid"
 	lgpu "github.com/stubbedev/lys-lib/gpu"
-	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render"
@@ -144,7 +143,7 @@ var (
 )
 
 func Fatal(err error) bool {
-	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken) || errors.Is(err, unix.ENODEV)
+	return errors.Is(err, ErrDeviceLost) || errors.Is(err, ErrBroken)
 }
 
 func GPULost(err error) bool {

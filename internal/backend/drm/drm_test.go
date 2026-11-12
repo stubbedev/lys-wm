@@ -92,6 +92,7 @@ type fakeDevice struct {
 	connected         bool
 	unplugged         bool
 	gone              bool
+	removed           bool
 	badEDID           bool
 	hdrConnector      bool
 	noBT2020Enum      bool
@@ -168,6 +169,8 @@ var modes = []kdrm.Mode{
 
 func (f *fakeDevice) FD() int { return f.events }
 
+func (f *fakeDevice) Path() string { return "/dev/dri/card0" }
+
 func (f *fakeDevice) CRTCSequence(crtc uint32) (kdrm.Vblank, error) {
 	f.vblankReads++
 	if f.vblank == nil {
@@ -179,6 +182,9 @@ func (f *fakeDevice) CRTCSequence(crtc uint32) (kdrm.Vblank, error) {
 func (f *fakeDevice) Number() (uint64, error) { return fakeNumber, nil }
 
 func (f *fakeDevice) Cap(c uint64) (uint64, error) {
+	if f.removed {
+		return 0, unix.ENODEV
+	}
 	switch c {
 	case kdrm.CapCursorWidth, kdrm.CapCursorHeight:
 		return 64, nil
@@ -511,6 +517,9 @@ func (f *fakeDevice) Commit(r *kdrm.Request, flags uint32, userData uint64) erro
 	c := commit{flags: flags, userData: userData, values: map[[2]uint32]uint64{}}
 	r.Each(func(object, property uint32, value uint64) { c.values[[2]uint32{object, property}] = value })
 	f.commits = append(f.commits, c)
+	if f.removed {
+		return unix.ENODEV
+	}
 	if f.noMaster {
 		return unix.EACCES
 	}
@@ -787,7 +796,7 @@ func rigged(t *testing.T, alloc func(*fakeDevice) allocator, master Master) *rig
 	r.dev.now = r.now
 	a := alloc(r.dev)
 	r.alloc, _ = a.(*fakeAlloc)
-	if r.b, err = newBackend(l, r.dev, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }, Master: master}); err != nil {
+	if r.b, err = newBackend(l, device{kernel: r.dev}, a, Options{Report: func(err error) { r.reports = append(r.reports, err) }, Master: master}); err != nil {
 		t.Fatal(err)
 	}
 	r.b.fenceTime = func(int) (time.Duration, bool, error) { return 0, false, nil }
@@ -1677,7 +1686,7 @@ func TestFramebuffersCarryModifiersOnlyWhereTheDeviceTakesThem(t *testing.T) {
 
 func TestSecondaryDevicesShowFramesThePrimaryRendered(t *testing.T) {
 	primary := soft.New()
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: primary} })
 	o := r.rec.outputs[0]
 	f, err := o.BeginFrame()
 	if err != nil {
@@ -1702,7 +1711,7 @@ func TestSecondaryDevicesShowFramesThePrimaryRendered(t *testing.T) {
 }
 
 func TestUnpluggedDevicesDropTheirOutputsWithoutTouchingTheDevice(t *testing.T) {
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: soft.New()} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: soft.New()} })
 	r.settle()
 	commits, dumbs, fbs := len(r.dev.commits), len(r.dev.live), len(r.dev.removedFBs)
 	r.dev.gone = true
@@ -2142,7 +2151,7 @@ func TestACursorRefusedAfterAFlipLetsTheLUTThrough(t *testing.T) {
 	}
 }
 
-func (r *rig) planesAfterAFlip(fail error) error {
+func (r *rig) planesAfterAFlip(fail func(*fakeDevice)) error {
 	r.t.Helper()
 	o := r.lit()
 	if err := r.setCursor(o, image.Pt(4, 6)); err != nil {
@@ -2153,14 +2162,18 @@ func (r *rig) planesAfterAFlip(fail error) error {
 	if err := cp.MoveCursor(image.Pt(30, 20)); err != nil {
 		r.t.Fatal(err)
 	}
-	r.dev.failCommits = fail
+	fail(r.dev)
 	r.dev.flip(r.t, 10, 2)
 	return r.runUntil("the rejected plane commit's report", func() bool { return len(r.reports) > 0 })
 }
 
+func failingCommits(err error) func(*fakeDevice) {
+	return func(d *fakeDevice) { d.failCommits = err }
+}
+
 func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
 	r := start(t)
-	if err := r.planesAfterAFlip(unix.EBUSY); err != nil {
+	if err := r.planesAfterAFlip(failingCommits(unix.EBUSY)); err != nil {
 		t.Fatalf("a busy plane commit ended the session: %v", err)
 	}
 	if len(r.reports) != 1 || !errors.Is(r.reports[0], unix.EBUSY) {
@@ -2187,8 +2200,42 @@ func TestAPlaneCommitTheKernelRejectsIsReportedAndRetried(t *testing.T) {
 
 func TestAPlaneCommitOnAGoneDeviceEndsTheSession(t *testing.T) {
 	r := start(t)
-	if err := r.planesAfterAFlip(unix.ENODEV); !errors.Is(err, unix.ENODEV) {
-		t.Fatalf("the loop ended with %v, want ENODEV", err)
+	if err := r.planesAfterAFlip(func(d *fakeDevice) { d.removed = true }); !errors.Is(err, backend.ErrDeviceLost) || !errors.Is(err, unix.ENODEV) {
+		t.Fatalf("the loop ended with %v, want the card's ENODEV as a lost device", err)
+	}
+}
+
+func TestANoDeviceErrorFromACommitTheCardStillAnswersAfterIsReportedNotFatal(t *testing.T) {
+	r := start(t)
+	if err := r.planesAfterAFlip(failingCommits(unix.ENODEV)); err != nil {
+		t.Fatalf("an ENODEV the card itself does not confirm ended the session: %v", err)
+	}
+	if len(r.reports) != 1 || !errors.Is(r.reports[0], unix.ENODEV) || backend.Fatal(r.reports[0]) {
+		t.Fatalf("reported %v, want the ENODEV once, not as a lost device", r.reports)
+	}
+}
+
+func TestAFrameCommitOnAGoneDeviceStopsTheCompositorWithTheDeviceLost(t *testing.T) {
+	r := start(t)
+	o := r.lit()
+	r.dev.removed = true
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	err := r.runUntil("the frame on the gone card", func() bool { return false })
+	if !errors.Is(err, backend.ErrDeviceLost) || !errors.Is(err, unix.ENODEV) || !strings.Contains(err.Error(), "/dev/dri/card0") {
+		t.Fatalf("the loop ended with %v, want the frame's ENODEV as /dev/dri/card0 lost", err)
+	}
+}
+
+func TestAFailedEventReadIsFatalAndAnEmptyOneIsNot(t *testing.T) {
+	r := start(t)
+	_, err := device{kernel: &fakeDevice{events: -1}}.readEvents(make([]byte, 8))
+	if !errors.Is(err, backend.ErrBroken) || !errors.Is(err, unix.EBADF) {
+		t.Fatalf("reading a closed fd = %v, want a broken invariant", err)
+	}
+	if err := r.b.readEvents(0); err != nil {
+		t.Fatalf("reading no events = %v, want nil on EAGAIN", err)
 	}
 }
 
@@ -2902,7 +2949,7 @@ func (p *pendingCopy) Release() error {
 
 func TestACopiedFrameCommitsOnlyOnceTheReadFinishedOffTheLoop(t *testing.T) {
 	primary := asyncPrimaryOf(soft.New())
-	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: dev, primary: primary} })
+	r := boot(t, func(dev *fakeDevice) allocator { return &copyAllocator{dev: device{kernel: dev}, primary: primary} })
 	r.copiesOffLoop(primary)
 	o := r.b.Outputs()[0]
 	n := len(r.dev.commits)

@@ -80,7 +80,7 @@ func TestThePrimaryPlaneOffersOnlyModifiersTheRendererAllocates(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = l.Close() })
-	_, err = newBackend(l, &fakeDevice{connected: true}, &fakeAlloc{soft: soft.New(), renders: []fourcc.Modifier{9}}, Options{Report: func(error) {}})
+	_, err = newBackend(l, device{kernel: &fakeDevice{connected: true}}, &fakeAlloc{soft: soft.New(), renders: []fourcc.Modifier{9}}, Options{Report: func(error) {}})
 	if err == nil || !strings.Contains(err.Error(), "scans out no XRGB8888 modifier the renderer can draw") {
 		t.Fatalf("a renderer sharing no modifier with the plane: %v", err)
 	}

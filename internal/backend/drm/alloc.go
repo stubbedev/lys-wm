@@ -82,7 +82,7 @@ func openStackOnFile(files []func() (*kdrm.Device, error), open func(fd int) (gp
 	return gpuStack{}, errors.Join(errs...)
 }
 
-func addFB2Modifiers(dev *kdrm.Device) (bool, error) {
+func addFB2Modifiers(dev device) (bool, error) {
 	modifiers, err := dev.Cap(kdrm.CapAddFB2Modifiers)
 	if err != nil {
 		return false, fmt.Errorf("drm: ADDFB2 modifier support of %s: %w", dev.Path(), err)
@@ -90,7 +90,7 @@ func addFB2Modifiers(dev *kdrm.Device) (bool, error) {
 	return modifiers == 1, nil
 }
 
-func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) {
+func newGLESAllocator(dev device, paths gpu.Paths) (*gpuAllocator, error) {
 	modifiers, err := addFB2Modifiers(dev)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func newGLESAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) 
 	return &gpuAllocator{dev: dev, path: dev.Path(), modifiers: modifiers, mem: gbmMemory{gbm: s.gbm, gpu: s.gpu}, gpu: s.gpu, closeGPU: s.closeGPU}, nil
 }
 
-func newVulkanAllocator(dev *kdrm.Device, paths gpu.Paths) (*gpuAllocator, error) {
+func newVulkanAllocator(dev device, paths gpu.Paths) (*gpuAllocator, error) {
 	modifiers, err := addFB2Modifiers(dev)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ type Options struct {
 	Master  Master
 }
 
-func primaryAllocator(dev *kdrm.Device, opts Options) (allocator, error) {
+func primaryAllocator(dev device, opts Options) (allocator, error) {
 	if opts.Vulkan {
 		return newVulkanAllocator(dev, opts.Paths)
 	}
@@ -315,11 +315,12 @@ func New(l *loop.Loop, dev *kdrm.Device, opts Options) (*Backend, error) {
 	if err := atomic(dev); err != nil {
 		return nil, err
 	}
-	alloc, err := primaryAllocator(dev, opts)
+	own := device{kernel: dev}
+	alloc, err := primaryAllocator(own, opts)
 	if err != nil {
 		return nil, err
 	}
-	b, err := newBackend(l, dev, alloc, opts)
+	b, err := newBackend(l, own, alloc, opts)
 	if err != nil {
 		return nil, errors.Join(err, alloc.close())
 	}

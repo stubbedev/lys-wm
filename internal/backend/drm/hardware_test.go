@@ -260,7 +260,8 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 				t.Skipf("cannot open %s: %v", card, err)
 			}
 			defer dev.Close()
-			a, err := newGLESAllocator(dev, gpu.PathsFromEnv(os.Getenv))
+			own := device{kernel: dev}
+			a, err := newGLESAllocator(own, gpu.PathsFromEnv(os.Getenv))
 			if err != nil {
 				t.Skipf("no GLES on %s: %v", card, err)
 			}
@@ -274,7 +275,7 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			files, err := renderFiles(dev)
+			files, err := renderFiles(own)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -306,14 +307,14 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			id, err := importFB(dev, bo.DMABUF, a.modifiers)
+			id, err := importFB(own, bo.DMABUF, a.modifiers)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := tex.Destroy(); err != nil {
 				t.Fatal(err)
 			}
-			again, err := importFB(dev, bo.DMABUF, a.modifiers)
+			again, err := importFB(own, bo.DMABUF, a.modifiers)
 			if err != nil {
 				t.Fatalf("importing the buffer again after Mesa let go of it: %v", err)
 			}
