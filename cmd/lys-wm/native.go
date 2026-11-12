@@ -488,15 +488,19 @@ func (n *native) retire() error {
 	return errors.Join(errs...)
 }
 
-func (n *native) park() error {
-	var errs []error
-	if n.input != nil {
-		errs = append(errs, n.input.Park())
+func (n *native) parkInput() error {
+	if n.input == nil {
+		return nil
 	}
-	for _, c := range n.cards {
-		errs = append(errs, c.backend.Park())
+	return n.input.Park()
+}
+
+func (n *native) displayDevices() []displayDevice {
+	devices := make([]displayDevice, len(n.cards))
+	for i, c := range n.cards {
+		devices[i] = c.backend
 	}
-	return errors.Join(errs...)
+	return devices
 }
 
 func (n *native) unpark() error {
@@ -512,15 +516,6 @@ func (n *native) unpark() error {
 
 func (n *native) paused() bool {
 	return slices.ContainsFunc(n.cards, func(c *card) bool { return c.backend.Paused() })
-}
-
-func (n *native) busy() string {
-	for _, c := range n.cards {
-		if why := c.backend.Flipping(); why != "" {
-			return why
-		}
-	}
-	return ""
 }
 
 func (n *native) Close() error {

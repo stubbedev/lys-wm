@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -178,7 +179,7 @@ func (u *upgrader) quiesce(binary string, conn *os.File, finish func(error)) {
 	}
 	native := u.opened.native
 	if native != nil {
-		if err := native.park(); err != nil {
+		if err := native.parkInput(); err != nil {
 			resume(fmt.Errorf("stop for the handover: %w", err))
 			return
 		}
@@ -187,12 +188,14 @@ func (u *upgrader) quiesce(binary string, conn *os.File, finish func(error)) {
 	var timer *loop.Timer
 	var err error
 	timer, err = u.loop.AddTimer(func() error {
-		why := u.comp.Busy()
-		if why == "" {
-			u.comp.Park()
+		var devices []displayDevice
+		if native != nil {
+			devices = native.displayDevices()
 		}
-		if why == "" && native != nil {
-			why = native.busy()
+		why, parkErr := quiet(u.comp, devices)
+		if parkErr != nil {
+			resume(fmt.Errorf("stop for the handover: %w", parkErr))
+			return timer.Remove()
 		}
 		if why == "" {
 			if err := timer.Remove(); err != nil {
@@ -216,6 +219,33 @@ func (u *upgrader) quiesce(binary string, conn *os.File, finish func(error)) {
 	}
 }
 
+type quiescent interface {
+	Busy() string
+	Park()
+}
+
+type displayDevice interface {
+	Flipping() string
+	Park() error
+}
+
+func quiet(comp quiescent, devices []displayDevice) (string, error) {
+	if why := comp.Busy(); why != "" {
+		return why, nil
+	}
+	comp.Park()
+	for _, d := range devices {
+		if why := d.Flipping(); why != "" {
+			return why, nil
+		}
+	}
+	var errs []error
+	for _, d := range devices {
+		errs = append(errs, d.Park())
+	}
+	return "", errors.Join(errs...)
+}
+
 func (u *upgrader) state(conn *os.File, t *handover.FDs) (*handoverState, error) {
 	cs, err := u.comp.HandoverState(t, u.skipClient)
 	if err != nil {
@@ -226,7 +256,16 @@ func (u *upgrader) state(conn *os.File, t *handover.FDs) (*handoverState, error)
 		return nil, fmt.Errorf("the IPC listener: %w", err)
 	}
 	u.held = append(u.held, ln)
-	st := &handoverState{Format: handover.Format, Compositor: cs, IPC: t.Add(int(ln.Fd())), Reply: t.Add(int(conn.Fd())), Stderr: t.Add(int(os.Stderr.Fd()))}
+	st := &handoverState{Format: handover.Format, Compositor: cs}
+	if st.IPC, err = passOn(t, "the IPC listener", ln); err != nil {
+		return nil, err
+	}
+	if st.Reply, err = passOn(t, "the upgrade request", conn); err != nil {
+		return nil, err
+	}
+	if st.Stderr, err = passOn(t, "stderr", os.Stderr); err != nil {
+		return nil, err
+	}
 	if u.xw != nil {
 		x := u.xw.Sockets(t)
 		st.X = &x
@@ -235,11 +274,27 @@ func (u *upgrader) state(conn *os.File, t *handover.FDs) (*handoverState, error)
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range watchers {
-		st.Watchers = append(st.Watchers, t.Add(int(f.Fd())))
-	}
 	u.held = append(u.held, watchers...)
+	for _, f := range watchers {
+		i, err := passOn(t, "an IPC watcher", f)
+		if err != nil {
+			return nil, err
+		}
+		st.Watchers = append(st.Watchers, i)
+	}
 	return st, nil
+}
+
+func passOn(t *handover.FDs, what string, c syscall.Conn) (int, error) {
+	raw, err := c.SyscallConn()
+	if err != nil {
+		return 0, fmt.Errorf("keep %s for the new process: %w", what, err)
+	}
+	var i int
+	if err := raw.Control(func(fd uintptr) { i = t.Add(int(fd)) }); err != nil {
+		return 0, fmt.Errorf("keep %s for the new process: %w", what, err)
+	}
+	return i, nil
 }
 
 type tail struct {
@@ -517,7 +572,7 @@ func (a *adopted) handshake() {
 		abort(err)
 		return
 	}
-	if err := unix.Dup3(stderr, int(os.Stderr.Fd()), 0); err != nil {
+	if err := unix.Dup3(stderr, unix.Stderr, 0); err != nil {
 		abort(fmt.Errorf("keep the session's stderr: %w", err))
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
+const reapLimit = 10 * time.Second
+
 func buildLysWM(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "lys-wm")
@@ -43,6 +46,7 @@ func buildLysWM(t *testing.T) string {
 type running struct {
 	t           *testing.T
 	cmd         *exec.Cmd
+	binary      string
 	runtime     string
 	socket      string
 	waylandPath string
@@ -76,13 +80,17 @@ func startBare(t *testing.T, binary, config string, extra ...string) *running {
 	cmd.Stderr, cmd.Stdout = logs, logs
 	env := os.Environ()
 	cmd.Env = append(slicesWithout(env, "WAYLAND_DISPLAY", wmipc.SocketEnv, "XDG_RUNTIME_DIR"), "XDG_RUNTIME_DIR="+runtime)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	s := &running{t: t, cmd: cmd, runtime: runtime, logs: logs, exited: make(chan error, 1)}
+	s := &running{t: t, cmd: cmd, binary: binary, runtime: runtime, logs: logs, exited: make(chan error, 1)}
 	go func() { s.exited <- cmd.Wait() }()
 	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
+		if err := unix.Kill(-cmd.Process.Pid, unix.SIGKILL); err != nil && !errors.Is(err, unix.ESRCH) {
+			t.Errorf("kill the process group %d: %v", cmd.Process.Pid, err)
+		}
+		s.reap()
 		if t.Failed() {
 			t.Log(s.log())
 		}
@@ -108,6 +116,85 @@ func startBare(t *testing.T, binary, config string, extra ...string) *running {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func (s *running) reap() {
+	s.t.Helper()
+	deadline := time.Now().Add(reapLimit)
+	for {
+		left, err := s.survivors()
+		if err != nil {
+			s.t.Error(err)
+			return
+		}
+		if len(left) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			for _, p := range left {
+				_ = unix.Kill(p.pid, unix.SIGKILL)
+			}
+			s.t.Errorf("processes of the session outlived it by %v: %+v", reapLimit, left)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+type survivor struct {
+	pid     int
+	group   int
+	exe     string
+	cmdline string
+}
+
+func (s *running) survivors() ([]survivor, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, fmt.Errorf("list the processes: %w", err)
+	}
+	var out []survivor
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		stat, err := os.ReadFile("/proc/" + e.Name() + "/stat")
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read the state of process %d: %w", pid, err)
+		}
+		end := strings.LastIndexByte(string(stat), ')')
+		if end < 0 {
+			return nil, fmt.Errorf("process %d has the state %q", pid, stat)
+		}
+		fields := strings.Fields(string(stat[end+1:]))
+		if len(fields) < 3 {
+			return nil, fmt.Errorf("process %d has the state %q", pid, stat)
+		}
+		if fields[0] == "Z" {
+			continue
+		}
+		group, err := strconv.Atoi(fields[2])
+		if err != nil {
+			return nil, fmt.Errorf("process %d has the group %q: %w", pid, fields[2], err)
+		}
+		exe, err := os.Readlink(filepathProcExe(pid))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrPermission) {
+			return nil, fmt.Errorf("read the binary of process %d: %w", pid, err)
+		}
+		if group != s.cmd.Process.Pid && exe != s.binary {
+			continue
+		}
+		cmdline, err := os.ReadFile("/proc/" + e.Name() + "/cmdline")
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, unix.ESRCH) {
+			return nil, fmt.Errorf("read the command line of process %d: %w", pid, err)
+		}
+		out = append(out, survivor{pid: pid, group: group, exe: exe, cmdline: strings.ReplaceAll(string(cmdline), "\x00", " ")})
+	}
+	return out, nil
 }
 
 func slicesWithout(env []string, names ...string) []string {
@@ -338,19 +425,34 @@ func TestUpgradeTwiceThenTheSessionEndsCleanly(t *testing.T) {
 		}
 		c.DispatchUntil("a frame", func() bool { return w.Frames > frames })
 	}
+	s.end()
+}
+
+func (s *running) end() {
+	s.t.Helper()
 	if err := s.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatal(err)
+		s.t.Fatal(err)
 	}
 	select {
 	case err := <-s.exited:
 		if err != nil {
-			t.Fatalf("the session ended with %v\n%s", err, s.log())
+			s.t.Fatalf("the session ended with %v\n%s", err, s.log())
 		}
 	case <-time.After(20 * time.Second):
-		t.Fatalf("the session did not end\n%s", s.log())
+		s.t.Fatalf("the session did not end\n%s", s.log())
 	}
 	if _, err := os.Stat(s.waylandPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the Wayland socket outlived the session: %v", err)
+		s.t.Fatalf("the Wayland socket outlived the session: %v", err)
+	}
+	if _, err := os.Stat(s.socket); !errors.Is(err, os.ErrNotExist) {
+		s.t.Fatalf("the IPC socket outlived the session: %v", err)
+	}
+	left, err := s.survivors()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	if len(left) != 0 {
+		s.t.Fatalf("processes of the session outlived it: %+v", left)
 	}
 }
 
@@ -863,6 +965,81 @@ func TestAFailedUpgradeNeverClosesTheNextConnection(t *testing.T) {
 	}
 }
 
+func TestASessionEndsCleanlyAfterAFailedUpgrade(t *testing.T) {
+	binary := buildLysWM(t)
+	s := startProcess(t, binary, "")
+	if _, err := s.upgrade(script(t, answersHandoverInfo()+"exit 3\n")); err == nil {
+		t.Fatal("a binary that exits at once took over")
+	}
+	if _, err := ipc.Do(s.socket, ipc.Request{Request: wmipc.KindWindows}); err != nil {
+		t.Fatalf("the session did not answer after the failed upgrade: %v\n%s", err, s.log())
+	}
+	s.end()
+}
+
 func answersHandoverInfo() string {
 	return fmt.Sprintf(`case "$1" in --handover-info) echo '{"format":%d}'; exit 0;; esac`+"\n", handover.Format)
+}
+
+type planeHolder struct {
+	owed   bool
+	parked bool
+}
+
+func (c *planeHolder) Busy() string {
+	if c.owed {
+		return "a buffer waits for a display plane to retire it"
+	}
+	return ""
+}
+
+func (c *planeHolder) Park() { c.parked = true }
+
+type flippingCard struct {
+	flipping, parked bool
+	parkedInFlight   bool
+	retire           func()
+}
+
+func (d *flippingCard) Flipping() string {
+	if d.flipping {
+		return "output DP-1 has a flip on its way"
+	}
+	return ""
+}
+
+func (d *flippingCard) Park() error {
+	d.parkedInFlight = d.parkedInFlight || d.flipping
+	d.parked = true
+	return nil
+}
+
+func (d *flippingCard) readEvents() {
+	if d.parked || !d.flipping {
+		return
+	}
+	d.flipping = false
+	d.retire()
+}
+
+func TestAnUpgradeStartedDuringAFlipWaitsForItThenParks(t *testing.T) {
+	comp := &planeHolder{owed: true}
+	card := &flippingCard{flipping: true, retire: func() { comp.owed = false }}
+	steps := int(quiesceLimit / quiesceStep)
+	for step := range steps {
+		why, err := quiet(comp, []displayDevice{card})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if why == "" {
+			break
+		}
+		if step == steps-1 {
+			t.Fatalf("the handover still waits after %v: %s", quiesceLimit, why)
+		}
+		card.readEvents()
+	}
+	if !comp.parked || !card.parked || card.parkedInFlight || comp.owed {
+		t.Fatalf("compositor parked %v, card parked %v, parked with a flip in flight %v, a buffer owed %v", comp.parked, card.parked, card.parkedInFlight, comp.owed)
+	}
 }
