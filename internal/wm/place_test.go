@@ -172,3 +172,21 @@ func TestFocusFloatingSwitchesLayers(t *testing.T) {
 	s = runWith(t, s, "focusfloating off", settings)
 	focusedIs(t, s, "DP-1", 1)
 }
+
+func TestAMinimizedFloatingWindowKeepsItsFloatingRectAndIsNotPlaced(t *testing.T) {
+	r := image.Rect(100, 100, 400, 300)
+	s := ok(t)(floatingAt(t, r).Minimize(2, image.Rectangle{}))
+	if got := rectOf(t, s, 2); got != r {
+		t.Fatalf("the minimized window floats at %v, want the %v it had", got, r)
+	}
+	next, err := s.Place(2, PlaceLeft, placeSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rectOf(t, next, 2); got != r {
+		t.Errorf("placing the minimized window moved it to %v, want it left at %v", got, r)
+	}
+	if _, floats := ok(t)(s.Minimize(1, image.Rectangle{})).FloatingRect(1); floats {
+		t.Error("a minimized tiled window has a floating rect")
+	}
+}

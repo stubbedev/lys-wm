@@ -72,7 +72,7 @@ func (s State) Place(id WindowID, p Placing, settings Settings) (State, error) {
 	}
 	current, floats := s.FloatingRect(id)
 	tiled := w.Tree.Contains(id)
-	if !floats && !tiled {
+	if w.minimizedIndex(id) >= 0 || !floats && !tiled {
 		return s, nil
 	}
 	fit := s.limits[id].floored()

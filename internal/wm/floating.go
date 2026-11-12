@@ -131,6 +131,12 @@ func (s State) FloatingRect(id WindowID) (image.Rectangle, bool) {
 	if w == nil {
 		return image.Rectangle{}, false
 	}
+	if i := w.minimizedIndex(id); i >= 0 {
+		if w.Minimized[i].Layer != LayerFloating {
+			return image.Rectangle{}, false
+		}
+		return w.Minimized[i].Rect, true
+	}
 	i := w.floatingIndex(id)
 	if i < 0 {
 		return image.Rectangle{}, false
@@ -233,14 +239,8 @@ func (s State) ResizeFloating(id WindowID, from image.Rectangle, d image.Point, 
 }
 
 func (s State) Floats(id WindowID) bool {
-	w := s.windowWorkspace(id)
-	if w == nil {
-		return false
-	}
-	if i := w.minimizedIndex(id); i >= 0 {
-		return w.Minimized[i].Layer == LayerFloating
-	}
-	return w.floatingIndex(id) >= 0
+	_, floats := s.FloatingRect(id)
+	return floats
 }
 
 func (s State) Reinsert(id WindowID, at image.Point, auto Autotile) (State, error) {
