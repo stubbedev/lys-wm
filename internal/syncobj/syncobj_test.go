@@ -2,6 +2,8 @@ package syncobj
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -85,22 +87,24 @@ func (s *screen) Awaiting() error {
 
 func (s *screen) OffScreen(_ *dmabuf.Buffer, f func() error) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.hold {
+		s.mu.Unlock()
 		return f()
 	}
+	defer s.mu.Unlock()
 	s.held = append(s.held, f)
 	return nil
 }
 
 func (s *screen) leave() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	errs := make([]error, 0, len(s.held))
-	for _, f := range s.held {
+	held := s.held
+	s.held, s.hold = nil, false
+	s.mu.Unlock()
+	errs := make([]error, 0, len(held))
+	for _, f := range held {
 		errs = append(errs, f())
 	}
-	s.held, s.hold = nil, false
 	return errors.Join(errs...)
 }
 
@@ -451,14 +455,12 @@ func TestAReleasePointSignalsAtOnceWhenTheGPUHasFinished(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = dev.DestroySyncobj(s) })
 	tl := &timeline{m: &Manager{dev: dev, fencer: finishedGPU{}}, handle: s, refs: 2}
-	if err := (&point{t: tl, value: 5}).signalAfterGPU(); err != nil {
+	how, err := (&point{t: tl, value: 5}).armAfterGPU()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if v, err := dev.Query(s); err != nil || v != 5 {
-		t.Fatalf("the timeline is at %d, %v, want 5", v, err)
-	}
-	if tl.refs != 1 {
-		t.Fatalf("the point left %d references", tl.refs)
+	if v, err := dev.Query(s); err != nil || v != 5 || how != signalled {
+		t.Fatalf("the timeline is at %d, %v, armed %d, want 5 signalled", v, err, how)
 	}
 }
 
@@ -499,24 +501,47 @@ type acquireWait struct {
 	sweeps  uint64
 }
 
-func (e *env) sweep() ([]acquireWait, bool) {
+type owedRelease struct {
+	surface  wire.ObjectID
+	buffer   string
+	timeline wire.ObjectID
+	point    uint64
+	arming   arming
+	sweeps   uint64
+	refs     int
+}
+
+type swept struct {
+	waits    []acquireWait
+	releases []owedRelease
+	busy     bool
+}
+
+func (e *env) sweepAll() swept {
 	e.t.Helper()
-	type swept struct {
-		waits []acquireWait
-		busy  bool
-	}
 	got := make(chan swept, 1)
 	if err := e.l.Post(func() error {
 		var s swept
-		s.busy = e.manager.Sweep(func(sf *surface.Surface, acquire, sweeps uint64) {
+		var err error
+		s.busy, err = e.manager.Sweep(func(sf *surface.Surface, acquire, sweeps uint64) {
 			s.waits = append(s.waits, acquireWait{sf.Resource().Base().ID(), acquire, sweeps})
+		}, func(r Release, sweeps uint64) {
+			s.releases = append(s.releases, owedRelease{r.Surface().Resource().Base().ID(), r.Buffer().String(), r.p.res.Base().ID(), r.p.value, r.arming, sweeps, r.p.t.refs})
 		})
 		got <- s
-		return nil
+		return err
 	}); err != nil {
 		e.t.Fatal(err)
 	}
-	s := <-got
+	return <-got
+}
+
+func (e *env) sweep() ([]acquireWait, bool) {
+	e.t.Helper()
+	s := e.sweepAll()
+	if len(s.releases) != 0 {
+		e.t.Fatalf("a sweep found release points owed: %v", s.releases)
+	}
 	return s.waits, s.busy
 }
 
@@ -577,15 +602,101 @@ func TestAReleasePointSignalsEvenIfItsGPUFenceCannotBeHad(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = dev.DestroySyncobj(s) })
 			tl := &timeline{m: &Manager{dev: dev, fencer: f}, handle: s, refs: 2}
-			if err := (&point{t: tl, value: 5}).signalAfterGPU(); err == nil {
+			how, err := (&point{t: tl, value: 5}).armAfterGPU()
+			if err == nil {
 				t.Fatal("the lost GPU fence was not reported")
 			}
-			if v, err := dev.Query(s); err != nil || v != 5 {
-				t.Fatalf("the timeline is at %d, %v, want 5: the client would wait on its release for ever", v, err)
-			}
-			if tl.refs != 1 {
-				t.Fatalf("the point left %d references", tl.refs)
+			if v, err := dev.Query(s); err != nil || v != 5 || how != signalled {
+				t.Fatalf("the timeline is at %d, %v, armed %d, want 5 signalled: the client would wait on its release for ever", v, err, how)
 			}
 		})
+	}
+}
+
+type withheldFences struct{ *drm.Device }
+
+func (withheldFences) ImportSyncFile(drm.Syncobj, uint64, int) error { return nil }
+
+type pendingGPU struct{}
+
+func (pendingGPU) SyncFile() (int, error) {
+	return unix.MemfdCreate("pending-fence", unix.MFD_CLOEXEC)
+}
+
+func (e *env) show(s *cw.WlSurface, ss *cls.WpLinuxDrmSyncobjSurfaceV1, acquire drm.Syncobj, atl, rtl *cls.WpLinuxDrmSyncobjTimelineV1, point uint32) *cw.WlBuffer {
+	e.t.Helper()
+	b := e.dmabuf()
+	if err := e.dev.Signal(acquire, uint64(point)); err != nil {
+		e.t.Fatal(err)
+	}
+	want := e.rec.count() + 1
+	for _, err := range []error{ss.SetAcquirePoint(atl, 0, point), ss.SetReleasePoint(rtl, 0, point), s.Attach(b, 0, 0), s.Commit()} {
+		if err != nil {
+			e.t.Fatal(err)
+		}
+	}
+	e.waitFor("the commit after its acquire point", func() bool { return e.rec.count() == want })
+	return b
+}
+
+func (e *env) arm(dev Device, f Fencer) {
+	e.t.Helper()
+	if err := e.l.Post(func() error {
+		e.manager.dev, e.manager.fencer = dev, f
+		return nil
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestASweepNamesAReleasePointOwedUntilTheKernelReachesIt(t *testing.T) {
+	e := setup(t)
+	e.arm(withheldFences{e.dev}, pendingGPU{})
+	acquire, atl := e.timeline()
+	release, rtl := e.timeline()
+	s, ss := e.surface()
+	first := e.show(s, ss, acquire, atl, rtl, 1)
+	if got := e.sweepAll(); got.busy || len(got.releases) != 0 {
+		t.Fatalf("a sweep with the buffer still on screen found %v", got.releases)
+	}
+	e.show(s, ss, acquire, atl, rtl, 2)
+	pid := os.Getpid()
+	for want := range uint64(3) {
+		got := e.sweepAll()
+		owed := []owedRelease{{s.Base().ID(), fmt.Sprintf("wl_buffer@%d of pid %d", first.Base().ID(), pid), rtl.Base().ID(), 1, fenced, want + 1, 3}}
+		if !got.busy || len(got.waits) != 0 || !slices.Equal(got.releases, owed) {
+			t.Fatalf("sweep %d found %+v, busy %v, want %+v", want+1, got.releases, got.busy, owed)
+		}
+	}
+	if err := e.dev.Signal(release, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.sweepAll(); got.busy || len(got.releases) != 0 {
+		t.Fatalf("a sweep after the release point signalled found %v, busy %v", got.releases, got.busy)
+	}
+	refs := make(chan int, 1)
+	if err := e.l.Post(func() error {
+		for _, ss := range e.manager.surfaces {
+			refs <- ss.current.release.t.refs
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := <-refs; n != 2 {
+		t.Fatalf("the release timeline holds %d references once the owed point signalled, want 2: its object and the buffer on screen", n)
+	}
+}
+
+func TestASweepFindsNoReleasePointOwedOnceItsGPUFenceSignalled(t *testing.T) {
+	e := setup(t)
+	acquire, atl := e.timeline()
+	_, rtl := e.timeline()
+	s, ss := e.surface()
+	for point := range uint32(3) {
+		e.show(s, ss, acquire, atl, rtl, point+1)
+	}
+	if got := e.sweepAll(); got.busy || len(got.releases) != 0 {
+		t.Fatalf("a sweep found %v owed, busy %v, after their fences signalled", got.releases, got.busy)
 	}
 }

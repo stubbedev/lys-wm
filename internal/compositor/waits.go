@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/surface"
+	"github.com/stubbedev/lys-wm/internal/syncobj"
 )
 
 const (
@@ -24,12 +25,14 @@ const (
 	waitAcquire waitKind = iota + 1
 	waitWriter
 	waitRelease
+	waitReleasePoint
 )
 
 var waitNames = [...]string{
-	waitAcquire: "its syncobj acquire point",
-	waitWriter:  "its writer's implicit fence",
-	waitRelease: "a display plane to retire it",
+	waitAcquire:      "its syncobj acquire point",
+	waitWriter:       "its writer's implicit fence",
+	waitRelease:      "a display plane to retire it",
+	waitReleasePoint: "the kernel to reach it",
 }
 
 func (k waitKind) String() string {
@@ -40,6 +43,7 @@ type waitKey struct {
 	kind    waitKind
 	surface *surface.Surface
 	buffer  *dmabuf.Buffer
+	release syncobj.Release
 }
 
 type waitEpisode struct {
@@ -83,8 +87,12 @@ func (c *Compositor) sweepWaits() error {
 	w.armed = false
 	w.sweeps++
 	busy := c.sweepWithheld()
-	if c.syncobj != nil && c.syncobj.Sweep(c.acquireWaiting) {
-		busy = true
+	if c.syncobj != nil {
+		owing, err := c.syncobj.Sweep(c.acquireWaiting, c.releaseOwed)
+		if err != nil {
+			c.report(err)
+		}
+		busy = busy || owing
 	}
 	if c.dmabuf != nil && c.dmabuf.Sweep(c.writerWaiting) {
 		busy = true
@@ -164,6 +172,16 @@ func (c *Compositor) writerWaiting(b *dmabuf.Buffer, s *surface.Surface, sweeps 
 	subject := fmt.Sprintf("%s on %s", b, c.describeSurface(s))
 	c.stall(k, subject, sweeps)
 	c.report(fmt.Errorf("compositor: a commit of %s has waited over %v for its writer's implicit fence; it and every later commit of its surface apply only once the fence signals%s", subject, waitedOver(sweeps), c.protocolAtStall()))
+}
+
+func (c *Compositor) releaseOwed(r syncobj.Release, sweeps uint64) {
+	k := waitKey{kind: waitReleasePoint, release: r}
+	if sweeps < waitStalled || c.stillStalled(k) {
+		return
+	}
+	subject := fmt.Sprintf("%s of %s on %s", r, r.Buffer(), c.describeSurface(r.Surface()))
+	c.stall(k, subject, sweeps)
+	c.report(fmt.Errorf("compositor: %s has not signalled over %v after lys-wm let the buffer go; it waits for %s, and until it signals the client cannot reuse the buffer%s", subject, waitedOver(sweeps), r.Awaits(), c.protocolAtStall()))
 }
 
 func (c *Compositor) sweepWithheld() bool {

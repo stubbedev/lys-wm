@@ -32,17 +32,29 @@ type Screen interface {
 	Awaiting() error
 }
 
+type Device interface {
+	Path() string
+	Cap(capability uint64) (uint64, error)
+	ImportSyncobj(fd int) (drm.Syncobj, error)
+	DestroySyncobj(s drm.Syncobj) error
+	Signal(s drm.Syncobj, point uint64) error
+	Query(s drm.Syncobj) (uint64, error)
+	EventFD(s drm.Syncobj, point uint64, eventfd int, available bool) error
+	ImportSyncFile(s drm.Syncobj, point uint64, syncFile int) error
+}
+
 type Manager struct {
 	loop     *loop.Loop
-	dev      *drm.Device
+	dev      Device
 	fencer   Fencer
 	screen   Screen
 	surfaces map[*surface.Surface]*syncSurface
+	owed     []Release
 	eventFDs uint64
 	sweeps   uint64
 }
 
-func (m *Manager) Sweep(waiting func(s *surface.Surface, acquire, sweeps uint64)) bool {
+func (m *Manager) Sweep(acquireWaiting func(s *surface.Surface, acquire, sweeps uint64), releaseOwed func(r Release, sweeps uint64)) (bool, error) {
 	m.sweeps++
 	busy := false
 	for s, ss := range m.surfaces {
@@ -51,12 +63,25 @@ func (m *Manager) Sweep(waiting func(s *surface.Surface, acquire, sweeps uint64)
 		}
 		busy = true
 		w := ss.waits[0]
-		waiting(s, w.acquire.value, m.sweeps-w.born)
+		acquireWaiting(s, w.acquire.value, m.sweeps-w.born)
 	}
-	return busy
+	var errs []error
+	owed := m.owed[:0]
+	for _, r := range m.owed {
+		reached, err := r.reached()
+		if err != nil || reached {
+			errs = append(errs, err, r.p.drop())
+			continue
+		}
+		owed = append(owed, r)
+		releaseOwed(r, m.sweeps-r.born)
+	}
+	clear(m.owed[len(owed):])
+	m.owed = owed
+	return busy || len(owed) > 0, errors.Join(errs...)
 }
 
-func New(d *server.Display, l *loop.Loop, dev *drm.Device, f Fencer, screen Screen) (*Manager, error) {
+func New(d *server.Display, l *loop.Loop, dev Device, f Fencer, screen Screen) (*Manager, error) {
 	timelines, err := dev.Cap(drm.CapSyncobjTimeline)
 	if err != nil {
 		return nil, fmt.Errorf("syncobj: %w", err)
@@ -115,30 +140,83 @@ func (p *point) drop() error {
 	return p.t.unref()
 }
 
-func (p *point) signal() error {
-	if p == nil {
-		return nil
-	}
-	return errors.Join(p.t.m.dev.Signal(p.t.handle, p.value), p.drop())
+func (p *point) armNow() (arming, error) {
+	return p.armInstead(nil)
 }
 
-func (p *point) signalAfterGPU() error {
-	if p == nil {
-		return nil
+func (p *point) armInstead(cause error) (arming, error) {
+	if err := p.t.m.dev.Signal(p.t.handle, p.value); err != nil {
+		return unarmed, errors.Join(cause, fmt.Errorf("syncobj: signal release point %d: %w", p.value, err))
 	}
+	return signalled, cause
+}
+
+func (p *point) armAfterGPU() (arming, error) {
 	fd, err := p.t.m.fencer.SyncFile()
 	if err != nil {
-		return errors.Join(fmt.Errorf("syncobj: fence release point %d, signalled at once instead: %w", p.value, err), p.signal())
+		return p.armInstead(fmt.Errorf("syncobj: fence release point %d, signalled at once instead: %w", p.value, err))
 	}
 	if fd < 0 {
-		return p.signal()
+		return p.armNow()
 	}
 	err = p.t.m.dev.ImportSyncFile(p.t.handle, p.value, fd)
 	closed := unix.Close(fd)
 	if err != nil {
-		return errors.Join(fmt.Errorf("syncobj: import the GPU fence into release point %d, signalled at once instead: %w", p.value, err), closed, p.signal())
+		how, signalErr := p.armInstead(fmt.Errorf("syncobj: import the GPU fence into release point %d, signalled at once instead: %w", p.value, err))
+		return how, errors.Join(signalErr, closed)
 	}
-	return errors.Join(closed, p.drop())
+	return fenced, closed
+}
+
+type arming uint8
+
+const (
+	fenced arming = iota + 1
+	signalled
+	unarmed
+)
+
+var armingNames = [...]string{
+	fenced:    "the GPU fence lys-wm attached to it when it let the buffer go",
+	signalled: "nothing lys-wm holds: it signalled the point when it let the buffer go, yet the kernel's timeline has not reached it",
+	unarmed:   "nothing: lys-wm failed to fence or signal it, so nothing ever will",
+}
+
+type Release struct {
+	p       *point
+	surface *surface.Surface
+	buffer  *dmabuf.Buffer
+	arming  arming
+	born    uint64
+}
+
+func (r Release) Surface() *surface.Surface {
+	return r.surface
+}
+
+func (r Release) Buffer() *dmabuf.Buffer {
+	return r.buffer
+}
+
+func (r Release) Awaits() string {
+	return armingNames[r.arming]
+}
+
+func (r Release) String() string {
+	return fmt.Sprintf("release point %d of timeline@%d (syncobj handle %d)", r.p.value, r.p.res.Base().ID(), r.p.t.handle)
+}
+
+func (r Release) reached() (bool, error) {
+	at, err := r.p.t.m.dev.Query(r.p.t.handle)
+	if err != nil {
+		return false, fmt.Errorf("syncobj: query %s of %s: %w", r, r.buffer, err)
+	}
+	return at >= r.p.value, nil
+}
+
+func (m *Manager) owe(s *surface.Surface, l latch, how arming, err error) error {
+	m.owed = append(m.owed, Release{p: l.release, surface: s, buffer: l.buffer, arming: how, born: m.sweeps})
+	return errors.Join(err, m.screen.Awaiting())
 }
 
 type requests struct {
@@ -251,7 +329,15 @@ func (ss *syncSurface) retire(l latch) error {
 	if l.release == nil {
 		return nil
 	}
-	return ss.m.screen.OffScreen(l.buffer, l.release.signalAfterGPU)
+	return ss.m.screen.OffScreen(l.buffer, func() error { return ss.letGo(l, (*point).armAfterGPU) })
+}
+
+func (ss *syncSurface) letGo(l latch, arm func(*point) (arming, error)) error {
+	if l.release == nil {
+		return nil
+	}
+	how, err := arm(l.release)
+	return ss.m.owe(ss.s, l, how, err)
 }
 
 func (ss *syncSurface) Destroy(*sls.WpLinuxDrmSyncobjSurfaceV1) error {
@@ -403,7 +489,7 @@ func (ss *syncSurface) surfaceGone() error {
 	errs := []error{ss.retire(ss.current)}
 	ss.current = latch{}
 	for _, l := range ss.latched {
-		errs = append(errs, l.release.signal())
+		errs = append(errs, ss.letGo(l, (*point).armNow))
 	}
 	ss.latched = nil
 	for _, w := range ss.waits {

@@ -253,9 +253,13 @@ lys-wmctl dispatch debug protocol off   # drop them
   `LYS_WM_DEBUG=wire` prints the same lines live to stderr.
 - While the protocol is recorded, a stall report also writes that dump by
   itself. lys-wm reports a commit that has waited over a quarter second for
-  its syncobj acquire point or its writer's implicit fence, and a buffer whose
-  release waits for a display plane, naming the surface, its client and the
-  buffer. The report then ends with the path of the dump taken at that moment:
+  its syncobj acquire point or its writer's implicit fence, a buffer whose
+  release waits for a display plane, and a syncobj release point the kernel
+  has not reached over a quarter second after lys-wm let its buffer go, naming
+  the surface, its client and the buffer, for a release point also its
+  timeline, the point and what it waits for (the GPU fence lys-wm attached,
+  or nothing when lys-wm signalled it or failed to). A line follows when the
+  wait clears. The report then ends with the path of the dump taken at that moment:
   `$XDG_RUNTIME_DIR/lys-wm/<display>.stall-<n>.log`, beside the IPC socket,
   `<n>` from 0 to 7. One dump is written per stall, stalls found together share
   it, and the ninth overwrites the first. With recording off, nothing is

@@ -87,7 +87,23 @@ func (c *Compositor) Resume() error {
 }
 
 func (c *Compositor) Busy() string {
-	return c.surfaces.Busy()
+	if why := c.surfaces.Busy(); why != "" {
+		return why
+	}
+	return c.owedOnPlane()
+}
+
+func (c *Compositor) owedOnPlane() string {
+	var owed []string
+	for b, held := range c.scannedOut {
+		if held.owed() {
+			owed = append(owed, fmt.Sprintf("%s, last shown on %s, waits for a display plane to retire it, and its %s would not survive the handover", b, c.describeSurface(held.surface), held.owes()))
+		}
+	}
+	if len(owed) == 0 {
+		return ""
+	}
+	return slices.Min(owed)
 }
 
 func (c *Compositor) HandoverState(t *handover.FDs, skip func(*server.Client) bool) (*HandoverState, error) {
