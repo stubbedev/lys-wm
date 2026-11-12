@@ -98,15 +98,18 @@ func rehomed(r, from, to image.Rectangle) image.Rectangle {
 }
 
 func (s *State) rehome(w *Workspace, output string) {
-	from, to := s.output(w.Output), s.output(output)
-	if from != nil && to != nil {
+	if to := s.output(output); to != nil {
+		from := to.Area
+		if o := s.output(w.Output); o != nil {
+			from = o.Area
+		}
 		w.Floating = slices.Clone(w.Floating)
 		for i := range w.Floating {
-			w.Floating[i].Rect = rehomed(w.Floating[i].Rect, from.Area, to.Area)
+			w.Floating[i].Rect = rehomed(w.Floating[i].Rect, from, to.Area)
 		}
 		w.Minimized = slices.Clone(w.Minimized)
 		for i := range w.Minimized {
-			w.Minimized[i].Rect = rehomed(w.Minimized[i].Rect, from.Area, to.Area)
+			w.Minimized[i].Rect = rehomed(w.Minimized[i].Rect, from, to.Area)
 		}
 	}
 	w.Output, w.home = output, ""

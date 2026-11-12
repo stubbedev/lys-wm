@@ -1,6 +1,7 @@
 package wm
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"image"
@@ -316,29 +317,27 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 		return State{}, fmt.Errorf("wm: output %s added twice", name)
 	}
 	s = s.clone()
+	var followed WorkspaceID
+	if f := s.output(s.focused); f != nil {
+		followed = f.Active
+	}
 	s.outputs = append(s.outputs, Output{Name: name, Full: full, Area: area})
 	for i := range s.workspaces {
-		w := &s.workspaces[i]
-		if w.home == name || w.Output == "" {
-			w.Output, w.home = name, ""
+		if w := &s.workspaces[i]; w.home == name || w.Output == "" {
+			s.rehome(w, name)
 		}
 	}
 	s.bindTo(name)
 	for i := range s.scratch {
 		if s.scratch[i].Output == "" {
-			s.scratch[i].Output = name
+			s.rehome(&s.scratch[i], name)
 		}
 	}
+	s.fixActive(name, followed, s.remembered[name], s.remembered[""])
 	o := s.output(name)
-	if id, ok := s.remembered[name]; ok && s.workspace(id) != nil && s.workspace(id).Output == name {
-		o.Active = id
-	} else if w := s.firstOn(name); w != nil {
-		o.Active = w.ID
-	} else {
-		o.Active = s.create(s.firstUnused(), name).ID
-	}
 	s.showDefault(o)
 	delete(s.remembered, name)
+	delete(s.remembered, "")
 	for _, other := range s.outputs {
 		if other.Name != name {
 			if w := s.workspace(other.Active); w == nil || w.Output != other.Name {
@@ -346,7 +345,7 @@ func (s State) AddOutput(name string, full, area image.Rectangle) (State, error)
 			}
 		}
 	}
-	if s.focused == "" {
+	if s.focused == "" || o.Active == followed {
 		s.focused = name
 	}
 	s.gatherPinned()
@@ -362,8 +361,14 @@ func (s *State) firstOn(output string) *Workspace {
 	return nil
 }
 
-func (s *State) fixActive(output string) {
+func (s *State) fixActive(output string, prefer ...WorkspaceID) {
 	o := s.output(output)
+	for _, id := range append(prefer, o.previous) {
+		if w := s.workspace(id); w != nil && w.Output == output {
+			o.Active = id
+			return
+		}
+	}
 	if w := s.firstOn(output); w != nil {
 		o.Active = w.ID
 		return
@@ -377,28 +382,31 @@ func (s State) RemoveOutput(name string) (State, error) {
 	}
 	s = s.clone()
 	gone := *s.output(name)
-	s.outputs = slices.DeleteFunc(s.outputs, func(o Output) bool { return o.Name == name })
-	if s.focused == name {
+	wasFocused := s.focused == name
+	if wasFocused {
 		s.focused = ""
-		if len(s.outputs) > 0 {
-			s.focused = s.outputs[0].Name
+		if i := slices.IndexFunc(s.outputs, func(o Output) bool { return o.Name != name }); i >= 0 {
+			s.focused = s.outputs[i].Name
 		}
 	}
-	s.remembered[name] = gone.Active
 	for i := range s.workspaces {
-		w := &s.workspaces[i]
-		if w.Output != name {
-			continue
+		if w := &s.workspaces[i]; w.Output == name {
+			home := cmp.Or(w.home, name)
+			s.rehome(w, s.focused)
+			w.home = home
 		}
-		if w.home == "" {
-			w.home = name
-		}
-		w.Output = s.focused
 	}
 	for i := range s.scratch {
 		if s.scratch[i].Output == name {
-			s.scratch[i].Output = s.focused
+			s.rehome(&s.scratch[i], s.focused)
 		}
+	}
+	s.outputs = slices.DeleteFunc(s.outputs, func(o Output) bool { return o.Name == name })
+	s.remembered[name] = gone.Active
+	if s.focused == "" {
+		s.remembered[""] = gone.Active
+	} else {
+		s.inherit(gone, wasFocused)
 	}
 	s.scratch = slices.DeleteFunc(s.scratch, func(w Workspace) bool { return w.empty() && !s.Shown(w) })
 	s.gatherPinned()
@@ -406,6 +414,26 @@ func (s State) RemoveOutput(name string) (State, error) {
 		s.dropIdleOn(s.focused)
 	}
 	return s, nil
+}
+
+func (s *State) inherit(gone Output, wasFocused bool) {
+	o := s.output(s.focused)
+	if !s.showsWindows(gone) || (!wasFocused && s.showsWindows(*o)) {
+		return
+	}
+	if w := s.workspace(gone.Active); w != nil && !w.empty() {
+		s.activate(gone.Active)
+	}
+	if w := s.workspace(gone.Scratch); w != nil && !w.empty() && o.Scratch == 0 {
+		s.showScratch(o, gone.Scratch)
+	}
+}
+
+func (s *State) showsWindows(o Output) bool {
+	return slices.ContainsFunc([]WorkspaceID{o.Active, o.Scratch}, func(id WorkspaceID) bool {
+		w := s.workspace(id)
+		return w != nil && !w.empty()
+	})
 }
 
 func (s *State) dropIdleOn(output string) {

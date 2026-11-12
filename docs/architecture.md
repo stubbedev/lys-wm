@@ -224,7 +224,14 @@ Workspaces follow Hyprland:
   wrapping. `previous` is the focused output's last workspace, recreated if
   dropped.
 - Outputs are known by connector name: unplugging moves their workspaces to
-  the focused output; replugging returns them.
+  the focused output, the first left if the lost one was focused; replugging
+  returns them. What was shown stays shown: the lost output's workspace and
+  scratchpad, if they hold windows, take over the receiving output when the
+  lost one was focused or the receiver shows no window, and keep focus.
+  Floating windows move with their workspace. A replugged output shows the
+  focused workspace if it is coming home, and focus follows it; the receiver
+  goes back to the workspace it showed before. After the last output goes, the
+  next one shows what it showed.
 - Workspace rules are resolved to connector names whenever outputs change:
   bound workspaces live on their output, `default` is shown first,
   `persistent` is never dropped, a name is a second address. Selector rules

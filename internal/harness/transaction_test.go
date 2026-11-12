@@ -426,14 +426,23 @@ func TestAWorkspaceSwitchIsNotHeldBackByAFrozenClient(t *testing.T) {
 func TestWindowsOnAnOutputThatWentAwayAreNotHeldBack(t *testing.T) {
 	t.Parallel()
 	h := StartWith(t, heldForever, small, small)
-	var doomed string
-	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
+	var doomed, kept string
+	h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 		doomed = comp.WM().FocusedOutput()
+		for _, o := range b.Outputs() {
+			if o.Name() != doomed {
+				kept = o.Name()
+			}
+		}
 		return nil
 	})
+	h.dispatch("focusoutput " + kept)
+	_, _ = open(t, h, "kept", fillRed)
+	h.dispatch("focusoutput " + doomed)
 	_, _ = open(t, h, "left", fillGreen)
 	_, _ = open(t, h, "right", fillBlue)
 	h.Eventually("the second window held back", holding)
+	h.dispatch("focusoutput " + kept)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		for _, o := range b.Outputs() {
 			if o.Name() == doomed {
