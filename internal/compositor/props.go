@@ -155,7 +155,7 @@ func (c *Compositor) setProp(w *window, key, value string) error {
 	k.override = &d
 	k.decider.Forget()
 	w.border = c.borderTarget(w)
-	return errors.Join(c.refreshLimits(w.top), c.reconcile(), c.scheduleAll())
+	return errors.Join(c.refreshFrame(w.top), c.reconcile(), c.scheduleAll())
 }
 
 func (c *Compositor) captureSetChanged() error {

@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"slices"
 
 	skd "github.com/stubbedev/lys-wm/internal/protocol/server/kdeserverdecoration"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
@@ -39,10 +40,12 @@ func (decorationManager) GetToplevelDecoration(_ *sxd.ZxdgDecorationManagerV1, r
 	case t.xs.surface.HasBuffer():
 		return nil, res.ProtocolError(sxd.ZxdgToplevelDecorationV1ErrorUnconfiguredBuffer, "the xdg_toplevel already has a buffer")
 	}
-	t.decoration = res
+	sh := t.xs.base.shell
+	if err := sh.redecorate(t.xs.surface, func() { t.decoration = res }); err != nil {
+		return nil, err
+	}
 	server.OnDestroy(res, func() error {
-		t.decoration = nil
-		return nil
+		return sh.redecorate(t.xs.surface, func() { t.decoration = nil })
 	})
 	d := decoration{t}
 	return d, d.configure()
@@ -92,12 +95,28 @@ func (m kdeDecorationManager) Create(_ *skd.OrgKdeKwinServerDecorationManager, r
 	if err != nil {
 		return nil, err
 	}
-	m.sh.kdeDecor[s] = struct{}{}
+	if err := m.sh.redecorate(s, func() { m.sh.kdeDecor[s] = struct{}{} }); err != nil {
+		return nil, err
+	}
 	server.OnDestroy(res, func() error {
-		delete(m.sh.kdeDecor, s)
-		return nil
+		return m.sh.redecorate(s, func() { delete(m.sh.kdeDecor, s) })
 	})
 	return kdeDecoration{}, res.SendMode(uint32(skd.OrgKdeKwinServerDecorationModeServer))
+}
+
+func (sh *Shell) redecorate(s *surface.Surface, change func()) error {
+	i := slices.IndexFunc(sh.toplevels, func(t *Toplevel) bool { return t.xs.surface == s })
+	if i < 0 {
+		change()
+		return nil
+	}
+	t := sh.toplevels[i]
+	was := t.ServerDecorated()
+	change()
+	if t.ServerDecorated() == was {
+		return nil
+	}
+	return sh.listener.ToplevelChanged(t, ChangedDecoration)
 }
 
 func (t *Toplevel) ServerDecorated() bool {

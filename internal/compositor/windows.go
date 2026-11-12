@@ -64,6 +64,7 @@ type window struct {
 	initialAppID  string
 	initialTitle  string
 	stated        wm.Decision
+	framedBar     int
 }
 
 type decided struct {
@@ -515,11 +516,14 @@ func floatSize(t toplevel, ruled image.Point) image.Point {
 	return limits.FitRequest(wm.Requested(ruled).Or(wm.Requested(t.Geometry().Size())).Or(limits.Fixed()))
 }
 
+func (c *Compositor) floatingInsets(w *window) frameInsets {
+	return c.insets(w.top, c.decision(w), wm.WorkspaceLook{}, wm.LayerFloating)
+}
+
 func (c *Compositor) frameLimits(w *window) wm.Limits {
 	minimum, maximum := w.top.sizeLimits()
-	d := c.decision(w)
-	minimum, maximum = ruledLimits(d, minimum, maximum)
-	insets := c.insets(w.top, d, wm.WorkspaceLook{}, wm.LayerFloating)
+	minimum, maximum = ruledLimits(c.decision(w), minimum, maximum)
+	insets := c.floatingInsets(w)
 	framed := func(p image.Point) image.Point {
 		f := insets.frameSize(p)
 		if p.X <= 0 {
@@ -533,16 +537,24 @@ func (c *Compositor) frameLimits(w *window) wm.Limits {
 	return wm.Limits{Min: framed(minimum), Max: framed(maximum)}
 }
 
-func (c *Compositor) refreshLimits(t toplevel) error {
+func (c *Compositor) refreshFrame(t toplevel) error {
 	w := c.windowOf(t)
 	if w == nil {
 		return nil
 	}
+	insets := c.floatingInsets(w)
+	was, floating := c.wm.FloatingRect(w.id)
+	before := frameInsets{border: insets.border, bar: w.framedBar}
+	w.framedBar = insets.bar
 	s, err := c.wm.SetLimits(w.id, c.frameLimits(w))
 	if err != nil {
 		return err
 	}
-	was, floating := c.wm.FloatingRect(w.id)
+	if floating && before != insets {
+		if s, err = s.SetFloatingRect(w.id, insets.frame(before.content(was))); err != nil {
+			return err
+		}
+	}
 	now, _ := s.FloatingRect(w.id)
 	if over := c.floatArea(t); floating && now != was && was == wm.Centered(over, was.Size()) {
 		s, err = s.SetFloatingRect(w.id, wm.Centered(over, now.Size()))
@@ -608,6 +620,7 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	}
 	_, w.floated = c.ruled(t)
 	w.stated = *c.decision(w)
+	w.framedBar = c.floatingInsets(w).bar
 	s, err := c.mapped(t, w.id, true)
 	if err != nil {
 		return err
@@ -670,8 +683,8 @@ func (c *Compositor) unmapToplevel(t toplevel) error {
 func (c *Compositor) ToplevelChanged(t *shell.Toplevel, change shell.Change) error {
 	c.stateChanged()
 	switch change {
-	case shell.ChangedSizeLimits:
-		return errors.Join(c.refreshLimits(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
+	case shell.ChangedSizeLimits, shell.ChangedDecoration:
+		return errors.Join(c.refreshFrame(xdgToplevel{t}), c.redecide(xdgToplevel{t}))
 	case shell.ChangedTitle:
 		return errors.Join(c.redecide(xdgToplevel{t}), c.syncForeign(), c.scheduleAll())
 	case shell.ChangedAppID, shell.ChangedTag, shell.ChangedParent:

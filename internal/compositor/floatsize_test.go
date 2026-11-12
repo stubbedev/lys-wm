@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	ckd "github.com/stubbedev/lys-wm/internal/protocol/client/kdeserverdecoration"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cxd "github.com/stubbedev/lys-wm/internal/protocol/client/xdgdecoration"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
@@ -62,13 +63,20 @@ func (decorationModes) Configure(*cxd.ZxdgToplevelDecorationV1, cxd.ZxdgToplevel
 	return nil
 }
 
+type kdeModes struct{}
+
+func (kdeModes) DefaultMode(*ckd.OrgKdeKwinServerDecorationManager, uint32) error { return nil }
+func (kdeModes) Mode(*ckd.OrgKdeKwinServerDecoration, uint32) error               { return nil }
+
 type floater struct {
-	r       *rig
-	surface *cw.WlSurface
-	xdg     *cxdg.XdgSurface
-	top     *cxdg.XdgToplevel
-	seen    *configures
-	scale   *scales
+	r          *rig
+	surface    *cw.WlSurface
+	xdg        *cxdg.XdgSurface
+	top        *cxdg.XdgToplevel
+	seen       *configures
+	scale      *scales
+	decoration *cxd.ZxdgToplevelDecorationV1
+	kde        *ckd.OrgKdeKwinServerDecoration
 }
 
 func floatingRig(t *testing.T) (*rig, *cxdg.XdgWmBase) {
@@ -119,8 +127,31 @@ func (f *floater) serverDecorated() error {
 	if err := f.r.registry.Bind(f.r.globals["zxdg_decoration_manager_v1"], m); err != nil {
 		return err
 	}
-	_, err = m.GetToplevelDecoration(decorationModes{}, f.top)
+	f.decoration, err = m.GetToplevelDecoration(decorationModes{}, f.top)
 	return err
+}
+
+func (f *floater) kdeDecorated() error {
+	m, err := ckd.NewOrgKdeKwinServerDecorationManager(f.r.client, 1, kdeModes{})
+	if err != nil {
+		return err
+	}
+	if err := f.r.registry.Bind(f.r.globals["org_kde_kwin_server_decoration_manager"], m); err != nil {
+		return err
+	}
+	f.kde, err = m.Create(kdeModes{}, f.surface)
+	return err
+}
+
+func (f *floater) settles(t *testing.T, when string, content image.Point, bar int) {
+	t.Helper()
+	f.r.roundtrip()
+	if got := f.last(); got != content {
+		t.Errorf("%s, the window is configured to %v, want its %v kept", when, got, content)
+	}
+	if got, want := f.floatingFrame(), content.Add(image.Pt(2*floatBorder, 2*floatBorder+bar)); got != want {
+		t.Errorf("%s, the window floats in a frame of %v, want %v around its %v", when, got, want, content)
+	}
 }
 
 func (f *floater) floatingFrame() image.Point {
@@ -263,6 +294,44 @@ func TestAFloatingWindowWithNoSizeChoosesEveryAxisItsLimitsLeaveOpen(t *testing.
 			if got := f.initial(); got != c.want {
 				t.Fatalf("a window with limits %v-%v and no size is first configured to %v, want %v", c.minimum, c.maximum, got, c.want)
 			}
+		})
+	}
+}
+
+func TestAMappedFloatingWindowsFrameFollowsItsDecoration(t *testing.T) {
+	for name, fixed := range map[string]bool{"a resizable window": false, "a fixed-size window": true} {
+		t.Run(name, func(t *testing.T) {
+			size := image.Pt(500, 400)
+			limit := func(f *floater) error {
+				if !fixed {
+					return f.xdg.SetWindowGeometry(0, 0, int32(size.X), int32(size.Y))
+				}
+				return errors.Join(f.top.SetMinSize(int32(size.X), int32(size.Y)), f.top.SetMaxSize(int32(size.X), int32(size.Y)))
+			}
+			t.Run("through xdg-decoration", func(t *testing.T) {
+				r, base := floatingRig(t)
+				f := r.floater(base, func(f *floater) error { return errors.Join(limit(f), f.serverDecorated()) })
+				f.draw(size)
+				f.settles(t, "mapped with a decoration", size, floatBar)
+				must(t, f.decoration.SetMode(cxd.ZxdgToplevelDecorationV1ModeClientSide))
+				f.settles(t, "after asking for client-side decorations", size, floatBar)
+				must(t, f.decoration.UnsetMode())
+				f.settles(t, "after unsetting the mode", size, floatBar)
+				must(t, f.decoration.Destroy())
+				f.settles(t, "after destroying the decoration", size, 0)
+			})
+			t.Run("through the KDE server decoration", func(t *testing.T) {
+				r, base := floatingRig(t)
+				f := r.floater(base, limit)
+				f.draw(size)
+				f.settles(t, "mapped without a decoration", size, 0)
+				must(t, f.kdeDecorated())
+				f.settles(t, "after creating the decoration", size, floatBar)
+				must(t, f.kde.RequestMode(uint32(ckd.OrgKdeKwinServerDecorationModeClient)))
+				f.settles(t, "after asking for client-side decorations", size, floatBar)
+				must(t, f.kde.Release())
+				f.settles(t, "after releasing the decoration", size, 0)
+			})
 		})
 	}
 }

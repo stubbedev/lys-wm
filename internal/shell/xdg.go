@@ -70,6 +70,7 @@ const (
 	ChangedIcon
 	ChangedSizeLimits
 	ChangedTag
+	ChangedDecoration
 )
 
 type Listener interface {
