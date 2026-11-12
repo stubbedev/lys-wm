@@ -504,9 +504,7 @@ func (b *Backend) rescan() error {
 	b.probing = true
 	b.probes.Go(func() {
 		p := probeConnectors(b.dev)
-		if err := b.loop.Post(func() error { return b.probed(p) }); err != nil && !errors.Is(err, loop.ErrClosed) {
-			panic(fmt.Sprintf("drm: hand a connector probe back to the loop: %v", err))
-		}
+		b.loop.Hand("a connector probe", func() error { return b.probed(p) })
 	})
 	return nil
 }

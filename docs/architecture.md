@@ -98,7 +98,11 @@ Import rules:
 
 One goroutine owns all compositor state and runs the event loop. Other
 goroutines exist only at the edges, for work that blocks: they post closures
-to the loop's mailbox (`Loop.Post`) and never read or write state themselves.
+to the loop's mailbox and never read or write state themselves. A goroutine
+that only hands back a result uses `Loop.Hand`: a closed loop is the shutdown
+race and drops the closure, any other failure to wake the loop panics. One that
+must clean up or answer when the loop is gone uses `Loop.Post` and handles its
+error, where `loop.ErrClosed` alone means the loop has shut down.
 Compositor state takes no locks. Packages under it that keep their own are the
 loop's mailbox, the IPC server's connection set, and process-wide tables in
 `gpu` and `session`.

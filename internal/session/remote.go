@@ -157,7 +157,7 @@ func (h *Holder) read() {
 	for {
 		m, fds, err := RecvHolder(h.fd)
 		if err != nil {
-			_ = h.loop.Post(func() error {
+			h.loop.Hand("the lost holder connection", func() error {
 				h.loop.Stop()
 				return fmt.Errorf("session: lost the holder: %w", err)
 			})
@@ -173,7 +173,7 @@ func (h *Holder) read() {
 			}
 			continue
 		}
-		_ = h.loop.Post(func() error { return h.event(m, fds) })
+		h.loop.Hand("a holder event", func() error { return h.event(m, fds) })
 	}
 }
 

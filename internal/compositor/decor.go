@@ -11,7 +11,6 @@ import (
 	gtext "github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
-	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shell"
@@ -240,9 +239,7 @@ func (c *Compositor) rasterLabelLater(o *output.Output, key labelKey) {
 	font, pad := c.font, o.Scale().ToDevice(c.decor.Tab.TextPadding)
 	c.labelWork.Run(func() {
 		pix, err := rasterLabel(font, key, pad)
-		if posted := c.loop.Post(func() error { return c.labelRastered(job, pix, err) }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-			panic(fmt.Sprintf("compositor: hand a rastered label back to the loop: %v", posted))
-		}
+		c.loop.Hand("a rastered label", func() error { return c.labelRastered(job, pix, err) })
 	})
 }
 

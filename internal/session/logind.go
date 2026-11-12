@@ -11,7 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/logind"
-	"github.com/stubbedev/lys-lib/third_party/godbus"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
@@ -176,9 +176,7 @@ func (lg *Logind) completePause(d Device) {
 	if err == nil {
 		return
 	}
-	if posted := lg.loop.Post(func() error { return err }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-		panic(fmt.Sprintf("session: hand a pause failure back to the loop: %v", posted))
-	}
+	lg.loop.Hand("a pause failure", func() error { return err })
 }
 
 func (lg *Logind) ReleaseDevice(d Device) error {

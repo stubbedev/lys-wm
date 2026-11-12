@@ -147,7 +147,7 @@ func (u *upgrader) start(binary string, dropX11 bool, conn *os.File, done func(i
 	}
 	go func() {
 		info, err := preflight(binary, u.path, u.runtime)
-		_ = u.loop.Post(func() error {
+		u.loop.Hand("the upgrade preflight of "+binary, func() error {
 			if err == nil {
 				err = u.refusal(binary, info)
 			}
@@ -391,7 +391,7 @@ func (u *upgrader) drive(pid int, fd int, st *handoverState, t *handover.FDs, lo
 		_ = unix.Kill(pid, unix.SIGKILL)
 		peer.close()
 		why := logs.settled()
-		_ = u.loop.Post(func() error {
+		u.loop.Hand("the failed handover to "+binary, func() error {
 			resume(fmt.Errorf("%s did not take over and this lys-wm keeps running: %w: %s", binary, cause, why))
 			return nil
 		})
@@ -423,7 +423,7 @@ func (u *upgrader) drive(pid int, fd int, st *handoverState, t *handover.FDs, lo
 		fail(fmt.Errorf("wait for it to take the commit: %q, %w", ack, err))
 		return
 	}
-	_ = u.loop.Post(u.leave)
+	u.loop.Hand("the committed handover to "+binary, u.leave)
 }
 
 func (u *upgrader) leave() error {
@@ -549,7 +549,7 @@ func (a *adopted) watch() error {
 
 func (a *adopted) handshake() {
 	abort := func(err error) {
-		_ = a.loop.Post(func() error {
+		a.loop.Hand("the aborted adoption", func() error {
 			a.stop(fmt.Errorf("the handover: %w", err))
 			return nil
 		})
@@ -580,7 +580,7 @@ func (a *adopted) handshake() {
 		abort(err)
 		return
 	}
-	_ = a.loop.Post(a.commit)
+	a.loop.Hand("the adoption commit", a.commit)
 }
 
 func (a *adopted) commit() error {

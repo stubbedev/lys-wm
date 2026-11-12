@@ -187,10 +187,12 @@ func setup(t *testing.T) *env {
 	done := make(chan error, 1)
 	go func() { done <- l.Run() }()
 	t.Cleanup(func() {
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			return nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := errors.Join(<-done, m.Close(), d.Close(), l.Close()); err != nil {
 			t.Error(err)
 		}

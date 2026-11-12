@@ -339,13 +339,10 @@ func (b *Buffer) AwaitWriter(c surface.Awaiter) error {
 			copy(s.pix, data)
 			return nil
 		})
-		err := p.m.loop.Post(func() error {
+		p.m.loop.Hand("a staged buffer", func() error {
 			s.done = true
 			return errors.Join(p.copied(), release())
 		})
-		if err != nil && !errors.Is(err, loop.ErrClosed) {
-			panic(fmt.Sprintf("shm: hand a staged buffer back to the loop: %v", err))
-		}
 	}()
 	return nil
 }

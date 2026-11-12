@@ -6,7 +6,6 @@ import (
 	"image"
 	"sync/atomic"
 
-	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/shm"
 )
@@ -14,9 +13,7 @@ import (
 func (c *Compositor) offLoop(work func() error, then func(error) error) {
 	c.offLoopWork.Go(func() {
 		err := work()
-		if posted := c.loop.Post(func() error { return then(err) }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-			panic(fmt.Sprintf("compositor: hand off-loop work back to the loop: %v", posted))
-		}
+		c.loop.Hand("off-loop work", func() error { return then(err) })
 	})
 }
 

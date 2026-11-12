@@ -93,11 +93,13 @@ func setup(t *testing.T) *env {
 	go func() { e.done <- l.Run() }()
 	t.Cleanup(func() {
 		ran := make(chan struct{})
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			close(ran)
 			return nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := <-e.done; err != nil {
 			t.Errorf("Run: %v", err)
 		}

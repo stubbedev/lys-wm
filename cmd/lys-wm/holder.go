@@ -52,7 +52,7 @@ func (h *holder) spawn(binary string, args []string, extra []*os.File, stderr *o
 	go h.serve(w)
 	go func() {
 		err := cmd.Wait()
-		_ = h.l.Post(func() error { return h.exited(w, err) })
+		h.l.Hand("the exit of worker "+strconv.Itoa(w.pid), func() error { return h.exited(w, err) })
 	}()
 	return w, nil
 }
@@ -80,7 +80,7 @@ func (h *holder) serve(w *holderWorker) {
 		if err != nil {
 			return
 		}
-		_ = h.l.Post(func() error {
+		h.l.Hand("a message from worker "+strconv.Itoa(w.pid), func() error {
 			say(h.handle(w, m, fds))
 			return nil
 		})

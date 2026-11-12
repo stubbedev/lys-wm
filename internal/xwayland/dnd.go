@@ -112,7 +112,7 @@ func (m *wm) dragEnter(d *data.Drag, s *surface.Surface, x, y float64) error {
 	go func() {
 		atoms, err := intern(m.x, sorted)
 		target, version := m.xdndTarget(w.id)
-		m.post(func() error {
+		m.loop.Hand("the drag offer to X", func() error {
 			if err != nil {
 				m.report(fmt.Errorf("xwayland: offer a drag to X: %w", err))
 				return nil

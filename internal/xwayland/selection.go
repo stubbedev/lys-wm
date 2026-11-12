@@ -327,7 +327,7 @@ func (m *wm) write(in *incoming, value []byte, last bool) error {
 		if err == nil {
 			_, err = out.Write(value)
 		}
-		m.post(func() error {
+		m.loop.Hand("an X selection write to a Wayland client", func() error {
 			if len(m.incoming) == 0 || m.incoming[0] != in {
 				return nil
 			}
@@ -366,7 +366,7 @@ func (m *wm) selectionChanged(k data.Kind, src data.Source) error {
 	go func() {
 		sorted := slices.Sorted(maps.Keys(names))
 		atoms, err := intern(m.x, sorted)
-		m.post(func() error {
+		m.loop.Hand("the Wayland selection offer to X", func() error {
 			if err != nil {
 				m.report(fmt.Errorf("xwayland: offer the Wayland selection to X: %w", err))
 				return nil
@@ -435,7 +435,7 @@ func (m *wm) requested(e xproto.SelectionRequestEvent) error {
 	m.reading++
 	go func() {
 		chunk, ended, err := readChunk(in, m.transfer)
-		m.post(func() error {
+		m.loop.Hand("the first chunk of a Wayland selection", func() error {
 			m.reading--
 			return m.firstChunk(e, property, in, chunk, ended, err)
 		})
@@ -512,7 +512,7 @@ func (m *wm) readMore(key outKey, o *outgoing) {
 	src := o.src
 	go func() {
 		chunk, ended, err := readChunk(src, m.transfer)
-		m.post(func() error {
+		m.loop.Hand("a further chunk of the Wayland selection", func() error {
 			o.reading = false
 			if m.outgoing[key] != o {
 				return nil

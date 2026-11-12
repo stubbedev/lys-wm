@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -370,10 +372,12 @@ func TestIdleLoopNeverWakes(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			return nil
-		})
+		}); err != nil {
+			t.Error(err)
+		}
 	}()
 	run(t, l)
 	if l.wakeups != 1 {
@@ -781,5 +785,77 @@ func TestAnFDNumberStillWatchedIsRefusedUntilItsSourceIsRemoved(t *testing.T) {
 	}
 	if err := fresh.Remove(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHandOnAClosedLoopDropsTheWorkWithoutPanicking(t *testing.T) {
+	l, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Post(func() error { return nil }); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Post after Close = %v, want ErrClosed", err)
+	}
+	l.Hand("work after Close", func() error {
+		t.Error("work handed to a closed loop ran")
+		return nil
+	})
+}
+
+func TestAFailedMailboxWakeIsNotMistakenForAClosedLoop(t *testing.T) {
+	l := newLoop(t)
+	r, _ := pipe(t)
+	mailbox := l.mailboxFD
+	l.mailboxFD = r
+	t.Cleanup(func() { l.mailboxFD = mailbox })
+	err := l.Post(func() error { return errors.New("work whose wake failed ran") })
+	if err == nil || errors.Is(err, ErrClosed) || !errors.Is(err, unix.EBADF) {
+		t.Fatalf("Post with an unwritable mailbox = %v, want EBADF and not ErrClosed", err)
+	}
+	if len(l.posted) != 0 {
+		t.Fatalf("%d posted closures left queued after the wake failed, want none", len(l.posted))
+	}
+	defer func() {
+		got, ok := recover().(error)
+		if !ok || !errors.Is(got, unix.EBADF) || !strings.Contains(got.Error(), "the failing work") {
+			t.Fatalf("Hand with an unwritable mailbox panicked with %v, want an error naming the work and wrapping EBADF", got)
+		}
+	}()
+	l.Hand("the failing work", func() error { return nil })
+	t.Fatal("Hand with an unwritable mailbox returned")
+}
+
+func TestPostsRacingCloseFailOnlyAsClosed(t *testing.T) {
+	for range 2000 {
+		l, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		errs := make(chan error, 64)
+		for range cap(errs) {
+			wg.Go(func() {
+				<-start
+				if err := l.Post(func() error { return nil }); err != nil && !errors.Is(err, ErrClosed) {
+					errs <- err
+				}
+				l.mu.Lock()
+				l.posted = l.posted[:0]
+				l.mu.Unlock()
+			})
+		}
+		close(start)
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatalf("Post racing Close = %v, want nil or ErrClosed", err)
+		}
 	}
 }

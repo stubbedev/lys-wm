@@ -233,7 +233,7 @@ func (s *Server) start() error {
 	s.proc = p
 	go func() {
 		err := cmd.Wait()
-		_ = s.loop.Post(func() error { return s.exited(p, err) })
+		s.loop.Hand("the exit of Xwayland", func() error { return s.exited(p, err) })
 	}()
 	wmFile := os.NewFile(uintptr(wm[0]), "xwayland-wm")
 	conn, err := net.FileConn(wmFile)
@@ -325,7 +325,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 	c, err := claim(conn)
 	if err != nil {
 		_ = conn.Close()
-		_ = s.loop.Post(func() error {
+		s.loop.Hand("a failed X window manager claim", func() error {
 			if s.proc != p {
 				return nil
 			}
@@ -336,14 +336,14 @@ func (s *Server) manage(p *process, conn net.Conn) {
 	}
 	c.report = s.report
 	c.post = func(f func(*wm) error) {
-		_ = s.loop.Post(func() error {
+		s.loop.Hand("an X event", func() error {
 			if s.proc != p || p.wm == nil {
 				return nil
 			}
 			return f(p.wm)
 		})
 	}
-	_ = s.loop.Post(func() error {
+	s.loop.Hand("the claimed X window manager", func() error {
 		if s.proc != p {
 			c.x.Close()
 			return nil
@@ -351,7 +351,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		m := &wm{
 			x: c.x, root: c.root, sel: c.sel, proxy: c.proxy, atoms: c.atoms, windows: map[xproto.Window]*Window{}, shell: s.shell,
 			listener: s.opts.Listener, loop: s.loop, client: p.client, outgoing: map[outKey]*outgoing{},
-			post: func(f func() error) { _ = s.loop.Post(f) }, report: s.report, transfer: s.opts.TransferTimeout,
+			report: s.report, transfer: s.opts.TransferTimeout,
 		}
 		var err error
 		if m.stall, err = s.loop.AddTimer(m.stalled); err != nil {
@@ -373,7 +373,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		return errors.Join(errs...)
 	})
 	c.run()
-	_ = s.loop.Post(func() error {
+	s.loop.Hand("the end of the X connection", func() error {
 		if s.proc != p || s.closed {
 			return nil
 		}
@@ -410,7 +410,7 @@ func (s *Server) dissociated(serial uint64) error {
 }
 
 func (s *Server) report(err error) {
-	_ = s.loop.Post(func() error {
+	s.loop.Hand("an Xwayland error", func() error {
 		s.opts.Report(err)
 		return nil
 	})

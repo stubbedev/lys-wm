@@ -98,10 +98,12 @@ func TestRunAgainstASocket(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- l.Run() }()
 	defer func() {
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			return nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := errors.Join(<-done, s.Close(), l.Close()); err != nil {
 			t.Error(err)
 		}
@@ -217,10 +219,12 @@ func TestOutputCreateAndRemove(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- l.Run() }()
 	defer func() {
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			return nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := errors.Join(<-done, s.Close(), l.Close()); err != nil {
 			t.Error(err)
 		}

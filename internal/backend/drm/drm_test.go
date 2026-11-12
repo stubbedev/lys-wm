@@ -887,7 +887,7 @@ func (r *rig) runUntil(what string, done func() bool) error {
 	r.waits++
 	wait := r.waits
 	watchdog := time.AfterFunc(loopWait, func() {
-		_ = r.l.Post(func() error {
+		r.l.Hand("the watchdog", func() error {
 			if wait == r.waits && r.awaited != nil {
 				r.overdue = true
 				r.l.Stop()

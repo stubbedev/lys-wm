@@ -172,12 +172,6 @@ func (c *offLoopCopy) releaseWhenIdle() error {
 	return c.release()
 }
 
-func (c *offLoopCopy) post(f func() error) {
-	if err := c.loop.Post(f); err != nil && !errors.Is(err, loop.ErrClosed) {
-		panic(fmt.Sprintf("drm: hand a frame copy back to the loop: %v", err))
-	}
-}
-
 func (c *offLoopCopy) finished(done func(error) error, err error) error {
 	c.copying = false
 	if c.released {
@@ -194,7 +188,7 @@ func (c *offLoopCopy) start(done func(error) error) error {
 	c.copying = true
 	go func() {
 		err := pending.Wait()
-		c.post(func() error {
+		c.loop.Hand("a finished frame read", func() error {
 			if err != nil {
 				return c.finished(done, errors.Join(err, pending.Release()))
 			}
@@ -210,7 +204,7 @@ func (c *offLoopCopy) start(done func(error) error) error {
 						copy(c.dumb.Pix[y*pitch:y*pitch+row], pix[y*stride:])
 					}
 				}
-				c.post(func() error {
+				c.loop.Hand("a finished frame copy", func() error {
 					c.stale.reset()
 					return c.finished(done, pending.Release())
 				})

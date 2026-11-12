@@ -108,10 +108,12 @@ func TestADryManualLoopWaitsForAPostAndNotForATimer(t *testing.T) {
 			return
 		}
 		go func() {
-			_ = l.Post(func() error {
+			if err := l.Post(func() error {
 				l.Stop()
 				return nil
-			})
+			}); err != nil {
+				t.Error(err)
+			}
 		}()
 	})
 	run(t, l)

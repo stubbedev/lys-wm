@@ -151,7 +151,7 @@ func (c *Compositor) debugRecord(a wm.DebugRecordAction) error {
 	case wm.DebugHeap:
 		go func() {
 			if err := writeHeapProfile(a.Path); err != nil {
-				_ = c.loop.Post(func() error {
+				c.loop.Hand("a failed heap profile", func() error {
 					c.report(err)
 					return nil
 				})
@@ -239,7 +239,7 @@ func (c *Compositor) dumpProtocol(path string) error {
 	}
 	c.recorders.dumps.Go(func() {
 		if err := atomicfile.WriteFile(path, dump, 0o600); err != nil {
-			_ = c.loop.Post(func() error {
+			c.loop.Hand("a failed protocol dump", func() error {
 				c.report(fmt.Errorf("compositor: dump the protocol: %w", err))
 				return nil
 			})

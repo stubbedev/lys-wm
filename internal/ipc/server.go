@@ -123,7 +123,7 @@ func (s *Server) shut() bool {
 }
 
 func (s *Server) post(f func()) {
-	_ = s.loop.Post(func() error {
+	s.loop.Hand("ipc connection work", func() error {
 		f()
 		return nil
 	})
@@ -319,12 +319,16 @@ func onLoop[T any](s *Server, f func() (T, error)) (T, error) {
 	}
 	ch := make(chan outcome, 1)
 	var zero T
-	if err := s.loop.Post(func() error {
+	err := s.loop.Post(func() error {
 		v, err := f()
 		ch <- outcome{v, err}
 		return nil
-	}); err != nil {
+	})
+	if errors.Is(err, loop.ErrClosed) {
 		return zero, ErrShutdown
+	}
+	if err != nil {
+		return zero, fmt.Errorf("ipc: hand a request to the loop: %w", err)
 	}
 	select {
 	case o := <-ch:

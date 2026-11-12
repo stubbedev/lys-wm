@@ -486,9 +486,7 @@ func (in *Libinput) releaseLater(dev Device) {
 }
 
 func (in *Libinput) postReport(err error) {
-	if posted := in.loop.Post(func() error { in.report(err); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-		panic(fmt.Sprintf("session: hand an input device error back to the loop: %v", posted))
-	}
+	in.loop.Hand("an input device error", func() error { in.report(err); return nil })
 }
 
 func (in *Libinput) dropReady() {
@@ -572,9 +570,7 @@ func (in *Libinput) ResumeLater() {
 			t.fd, t.dev, t.err = in.opener.TakeDevice(path)
 			taken[path] = t
 		}
-		if err := in.loop.Post(func() error { return in.resumed(resume, taken) }); err != nil && !errors.Is(err, loop.ErrClosed) {
-			panic(fmt.Sprintf("session: hand the resumed input devices back to the loop: %v", err))
-		}
+		in.loop.Hand("the resumed input devices", func() error { return in.resumed(resume, taken) })
 	})
 }
 

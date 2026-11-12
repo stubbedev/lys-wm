@@ -157,14 +157,10 @@ func (c *Compositor) spawnWith(command string, env []string, started func(pid in
 		if err == nil {
 			pid := cmd.Process.Pid
 			go c.reap(command, cmd)
-			if posted := c.loop.Post(func() error { started(pid); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-				panic(fmt.Sprintf("compositor: hand a started exec back to the loop: %v", posted))
-			}
+			c.loop.Hand("a started exec", func() error { started(pid); return nil })
 			return
 		}
-		if posted := c.loop.Post(func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-			panic(fmt.Sprintf("compositor: hand a failed exec back to the loop: %v", posted))
-		}
+		c.loop.Hand("a failed exec", func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil })
 	})
 }
 

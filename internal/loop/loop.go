@@ -347,9 +347,7 @@ func (l *Loop) AddSignals(handler func(os.Signal) error, sigs ...os.Signal) (*Si
 		for {
 			select {
 			case sig := <-s.ch:
-				if err := l.Post(func() error { return handler(sig) }); err != nil {
-					return
-				}
+				l.Hand("signal "+sig.String(), func() error { return handler(sig) })
 			case <-s.stop:
 				return
 			}
@@ -370,21 +368,28 @@ func (s *Signals) Remove() {
 
 func (l *Loop) Post(f func() error) error {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.shut {
-		l.mu.Unlock()
 		return ErrClosed
 	}
 	wake := len(l.posted) == 0
 	l.posted = append(l.posted, f)
-	l.mu.Unlock()
 	if !wake {
 		return nil
 	}
 	one := [8]byte{1}
 	if _, err := unix.Write(l.mailboxFD, one[:]); err != nil && !errors.Is(err, unix.EAGAIN) {
-		return fmt.Errorf("loop: wake mailbox: %w", err)
+		l.posted[0] = nil
+		l.posted = l.posted[:0]
+		return fmt.Errorf("loop: wake mailbox fd %d: %w", l.mailboxFD, err)
 	}
 	return nil
+}
+
+func (l *Loop) Hand(what string, f func() error) {
+	if err := l.Post(f); err != nil && !errors.Is(err, ErrClosed) {
+		panic(fmt.Errorf("loop: hand %s back to the loop: %w", what, err))
+	}
 }
 
 func (l *Loop) drainMailbox(Events) error {

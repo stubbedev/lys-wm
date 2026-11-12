@@ -794,12 +794,10 @@ func run(args []string) (err error) {
 		if !s.follow(accent) {
 			return
 		}
-		if err := l.Post(func() error {
+		l.Hand("the desktop accent", func() error {
 			s.comp.ReloadConfig()
 			return nil
-		}); err != nil && !errors.Is(err, loop.ErrClosed) {
-			cfg.Report(fmt.Errorf("follow the desktop accent: %w", err))
-		}
+		})
 	})
 	defer leave(func() error {
 		accents.Close()

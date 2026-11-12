@@ -165,7 +165,6 @@ type wm struct {
 	loop       *loop.Loop
 	stamps     uint32
 	client     *server.Client
-	post       func(func() error)
 	report     func(error)
 	transfer   time.Duration
 	stall      *loop.Timer

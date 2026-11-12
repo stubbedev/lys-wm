@@ -314,9 +314,7 @@ func (n *native) switchVT(vt uint32) error {
 		if err == nil {
 			return
 		}
-		if posted := n.l.Post(func() error { n.report(err); return nil }); posted != nil && !errors.Is(posted, loop.ErrClosed) {
-			panic(fmt.Sprintf("hand a failed VT switch back to the loop: %v", posted))
-		}
+		n.l.Hand("a failed VT switch", func() error { n.report(err); return nil })
 	})
 	return nil
 }

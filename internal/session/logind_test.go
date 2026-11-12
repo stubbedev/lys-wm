@@ -13,7 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/logind"
 	"github.com/stubbedev/lys-lib/logind/logindtest"
-	"github.com/stubbedev/lys-lib/third_party/godbus"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
@@ -99,10 +99,12 @@ func run(t *testing.T, l *loop.Loop) {
 	done := make(chan error, 1)
 	go func() { done <- l.Run() }()
 	t.Cleanup(func() {
-		_ = l.Post(func() error {
+		if err := l.Post(func() error {
 			l.Stop()
 			return nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
