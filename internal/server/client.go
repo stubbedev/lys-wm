@@ -125,19 +125,27 @@ func (c *Client) settle(doing string, errs []error) error {
 	for _, err := range errs {
 		switch {
 		case err == nil, c.gone && addressedToTheClient(err):
-		case backend.Fatal(err):
+		case compositorFatal(err):
 			fatal = append(fatal, err)
 		default:
 			reported = append(reported, err)
 		}
 	}
 	if len(reported) > 0 {
-		c.display.report(fmt.Errorf("server: %s %v: %w", doing, c, errors.Join(reported...)))
+		c.display.report(c.while(doing, errors.Join(reported...)))
 	}
 	if len(fatal) > 0 {
-		return fmt.Errorf("server: %s %v: %w", doing, c, errors.Join(fatal...))
+		return c.while(doing, errors.Join(fatal...))
 	}
 	return nil
+}
+
+func (c *Client) while(doing string, err error) error {
+	return fmt.Errorf("server: %s %v: %w", doing, c, err)
+}
+
+func compositorFatal(err error) bool {
+	return errors.Is(err, backend.ErrDeviceLost) || errors.Is(err, backend.ErrBroken)
 }
 
 func addressedToTheClient(err error) bool {
@@ -233,8 +241,8 @@ func (c *Client) handle(ev loop.Events) error {
 	}
 	if ev&loop.Readable != 0 {
 		err := c.conn.Fill()
-		if teardown := c.dispatch(); c.gone {
-			return teardown
+		if served := c.dispatch(); served != nil || c.gone {
+			return served
 		}
 		if err != nil {
 			return c.destroy()
@@ -282,16 +290,23 @@ func (c *Client) fail(err error) error {
 	if c.restoring {
 		c.display.restoreFailed(c, err)
 	}
+	if compositorFatal(err) {
+		return c.while("serve", err)
+	}
+	c.tell(err)
+	return c.destroy()
+}
+
+func (c *Client) tell(err error) {
 	object, code := wire.Resource(c.wlDisplay), sw.WlDisplayErrorImplementation
 	var pe *wire.ProtocolError
 	var me *wire.MessageError
 	switch {
 	case c.conn.Err() != nil:
-		return c.destroy()
+		return
 	case errors.As(err, &pe):
-		object = c.resource(pe.Object)
-		_ = c.wlDisplay.SendError(object, pe.Code, pe.Message)
-		return c.destroy()
+		_ = c.wlDisplay.SendError(c.resource(pe.Object), pe.Code, pe.Message)
+		return
 	case errors.As(err, &me):
 		object, code = c.resource(me.Object), sw.WlDisplayErrorInvalidMethod
 		for _, target := range []error{wire.ErrUnknownObject, wire.ErrWrongInterface, wire.ErrNullObject, wire.ErrInvalidNewID} {
@@ -303,7 +318,6 @@ func (c *Client) fail(err error) error {
 		code = sw.WlDisplayErrorInvalidObject
 	}
 	_ = c.wlDisplay.SendError(object, uint32(code), err.Error())
-	return c.destroy()
 }
 
 func (c *Client) resource(id wire.ObjectID) wire.Resource {

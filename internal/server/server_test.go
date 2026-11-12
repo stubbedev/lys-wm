@@ -952,3 +952,99 @@ func TestOnlyProtocolErrorsOfALeavingClientGoUnreported(t *testing.T) {
 		t.Fatalf("reported %v, want only the internal error joined to a protocol error", got)
 	}
 }
+
+func failingGlobal(h *harness, err error) {
+	h.on(func() {
+		if _, e := h.disp.AddGlobal(sw.WlCompositorInterface, 6, func(*Client, wire.ObjectID, uint32) error { return err }); e != nil {
+			h.t.Error(e)
+		}
+	})
+}
+
+func requestBind(t *testing.T, h *harness, d *wlclient.Display) {
+	t.Helper()
+	reg, _ := h.registry(d)
+	comp, err := cw.NewWlCompositor(d, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(reg.Bind(1, comp), d.Flush()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestARequestMeetingTheCompositorsOwnFatalConditionStopsTheCompositor(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+	}{
+		{"device lost", fmt.Errorf("%w: lost while importing a buffer", backend.ErrDeviceLost)},
+		{"broken invariant", backend.Broken("a frame on an unknown output")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := start(t)
+			failingGlobal(h, c.err)
+			reported := h.reports()
+			requestBind(t, h, h.connect())
+			err := h.ended()
+			if !errors.Is(err, c.err) || !strings.Contains(err.Error(), fmt.Sprintf("serve the client of pid %d", os.Getpid())) {
+				t.Fatalf("Run = %v, want %v from serving the client", err, c.err)
+			}
+			if got := reported(); len(got) != 0 {
+				t.Errorf("reported %v, want the fatal error returned, not reported", got)
+			}
+		})
+	}
+}
+
+func TestAPostedFailureMeetingTheCompositorsOwnFatalConditionStopsTheCompositor(t *testing.T) {
+	h := start(t)
+	h.connect()
+	h.waitClients(1)
+	lost := fmt.Errorf("%w: lost while retrying a commit", backend.ErrDeviceLost)
+	h.on(func() {
+		if err := h.disp.clients[0].Fail(lost); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := h.ended(); !errors.Is(err, lost) {
+		t.Fatalf("Run = %v, want the device loss", err)
+	}
+}
+
+func TestARequestFailingOnAClientsOwnResourceKillsOnlyThatClient(t *testing.T) {
+	h := start(t)
+	failingGlobal(h, fmt.Errorf("dmabuf: poll plane fd 7 for its writer: %w", unix.ENODEV))
+	reported := h.reports()
+	bad, good := h.connect(), h.connect()
+	h.registry(good)
+	requestBind(t, h, bad)
+	h.waitClients(1)
+	var pe *wire.ProtocolError
+	if err := bad.Roundtrip(); !errors.As(err, &pe) || pe.Code != uint32(sw.WlDisplayErrorImplementation) || !strings.Contains(pe.Message, "no such device") {
+		t.Fatalf("Roundtrip = %v, want an implementation error naming the client's fd", err)
+	}
+	if err := good.Roundtrip(); err != nil {
+		t.Fatalf("the other client was affected: %v", err)
+	}
+	if got := reported(); len(got) != 0 {
+		t.Errorf("reported %v, want the error sent to the client alone", got)
+	}
+}
+
+func TestANoDeviceErrorFromALeavingClientsResourceIsReportedAndOthersAreStillServed(t *testing.T) {
+	h := start(t)
+	enodev := fmt.Errorf("shm: map the pool for writing: %w", unix.ENODEV)
+	hookedCompositors(h, func() error { return enodev })
+	leaving, staying := h.connect(), h.connect()
+	bindCompositors(t, h, leaving, 1)
+	reported := h.reports()
+	if err := leaving.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h.waitClients(1)
+	if got := reported(); len(got) != 1 || !errors.Is(got[0], unix.ENODEV) {
+		t.Fatalf("reported %v, want the client resource's error once", got)
+	}
+	bindCompositors(t, h, staying, 1)
+}
