@@ -471,7 +471,13 @@ func (c *Compositor) OutputDamaged(b backend.Output) error {
 
 func (c *Compositor) OutputChanged(b backend.Output) error {
 	c.stateChanged()
-	if slices.Contains(c.disabled, b) {
+	err := errors.Join(c.outputChanged(b), c.dockChanged(b))
+	c.applyLidPolicy()
+	return err
+}
+
+func (c *Compositor) outputChanged(b backend.Output) error {
+	if slices.Contains(c.disabled, b) || c.mirrorOf(b) != nil {
 		return nil
 	}
 	o, err := c.knownOutput(b, "change of")
@@ -501,57 +507,69 @@ func (c *Compositor) SetOutputScale(b backend.Output, scale output.Scale) error 
 }
 
 func (c *Compositor) applyOutputRules() error {
+	external := func(b backend.Output) bool { return !internalPanel(b.Name()) }
+	errs := c.applyOutputRulesOf(external)
+	errs = append(errs, c.applyMirrorRules())
+	errs = append(errs, c.applyOutputRulesOf(func(b backend.Output) bool { return !external(b) })...)
+	errs = append(errs, c.relayout(), c.syncAreas())
+	return errors.Join(errs...)
+}
+
+func (c *Compositor) applyOutputRulesOf(which func(backend.Output) bool) []error {
 	var errs []error
 	for _, o := range slices.Clone(c.outputs) {
-		b := o.Backend()
-		rule := c.outputRule(b)
-		if rule.Disabled {
-			if _, _, err := c.commitOutput(b, rule); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			c.disabled = append(c.disabled, b)
-			errs = append(errs, c.disable(o))
-			continue
-		}
-		if rule.Mirror != nil {
-			errs = append(errs, c.disable(o))
-			if _, _, err := c.commitOutput(b, rule); err != nil {
-				errs = append(errs, err)
-			}
-			errs = append(errs, c.addMirror(b, rule))
-			continue
-		}
-		changed, recolored, err := c.commitOutput(b, rule)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		switch {
-		case changed || o.Scale() != rule.scale() || o.Transform() != rule.Transform:
-			errs = append(errs, o.Update(o.Position(), rule.scale(), rule.Transform), c.outputResized(o))
-		case recolored && c.colorManager != nil:
-			errs = append(errs, c.colorManager.OutputDone(o))
+		if which(o.Backend()) {
+			errs = append(errs, c.applyEnabledRule(o))
 		}
 	}
 	for _, b := range slices.Clone(c.disabled) {
-		rule := c.outputRule(b)
-		if rule.Disabled {
-			continue
+		if which(b) {
+			errs = append(errs, c.applyDisabledRule(b))
 		}
-		if _, _, err := c.commitOutput(b, rule); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		c.disabled = slices.DeleteFunc(c.disabled, func(x backend.Output) bool { return x == b })
-		if rule.Mirror != nil {
-			errs = append(errs, c.addMirror(b, rule))
-			continue
-		}
-		errs = append(errs, c.enable(b, rule))
 	}
-	errs = append(errs, c.applyMirrorRules())
-	errs = append(errs, c.relayout(), c.syncAreas())
-	return errors.Join(errs...)
+	return errs
+}
+
+func (c *Compositor) applyEnabledRule(o *output.Output) error {
+	b := o.Backend()
+	rule := c.outputRule(b)
+	if rule.Disabled {
+		if _, _, err := c.commitOutput(b, rule); err != nil {
+			return err
+		}
+		c.disabled = append(c.disabled, b)
+		return c.disable(o)
+	}
+	if rule.Mirror != nil {
+		err := c.disable(o)
+		if _, _, cerr := c.commitOutput(b, rule); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+		return errors.Join(err, c.addMirror(b, rule))
+	}
+	changed, recolored, err := c.commitOutput(b, rule)
+	switch {
+	case changed || o.Scale() != rule.scale() || o.Transform() != rule.Transform:
+		return errors.Join(err, o.Update(o.Position(), rule.scale(), rule.Transform), c.outputResized(o))
+	case recolored && c.colorManager != nil:
+		return errors.Join(err, c.colorManager.OutputDone(o))
+	}
+	return err
+}
+
+func (c *Compositor) applyDisabledRule(b backend.Output) error {
+	rule := c.outputRule(b)
+	if rule.Disabled {
+		return nil
+	}
+	if _, _, err := c.commitOutput(b, rule); err != nil {
+		return err
+	}
+	c.disabled = slices.DeleteFunc(c.disabled, func(x backend.Output) bool { return x == b })
+	if rule.Mirror != nil {
+		return c.addMirror(b, rule)
+	}
+	return c.enable(b, rule)
 }
 
 func (i Insets) inset(r image.Rectangle) image.Rectangle {

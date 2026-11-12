@@ -138,6 +138,7 @@ var (
 	_ backend.FrameTearing = (*Output)(nil)
 	_ backend.FrameFilling = (*Output)(nil)
 	_ backend.FrameRateCap = (*Output)(nil)
+	_ backend.Stalling     = (*Output)(nil)
 )
 
 type Backend struct {
@@ -857,7 +858,7 @@ func (b *Backend) remove(o *Output) error {
 		return nil
 	}
 	b.outputs = slices.Delete(b.outputs, i, i+1)
-	return errors.Join(b.handler.OutputRemoved(o), o.disable(), o.release())
+	return errors.Join(b.handler.OutputRemoved(o), o.disableGone(), o.release())
 }
 
 func (b *Backend) Outputs() []*Output {
@@ -1061,6 +1062,7 @@ type Output struct {
 	lateTimed     bool
 	primaryAt     backend.Placement
 	primaryNext   backend.Placement
+	commits       backend.Commits
 }
 
 func (o *Output) Name() string {
@@ -1502,11 +1504,24 @@ func (o *Output) disable() error {
 	if err := o.commitDisable(r); err != nil {
 		return fmt.Errorf("drm: disable %s: %w", o.Name(), err)
 	}
+	return o.forgetLit()
+}
+
+func (o *Output) forgetLit() error {
 	o.enabled, o.lit, o.flipping = false, false, false
 	o.clock.Cancel()
 	err := o.freeBuffers()
 	o.unbind()
 	return err
+}
+
+func (o *Output) disableGone() error {
+	err := o.disable()
+	if err == nil || backend.Fatal(err) {
+		return err
+	}
+	o.b.report(fmt.Errorf("%w; it is gone, so its CRTC stays as the kernel has it", err))
+	return o.forgetLit()
 }
 
 var errNoCRTC = errors.New("no free CRTC and primary plane")
@@ -1857,6 +1872,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	restated := o.restatedFlips + len(o.tiles)
 	err = errors.Join(err, o.dropRestated())
 	if err != nil {
+		err = errors.Join(err, o.commitFailed(err))
 		if refused(err) {
 			err = errors.Join(err, o.overlayRefused())
 		}
@@ -1865,6 +1881,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 		}
 		return err
 	}
+	o.commitTook()
 	if err := o.dropRenderFence(); err != nil {
 		return errors.Join(err, unix.Close(fence))
 	}
@@ -2316,6 +2333,7 @@ func (o *Output) sendPlanes(cursor bool) error {
 		return o.planesFailed(fmt.Errorf("drm: commit the cursor and colour of %s: %w", o.Name(), err))
 	}
 	o.planesFailing = false
+	o.commitTook()
 	o.flipping, o.extraFlips = true, len(o.tiles)
 	if cursor {
 		c.sent()
@@ -2369,7 +2387,35 @@ func (o *Output) planesFailed(err error) error {
 		o.planesFailing = true
 		o.b.report(fmt.Errorf("%w; keeping the planes as they are until a commit takes", err))
 	}
-	return nil
+	return o.commitFailed(err)
+}
+
+func (o *Output) Stalled() bool {
+	return o.commits.Stalled()
+}
+
+func (o *Output) commitFailed(err error) error {
+	stall := o.commits.Failed(o.Name(), o.b.now(), err)
+	if stall == nil {
+		return nil
+	}
+	o.b.report(fmt.Errorf("drm: %w; re-reading its connector", stall))
+	o.b.loop.Idle(o.stallChanged)
+	return o.b.rescan()
+}
+
+func (o *Output) commitTook() {
+	if recovery := o.commits.Took(o.Name()); recovery != nil {
+		o.b.report(fmt.Errorf("drm: %w", recovery))
+		o.b.loop.Idle(o.stallChanged)
+	}
+}
+
+func (o *Output) stallChanged() error {
+	if o.b.closed || !slices.Contains(o.b.outputs, o) {
+		return nil
+	}
+	return o.b.handler.OutputChanged(o)
 }
 
 func (o *Output) flipped(e kdrm.FlipEvent) error {

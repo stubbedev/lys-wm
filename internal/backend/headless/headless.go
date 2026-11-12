@@ -260,6 +260,7 @@ var (
 	_ backend.Scanner        = (*Output)(nil)
 	_ backend.Gamma          = (*Output)(nil)
 	_ backend.ColorTransform = (*Output)(nil)
+	_ backend.Stalling       = (*Output)(nil)
 )
 
 type Output struct {
@@ -320,6 +321,7 @@ type Output struct {
 	hardwareClock  bool
 	contentType    wm.ContentType
 	failPresents   error
+	commits        backend.Commits
 	loseInFrame    bool
 	inherited      bool
 	takeover       *soft.Buffer
@@ -584,8 +586,10 @@ func (o *Output) Present(damage render.Region) error {
 	}
 	o.inFrame = false
 	if o.failPresents != nil {
+		o.commitFailed(o.failPresents)
 		return o.failPresents
 	}
+	o.commitTook()
 	o.drawn = true
 	o.damage = append(o.damage[:0], damage...)
 	_, o.unread = o.gpuTarget()
@@ -784,6 +788,31 @@ func (o *Output) ContentType() wm.ContentType {
 
 func (o *Output) FailPresents(err error) {
 	o.failPresents = err
+}
+
+func (o *Output) Stalled() bool {
+	return o.commits.Stalled()
+}
+
+func (o *Output) commitFailed(err error) {
+	if stall := o.commits.Failed(o.name, now(), err); stall != nil {
+		o.backend.report(fmt.Errorf("headless: %w", stall))
+		o.backend.loop.Idle(o.stallChanged)
+	}
+}
+
+func (o *Output) commitTook() {
+	if recovery := o.commits.Took(o.name); recovery != nil {
+		o.backend.report(fmt.Errorf("headless: %w", recovery))
+		o.backend.loop.Idle(o.stallChanged)
+	}
+}
+
+func (o *Output) stallChanged() error {
+	if o.removed || o.backend.closed {
+		return nil
+	}
+	return o.backend.handler.OutputChanged(o)
 }
 
 func (o *Output) LoseDeviceInFrame() {

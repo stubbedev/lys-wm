@@ -143,9 +143,13 @@ A list of rules. Each output takes the first rule that matches, else the
 Changes from wlr-output-management tools (wlr-randr, kanshi, wdisplays)
 replace these rules until the next reload. Rotation, unsupported VRR, unlisted
 modes and turning every output off are refused. While the lid is closed and
-another output is connected and not turned off, `eDP-*` panels are off and
-their workspaces move to the other outputs; with no other output they stay on.
-The lid state at startup comes from logind, later changes from libinput.
+another output is on and displaying, `eDP-*` panels are off and their
+workspaces move to the other outputs; with no other output they stay on. An
+output displays while it is on and its commits take: one whose every commit
+has failed for a second (a dock that went away without telling, say) stops
+counting, its connector is read again, and the panel comes back even with the
+lid closed, until a commit to it takes again. The lid state at startup comes
+from logind, later changes from libinput.
 
 ### HDR
 
@@ -1033,8 +1037,9 @@ lid_suspend: false
 ```
 
 Default `true` on the drm backend: lys-wm inhibits logind's lid handling and
-suspends when the lid is closed, no output besides the `eDP-*` panels is
-connected and left on by the config, and the machine is on battery. `false` leaves the lid to logind. Read at startup.
+suspends when the lid is closed, no output besides the `eDP-*` panels is on
+and displaying (as for the panel rule in [outputs](#outputs)), and the machine
+is on battery. `false` leaves the lid to logind. Read at startup.
 
 ## gpu
 

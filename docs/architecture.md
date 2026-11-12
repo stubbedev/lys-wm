@@ -199,7 +199,7 @@ Everything else is scoped and reported through `Config.Report`:
 
 | Scope | Failure | Recovery |
 | --- | --- | --- |
-| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. |
+| Frame | Render, readback, test or commit failure (`EBUSY`, `EINVAL`, GL error, `EACCES` after losing master, an `ENODEV` the card does not confirm) | `AbortFrame`, invalidate the scene, schedule another frame at the frame clock's pace. The first drop and the first recovery are reported. Commits failing for `StallAfter` stall the output ([The lid](#the-lid)). |
 | Planes between frames | Cursor or gamma commit rejected | Reported once, state stays dirty and is committed again. A cursor refused with `EINVAL`/`ERANGE` moves into the frame. |
 | Client | A failing request | A request meeting an error `backend.Fatal` accepts stops the compositor, naming the client. Any other error, a client resource's own failure included, is sent to that client as `wl_display.error` and kills only it (`server.Client`, #428); a failed capture sends `failed`. |
 | Client teardown | A destroy hook failing as a client leaves, is killed or the compositor closes | Every remaining hook still runs. A protocol error for a client already gone is dropped; an error `backend.Fatal` accepts reaches the loop; anything else is reported once with the client and the object. |
@@ -594,9 +594,30 @@ cursor plane keeps the mode's own. `internal/powerprofile` follows
 
 lys-wm holds logind's `handle-lid-switch` inhibitor in block mode and applies
 one policy on every relevant change (lid, outputs, power supplies): suspend
-when the lid is closed, no external output is connected and the machine is on
+when the lid is closed, the laptop is not docked and the machine is on
 battery (`compositor/lid.go`). `lid_suspend: false` hands the lid back to
 logind.
+
+Docked is one fact, read by both the clamshell rule (`eDP-*` panels off while
+the lid is closed) and the suspend: an external output in the layout that
+displays (`backend.Displays`: enabled, and its commits take). A connected
+output is not enough: after an undock a connector can stay listed while every
+commit to it fails with `EBUSY` (#436).
+
+- A backend output tracks its commits in `backend.Commits`. Every failed
+  commit (frame, modeset, cursor or colour planes) starts or extends a streak;
+  one that takes ends it. A streak that has lasted `StallAfter` (1 s) at a
+  failed commit stalls the output: one such commit is about 60 frame retries,
+  far past a transient `EBUSY`, and the panel is dark for at most a second.
+  A lost device never stalls; the session ends instead.
+- The stall and the recovery are reported once each, and reach the compositor
+  as `OutputChanged` from an idle callback, never inside a frame; the
+  compositor re-applies the output rules and the lid policy.
+- On a stall the drm backend probes its connectors again, as on a hotplug
+  uevent, so a connector that left without one is removed. Removing an output
+  whose disabling commit fails is reported, not fatal.
+- The output rules apply to external outputs first and panels last, so the
+  panel's rule reads where the externals ended up.
 
 - The power read and Suspend run off the loop, one check at a time.
 - A sleep is pending from Suspend accepted (or `PrepareForSleep(true)`) until

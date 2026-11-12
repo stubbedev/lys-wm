@@ -85,7 +85,8 @@ func (c *Compositor) lidSettled() {
 }
 
 func (c *Compositor) docked() bool {
-	shows := func(b backend.Output) bool { return !internalPanel(b.Name()) && !c.configuredRule(b).Disabled }
-	return slices.ContainsFunc(c.outputs, func(o *output.Output) bool { return shows(o.Backend()) }) ||
-		slices.ContainsFunc(c.disabled, shows)
+	return slices.ContainsFunc(c.outputs, func(o *output.Output) bool {
+		b := o.Backend()
+		return !internalPanel(b.Name()) && backend.Displays(b)
+	})
 }

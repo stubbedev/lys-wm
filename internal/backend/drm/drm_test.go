@@ -688,6 +688,9 @@ func (a *fakeAlloc) close() error { return nil }
 type recorder struct {
 	during   func(o backend.Output) error
 	idle     bool
+	retry    bool
+	dropped  int
+	changed  int
 	log      []string
 	outputs  []backend.Output
 	presents []backend.Presentation
@@ -704,7 +707,10 @@ func (r *recorder) OutputRemoved(o backend.Output) error {
 	return nil
 }
 
-func (r *recorder) OutputChanged(backend.Output) error { return nil }
+func (r *recorder) OutputChanged(backend.Output) error {
+	r.changed++
+	return nil
+}
 
 func (r *recorder) OutputDamaged(o backend.Output) error {
 	r.log = append(r.log, "damaged "+o.Name())
@@ -730,7 +736,15 @@ func (r *recorder) Frame(o backend.Output) error {
 		return err
 	}
 	p.FillRect(image.Rect(0, 0, 16, 16), render.Color{A: 0xff}, render.Mask{})
-	return errors.Join(p.End(), o.Present(nil))
+	if err := p.End(); err != nil {
+		return err
+	}
+	err = o.Present(nil)
+	if err == nil || !r.retry || backend.Fatal(err) {
+		return err
+	}
+	r.dropped++
+	return o.ScheduleFrame()
 }
 
 func (r *recorder) Presented(_ backend.Output, p backend.Presentation) error {
