@@ -48,6 +48,17 @@ func GPU(t testing.TB) *gpu.Library {
 	return l
 }
 
+func Library(t testing.TB, name, path string, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		Require(t, name)
+	}
+	t.Fatalf("open %s from %s: %v", name, path, err)
+}
+
 var driverClose sync.Mutex
 
 func CloseDriver(closeDriver func() error) error {

@@ -828,17 +828,10 @@ func run(args []string) (err error) {
 	rtdebug.SetGCPercent(gcPercent)
 	rtdebug.SetMemoryLimit(softMemoryLimit)
 	unpin := gpu.PinThread()
-	how, release, err := raiseThreadPriority(session.SystemBus(os.Getenv))
-	if how != "" {
-		fmt.Fprintf(os.Stderr, "lys-wm: the compositor thread runs at %s\n", how)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
-	}
+	restore := compositorThread.raise(session.SystemBus(os.Getenv))
 	ran := l.Run()
-	release()
 	if errors.Is(ran, nested.ErrClosed) {
 		ran = nil
 	}
-	return errors.Join(ran, unpin())
+	return errors.Join(ran, restore(), unpin())
 }

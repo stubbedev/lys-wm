@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +32,9 @@ func libinput(t testing.TB, opener Opener) *Libinput {
 	return libinputReporting(t, opener, func(err error) { t.Errorf("reported: %v", err) })
 }
 
-func libinputReporting(t testing.TB, opener Opener, report func(error)) *Libinput {
+func keepPriority() (restore func() error) { return func() error { return nil } }
+
+func openLibinput(t testing.TB, opener Opener, report func(error), raise func() (restore func() error)) *Libinput {
 	t.Helper()
 	l, err := loop.New()
 	if err != nil {
@@ -39,13 +42,14 @@ func libinputReporting(t testing.TB, opener Opener, report func(error)) *Libinpu
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	path := LibinputPath(os.Getenv)
-	in, err := OpenLibinput(l, path, opener, InputConfig{}, report)
-	if err != nil {
-		if _, statErr := os.Stat(path); statErr != nil {
-			testenv.Require(t, "libinput")
-		}
-		t.Fatal(err)
-	}
+	in, err := OpenLibinput(l, path, opener, InputConfig{}, report, raise)
+	testenv.Library(t, "libinput", path, err)
+	return in
+}
+
+func libinputReporting(t testing.TB, opener Opener, report func(error)) *Libinput {
+	t.Helper()
+	in := openLibinput(t, opener, report, keepPriority)
 	t.Cleanup(func() {
 		if err := in.Close(); err != nil {
 			t.Error(err)
@@ -102,7 +106,7 @@ func TestLibinputRejectsNonInputDevices(t *testing.T) {
 	if err := in.reader.call("add /dev/null", func() error { return in.reader.add(os.DevNull) }); !errors.Is(err, ErrDeclined) {
 		t.Fatalf("/dev/null as an input device: %v", err)
 	}
-	if _, err := OpenLibinput(nil, "/nonexistent/libinput.so.10", PlainOpener{}, InputConfig{}, nil); err == nil || !strings.Contains(err.Error(), LibinputEnv) {
+	if _, err := OpenLibinput(nil, "/nonexistent/libinput.so.10", PlainOpener{}, InputConfig{}, nil, keepPriority); err == nil || !strings.Contains(err.Error(), LibinputEnv) {
 		t.Fatalf("a missing library: %v", err)
 	}
 }
@@ -268,5 +272,54 @@ func TestAReleaseDoesNotWaitForTheOpener(t *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("the release never ran")
+	}
+}
+
+func endsWithItsGoroutine(tid int) bool { return tid != unix.Getpid() }
+
+func TestTheInputReaderRaisesItsOwnThreadAndReleasesItBeforeTheThreadEnds(t *testing.T) {
+	var raised, released atomic.Int64
+	in := openLibinput(t, PlainOpener{}, func(err error) { t.Errorf("reported: %v", err) }, func() func() error {
+		raised.Store(int64(unix.Gettid()))
+		return func() error {
+			released.Store(int64(unix.Gettid()))
+			return nil
+		}
+	})
+	tid := int(raised.Load())
+	var reading int
+	in.onReader(t, "read the reader's thread", func(*inputReader) error {
+		reading = unix.Gettid()
+		return nil
+	})
+	if tid == 0 || reading != tid || tid == unix.Gettid() {
+		t.Fatalf("the priority was raised on thread %d, the reader reads on %d and the test runs on %d, want the reader's own thread", tid, reading, unix.Gettid())
+	}
+	if released.Load() != 0 {
+		t.Fatal("the priority was released while the reader runs")
+	}
+	if err := in.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := int(released.Load()); got != tid {
+		t.Fatalf("Close returned with the priority released on thread %d, want the reader's %d", got, tid)
+	}
+	if !endsWithItsGoroutine(tid) {
+		return
+	}
+	task := fmt.Sprintf("/proc/self/task/%d", tid)
+	deadline := time.Now().Add(testenv.HangLimit)
+	for {
+		_, err := os.Stat(task)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the reader's thread %d outlived Close by %v", tid, testenv.HangLimit)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

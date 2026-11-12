@@ -3,67 +3,72 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/rtkit/rtkittest"
+	"github.com/stubbedev/lys-wm/internal/session"
+	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
-func TestTheCompositorThreadReadsBackThePriorityItTook(t *testing.T) {
+func TestTheCompositorThreadReadsBackThePriorityItTookAndGivesItBack(t *testing.T) {
 	type outcome struct {
-		how    string
-		err    error
-		before uint32
-		policy uint32
-		flags  uint64
-		nice   int32
-		attr   error
+		how                   string
+		err                   error
+		before, raised, after unix.SchedAttr
+		attr, restored        error
 	}
 	noBus := "unix:path=" + filepath.Join(t.TempDir(), "no-bus")
-	done := make(chan outcome, 1)
-	go func() {
-		runtime.LockOSThread()
-		var o outcome
-		before, err := unix.SchedGetAttr(0, 0)
-		if err != nil {
-			o.attr = err
-			done <- o
-			return
+	o := onOwnThread(func() (o outcome) {
+		tid := unix.Gettid()
+		if o.before, o.attr = threadSchedule(tid); o.attr != nil {
+			return o
 		}
-		o.before = before.Policy
-		var release func()
-		o.how, release, o.err = raiseThreadPriority(noBus)
-		release()
-		attr, err := unix.SchedGetAttr(0, 0)
-		o.attr = err
-		if err == nil {
-			o.policy, o.flags, o.nice = attr.Policy, attr.Flags, attr.Nice
+		var restore func() error
+		o.how, restore, o.err = compositorThread.raisePriority(noBus)
+		raised, raisedErr := unix.SchedGetAttr(0, 0)
+		o.restored = restore()
+		after, afterErr := threadSchedule(tid)
+		o.attr = errors.Join(raisedErr, afterErr)
+		if o.attr == nil {
+			o.raised, o.after = *raised, after
 		}
-		done <- o
-	}()
-	o := <-done
+		return o
+	})
 	if o.attr != nil {
 		t.Fatal(o.attr)
+	}
+	if o.restored != nil {
+		t.Fatal(o.restored)
+	}
+	if o.after != o.before {
+		t.Fatalf("the thread was given back %+v, not the %+v it ran at before", o.after, o.before)
 	}
 	switch {
 	case o.err != nil:
 		t.Logf("refused here: %v", o.err)
-		if o.policy != o.before {
-			t.Fatalf("a refused raise moved the thread from policy %d to %d", o.before, o.policy)
+		if o.raised.Policy != o.before.Policy {
+			t.Fatalf("a refused raise moved the thread from policy %d to %d", o.before.Policy, o.raised.Policy)
 		}
 		if !strings.Contains(o.err.Error(), "90-lys-wm.conf") || !strings.Contains(o.err.Error(), "rtkit") {
 			t.Fatalf("the refusal does not say how to grant the priority: %v", o.err)
 		}
 	case o.how == "SCHED_RR":
-		if o.policy != unix.SCHED_RR || o.flags&unix.SCHED_FLAG_RESET_ON_FORK == 0 {
-			t.Fatalf("policy %d flags %#x, want SCHED_RR that resets on fork", o.policy, o.flags)
+		if o.raised.Policy != unix.SCHED_RR || o.raised.Flags&unix.SCHED_FLAG_RESET_ON_FORK == 0 {
+			t.Fatalf("policy %d flags %#x, want SCHED_RR that resets on fork", o.raised.Policy, o.raised.Flags)
 		}
 	default:
-		if o.nice != loopNice || o.flags&unix.SCHED_FLAG_RESET_ON_FORK == 0 {
-			t.Fatalf("nice %d flags %#x, want %d that resets on fork", o.nice, o.flags, loopNice)
+		if o.raised.Nice != loopNice || o.raised.Flags&unix.SCHED_FLAG_RESET_ON_FORK == 0 {
+			t.Fatalf("nice %d flags %#x, want %d that resets on fork", o.raised.Nice, o.raised.Flags, loopNice)
 		}
 	}
 }
@@ -125,15 +130,14 @@ func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
 			probed <- probe{err: err}
 			return
 		}
-		batch := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_BATCH, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
-		reason, err := demotionUnavailable(start.Policy, unix.SchedSetAttr(0, &batch, 0))
+		tid := unix.Gettid()
+		reason, err := demotionUnavailable(start.Policy, setPolicyKeepingNice(tid, unix.SCHED_BATCH))
 		probed <- probe{reason, err}
 		if reason != "" || err != nil {
 			return
 		}
-		tid := unix.Gettid()
 		asked := make(chan uint32, 2)
-		release := demoteOnRTTimeout(tid, func() error {
+		release := compositorThread.demoteOnRTTimeout(tid, func() error {
 			attr, err := unix.SchedGetAttr(tid, 0)
 			if err != nil {
 				return err
@@ -143,7 +147,7 @@ func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
 		}, time.Millisecond)
 		defer release()
 		for round := range 2 {
-			if err := unix.SchedSetAttr(0, &batch, 0); err != nil {
+			if err := setPolicyKeepingNice(tid, unix.SCHED_BATCH); err != nil {
 				done <- err
 				return
 			}
@@ -173,5 +177,212 @@ func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func onOwnThread[T any](job func() T) T {
+	out := make(chan T, 1)
+	go func() {
+		runtime.LockOSThread()
+		out <- job()
+	}()
+	return <-out
+}
+
+func requireStandIn(t *testing.T) {
+	t.Helper()
+	type probe struct {
+		reason string
+		err    error
+	}
+	p := onOwnThread(func() probe {
+		start, err := unix.SchedGetAttr(0, 0)
+		if err != nil {
+			return probe{err: fmt.Errorf("read this thread's policy: %w", err)}
+		}
+		reason, err := demotionUnavailable(start.Policy, setPolicyKeepingNice(unix.Gettid(), unix.SCHED_BATCH))
+		return probe{reason, err}
+	})
+	if p.err != nil {
+		t.Fatal(p.err)
+	}
+	if p.reason != "" {
+		t.Skip(p.reason)
+	}
+}
+
+func withoutRTPrio(t *testing.T) {
+	t.Helper()
+	var was unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_RTPRIO, &was); err != nil {
+		t.Fatalf("read RLIMIT_RTPRIO: %v", err)
+	}
+	if err := unix.Setrlimit(unix.RLIMIT_RTPRIO, &unix.Rlimit{Cur: 0, Max: was.Max}); err != nil {
+		t.Fatalf("drop the soft RLIMIT_RTPRIO: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := unix.Setrlimit(unix.RLIMIT_RTPRIO, &was); err != nil {
+			t.Errorf("restore RLIMIT_RTPRIO %+v: %v", was, err)
+		}
+	})
+}
+
+type request struct {
+	tid    int
+	policy uint32
+}
+
+func rtkitStandingInWithBatch(t *testing.T) (bus string, asked <-chan request) {
+	t.Helper()
+	requests := make(chan request, 16)
+	return rtkittest.Serve(t, func(req rtkittest.Request) *dbus.Error {
+		if req.Method != rtkittest.Realtime || req.Value != loopRTPriority {
+			return dbus.MakeFailedError(fmt.Errorf("the fake rtkit grants SCHED_RR %d only, not %+v", loopRTPriority, req))
+		}
+		attr, err := unix.SchedGetAttr(req.TID, 0)
+		if err != nil {
+			return dbus.MakeFailedError(fmt.Errorf("read the policy of thread %d: %w", req.TID, err))
+		}
+		requests <- request{req.TID, attr.Policy}
+		if err := setPolicyKeepingNice(req.TID, unix.SCHED_BATCH); err != nil {
+			return dbus.MakeFailedError(fmt.Errorf("stand SCHED_BATCH in for SCHED_RR: %w", err))
+		}
+		return nil
+	}), requests
+}
+
+type noDevices struct{}
+
+func (noDevices) TakeDevice(path string) (int, session.Device, error) {
+	return -1, session.Device{}, fmt.Errorf("no device for %s in this test: %w", path, unix.EPERM)
+}
+
+func (noDevices) ReleaseDevice(session.Device) error { return nil }
+
+func openInputThread(t *testing.T, bus string) (in *session.Libinput, tid int) {
+	t.Helper()
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	path := session.LibinputPath(os.Getenv)
+	in, err = session.OpenLibinput(l, path, noDevices{}, session.InputConfig{}, func(err error) { t.Errorf("reported: %v", err) }, func() func() error {
+		tid = unix.Gettid()
+		return inputThread.raise(bus)
+	})
+	testenv.Library(t, "libinput", path, err)
+	return in, tid
+}
+
+func scheduleOf(t *testing.T, tid int) unix.SchedAttr {
+	t.Helper()
+	attr, err := threadSchedule(tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return attr
+}
+
+func TestTheInputThreadRunsAtTheCompositorThreadsPriority(t *testing.T) {
+	requireStandIn(t)
+	withoutRTPrio(t)
+	bus, _ := rtkitStandingInWithBatch(t)
+	type taken struct {
+		s   unix.SchedAttr
+		err error
+	}
+	compositor := onOwnThread(func() taken {
+		restore := compositorThread.raise(bus)
+		s, err := threadSchedule(unix.Gettid())
+		return taken{s, errors.Join(err, restore())}
+	})
+	if compositor.err != nil {
+		t.Fatal(compositor.err)
+	}
+	in, tid := openInputThread(t, bus)
+	defer func() {
+		if err := in.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if got := scheduleOf(t, tid); got != compositor.s {
+		t.Fatalf("the input thread runs at %+v, the compositor thread at %+v", got, compositor.s)
+	}
+}
+
+func TestTheInputThreadLeavesAndRegainsRealtimeOnAnRTTimeout(t *testing.T) {
+	requireStandIn(t)
+	withoutRTPrio(t)
+	bus, asked := rtkitStandingInWithBatch(t)
+	guard := make(chan os.Signal, 1)
+	signal.Notify(guard, unix.SIGXCPU)
+	defer signal.Stop(guard)
+	in, tid := openInputThread(t, bus)
+	defer func() {
+		if err := in.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case first := <-asked:
+		if first.tid != tid {
+			t.Fatalf("rtkit was asked for thread %d, not the input thread %d", first.tid, tid)
+		}
+	default:
+		got := scheduleOf(t, tid)
+		if got.Policy != unix.SCHED_RR {
+			t.Fatalf("the input thread runs at %+v without having asked rtkit, want SCHED_RR", got)
+		}
+		t.Skip("the input thread took SCHED_RR without rtkit, so no RLIMIT_RTTIME applies")
+	}
+	if got := scheduleOf(t, tid).Policy; got != unix.SCHED_BATCH {
+		t.Fatalf("the input thread runs at policy %d after rtkit's grant, want the fake's SCHED_BATCH", got)
+	}
+	if err := unix.Kill(unix.Getpid(), unix.SIGXCPU); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case again := <-asked:
+		if again.tid != tid || again.policy != unix.SCHED_NORMAL {
+			t.Fatalf("rtkit was asked again for thread %d at policy %d, want the input thread %d back at SCHED_NORMAL first", again.tid, again.policy, tid)
+		}
+	case <-time.After(testenv.HangLimit):
+		t.Fatalf("rtkit was not asked again for the input thread within %v of SIGXCPU", testenv.HangLimit)
+	}
+	if got := scheduleOf(t, tid).Policy; got != unix.SCHED_BATCH {
+		t.Fatalf("the input thread runs at policy %d after rtkit granted it again, want the fake's SCHED_BATCH", got)
+	}
+}
+
+func TestARaiseThroughRtkitGivesTheThreadBackItsScheduling(t *testing.T) {
+	requireStandIn(t)
+	withoutRTPrio(t)
+	bus, _ := rtkitStandingInWithBatch(t)
+	type taken struct {
+		before, raised, after unix.SchedAttr
+		err                   error
+	}
+	got := onOwnThread(func() (got taken) {
+		tid := unix.Gettid()
+		var beforeErr, raisedErr, afterErr error
+		if got.before, beforeErr = threadSchedule(tid); beforeErr != nil {
+			return taken{err: beforeErr}
+		}
+		restore := compositorThread.raise(bus)
+		got.raised, raisedErr = threadSchedule(tid)
+		restoreErr := restore()
+		got.after, afterErr = threadSchedule(tid)
+		got.err = errors.Join(raisedErr, restoreErr, afterErr)
+		return got
+	})
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.raised.Policy != unix.SCHED_BATCH {
+		t.Fatalf("the thread ran at %+v after the raise, want the fake rtkit's SCHED_BATCH", got.raised)
+	}
+	if got.after != got.before {
+		t.Fatalf("the thread was given back %+v, not the %+v it ran at before", got.after, got.before)
 	}
 }

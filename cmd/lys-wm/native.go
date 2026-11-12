@@ -178,7 +178,7 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 			n.addSecondary(c)
 		}
 	}
-	if n.input, err = session.OpenLibinput(l, session.LibinputPath(getenv), n.logind, opts.input, report); err != nil {
+	if n.input, err = session.OpenLibinput(l, session.LibinputPath(getenv), n.logind, opts.input, report, func() func() error { return inputThread.raise(session.SystemBus(getenv)) }); err != nil {
 		return nil, err
 	}
 	subsystems := []session.Subsystem{session.DRM, session.Input}

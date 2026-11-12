@@ -158,13 +158,17 @@ The loop goroutine is locked to its OS thread (`gpu.PinThread`), so its GL
 context stays current between renderer calls; on any other goroutine the
 renderer makes its context current around each call.
 
-The pinned thread raises its priority (`cmd/lys-wm/priority.go`), always with
-`SCHED_FLAG_RESET_ON_FORK`: `SCHED_RR` 1, else `SCHED_RR` through rtkit, else
-nice -10, else nice -10 through rtkit. Packages grant the limit through PAM
+The pinned thread and the input reader's thread raise their priority the same
+way (`cmd/lys-wm/priority.go`), always with `SCHED_FLAG_RESET_ON_FORK`:
+`SCHED_RR` 1, else `SCHED_RR` through rtkit, else nice -10, else nice -10
+through rtkit. The reader raises its own thread before it opens libinput and
+drops the raise before the thread ends, so a loop burning the only CPU cannot
+starve it. Packages grant the limit through PAM
 (`packaging/limits.d/90-lys-wm.conf`), never a file capability, which would put
 libc in secure mode and hide driver environment variables. Under rtkit,
-`SIGXCPU` drops the thread to normal priority for a backoff (1 s doubling to 1
-min) before asking again.
+`SIGXCPU` drops each thread rtkit raised to normal priority at its nice value
+for a backoff (1 s doubling to 1 min) before asking again; the signal names no
+thread, so both drop when either ran past `RLIMIT_RTTIME`.
 
 ## Errors that end the session
 

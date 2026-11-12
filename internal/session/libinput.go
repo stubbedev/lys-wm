@@ -276,7 +276,7 @@ func logged(li uintptr, priority int32, format *byte, args uintptr) {
 	}
 }
 
-func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, report func(error)) (*Libinput, error) {
+func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, report func(error), raise func() (restore func() error)) (*Libinput, error) {
 	lib, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_LOCAL)
 	if err != nil {
 		return nil, fmt.Errorf("session: load libinput from %s (set %s to its path): %w", path, LibinputEnv, err)
@@ -291,7 +291,7 @@ func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, 
 		return nil, errors.Join(fmt.Errorf("session: the input reader's loop: %w", err), purego.Dlclose(lib))
 	}
 	opened := make(chan error, 1)
-	go r.run(opened)
+	go r.run(raise, opened)
 	if err := <-opened; err != nil {
 		<-r.done
 		return nil, errors.Join(err, purego.Dlclose(lib))
@@ -299,18 +299,19 @@ func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, 
 	return in, nil
 }
 
-func (r *inputReader) run(opened chan<- error) {
+func (r *inputReader) run(raise func() (restore func() error), opened chan<- error) {
 	runtime.LockOSThread()
 	defer close(r.done)
+	restore := raise()
 	if err := r.open(); err != nil {
-		opened <- errors.Join(err, r.teardown(), r.loop.Close())
+		opened <- errors.Join(err, r.teardown(), r.loop.Close(), restore())
 		return
 	}
 	opened <- nil
 	if err := r.loop.Run(); err != nil {
 		r.filling.fail(fmt.Errorf("session: the input reader stopped: %w", err))
 	}
-	r.stopErr = errors.Join(r.teardown(), r.loop.Close())
+	r.stopErr = errors.Join(r.teardown(), r.loop.Close(), restore())
 }
 
 func (r *inputReader) open() error {

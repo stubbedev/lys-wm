@@ -1,4 +1,4 @@
-package rtkit
+package rtkit_test
 
 import (
 	"sync"
@@ -6,80 +6,41 @@ import (
 
 	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/third_party/godbus"
-	"github.com/stubbedev/lys-lib/third_party/godbus/prop"
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-wm/internal/rtkit"
+	"github.com/stubbedev/lys-wm/internal/rtkit/rtkittest"
 )
 
-const fakeRTTimeMax = 200000
-
-type request struct {
-	method string
-	tid    uint64
-	value  int64
-	rttime unix.Rlimit
-}
-
-type fakeKit struct {
+type recorder struct {
 	mu       sync.Mutex
-	requests []request
+	requests []rtkittest.Request
 	refusal  *dbus.Error
 }
 
-func (f *fakeKit) record(method string, tid uint64, value int64) *dbus.Error {
-	var limit unix.Rlimit
-	if err := unix.Getrlimit(unix.RLIMIT_RTTIME, &limit); err != nil {
-		return dbus.MakeFailedError(err)
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.requests = append(f.requests, request{method, tid, value, limit})
-	return f.refusal
+func (r *recorder) grant(req rtkittest.Request) *dbus.Error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, req)
+	return r.refusal
 }
 
-func (f *fakeKit) refuse(e *dbus.Error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.refusal = e
+func (r *recorder) refuse(e *dbus.Error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refusal = e
 }
 
-func (f *fakeKit) seen() []request {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]request(nil), f.requests...)
+func (r *recorder) seen() []rtkittest.Request {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]rtkittest.Request(nil), r.requests...)
 }
 
-type kitObject struct{ f *fakeKit }
-
-func (k kitObject) MakeThreadRealtime(tid uint64, priority uint32) *dbus.Error {
-	return k.f.record("realtime", tid, int64(priority))
-}
-
-func (k kitObject) MakeThreadHighPriority(tid uint64, nice int32) *dbus.Error {
-	return k.f.record("high", tid, int64(nice))
-}
-
-func serve(t *testing.T) (string, *fakeKit) {
+func serve(t *testing.T) (string, *recorder) {
 	t.Helper()
-	address := dbustest.Start(t).Address
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	f := &fakeKit{}
-	if err := conn.Export(kitObject{f}, Path, Service); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := prop.Export(conn, Path, prop.Map{Service: {
-		"RTTimeUSecMax":       {Value: int64(fakeRTTimeMax)},
-		"MaxRealtimePriority": {Value: int32(20)},
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	if reply, err := conn.RequestName(Service, dbus.NameFlagDoNotQueue); err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("own %s: %v %v", Service, reply, err)
-	}
-	return address, f
+	r := &recorder{}
+	return rtkittest.Serve(t, r.grant), r
 }
 
 func rttime(t *testing.T) unix.Rlimit {
@@ -91,9 +52,9 @@ func rttime(t *testing.T) unix.Rlimit {
 	return limit
 }
 
-func open(t *testing.T, address string) *Kit {
+func open(t *testing.T, address string) *rtkit.Kit {
 	t.Helper()
-	kit, err := Open(address)
+	kit, err := rtkit.Open(address)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +74,7 @@ func TestTheRTTimeLimitKeepsTheHardLimitWithinRtkitsAndTheSoftAtHalf(t *testing.
 		{unix.Rlimit{Cur: 80000, Max: 80000}, unix.Rlimit{Cur: 40000, Max: 80000}},
 		{unix.Rlimit{Cur: 100000, Max: 200000}, unix.Rlimit{Cur: 100000, Max: 200000}},
 	} {
-		if got := rttimeLimit(tc.was, fakeRTTimeMax); got != tc.want {
+		if got := rtkit.RTTimeLimit(tc.was, rtkittest.RTTimeUSecMax); got != tc.want {
 			t.Errorf("RLIMIT_RTTIME %+v became %+v, want %+v", tc.was, got, tc.want)
 		}
 	}
@@ -126,14 +87,14 @@ func TestARealtimeRequestLimitsRTTimeToWhatRtkitAllowsFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.seen()
-	if len(got) != 1 || got[0].method != "realtime" || got[0].tid != uint64(tid) || got[0].value != 1 {
+	if len(got) != 1 || got[0].Method != rtkittest.Realtime || got[0].TID != tid || got[0].Value != 1 {
 		t.Fatalf("rtkit saw %+v, want SCHED_RR 1 for thread %d", got, tid)
 	}
-	if got[0].rttime.Max > fakeRTTimeMax || got[0].rttime.Cur > got[0].rttime.Max/2 {
-		t.Fatalf("rtkit was asked with RLIMIT_RTTIME %+v, want a hard limit within %d µs and a soft one at most half of it", got[0].rttime, fakeRTTimeMax)
+	if got[0].RTTime.Max > rtkittest.RTTimeUSecMax || got[0].RTTime.Cur > got[0].RTTime.Max/2 {
+		t.Fatalf("rtkit was asked with RLIMIT_RTTIME %+v, want a hard limit within %d µs and a soft one at most half of it", got[0].RTTime, rtkittest.RTTimeUSecMax)
 	}
-	if now := rttime(t); now != got[0].rttime {
-		t.Fatalf("a granted request left RLIMIT_RTTIME at %+v, not the %+v rtkit granted it under", now, got[0].rttime)
+	if now := rttime(t); now != got[0].RTTime {
+		t.Fatalf("a granted request left RLIMIT_RTTIME at %+v, not the %+v rtkit granted it under", now, got[0].RTTime)
 	}
 }
 
@@ -145,8 +106,8 @@ func TestARefusedRealtimeRequestPutsTheSoftRTTimeBack(t *testing.T) {
 		t.Fatal("a refused request reported success")
 	}
 	now := rttime(t)
-	if want := min(was.Cur, now.Max); now.Cur != want || now.Max > fakeRTTimeMax {
-		t.Fatalf("a refused request left RLIMIT_RTTIME at %+v, want soft %d under a hard limit within %d", now, want, fakeRTTimeMax)
+	if want := min(was.Cur, now.Max); now.Cur != want || now.Max > rtkittest.RTTimeUSecMax {
+		t.Fatalf("a refused request left RLIMIT_RTTIME at %+v, want soft %d under a hard limit within %d", now, want, rtkittest.RTTimeUSecMax)
 	}
 }
 
@@ -156,7 +117,7 @@ func TestAHighPriorityRequestCarriesTheNiceValue(t *testing.T) {
 	if err := open(t, address).HighPriority(tid, -10); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.seen(); len(got) != 1 || got[0].method != "high" || got[0].tid != uint64(tid) || got[0].value != -10 {
+	if got := f.seen(); len(got) != 1 || got[0].Method != rtkittest.HighPriority || got[0].TID != tid || got[0].Value != -10 {
 		t.Fatalf("rtkit saw %+v, want one nice -10 for thread %d", got, tid)
 	}
 }
