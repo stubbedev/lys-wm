@@ -1,5 +1,6 @@
 {
   perSystem = {
+    inputs',
     lib,
     pkgs,
     self',
@@ -19,7 +20,7 @@
   in {
     packages = {
       default = self'.packages.lys-wm;
-      lys-wm = pkgs.buildGo127Module {
+      lys-wm = (pkgs.buildGoModule.override {go = inputs'.devtools.packages.go;}) {
         pname = "lys-wm";
         # Nix has no version to read from the source tree, so builds from a
         # checkout are stamped with their source's hash: only a commit that
