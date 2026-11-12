@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/dbusx"
-	"github.com/stubbedev/lys-lib/third_party/godbus"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-wm/internal/loop"
 )
@@ -91,15 +91,14 @@ func Watch(l *loop.Loop, address string, changed func(saver bool) error, report 
 
 func (w *Watcher) signalled(i int, c dbusx.ChangedProperties, sent dbus.Sequence) error {
 	v, ok := c.Changed[activeProfile]
-	err := dbus.CloseFDs([]any{c.Changed})
 	if !ok {
+		return nil
+	}
+	saver, err := isSaver(services[i], v)
+	if err != nil {
 		return err
 	}
-	saver, perr := isSaver(services[i], v)
-	if perr != nil {
-		return errors.Join(perr, err)
-	}
-	return errors.Join(w.post(i, profile{asOf: sent, owned: true, saver: saver}), err)
+	return w.post(i, profile{asOf: sent, owned: true, saver: saver})
 }
 
 func isSaver(s service, v dbus.Variant) (bool, error) {
