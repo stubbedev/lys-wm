@@ -64,7 +64,7 @@ type window struct {
 	initialAppID  string
 	initialTitle  string
 	stated        wm.Decision
-	framedBar     int
+	framed        frameInsets
 }
 
 type decided struct {
@@ -191,6 +191,14 @@ func (c *Compositor) scaleOver(r image.Rectangle) output.Scale {
 func (c *Compositor) update(s wm.State, err error) error {
 	if err != nil {
 		return err
+	}
+	for _, w := range c.windows {
+		if c.floatingInsets(s, w) == w.framed {
+			continue
+		}
+		if s, err = c.reframed(s, w); err != nil {
+			return err
+		}
 	}
 	c.wm = s.FollowFocus(c.spacing(), c.settings.Scroll.Center)
 	c.stateUpdates++
@@ -440,11 +448,15 @@ func (c *Compositor) mapped(t toplevel, id wm.WindowID, swallow bool) (wm.State,
 	if d.Workspace != nil {
 		o.Workspace, o.Scratchpad, o.Silent = d.Workspace.ID, "", d.Workspace.Silent
 	}
-	if float {
-		o.Rect = c.floatRect(t, d, c.openingArea(t, o))
-	}
 	if swallow && o.Workspace == 0 && o.Output == "" && o.Scratchpad == "" && o.Group == nil && o.Mode == wm.ModeNormal {
 		o.Swallow = c.swallowTarget(t, float)
+	}
+	if float {
+		opened, err := c.wm.Open(id, o)
+		if err != nil {
+			return wm.State{}, err
+		}
+		o.Rect = c.floatRect(t, d, c.insets(t, &d, opened.LookOf(id), wm.LayerFloating), c.openingArea(t, o))
 	}
 	return c.wm.Open(id, o)
 }
@@ -487,8 +499,8 @@ func (c *Compositor) openingArea(t toplevel, o wm.Opening) image.Rectangle {
 	return c.floatArea(t)
 }
 
-func (c *Compositor) floatRect(t toplevel, d wm.Decision, area image.Rectangle) image.Rectangle {
-	size := c.insets(t, &d, wm.WorkspaceLook{}, wm.LayerFloating).frameSize(floatSize(t, d.Size.In(area.Size())))
+func (c *Compositor) floatRect(t toplevel, d wm.Decision, insets frameInsets, area image.Rectangle) image.Rectangle {
+	size := insets.frameSize(floatSize(t, d.Size.In(area.Size())))
 	switch d.Position.Kind {
 	case wm.PositionCursor:
 		at := c.cursor.pixel().Sub(size.Div(2))
@@ -516,14 +528,13 @@ func floatSize(t toplevel, ruled image.Point) image.Point {
 	return limits.FitRequest(wm.Requested(ruled).Or(wm.Requested(t.Geometry().Size())).Or(limits.Fixed()))
 }
 
-func (c *Compositor) floatingInsets(w *window) frameInsets {
-	return c.insets(w.top, c.decision(w), wm.WorkspaceLook{}, wm.LayerFloating)
+func (c *Compositor) floatingInsets(s wm.State, w *window) frameInsets {
+	return c.insets(w.top, c.decision(w), s.LookOf(w.id), wm.LayerFloating)
 }
 
-func (c *Compositor) frameLimits(w *window) wm.Limits {
+func (c *Compositor) frameLimits(w *window, insets frameInsets) wm.Limits {
 	minimum, maximum := w.top.sizeLimits()
 	minimum, maximum = ruledLimits(c.decision(w), minimum, maximum)
-	insets := c.floatingInsets(w)
 	framed := func(p image.Point) image.Point {
 		f := insets.frameSize(p)
 		if p.X <= 0 {
@@ -542,24 +553,27 @@ func (c *Compositor) refreshFrame(t toplevel) error {
 	if w == nil {
 		return nil
 	}
-	insets := c.floatingInsets(w)
-	was, floating := c.wm.FloatingRect(w.id)
-	before := frameInsets{border: insets.border, bar: w.framedBar}
-	w.framedBar = insets.bar
-	s, err := c.wm.SetLimits(w.id, c.frameLimits(w))
+	return c.update(c.reframed(c.wm, w))
+}
+
+func (c *Compositor) reframed(s wm.State, w *window) (wm.State, error) {
+	insets := c.floatingInsets(s, w)
+	was, floating := s.FloatingRect(w.id)
+	s, err := s.SetLimits(w.id, c.frameLimits(w, insets))
 	if err != nil {
-		return err
+		return wm.State{}, err
 	}
-	if floating && before != insets {
-		if s, err = s.SetFloatingRect(w.id, insets.frame(before.content(was))); err != nil {
-			return err
+	if floating && w.framed != insets {
+		if s, err = s.SetFloatingRect(w.id, insets.frame(w.framed.content(was))); err != nil {
+			return wm.State{}, err
 		}
 	}
+	w.framed = insets
 	now, _ := s.FloatingRect(w.id)
-	if over := c.floatArea(t); floating && now != was && was == wm.Centered(over, was.Size()) {
-		s, err = s.SetFloatingRect(w.id, wm.Centered(over, now.Size()))
+	if over := c.floatArea(w.top); floating && now != was && was == wm.Centered(over, was.Size()) {
+		return s.SetFloatingRect(w.id, wm.Centered(over, now.Size()))
 	}
-	return c.update(s, err)
+	return s, nil
 }
 
 func (c *Compositor) redecide(t toplevel) error {
@@ -576,7 +590,7 @@ func (c *Compositor) redecide(t toplevel) error {
 	}
 	w.floated = float
 	if float {
-		return c.update(c.wm.Float(w.id, c.floatRect(t, d, c.floatArea(t))))
+		return c.update(c.wm.Float(w.id, c.floatRect(t, d, w.framed, c.floatArea(t))))
 	}
 	return c.update(c.wm.Tile(w.id, c.settings.Autotile))
 }
@@ -620,12 +634,12 @@ func (c *Compositor) mapToplevel(t toplevel) error {
 	}
 	_, w.floated = c.ruled(t)
 	w.stated = *c.decision(w)
-	w.framedBar = c.floatingInsets(w).bar
 	s, err := c.mapped(t, w.id, true)
 	if err != nil {
 		return err
 	}
-	if s, err = s.SetLimits(w.id, c.frameLimits(w)); err != nil {
+	w.framed = c.floatingInsets(s, w)
+	if s, err = c.reframed(s, w); err != nil {
 		return err
 	}
 	for _, p := range s.Arrange(c.spacing()).Windows {

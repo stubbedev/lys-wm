@@ -53,9 +53,18 @@ func (s *scales) PreferredBufferScale(_ *cw.WlSurface, factor int32) error {
 }
 
 const (
-	floatBorder = 3
-	floatBar    = 20
+	floatBorder     = 3
+	floatBar        = 20
+	workspaceBorder = 7
+	ruledBorder     = 11
 )
+
+func borderedWorkspace(id wm.WorkspaceID) func(*Config) {
+	return func(cfg *Config) {
+		width := workspaceBorder
+		cfg.WorkspaceRules = []WorkspaceRule{{ID: id, Select: wm.SelectID, Look: wm.WorkspaceLook{BorderWidth: &width}}}
+	}
+}
 
 type decorationModes struct{}
 
@@ -79,7 +88,7 @@ type floater struct {
 	kde        *ckd.OrgKdeKwinServerDecoration
 }
 
-func floatingRig(t *testing.T) (*rig, *cxdg.XdgWmBase) {
+func floatingRig(t *testing.T, configure ...func(*Config)) (*rig, *cxdg.XdgWmBase) {
 	t.Helper()
 	var b *headless.Backend
 	r := setupWith(t, func(l *loop.Loop, _ *spyRenderer) backend.Backend {
@@ -95,6 +104,9 @@ func floatingRig(t *testing.T) (*rig, *cxdg.XdgWmBase) {
 		}
 		cfg.Decor.BorderWidth = floatBorder
 		cfg.Decor.Titlebar.Floating, cfg.Decor.Titlebar.Height = true, floatBar
+		for _, c := range configure {
+			c(cfg)
+		}
 	})
 	var err error
 	r.on(func() { err = r.comp.SetOutputScale(b.Outputs()[0], 240) })
@@ -143,15 +155,30 @@ func (f *floater) kdeDecorated() error {
 	return err
 }
 
-func (f *floater) settles(t *testing.T, when string, content image.Point, bar int) {
+func (f *floater) settles(t *testing.T, when string, content image.Point, border, bar int) {
 	t.Helper()
 	f.r.roundtrip()
 	if got := f.last(); got != content {
 		t.Errorf("%s, the window is configured to %v, want its %v kept", when, got, content)
 	}
-	if got, want := f.floatingFrame(), content.Add(image.Pt(2*floatBorder, 2*floatBorder+bar)); got != want {
+	if got, want := f.floatingFrame(), content.Add(image.Pt(2*border, 2*border+bar)); got != want {
 		t.Errorf("%s, the window floats in a frame of %v, want %v around its %v", when, got, want, content)
 	}
+}
+
+func (f *floater) act(do func(c *Compositor, w *window) error) {
+	f.r.t.Helper()
+	var err error
+	f.r.on(func() {
+		w := f.r.comp.findWindow(func(*window) bool { return true })
+		if w == nil {
+			err = errors.New("the window did not map")
+			return
+		}
+		err = do(f.r.comp, w)
+	})
+	must(f.r.t, err)
+	f.r.roundtrip()
 }
 
 func (f *floater) floatingFrame() image.Point {
@@ -212,41 +239,44 @@ func TestAFloatingWindowWithAMinimumAndNoSizeChoosesItsOwnSize(t *testing.T) {
 }
 
 func TestAFloatingWindowIsConfiguredAtTheSizeItAskedForWithOrWithoutATitlebar(t *testing.T) {
-	for titling, bar := range map[string]int{"with a titlebar": floatBar, "without a titlebar": 0} {
-		for source, c := range map[string]struct {
-			appID                 string
-			geometry, fixed, want image.Point
-		}{
-			"its own geometry": {"floater", image.Pt(500, 400), image.Point{}, image.Pt(500, 400)},
-			"a rule's size":    {"sized", image.Point{}, image.Point{}, image.Pt(640, 480)},
-			"its fixed size":   {"floater", image.Point{}, image.Pt(300, 200), image.Pt(300, 200)},
-		} {
-			t.Run(titling+" sized by "+source, func(t *testing.T) {
-				r, base := floatingRig(t)
-				f := r.floater(base, func(f *floater) error {
-					err := f.top.SetAppID(c.appID)
-					if c.geometry != (image.Point{}) {
-						err = errors.Join(err, f.xdg.SetWindowGeometry(0, 0, int32(c.geometry.X), int32(c.geometry.Y)))
+	for bordering, b := range map[string]struct {
+		configure []func(*Config)
+		border    int
+	}{
+		"with the default border":              {nil, floatBorder},
+		"on a workspace overriding the border": {[]func(*Config){borderedWorkspace(1)}, workspaceBorder},
+	} {
+		for titling, bar := range map[string]int{"with a titlebar": floatBar, "without a titlebar": 0} {
+			for source, c := range map[string]struct {
+				appID                 string
+				geometry, fixed, want image.Point
+			}{
+				"its own geometry": {"floater", image.Pt(500, 400), image.Point{}, image.Pt(500, 400)},
+				"a rule's size":    {"sized", image.Point{}, image.Point{}, image.Pt(640, 480)},
+				"its fixed size":   {"floater", image.Point{}, image.Pt(300, 200), image.Pt(300, 200)},
+			} {
+				t.Run(bordering+" "+titling+" sized by "+source, func(t *testing.T) {
+					r, base := floatingRig(t, b.configure...)
+					f := r.floater(base, func(f *floater) error {
+						err := f.top.SetAppID(c.appID)
+						if c.geometry != (image.Point{}) {
+							err = errors.Join(err, f.xdg.SetWindowGeometry(0, 0, int32(c.geometry.X), int32(c.geometry.Y)))
+						}
+						if c.fixed != (image.Point{}) {
+							err = errors.Join(err, f.top.SetMinSize(int32(c.fixed.X), int32(c.fixed.Y)), f.top.SetMaxSize(int32(c.fixed.X), int32(c.fixed.Y)))
+						}
+						if bar > 0 {
+							err = errors.Join(err, f.serverDecorated())
+						}
+						return err
+					})
+					if got := f.initial(); got != c.want {
+						t.Fatalf("the initial configure is %v, want the %v asked for", got, c.want)
 					}
-					if c.fixed != (image.Point{}) {
-						err = errors.Join(err, f.top.SetMinSize(int32(c.fixed.X), int32(c.fixed.Y)), f.top.SetMaxSize(int32(c.fixed.X), int32(c.fixed.Y)))
-					}
-					if bar > 0 {
-						err = errors.Join(err, f.serverDecorated())
-					}
-					return err
+					f.draw(c.want)
+					f.settles(t, "mapped", c.want, b.border, bar)
 				})
-				if got := f.initial(); got != c.want {
-					t.Fatalf("the initial configure is %v, want the %v asked for", got, c.want)
-				}
-				f.draw(c.want)
-				if got := f.last(); got != c.want {
-					t.Fatalf("the mapped window is configured to %v, want the %v asked for", got, c.want)
-				}
-				if got, want := f.floatingFrame(), c.want.Add(image.Pt(2*floatBorder, 2*floatBorder+bar)); got != want {
-					t.Errorf("the window floats in a frame of %v, want %v around the %v asked for", got, want, c.want)
-				}
-			})
+			}
 		}
 	}
 }
@@ -312,26 +342,93 @@ func TestAMappedFloatingWindowsFrameFollowsItsDecoration(t *testing.T) {
 				r, base := floatingRig(t)
 				f := r.floater(base, func(f *floater) error { return errors.Join(limit(f), f.serverDecorated()) })
 				f.draw(size)
-				f.settles(t, "mapped with a decoration", size, floatBar)
+				f.settles(t, "mapped with a decoration", size, floatBorder, floatBar)
 				must(t, f.decoration.SetMode(cxd.ZxdgToplevelDecorationV1ModeClientSide))
-				f.settles(t, "after asking for client-side decorations", size, floatBar)
+				f.settles(t, "after asking for client-side decorations", size, floatBorder, floatBar)
 				must(t, f.decoration.UnsetMode())
-				f.settles(t, "after unsetting the mode", size, floatBar)
+				f.settles(t, "after unsetting the mode", size, floatBorder, floatBar)
 				must(t, f.decoration.Destroy())
-				f.settles(t, "after destroying the decoration", size, 0)
+				f.settles(t, "after destroying the decoration", size, floatBorder, 0)
 			})
 			t.Run("through the KDE server decoration", func(t *testing.T) {
 				r, base := floatingRig(t)
 				f := r.floater(base, limit)
 				f.draw(size)
-				f.settles(t, "mapped without a decoration", size, 0)
+				f.settles(t, "mapped without a decoration", size, floatBorder, 0)
 				must(t, f.kdeDecorated())
-				f.settles(t, "after creating the decoration", size, floatBar)
+				f.settles(t, "after creating the decoration", size, floatBorder, floatBar)
 				must(t, f.kde.RequestMode(uint32(ckd.OrgKdeKwinServerDecorationModeClient)))
-				f.settles(t, "after asking for client-side decorations", size, floatBar)
+				f.settles(t, "after asking for client-side decorations", size, floatBorder, floatBar)
 				must(t, f.kde.Release())
-				f.settles(t, "after releasing the decoration", size, 0)
+				f.settles(t, "after releasing the decoration", size, floatBorder, 0)
 			})
 		})
 	}
+}
+
+func TestAMinimizedFloatingWindowsFrameFollowsItsDecoration(t *testing.T) {
+	size := image.Pt(500, 400)
+	r, base := floatingRig(t)
+	f := r.floater(base, func(f *floater) error { return f.xdg.SetWindowGeometry(0, 0, int32(size.X), int32(size.Y)) })
+	f.draw(size)
+	f.settles(t, "mapped without a decoration", size, floatBorder, 0)
+	f.act(func(c *Compositor, w *window) error { return c.minimize(w) })
+	must(t, f.kdeDecorated())
+	f.settles(t, "after creating the decoration while minimized", size, floatBorder, floatBar)
+	f.act(func(c *Compositor, w *window) error { return c.restore(w) })
+	f.settles(t, "restored", size, floatBorder, floatBar)
+}
+
+func TestAFloatingWindowKeepsItsContentMovingToAWorkspaceWithAnotherBorder(t *testing.T) {
+	size := image.Pt(500, 400)
+	r, base := floatingRig(t, borderedWorkspace(2))
+	f := r.floater(base, func(f *floater) error {
+		return errors.Join(f.xdg.SetWindowGeometry(0, 0, int32(size.X), int32(size.Y)), f.serverDecorated())
+	})
+	f.draw(size)
+	f.settles(t, "mapped on a workspace with the default border", size, floatBorder, floatBar)
+	move := func(to wm.WorkspaceID) func(*Compositor, *window) error {
+		return func(c *Compositor, w *window) error {
+			s, err := c.wm.MoveWindowToWorkspace(w.id, to, wm.Autotile{})
+			if err != nil {
+				return err
+			}
+			return c.update(s.SwitchWorkspace(to))
+		}
+	}
+	f.act(move(2))
+	f.settles(t, "moved to a workspace overriding the border", size, workspaceBorder, floatBar)
+	f.act(move(1))
+	f.settles(t, "moved back", size, floatBorder, floatBar)
+}
+
+func TestAFloatingWindowsFrameFollowsABorderRule(t *testing.T) {
+	size := image.Pt(500, 400)
+	mapped := func(t *testing.T, configure func(*Config)) *floater {
+		r, base := floatingRig(t, configure)
+		f := r.floater(base, func(f *floater) error {
+			return errors.Join(f.xdg.SetWindowGeometry(0, 0, int32(size.X), int32(size.Y)), f.serverDecorated())
+		})
+		f.draw(size)
+		f.settles(t, "mapped", size, floatBorder, floatBar)
+		return f
+	}
+	t.Run("set as a property", func(t *testing.T) {
+		f := mapped(t, func(cfg *Config) {
+			cfg.Hooks.ParseProp = func(string, string) (wm.Decision, error) {
+				width := ruledBorder
+				return wm.Decision{BorderWidth: &width}, nil
+			}
+		})
+		f.act(func(c *Compositor, w *window) error { return c.setProp(w, "border", "") })
+		f.settles(t, "after a property set its border", size, ruledBorder, floatBar)
+	})
+	t.Run("matched by a new title", func(t *testing.T) {
+		f := mapped(t, func(cfg *Config) {
+			width := ruledBorder
+			cfg.Rules = append(cfg.Rules, wm.Rule{Match: wm.Match{Title: regexp.MustCompile(`^bordered$`)}, BorderWidth: &width})
+		})
+		must(t, f.top.SetTitle("bordered"), f.surface.Commit())
+		f.settles(t, "after a title a border rule matches", size, ruledBorder, floatBar)
+	})
 }

@@ -1,6 +1,7 @@
 package wm
 
 import (
+	"image"
 	"testing"
 )
 
@@ -64,5 +65,31 @@ func TestWorkspaceRulesBindNameAndKeepWorkspaces(t *testing.T) {
 	s = must(s.MapWindow(2, Autotile{}))
 	if p, _ := placementOf(s, sp, 1); p.Rect.Min.X != right.Min.X+8 || p.Look.BorderWidth != nil {
 		t.Fatalf("with a second window: %+v, want the gaps back", p)
+	}
+}
+
+func TestLookOfIsTheLookAWindowIsPlacedWith(t *testing.T) {
+	must := ok(t)
+	width := 7
+	s := State{}.WithWorkspaceRules([]WorkspaceRule{{ID: 2, Select: SelectID, Look: WorkspaceLook{BorderWidth: &width}}})
+	s = must(s.AddOutput("A", left, left))
+	s = must(s.MapWindow(1, Autotile{}))
+	s = must(s.SwitchWorkspace(2))
+	s = must(s.MapWindow(2, Autotile{}))
+	s = must(s.MapFloating(3, image.Rect(10, 10, 110, 110)))
+	s = must(s.MapFloating(4, image.Rect(20, 20, 120, 120)))
+	s = must(s.Minimize(4, image.Rectangle{}))
+	s = must(s.MapWindow(5, Autotile{}))
+	s = must(s.MoveWindowToScratchpad(5, "term", ScratchpadSpec{}, Autotile{}))
+	headless := must(State{}.WithWorkspaceRules([]WorkspaceRule{{Select: SelectAny, Look: WorkspaceLook{BorderWidth: &width}}}).MapWindow(6, Autotile{}))
+	for _, s := range []State{s, headless} {
+		for _, p := range s.Arrange(Spacing{}).Windows {
+			if got := s.LookOf(p.ID); got != p.Look {
+				t.Errorf("window %d: LookOf gives %+v, want the %+v it is placed with", p.ID, got, p.Look)
+			}
+		}
+	}
+	if s.LookOf(3).BorderWidth != &width {
+		t.Error("a floating window on workspace 2 does not take its border override")
 	}
 }

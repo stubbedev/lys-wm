@@ -28,12 +28,12 @@ func (c *Compositor) restate(w *window) error {
 		return nil
 	}
 	w.stated = now
+	err := c.refreshFrame(w.top)
 	s := w.top.Surface()
 	if s == nil {
-		return nil
+		return err
 	}
 	whole := []image.Rectangle{{Max: s.Size()}}
-	var err error
 	for _, o := range c.outputs {
 		if !showsTree(c.shown[o], s) {
 			continue

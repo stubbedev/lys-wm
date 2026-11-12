@@ -770,6 +770,23 @@ func placeWorkspace(all *Arranger, w *Workspace, o *Output, shown bool, sp Spaci
 	all.Windows = appendMinimized(all.Windows, w.Minimized)
 }
 
+func (s State) LookOf(id WindowID) WorkspaceLook {
+	if len(s.wsRules) == 0 {
+		return WorkspaceLook{}
+	}
+	for i := range s.workspaces {
+		w := &s.workspaces[i]
+		if !w.contains(id) {
+			continue
+		}
+		if s.output(w.Output) == nil {
+			return WorkspaceLook{}
+		}
+		return s.lookFor(w)
+	}
+	return WorkspaceLook{}
+}
+
 func (s *State) spacingFor(w *Workspace, sp Spacing) (WorkspaceLook, Spacing) {
 	if len(s.wsRules) == 0 {
 		return WorkspaceLook{}, sp
