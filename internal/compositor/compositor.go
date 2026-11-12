@@ -595,6 +595,7 @@ func New(l *loop.Loop, display *server.Display, b backend.Backend, cfg Config) (
 	if err := c.preloadCursors(c.cursors.Size); err != nil {
 		return nil, err
 	}
+	c.applyLidPolicy()
 	return c, nil
 }
 
