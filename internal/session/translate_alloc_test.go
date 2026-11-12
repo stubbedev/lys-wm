@@ -8,12 +8,12 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend"
 )
 
-func fakeInput() *Libinput {
+func fakeInput() *inputReader {
 	id := func(ev uintptr) uintptr { return ev }
 	at := func(uintptr) uint64 { return 1000 }
 	one := func(uintptr) int32 { return 1 }
 	half := func(uintptr, uint32) float64 { return 0.5 }
-	return &Libinput{fn: libinputFuncs{
+	return &inputReader{fn: libinputFuncs{
 		keyboardEvent: id, keyTime: at, key: func(uintptr) uint32 { return 30 }, keyState: one,
 		pointerEvent: id, pointerTime: at, absX: half, absY: half,
 		dx: func(uintptr) float64 { return 1 }, dy: func(uintptr) float64 { return 2 },
@@ -35,9 +35,13 @@ var inputKinds = map[string]int32{
 func TestTranslatingKeyButtonAxisAndTouchEventsAllocatesNothing(t *testing.T) {
 	in := fakeInput()
 	d := &InputDevice{scrollFactor: 1}
+	var into translated
 	for name, typ := range inputKinds {
-		in.out = in.translate(in.out[:0], d, 1, typ)
-		if n := testing.AllocsPerRun(100, func() { in.out = in.translate(in.out[:0], d, 1, typ) }); n != 0 {
+		in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		if n := testing.AllocsPerRun(100, func() {
+			into.reset()
+			in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		}); n != 0 {
 			t.Errorf("%s: %v allocations per event", name, n)
 		}
 	}
@@ -67,7 +71,7 @@ func TestTranslatedEventsCarryWhatLibinputSaid(t *testing.T) {
 		evTouchFrame:  {&backend.TouchFrame{Time: ms}},
 	}
 	for typ, want := range cases {
-		if got := in.translate(nil, &InputDevice{scrollFactor: 2}, 1, typ); !reflect.DeepEqual(got, want) {
+		if got := in.translate(nil, &translated{}, &InputDevice{scrollFactor: 2}, 1, typ); !reflect.DeepEqual(got, want) {
 			t.Errorf("event %d: %+v, want %+v", typ, got, want)
 		}
 	}

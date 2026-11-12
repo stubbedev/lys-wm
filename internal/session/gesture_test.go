@@ -31,7 +31,7 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 		{typ: evHoldEnd, usec: 8000, cancelled: 1},
 	}
 	at := func(i uintptr) fakeGesture { return events[i-1] }
-	in := &Libinput{fn: libinputFuncs{
+	in := &inputReader{fn: libinputFuncs{
 		eventType:        func(ev uintptr) int32 { return at(ev).typ },
 		gestureEvent:     func(ev uintptr) uintptr { return ev },
 		gestureTime:      func(g uintptr) uint64 { return at(g).usec },
@@ -46,7 +46,7 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 	}}
 	var got []backend.Event
 	for i := range events {
-		got = in.translate(got, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
+		got = in.translate(got, &translated{}, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
 	}
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	want := []backend.Event{
@@ -66,7 +66,7 @@ func TestLibinputGesturesBecomeBackendEvents(t *testing.T) {
 
 func TestOnlyKnownSwitchesBecomeBackendEvents(t *testing.T) {
 	kinds := []int32{switchLid, switchTabletMode, 3}
-	in := &Libinput{fn: libinputFuncs{
+	in := &inputReader{fn: libinputFuncs{
 		eventType:   func(uintptr) int32 { return evSwitchToggle },
 		switchEvent: func(ev uintptr) uintptr { return ev },
 		switchKind:  func(s uintptr) int32 { return kinds[s-1] },
@@ -75,7 +75,7 @@ func TestOnlyKnownSwitchesBecomeBackendEvents(t *testing.T) {
 	}}
 	var got []backend.Event
 	for i := range kinds {
-		got = in.translate(got, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
+		got = in.translate(got, &translated{}, &InputDevice{}, uintptr(i+1), in.fn.eventType(uintptr(i+1)))
 	}
 	want := []backend.Event{
 		backend.Switch{Time: time.Millisecond, Kind: backend.SwitchLid, On: true},

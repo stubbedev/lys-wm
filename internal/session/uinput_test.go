@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/xkb"
 )
 
@@ -119,6 +120,7 @@ func newVirtualDevice(t testing.TB, devName string, bits []uinputBit) *virtualDe
 	}
 	sys := filepath.Join("/sys/devices/virtual/input", strings.TrimRight(string(name[:]), "\x00"))
 	deadline := time.Now().Add(5 * time.Second)
+	var denied error
 	for {
 		events, _ := filepath.Glob(filepath.Join(sys, "event*"))
 		if len(events) == 1 {
@@ -129,10 +131,13 @@ func newVirtualDevice(t testing.TB, devName string, bits []uinputBit) *virtualDe
 				return &virtualDevice{f: f, node: node}
 			}
 			if errors.Is(err, os.ErrPermission) {
-				t.Skipf("cannot read %s: %v", node, err)
+				denied = err
 			}
 		}
 		if time.Now().After(deadline) {
+			if denied != nil {
+				t.Skipf("udev never let this user read the event node: %v", denied)
+			}
 			t.Fatalf("no readable event node under %s", sys)
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -193,34 +198,24 @@ func (r *inputRecorder) Input(_ backend.Device, e backend.Event) error {
 	return nil
 }
 
-func (in *Libinput) waitAxis(t *testing.T, r *inputRecorder) backend.PointerAxis {
+func (in *Libinput) waitAxis(t *testing.T, rec *inputRecorder) backend.PointerAxis {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(r.axes) == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("no scroll event arrived")
-		}
-		if err := in.read(0); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	a := r.axes[0]
-	r.axes = r.axes[:0]
+	runUntil(t, in.loop, "a scroll event", func() bool { return len(rec.axes) > 0 })
+	a := rec.axes[0]
+	rec.axes = rec.axes[:0]
 	return a
 }
 
 func TestLibinputAppliesAndReappliesPointerSettings(t *testing.T) {
 	mouse := newVirtualMouse(t)
-	in := libinput(t, PlainOpener{})
+	in := libinput(t, grabbingOpener{PlainOpener{}})
 	rec := &inputRecorder{}
 	in.Start(rec)
 	if err := in.Reconfigure(InputConfig{Pointer: DeviceConfig{NaturalScroll: new(true), ScrollFactor: new(2.0)}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := in.Add(mouse.node); err != nil {
-		t.Fatal(err)
-	}
+	in.addNow(t, mouse.node)
+	runUntil(t, in.loop, "the mouse's DeviceAdded", func() bool { return len(rec.devices) > 0 })
 	if len(rec.devices) != 1 || rec.devices[0].Name() != virtualMouse {
 		t.Fatalf("added %v", rec.devices)
 	}
@@ -248,9 +243,8 @@ func TestLibinputSetsKeyboardLEDs(t *testing.T) {
 	in := libinput(t, PlainOpener{})
 	rec := &inputRecorder{}
 	in.Start(rec)
-	if err := in.Add(kbd.node); err != nil {
-		t.Fatal(err)
-	}
+	in.addNow(t, kbd.node)
+	runUntil(t, in.loop, "the keyboard's DeviceAdded", func() bool { return len(rec.devices) > 0 })
 	if len(rec.devices) != 1 || rec.devices[0].Name() != virtualKeyboard {
 		t.Fatalf("added %v", rec.devices)
 	}
@@ -269,6 +263,8 @@ type motionRecorder struct {
 	motions []backend.PointerMotion
 	frames  int
 	count   int
+	stopAt  int
+	loop    *loop.Loop
 }
 
 func (*motionRecorder) DeviceAdded(backend.Device) error   { return nil }
@@ -276,23 +272,12 @@ func (*motionRecorder) DeviceRemoved(backend.Device) error { return nil }
 
 func TestLibinputPointerMotionBecomesEvents(t *testing.T) {
 	mouse := newVirtualMouse(t)
-	in := libinput(t, PlainOpener{})
+	in := libinput(t, grabbingOpener{PlainOpener{}})
 	rec := &motionRecorder{}
 	in.Start(rec)
-	if err := in.Add(mouse.node); err != nil {
-		t.Fatal(err)
-	}
+	in.addNow(t, mouse.node)
 	mouse.emit(t, [3]int32{evRel, relX, 7}, [3]int32{evRel, relY, -3})
-	deadline := time.Now().Add(5 * time.Second)
-	for len(rec.motions) == 0 || rec.frames == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("no motion arrived")
-		}
-		if err := in.read(0); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(time.Millisecond)
-	}
+	runUntil(t, in.loop, "a motion and its frame", func() bool { return len(rec.motions) > 0 && rec.frames > 0 })
 	m := rec.motions[0]
 	if m.Time <= 0 || m.DX <= 0 || m.DY >= 0 || m.UnaccelDX != 7 || m.UnaccelDY != -3 {
 		t.Fatalf("the motion arrived as %+v", m)
@@ -304,15 +289,10 @@ func TestLibinputPointerMotionBecomesEvents(t *testing.T) {
 
 func BenchmarkLibinputMotion(b *testing.B) {
 	mouse := newVirtualMouse(b)
-	in := libinput(b, PlainOpener{})
-	rec := &motionRecorder{}
+	in := libinput(b, grabbingOpener{PlainOpener{}})
+	rec := &motionRecorder{loop: in.loop}
 	in.Start(rec)
-	if err := in.Add(mouse.node); err != nil {
-		b.Fatal(err)
-	}
-	if err := in.read(0); err != nil {
-		b.Fatal(err)
-	}
+	in.addNow(b, mouse.node)
 	events := binaryMotions(50)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -321,16 +301,10 @@ func BenchmarkLibinputMotion(b *testing.B) {
 		if _, err := mouse.f.Write(events); err != nil {
 			b.Fatal(err)
 		}
-		before := rec.count
-		deadline := time.Now().Add(5 * time.Second)
+		rec.stopAt = rec.count + 50
 		b.StartTimer()
-		for rec.count < before+50 {
-			if time.Now().After(deadline) {
-				b.Fatalf("only %d of 50 motions arrived", rec.count-before)
-			}
-			if err := in.read(0); err != nil {
-				b.Fatal(err)
-			}
+		if err := in.loop.Run(); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
@@ -354,6 +328,9 @@ func (r *motionRecorder) Input(_ backend.Device, e backend.Event) error {
 	switch e := e.(type) {
 	case *backend.PointerMotion:
 		r.count++
+		if r.count == r.stopAt {
+			r.loop.Stop()
+		}
 		if len(r.motions) < 8 {
 			r.motions = append(r.motions, *e)
 		}

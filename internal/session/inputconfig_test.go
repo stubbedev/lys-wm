@@ -77,7 +77,7 @@ type fakeSettings struct {
 
 const fakeDevice = "fake tablet touchpad"
 
-func fakeConfigurable(def fakeSettings) (*Libinput, *fakeSettings) {
+func fakeConfigurable(def fakeSettings) (*inputReader, *fakeSettings) {
 	now := def
 	now.points = slices.Clone(def.points)
 	yes := func(uintptr) int32 { return 1 }
@@ -88,7 +88,7 @@ func fakeConfigurable(def fakeSettings) (*Libinput, *fakeSettings) {
 		}
 	}
 	var pending fakeSettings
-	in := &Libinput{devices: map[uintptr]*InputDevice{}, fn: libinputFuncs{
+	in := &inputReader{devices: map[uintptr]*InputDevice{}, filling: &inputBatch{}, queue: &inputQueue{}, fn: libinputFuncs{
 		eventDevice:  func(ev uintptr) uintptr { return ev },
 		eventType:    func(uintptr) int32 { return evDeviceAdded },
 		deviceName:   func(uintptr) string { return fakeDevice },
@@ -211,13 +211,9 @@ func TestEveryLibinputSettingAppliesOnHotplugAndRevertsWhenRemoved(t *testing.T)
 			Area:        &area,
 		}},
 	}
-	rec := &inputRecorder{}
-	in.Start(rec)
-	if err := in.event(7); err != nil {
-		t.Fatal(err)
-	}
-	if len(rec.devices) != 1 {
-		t.Fatalf("hotplug announced %v", rec.devices)
+	in.event(7)
+	if r := in.filling.records; len(r) != 1 || r[0].kind != deviceAdded || r[0].dev.Name() != fakeDevice {
+		t.Fatalf("hotplug recorded %+v, want one added %s and no configuration error", r, fakeDevice)
 	}
 	want := fakeSettings{
 		tap: 1, drag: 1, natural: 1, dwt: 0, middle: 1, left: 1, lock: 1,
@@ -228,14 +224,14 @@ func TestEveryLibinputSettingAppliesOnHotplugAndRevertsWhenRemoved(t *testing.T)
 	if !reflect.DeepEqual(*now, want) {
 		t.Fatalf("after hotplug the device holds\n%+v\nwant\n%+v", *now, want)
 	}
-	if err := in.Reconfigure(InputConfig{}); err != nil {
+	if err := in.reconfigure(InputConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(*now, def) {
 		t.Fatalf("after the settings left the config the device holds\n%+v\nwant its defaults\n%+v", *now, def)
 	}
 	flat := AccelFlat
-	if err := in.Reconfigure(InputConfig{Pointer: DeviceConfig{AccelProfile: &flat}, Touchpad: DeviceConfig{AccelProfile: &custom}}); err != nil {
+	if err := in.reconfigure(InputConfig{Pointer: DeviceConfig{AccelProfile: &flat}, Touchpad: DeviceConfig{AccelProfile: &custom}}); err != nil {
 		t.Fatal(err)
 	}
 	if now.profile != accelCustom || now.step != 0.5 {

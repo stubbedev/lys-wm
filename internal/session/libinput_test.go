@@ -2,10 +2,12 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,13 +28,18 @@ func (o *refusingOpener) ReleaseDevice(Device) error { return nil }
 
 func libinput(t testing.TB, opener Opener) *Libinput {
 	t.Helper()
+	return libinputReporting(t, opener, func(err error) { t.Errorf("reported: %v", err) })
+}
+
+func libinputReporting(t testing.TB, opener Opener, report func(error)) *Libinput {
+	t.Helper()
 	l, err := loop.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	path := LibinputPath(os.Getenv)
-	in, err := OpenLibinput(l, path, opener, InputConfig{}, func(err error) { t.Errorf("reported: %v", err) })
+	in, err := OpenLibinput(l, path, opener, InputConfig{}, report)
 	if err != nil {
 		if _, statErr := os.Stat(path); statErr != nil {
 			testenv.Require(t, "libinput")
@@ -57,29 +64,42 @@ func evdevNode(t *testing.T) string {
 	return nodes[0]
 }
 
-func TestLibinputAsksTheOpenerForDevices(t *testing.T) {
-	node := evdevNode(t)
-	opener := &refusingOpener{}
-	in := libinput(t, opener)
-	err := in.Add(node)
-	if !errors.Is(err, unix.EPERM) || errors.Is(err, ErrDeclined) || !strings.Contains(err.Error(), node) {
-		t.Fatalf("a refused open: %v", err)
-	}
-	if !slices.Equal(opener.asked, []string{node}) {
-		t.Fatalf("the opener was asked for %v", opener.asked)
-	}
-	in.Suspend()
-	if err := in.Resume(); err != nil {
-		t.Fatal(err)
-	}
-	if err := in.Remove(node); err != nil {
+func (in *Libinput) onReader(t testing.TB, what string, job func(r *inputReader) error) {
+	t.Helper()
+	if err := in.reader.call(what, func() error { return job(in.reader) }); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func (in *Libinput) addNow(t testing.TB, path string) {
+	t.Helper()
+	in.onReader(t, "add "+path, func(r *inputReader) error { return r.add(path) })
+}
+
+func TestLibinputAsksTheOpenerForDevices(t *testing.T) {
+	node := evdevNode(t)
+	opener := &refusingOpener{}
+	var reports []error
+	in := libinputReporting(t, opener, func(err error) { reports = append(reports, err) })
+	in.AddLater(node)
+	runUntil(t, in.loop, "the refused open's report", func() bool { return len(reports) > 0 })
+	if err := reports[0]; len(reports) != 1 || !errors.Is(err, unix.EPERM) || errors.Is(err, ErrDeclined) || !strings.Contains(err.Error(), node) {
+		t.Fatalf("a refused open reported %v", reports)
+	}
+	if !slices.Equal(opener.asked, []string{node}) {
+		t.Fatalf("the opener was asked for %v", opener.asked)
+	}
+	in.onReader(t, "suspend, resume and remove", func(r *inputReader) error {
+		r.suspend()
+		err := r.resume()
+		r.remove(node)
+		return err
+	})
+}
+
 func TestLibinputRejectsNonInputDevices(t *testing.T) {
 	in := libinput(t, PlainOpener{})
-	if err := in.Add(os.DevNull); !errors.Is(err, ErrDeclined) {
+	if err := in.reader.call("add /dev/null", func() error { return in.reader.add(os.DevNull) }); !errors.Is(err, ErrDeclined) {
 		t.Fatalf("/dev/null as an input device: %v", err)
 	}
 	if _, err := OpenLibinput(nil, "/nonexistent/libinput.so.10", PlainOpener{}, InputConfig{}, nil); err == nil || !strings.Contains(err.Error(), LibinputEnv) {
@@ -93,7 +113,7 @@ func TestLibinputDeclinesAHeadphoneJack(t *testing.T) {
 		{uiSetSwBit, swHeadphoneInsert},
 	})
 	in := libinput(t, PlainOpener{})
-	if err := in.Add(jack.node); !errors.Is(err, ErrDeclined) {
+	if err := in.reader.call("add the jack", func() error { return in.reader.add(jack.node) }); !errors.Is(err, ErrDeclined) {
 		t.Fatalf("a headphone jack: %v", err)
 	}
 }
@@ -112,13 +132,24 @@ func TestPlainOpenerNamesTheDeviceItOpened(t *testing.T) {
 	}
 }
 
-// takeOnceOpener lends a device once until it is released, as logind's
-// TakeDevice does.
 type takeOnceOpener struct {
+	mu    sync.Mutex
 	taken map[Device]bool
 }
 
+func (o *takeOnceOpener) holds(path string) bool {
+	d, err := DeviceOf(path)
+	if err != nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.taken[d]
+}
+
 func (o *takeOnceOpener) TakeDevice(path string) (int, Device, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	d, err := DeviceOf(path)
 	if err != nil {
 		return -1, Device{}, err
@@ -134,30 +165,26 @@ func (o *takeOnceOpener) TakeDevice(path string) (int, Device, error) {
 }
 
 func (o *takeOnceOpener) ReleaseDevice(d Device) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	delete(o.taken, d)
 	return nil
 }
 
-// A session that turns active without having been inactive resumes
-// nothing: libinput resuming devices it never let go of takes each a
-// second time, which logind refuses, and lys-wm used to exit on that
-// when a greeter's session turned active right after it started.
 func TestLibinputResumesOnlyAfterASuspend(t *testing.T) {
 	kbd := newVirtualKeyboard(t)
 	opener := &takeOnceOpener{taken: map[Device]bool{}}
 	in := libinput(t, opener)
-	if err := in.Add(kbd.node); err != nil {
-		t.Fatal(err)
-	}
-	if err := in.Resume(); err != nil {
-		t.Fatalf("a resume without a suspend: %v", err)
-	}
-	in.Suspend()
-	in.Suspend()
-	if err := in.Resume(); err != nil {
-		t.Fatalf("a resume after a suspend: %v", err)
-	}
-	if d, _ := DeviceOf(kbd.node); !opener.taken[d] {
+	in.addNow(t, kbd.node)
+	in.onReader(t, "a resume without a suspend", func(r *inputReader) error { return r.resume() })
+	in.onReader(t, "two suspends", func(r *inputReader) error {
+		r.suspend()
+		r.suspend()
+		return nil
+	})
+	in.reader.work.Wait()
+	in.onReader(t, "a resume after a suspend", func(r *inputReader) error { return r.resume() })
+	if !opener.holds(kbd.node) {
 		t.Error("the keyboard was not taken back after the resume")
 	}
 }
@@ -197,38 +224,32 @@ func TestAnInputDeviceIsTakenOffTheLoop(t *testing.T) {
 	if ticks != 1 {
 		t.Fatalf("%d posted ticks ran while an opener was stuck in logind", ticks)
 	}
-	if _, adding := in.adding["/dev/null"]; !adding {
+	adding := func() (pending bool) {
+		in.onReader(t, "look at the devices in flight", func(r *inputReader) error {
+			_, pending = r.adding["/dev/null"]
+			return nil
+		})
+		return pending
+	}
+	if !adding() {
 		t.Fatal("the device was not in flight while the opener held it")
 	}
-	if err := in.loop.Post(func() error { close(opener.release); return nil }); err != nil {
-		t.Fatal(err)
-	}
+	close(opener.release)
 	deadline := time.After(30 * time.Second)
-	for {
-		var pending bool
-		if err := in.loop.Post(func() error {
-			_, pending = in.adding["/dev/null"]
-			in.loop.Stop()
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-		if err := in.loop.Run(); err != nil {
-			t.Fatal(err)
-		}
-		if !pending {
-			break
-		}
+	for adding() {
 		select {
 		case <-deadline:
-			t.Fatal("the taken device never reached the loop")
+			t.Fatal("the taken device never reached the input reader")
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
-	if len(in.ready) != 0 || len(in.paths) != 0 {
-		t.Fatalf("a device libinput declines left ready %v, paths %v", in.ready, in.paths)
-	}
+	in.onReader(t, "look at what is left", func(r *inputReader) error {
+		if len(r.ready) != 0 || len(r.paths) != 0 {
+			return fmt.Errorf("a device libinput declines left ready %v, paths %v", r.ready, r.paths)
+		}
+		return nil
+	})
 	select {
 	case <-opener.released:
 	case <-deadline:
@@ -239,7 +260,7 @@ func TestAnInputDeviceIsTakenOffTheLoop(t *testing.T) {
 func TestAReleaseDoesNotWaitForTheOpener(t *testing.T) {
 	opener := &blockingOpener{entered: make(chan struct{}), release: make(chan struct{}), released: make(chan Device)}
 	in := libinput(t, opener)
-	in.releaseLater(Device{Major: 13, Minor: 64})
+	in.reader.releaseLater(Device{Major: 13, Minor: 64})
 	select {
 	case d := <-opener.released:
 		if d.Major != 13 {

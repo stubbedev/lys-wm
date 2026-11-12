@@ -77,16 +77,8 @@ type libSymbol struct {
 	name string
 }
 
-type tabletEvents struct {
-	tools     map[uintptr]*tabletinput.Tool
-	proximity tabletinput.Proximity
-	motion    tabletinput.Motion
-	tip       tabletinput.Tip
-	button    tabletinput.Button
-}
-
-func (in *Libinput) bindTablet(path string) error {
-	f := &in.fn.tablet
+func (r *inputReader) bindTablet(path string) error {
+	f := &r.fn.tablet
 	syms := []libSymbol{
 		{&f.event, "libinput_event_get_tablet_tool_event"},
 		{&f.tool, "libinput_event_tablet_tool_get_tool"},
@@ -119,12 +111,12 @@ func (in *Libinput) bindTablet(path string) error {
 	for i, c := range toolCapabilities {
 		syms = append(syms, libSymbol{&f.toolHas[i], "libinput_tablet_tool_has_" + c.name})
 	}
-	return in.register(path, syms)
+	return r.register(path, syms)
 }
 
-func (in *Libinput) tabletTool(h uintptr) *tabletinput.Tool {
-	f := &in.fn.tablet
-	if t, ok := in.tablet.tools[h]; ok {
+func (r *inputReader) tabletTool(h uintptr) *tabletinput.Tool {
+	f := &r.fn.tablet
+	if t, ok := r.tools[h]; ok {
 		return t
 	}
 	t := &tabletinput.Tool{Type: toolTypes[f.toolType(h)], Serial: f.toolSerial(h), HardwareID: f.toolID(h)}
@@ -133,22 +125,22 @@ func (in *Libinput) tabletTool(h uintptr) *tabletinput.Tool {
 			t.Caps |= c.capability
 		}
 	}
-	if in.tablet.tools == nil {
-		in.tablet.tools = map[uintptr]*tabletinput.Tool{}
+	if r.tools == nil {
+		r.tools = map[uintptr]*tabletinput.Tool{}
 	}
-	in.tablet.tools[f.toolRef(h)] = t
+	r.tools[f.toolRef(h)] = t
 	return t
 }
 
-func (in *Libinput) dropTabletTools() {
-	for h := range in.tablet.tools {
-		in.fn.tablet.toolUnref(h)
-		delete(in.tablet.tools, h)
+func (r *inputReader) dropTabletTools() {
+	for h := range r.tools {
+		r.fn.tablet.toolUnref(h)
+		delete(r.tools, h)
 	}
 }
 
-func (in *Libinput) tabletAxes(tev uintptr) tabletinput.Axes {
-	f := &in.fn.tablet
+func (r *inputReader) tabletAxes(tev uintptr) tabletinput.Axes {
+	f := &r.fn.tablet
 	var a tabletinput.Axes
 	for i, c := range changedAxes {
 		if f.changed[i](tev) != 0 {
@@ -163,24 +155,19 @@ func (in *Libinput) tabletAxes(tev uintptr) tabletinput.Axes {
 	return a
 }
 
-func (in *Libinput) translateTablet(out []backend.Event, ev uintptr, typ int32) []backend.Event {
-	f := &in.fn.tablet
+func (r *inputReader) translateTablet(out []backend.Event, into *translated, ev uintptr, typ int32) []backend.Event {
+	f := &r.fn.tablet
 	tev := f.event(ev)
-	at, tool := usec(f.time(tev)), in.tabletTool(f.tool(tev))
-	t := &in.tablet
+	at, tool := usec(f.time(tev)), r.tabletTool(f.tool(tev))
 	switch typ {
 	case evTabletToolProximity:
-		t.proximity = tabletinput.Proximity{Time: at, Tool: tool, In: f.proximity(tev) == 1, Axes: in.tabletAxes(tev)}
-		return append(out, &t.proximity)
+		return append(out, into.proximity.put(tabletinput.Proximity{Time: at, Tool: tool, In: f.proximity(tev) == 1, Axes: r.tabletAxes(tev)}))
 	case evTabletToolAxis:
-		t.motion = tabletinput.Motion{Time: at, Tool: tool, Axes: in.tabletAxes(tev)}
-		return append(out, &t.motion)
+		return append(out, into.toolMotion.put(tabletinput.Motion{Time: at, Tool: tool, Axes: r.tabletAxes(tev)}))
 	case evTabletToolTip:
-		t.tip = tabletinput.Tip{Time: at, Tool: tool, Down: f.tip(tev) == 1, Axes: in.tabletAxes(tev)}
-		return append(out, &t.tip)
+		return append(out, into.tip.put(tabletinput.Tip{Time: at, Tool: tool, Down: f.tip(tev) == 1, Axes: r.tabletAxes(tev)}))
 	case evTabletToolButton:
-		t.button = tabletinput.Button{Time: at, Tool: tool, Button: f.button(tev), Pressed: f.buttonState(tev) == 1}
-		return append(out, &t.button)
+		return append(out, into.toolButton.put(tabletinput.Button{Time: at, Tool: tool, Button: f.button(tev), Pressed: f.buttonState(tev) == 1}))
 	}
 	return out
 }

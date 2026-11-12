@@ -47,15 +47,8 @@ type padFuncs struct {
 	deviceGroup  func(dev uintptr) uintptr
 }
 
-type padEvents struct {
-	button tabletinput.PadButton
-	ring   tabletinput.PadRing
-	strip  tabletinput.PadStrip
-	dial   tabletinput.PadDial
-}
-
-func (in *Libinput) bindPad(path string) error {
-	f := &in.fn.pad
+func (r *inputReader) bindPad(path string) error {
+	f := &r.fn.pad
 	syms := []libSymbol{
 		{&f.event, "libinput_event_get_tablet_pad_event"},
 		{&f.time, "libinput_event_tablet_pad_get_time_usec"},
@@ -86,7 +79,7 @@ func (in *Libinput) bindPad(path string) error {
 		{&f.hasDial, "libinput_tablet_pad_mode_group_has_dial"},
 		{&f.deviceGroup, "libinput_device_get_device_group"},
 	}
-	return in.register(path, syms)
+	return r.register(path, syms)
 }
 
 func count(n int32) uint32 {
@@ -103,8 +96,8 @@ func members(n uint32, has func(uint32) bool) []uint32 {
 	return out
 }
 
-func (in *Libinput) padLayout(h uintptr) tabletinput.PadLayout {
-	f := &in.fn.pad
+func (r *inputReader) padLayout(h uintptr) tabletinput.PadLayout {
+	f := &r.fn.pad
 	l := tabletinput.PadLayout{Buttons: count(f.numButtons(h))}
 	rings, strips, dials := count(f.numRings(h)), count(f.numStrips(h)), count(f.numDials(h))
 	for i := range count(f.numGroups(h)) {
@@ -121,26 +114,21 @@ func (in *Libinput) padLayout(h uintptr) tabletinput.PadLayout {
 	return l
 }
 
-func (in *Libinput) translatePad(out []backend.Event, ev uintptr, typ int32) []backend.Event {
-	f := &in.fn.pad
+func (r *inputReader) translatePad(out []backend.Event, into *translated, ev uintptr, typ int32) []backend.Event {
+	f := &r.fn.pad
 	pev := f.event(ev)
 	at, group, mode := usec(f.time(pev)), f.groupIndex(f.modeGroup(pev)), f.mode(pev)
-	p := &in.pad
 	switch typ {
 	case evTabletPadButton:
-		p.button = tabletinput.PadButton{Time: at, Button: f.button(pev), Pressed: f.buttonState(pev) == 1, Group: group, Mode: mode}
-		return append(out, &p.button)
+		return append(out, into.padButton.put(tabletinput.PadButton{Time: at, Button: f.button(pev), Pressed: f.buttonState(pev) == 1, Group: group, Mode: mode}))
 	case evTabletPadRing:
 		v := f.ringPosition(pev)
-		p.ring = tabletinput.PadRing{Time: at, Ring: f.ringNumber(pev), Degrees: max(v, 0), Stopped: v < 0, Finger: f.ringSource(pev) == padSourceFinger, Group: group, Mode: mode}
-		return append(out, &p.ring)
+		return append(out, into.ring.put(tabletinput.PadRing{Time: at, Ring: f.ringNumber(pev), Degrees: max(v, 0), Stopped: v < 0, Finger: f.ringSource(pev) == padSourceFinger, Group: group, Mode: mode}))
 	case evTabletPadStrip:
 		v := f.stripPos(pev)
-		p.strip = tabletinput.PadStrip{Time: at, Strip: f.stripNumber(pev), Position: max(v, 0), Stopped: v < 0, Finger: f.stripSource(pev) == padSourceFinger, Group: group, Mode: mode}
-		return append(out, &p.strip)
+		return append(out, into.strip.put(tabletinput.PadStrip{Time: at, Strip: f.stripNumber(pev), Position: max(v, 0), Stopped: v < 0, Finger: f.stripSource(pev) == padSourceFinger, Group: group, Mode: mode}))
 	case evTabletPadDial:
-		p.dial = tabletinput.PadDial{Time: at, Dial: f.dialNumber(pev), Delta: int32(math.Round(f.dialDelta(pev))), Group: group, Mode: mode}
-		return append(out, &p.dial)
+		return append(out, into.dial.put(tabletinput.PadDial{Time: at, Dial: f.dialNumber(pev), Delta: int32(math.Round(f.dialDelta(pev))), Group: group, Mode: mode}))
 	}
 	return out
 }

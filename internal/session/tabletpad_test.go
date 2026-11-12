@@ -9,8 +9,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
 )
 
-func fakePad(ring, strip float64) *Libinput {
-	in := &Libinput{}
+func fakePad(ring, strip float64) *inputReader {
+	in := &inputReader{}
 	f := &in.fn.pad
 	f.event = func(ev uintptr) uintptr { return ev }
 	f.time = func(uintptr) uint64 { return 3000 }
@@ -75,7 +75,7 @@ func TestTabletPadEventsCarryWhatLibinputSaid(t *testing.T) {
 		{evTabletPadDial, 0, 0, &tabletinput.PadDial{Time: ms, Delta: -120, Group: 1, Mode: 2}},
 	}
 	for _, tc := range cases {
-		got := fakePad(tc.ring, tc.strip).translate(nil, &InputDevice{}, 1, tc.typ)
+		got := fakePad(tc.ring, tc.strip).translate(nil, &translated{}, &InputDevice{}, 1, tc.typ)
 		if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
 			t.Errorf("event %d: %+v, want %+v", tc.typ, got, tc.want)
 		}
@@ -85,9 +85,13 @@ func TestTabletPadEventsCarryWhatLibinputSaid(t *testing.T) {
 func TestTranslatingTabletPadEventsAllocatesNothing(t *testing.T) {
 	in := fakePad(10, 0.5)
 	d := &InputDevice{}
+	var into translated
 	for _, typ := range []int32{evTabletPadButton, evTabletPadRing, evTabletPadStrip, evTabletPadDial} {
-		in.out = in.translate(in.out[:0], d, 1, typ)
-		if n := testing.AllocsPerRun(100, func() { in.out = in.translate(in.out[:0], d, 1, typ) }); n != 0 {
+		in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		if n := testing.AllocsPerRun(100, func() {
+			into.reset()
+			in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		}); n != 0 {
 			t.Errorf("event %d: %v allocations", typ, n)
 		}
 	}

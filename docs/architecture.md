@@ -104,8 +104,37 @@ race and drops the closure, any other failure to wake the loop panics. One that
 must clean up or answer when the loop is gone uses `Loop.Post` and handles its
 error, where `loop.ErrClosed` alone means the loop has shut down.
 Compositor state takes no locks. Packages under it that keep their own are the
-loop's mailbox, the IPC server's connection set, and process-wide tables in
-`gpu` and `session`.
+loop's mailbox, the IPC server's connection set, the input queue in `session`,
+and process-wide tables in `gpu` and `session`.
+
+Input has a thread of its own. `session.Libinput` runs libinput on a goroutine
+locked to one OS thread, with its own `loop.Loop`. libinput is not thread-safe,
+so every libinput call happens there: context creation, dispatch, reading
+events, adding and removing devices, suspend and resume, device settings,
+keyboard LEDs and teardown, and libinput's open, close and log callbacks with
+them. The reader dispatches whenever libinput's fd is readable, however long
+the compositor loop is busy, so the kernel's per-client evdev buffer (64
+events for a keyboard, about 16 keystrokes) never fills behind a slow frame.
+It translates events into batches and hands them to the compositor loop with
+`Loop.Hand`, in libinput's order and with its timestamps; device arrivals,
+removals and reports travel in the same stream. At most 65536 input events wait
+undelivered; beyond that the reader drops events and the loop reports how many.
+libinput's `SYN_DROPPED` (the kernel overflowed before the reader got there)
+and every message at libinput's error priority are reported too, so no loss is
+silent.
+
+The compositor loop reaches the reader only through the reader's mailbox.
+Hotplug, suspend, resume and LEDs are posted and return at once;
+`Reconfigure`, `Park` and `Unpark` wait for the reader's answer, which comes
+between two libinput calls. The reader never waits on the compositor loop.
+Devices are taken from and given back to logind on a third goroutine
+(`loop.Serial`), so neither loop waits on D-Bus. An inactive session suspends
+libinput on the reader, which closes the devices, so nothing is read until the
+resumed devices are handed back. Parking for an upgrade stops dispatch on the
+reader and delivers everything already read before `Park` returns; nothing is
+read again until `Unpark`. `Close` stops taking devices, waits for the takes in
+flight, stops the reader, tears libinput down on its thread, and delivers the
+removals.
 
 The loop never waits on another process, the GPU or client memory. Off the
 loop (`Compositor.offLoop` or a package's own goroutine), result applied on

@@ -428,7 +428,8 @@ func (n *native) udev(ev session.UdevEvent) error {
 		n.addInput(ev.Devnode)
 		return nil
 	case ev.Subsystem == session.Input && ev.Action == session.Remove:
-		return n.input.Remove(ev.Devnode)
+		n.input.Remove(ev.Devnode)
+		return nil
 	case ev.Subsystem != session.DRM:
 		return nil
 	case ev.Action == session.Remove:

@@ -9,8 +9,8 @@ import (
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
 )
 
-func fakeTablet(proximity, tip int32, changed tabletinput.Axis) *Libinput {
-	in := &Libinput{}
+func fakeTablet(proximity, tip int32, changed tabletinput.Axis) *inputReader {
+	in := &inputReader{}
 	f := &in.fn.tablet
 	id := func(ev uintptr) uintptr { return ev }
 	value := func(v float64) func(uintptr) float64 { return func(uintptr) float64 { return v } }
@@ -54,7 +54,7 @@ func TestTabletToolEventsCarryWhatLibinputSaid(t *testing.T) {
 		evTabletToolButton:    &tabletinput.Button{Time: ms, Tool: tool, Button: 0x14b, Pressed: true},
 	}
 	for typ, want := range cases {
-		got := fakeTablet(1, 1, axes.Changed).translate(nil, &InputDevice{}, 1, typ)
+		got := fakeTablet(1, 1, axes.Changed).translate(nil, &translated{}, &InputDevice{}, 1, typ)
 		if len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 			t.Errorf("event %d: %+v, want %+v", typ, got, want)
 		}
@@ -63,25 +63,29 @@ func TestTabletToolEventsCarryWhatLibinputSaid(t *testing.T) {
 
 func TestATabletToolKeepsItsIdentityAcrossEvents(t *testing.T) {
 	in := fakeTablet(1, 0, 0)
-	first := in.translate(nil, &InputDevice{}, 1, evTabletToolProximity)[0].(*tabletinput.Proximity).Tool
-	second := in.translate(nil, &InputDevice{}, 1, evTabletToolAxis)[0].(*tabletinput.Motion).Tool
+	first := in.translate(nil, &translated{}, &InputDevice{}, 1, evTabletToolProximity)[0].(*tabletinput.Proximity).Tool
+	second := in.translate(nil, &translated{}, &InputDevice{}, 1, evTabletToolAxis)[0].(*tabletinput.Motion).Tool
 	if first != second {
 		t.Fatal("one libinput tool became two")
 	}
 	unrefs := 0
 	in.fn.tablet.toolUnref = func(uintptr) uintptr { unrefs++; return 0 }
 	in.dropTabletTools()
-	if unrefs != 1 || len(in.tablet.tools) != 0 {
-		t.Fatalf("%d unrefs, %d tools left", unrefs, len(in.tablet.tools))
+	if unrefs != 1 || len(in.tools) != 0 {
+		t.Fatalf("%d unrefs, %d tools left", unrefs, len(in.tools))
 	}
 }
 
 func TestTranslatingTabletToolMotionAllocatesNothing(t *testing.T) {
 	in := fakeTablet(1, 1, tabletinput.AxisX|tabletinput.AxisY)
 	d := &InputDevice{}
+	var into translated
 	for _, typ := range []int32{evTabletToolProximity, evTabletToolAxis, evTabletToolTip, evTabletToolButton} {
-		in.out = in.translate(in.out[:0], d, 1, typ)
-		if n := testing.AllocsPerRun(100, func() { in.out = in.translate(in.out[:0], d, 1, typ) }); n != 0 {
+		in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		if n := testing.AllocsPerRun(100, func() {
+			into.reset()
+			in.out = in.translate(in.out[:0], &into, d, 1, typ)
+		}); n != 0 {
 			t.Errorf("event %d: %v allocations", typ, n)
 		}
 	}

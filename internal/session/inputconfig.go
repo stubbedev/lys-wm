@@ -202,9 +202,9 @@ type configFuncs struct {
 	areaDefault         func(dev uintptr) Area
 }
 
-func (in *Libinput) bindConfig(path string) error {
-	f := &in.fn.config
-	return in.register(path, []libSymbol{
+func (r *inputReader) bindConfig(path string) error {
+	f := &r.fn.config
+	return r.register(path, []libSymbol{
 		{&f.tapFingers, "libinput_device_config_tap_get_finger_count"},
 		{&f.tap, "libinput_device_config_tap_set_enabled"},
 		{&f.tapDefault, "libinput_device_config_tap_get_default_enabled"},
@@ -323,18 +323,18 @@ func externalMouse(off *bool) *sendEvents {
 	return &mode
 }
 
-func (in *Libinput) class(d *InputDevice) DeviceConfig {
+func (r *inputReader) class(d *InputDevice) DeviceConfig {
 	switch {
 	case d.touchpad:
-		return in.config.Touchpad
+		return r.config.Touchpad
 	case d.caps&backend.Pointer != 0:
-		return in.config.Pointer
+		return r.config.Pointer
 	}
 	return DeviceConfig{}
 }
 
-func (in *Libinput) configure(d *InputDevice) error {
-	f, h, c, o := &in.fn.config, d.h, in.class(d), in.config.Devices[d.name]
+func (r *inputReader) configure(d *InputDevice) error {
+	f, h, c, o := &r.fn.config, d.h, r.class(d), r.config.Devices[d.name]
 	tap, accel, buttonScroll := f.tapFingers(h) > 0, f.hasAccel(h) != 0, f.scrollMethods(h)&ScrollOnButtonDown != 0
 	toggles := []struct {
 		name          string
@@ -406,12 +406,12 @@ func (in *Libinput) configure(d *InputDevice) error {
 	)...)
 }
 
-func (in *Libinput) Reconfigure(config InputConfig) error {
-	in.config = config
-	devices := slices.SortedFunc(maps.Values(in.devices), func(a, b *InputDevice) int { return cmp.Compare(a.name, b.name) })
+func (r *inputReader) reconfigure(config InputConfig) error {
+	r.config = config
+	devices := slices.SortedFunc(maps.Values(r.devices), func(a, b *InputDevice) int { return cmp.Compare(a.name, b.name) })
 	errs := make([]error, 0, len(devices))
 	for _, d := range devices {
-		errs = append(errs, in.configure(d))
+		errs = append(errs, r.configure(d))
 	}
 	return errors.Join(errs...)
 }
