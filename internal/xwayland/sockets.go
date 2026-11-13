@@ -25,41 +25,79 @@ type sockets struct {
 	fds      [2]int
 }
 
-func bindDisplay(dir string, first int) (*sockets, error) {
+func bindDisplay(dir string, first int, remove func(string) error) (*sockets, []error, error) {
 	socketDir := filepath.Join(dir, ".X11-unix")
 	switch err := os.Mkdir(socketDir, 0o700); {
 	case errors.Is(err, os.ErrExist):
 	case err != nil:
-		return nil, fmt.Errorf("xwayland: make %s: %w", socketDir, err)
+		return nil, nil, fmt.Errorf("xwayland: make %s: %w", socketDir, err)
 	default:
 		if err := os.Chmod(socketDir, 0o777|os.ModeSticky); err != nil {
-			return nil, fmt.Errorf("xwayland: open %s to every X server: %w", socketDir, err)
+			return nil, nil, fmt.Errorf("xwayland: open %s to every X server: %w", socketDir, err)
 		}
 	}
+	var skipped []error
 	for n := first; n < maxDisplays; n++ {
-		lock := filepath.Join(dir, fmt.Sprintf(".X%d-lock", n))
-		path := filepath.Join(socketDir, fmt.Sprintf("X%d", n))
-		taken, err := takeLock(lock, path)
-		if err != nil {
-			return nil, err
-		}
-		if !taken {
+		s, err := claimDisplay(n, filepath.Join(dir, fmt.Sprintf(".X%d-lock", n)), filepath.Join(socketDir, fmt.Sprintf("X%d", n)), remove)
+		if _, ok := errors.AsType[*foreignError](err); ok {
+			skipped = append(skipped, fmt.Errorf(":%d %w", n, err))
 			continue
 		}
-		s := &sockets{n: n, lockPath: lock, path: path, fds: [2]int{-1, -1}}
-		err = s.listen()
-		if err == nil {
-			return s, nil
+		if errors.Is(err, unix.EADDRINUSE) {
+			continue
 		}
-		err = errors.Join(err, s.close())
-		if !errors.Is(err, unix.EADDRINUSE) {
-			return nil, err
+		if err != nil {
+			return nil, nil, err
+		}
+		if s != nil {
+			return s, skipped, nil
 		}
 	}
-	return nil, fmt.Errorf("xwayland: displays :0 to :%d in %s are all in use", maxDisplays-1, dir)
+	return nil, nil, errors.Join(append([]error{fmt.Errorf("xwayland: displays :0 to :%d in %s are all in use", maxDisplays-1, dir)}, skipped...)...)
 }
 
-func takeLock(lock, socket string) (bool, error) {
+func claimDisplay(n int, lock, path string, remove func(string) error) (*sockets, error) {
+	taken, err := takeLock(lock, remove)
+	if err != nil || !taken {
+		return nil, err
+	}
+	if err := removeStale(path, remove); err != nil {
+		if released := remove(lock); released != nil {
+			return nil, fmt.Errorf("xwayland: release %s after %v: %w", lock, err, released)
+		}
+		return nil, err
+	}
+	s := &sockets{n: n, lockPath: lock, path: path, fds: [2]int{-1, -1}}
+	if err := s.listen(); err != nil {
+		return nil, errors.Join(err, s.close())
+	}
+	return s, nil
+}
+
+type foreignError struct {
+	err error
+}
+
+func (e *foreignError) Error() string {
+	return "is another user's: " + e.err.Error()
+}
+
+func (e *foreignError) Unwrap() error {
+	return e.err
+}
+
+func removeStale(path string, remove func(string) error) error {
+	switch err := remove(path); {
+	case err == nil, errors.Is(err, os.ErrNotExist):
+		return nil
+	case errors.Is(err, os.ErrPermission):
+		return &foreignError{err: err}
+	default:
+		return fmt.Errorf("xwayland: remove stale %s: %w", path, err)
+	}
+}
+
+func takeLock(lock string, remove func(string) error) (bool, error) {
 	for range 2 {
 		f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444) //nolint:gosec // other X servers read the lock to see the display is taken
 		if err == nil {
@@ -75,10 +113,8 @@ func takeLock(lock, socket string) (bool, error) {
 		if live, err := held(lock); err != nil || live {
 			return false, err
 		}
-		for _, stale := range []string{lock, socket} {
-			if err := os.Remove(stale); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return false, fmt.Errorf("xwayland: remove stale %s: %w", stale, err)
-			}
+		if err := removeStale(lock, remove); err != nil {
+			return false, err
 		}
 	}
 	return false, nil
@@ -86,6 +122,9 @@ func takeLock(lock, socket string) (bool, error) {
 
 func held(lock string) (bool, error) {
 	data, err := os.ReadFile(lock) //nolint:gosec // the lock path is built from the display number
+	if errors.Is(err, os.ErrPermission) {
+		return false, &foreignError{err: err}
+	}
 	if err != nil {
 		return false, fmt.Errorf("xwayland: read %s: %w", lock, err)
 	}
@@ -103,11 +142,6 @@ func (s *sockets) listen() error {
 			return fmt.Errorf("xwayland: socket for %s: %w", name, err)
 		}
 		s.fds[i] = fd
-		if i == 1 {
-			if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("xwayland: remove stale %s: %w", s.path, err)
-			}
-		}
 		if err := unix.Bind(fd, &unix.SockaddrUnix{Name: name}); err != nil {
 			return fmt.Errorf("xwayland: bind %s: %w", name, err)
 		}

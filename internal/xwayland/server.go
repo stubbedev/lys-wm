@@ -80,11 +80,14 @@ func Listen(l *loop.Loop, d *server.Display, opts Options) (*Server, error) {
 		return nil, fmt.Errorf("xwayland: find %s (set %s to its path): %w", opts.Binary, Env, err)
 	}
 	opts.Binary = binary
-	socks, err := bindDisplay(opts.Dir, opts.FirstDisplay)
+	socks, skipped, err := bindDisplay(opts.Dir, opts.FirstDisplay, os.Remove)
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{loop: l, display: d, opts: opts, socks: socks}
+	if len(skipped) > 0 {
+		opts.Report(fmt.Errorf("xwayland: took %s, passing over displays a dead X server left behind: %w", s.Display(), errors.Join(skipped...)))
+	}
 	if s.shell, err = newShell(d, s.IsClient, s.associated, s.dissociated); err != nil {
 		return nil, errors.Join(err, socks.close())
 	}

@@ -753,20 +753,21 @@ func run(args []string) (err error) {
 		defer leave(profiles.Close)
 	}
 	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {wmipc.SocketEnv, socket}}
-	var xwRunning *xwayland.Server
+	var xw *xwayland.Server
 	if first.xwayland {
-		var xw *xwayland.Server
 		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second}
 		if incoming != nil && incoming.state.X != nil {
-			xw, err = xwayland.Adopt(l, display, opts, *incoming.state.X, incoming.fds)
+			if xw, err = xwayland.Adopt(l, display, opts, *incoming.state.X, incoming.fds); err != nil {
+				return fmt.Errorf("%w (or turn it off with xwayland.enabled: false)", err)
+			}
+		} else if started, listenErr := xwayland.Listen(l, display, opts); listenErr != nil {
+			cfg.Report(fmt.Errorf("%w; running without X11 clients (or turn it off with xwayland.enabled: false)", listenErr))
 		} else {
-			xw, err = xwayland.Listen(l, display, opts)
+			xw = started
 		}
-		if err != nil {
-			return fmt.Errorf("%w (or turn it off with xwayland.enabled: false)", err)
-		}
+	}
+	if xw != nil {
 		defer leave(func() error { return xw.Close() })
-		xwRunning = xw
 		s.comp.WatchSelection(xw.SelectionChanged)
 		s.comp.SetDropTarget(xw)
 		s.comp.WatchWorkArea(xw.WorkAreaChanged)
@@ -803,7 +804,7 @@ func run(args []string) (err error) {
 		accents.Close()
 		return nil
 	})
-	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xwRunning, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, opened: b}
+	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xw, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, opened: b}
 	srv.OnUpgrade(u.start)
 	if incoming == nil {
 		for _, command := range first.autostart {
@@ -821,8 +822,8 @@ func run(args []string) (err error) {
 		}
 	}
 	listening := display.Name()
-	if first.xwayland {
-		listening += " and X display " + os.Getenv("DISPLAY")
+	if xw != nil {
+		listening += " and X display " + xw.Display()
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: listening on %s with the %s backend\n", listening, kind)
 	rtdebug.SetGCPercent(gcPercent)

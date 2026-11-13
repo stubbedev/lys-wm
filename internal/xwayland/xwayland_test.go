@@ -42,9 +42,12 @@ func TestDisplaysSkipLiveLocksAndReclaimStaleOnes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, err := bindDisplay(dir, 0)
+	s, skipped, err := bindDisplay(dir, 0, os.Remove)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("skipped %v", skipped)
 	}
 	if s.n != 1 {
 		t.Fatalf("took display :%d, want the stale :1", s.n)
@@ -74,6 +77,97 @@ func TestDisplaysSkipLiveLocksAndReclaimStaleOnes(t *testing.T) {
 		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s outlived the display: %v", p, err)
 		}
+	}
+}
+
+func writeLock(t *testing.T, dir string, n, pid int, mode os.FileMode) string {
+	t.Helper()
+	lock := filepath.Join(dir, fmt.Sprintf(".X%d-lock", n))
+	if err := os.WriteFile(lock, fmt.Appendf(nil, "%10d\n", pid), mode); err != nil {
+		t.Fatal(err)
+	}
+	return lock
+}
+
+func failingRemove(fail error, paths ...string) func(string) error {
+	return func(p string) error {
+		if slices.Contains(paths, p) {
+			return &os.PathError{Op: "remove", Path: p, Err: fail}
+		}
+		return os.Remove(p)
+	}
+}
+
+func TestDisplaysPassOverStaleFilesAnotherUserOwns(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	if err := os.Mkdir(filepath.Join(dir, ".X11-unix"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	staleLock := writeLock(t, dir, 0, deadPid(t), 0o444)
+	strandedSocket := filepath.Join(dir, ".X11-unix", "X1")
+	if err := os.WriteFile(strandedSocket, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, skipped, err := bindDisplay(dir, 0, failingRemove(unix.EPERM, staleLock, strandedSocket))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if s.n != 2 {
+		t.Fatalf("took display :%d, want :2 past the two another user left", s.n)
+	}
+	if len(skipped) != 2 || !errors.Is(skipped[0], os.ErrPermission) || !errors.Is(skipped[1], os.ErrPermission) {
+		t.Fatalf("skipped %v, want :0 and :1 for their unremovable files", skipped)
+	}
+	for _, p := range []string{staleLock, strandedSocket} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".X1-lock")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the lock on :1 outlived passing it over: %v", err)
+	}
+}
+
+func TestDisplaysPassOverLocksTheyCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every lock")
+	}
+	dir := testenv.SocketDir(t)
+	writeLock(t, dir, 0, deadPid(t), 0)
+	s, skipped, err := bindDisplay(dir, 0, os.Remove)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if s.n != 1 || len(skipped) != 1 || !errors.Is(skipped[0], os.ErrPermission) {
+		t.Fatalf("took display :%d skipping %v, want :1 past the unreadable :0", s.n, skipped)
+	}
+}
+
+func TestDisplaysFailOnStaleFilesTheyCannotRemoveForOtherReasons(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	lock := writeLock(t, dir, 0, deadPid(t), 0o444)
+	s, _, err := bindDisplay(dir, 0, failingRemove(unix.EIO, lock))
+	if !errors.Is(err, unix.EIO) {
+		t.Fatalf("took %v with err %v, want the I/O error", s, err)
+	}
+}
+
+func TestDisplaysAllPassedOverSayWhy(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	lock := writeLock(t, dir, maxDisplays-1, deadPid(t), 0o444)
+	s, _, err := bindDisplay(dir, maxDisplays-1, failingRemove(unix.EPERM, lock))
+	if !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), "all in use") {
+		t.Fatalf("took %v with err %v, want every display in use because of the stale lock", s, err)
 	}
 }
 
