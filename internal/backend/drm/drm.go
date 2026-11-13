@@ -1029,6 +1029,7 @@ type Output struct {
 	aimedAt       time.Duration
 	untimed       bool
 	lastFlip      time.Duration
+	lastVblank    time.Duration
 	unanchored    bool
 	presented     uint64
 	color         colorBlobs
@@ -1653,7 +1654,7 @@ func (o *Output) emptyFrame() error {
 		return nil
 	}
 	now := o.b.now()
-	at, _ := backend.NextVblank(o.vblank(now), now, o.paceInterval())
+	at := o.pacing(now).Aim(now)
 	if err := o.pacer.Arm(at - now); err != nil {
 		return fmt.Errorf("drm: pace the frames of %s: %w", o.Name(), err)
 	}
@@ -1889,7 +1890,7 @@ func (o *Output) commitFenced(s *scanout, fence int) error {
 	o.aimedAt = 0
 	if !o.vrrSent {
 		now := o.b.now()
-		o.aimedAt, _ = backend.NextVblank(o.vblank(now), now, o.paceInterval())
+		o.aimedAt = o.pacing(now).Aim(now)
 	}
 	o.sentOverlay()
 	if flags&kdrm.AtomicAllowModeset != 0 {
@@ -2227,12 +2228,12 @@ func (o *Output) frameWait() time.Duration {
 		}
 		return max(o.lastFlip+o.paceInterval()-now, 0)
 	}
-	return backend.HoldToCap(o.budget.Deadline(o.vblank(now), now, o.paceInterval()), o.lastFlip, o.paceInterval(), modeOf(o.mode).Interval()) - now
+	return o.budget.Deadline(o.pacing(now), now) - now
 }
 
 func (o *Output) vblank(now time.Duration) time.Duration {
-	if o.lastFlip == 0 || now-o.lastFlip <= modeOf(o.mode).Interval() || o.unanchored || !o.lit || o.off || o.kms != kmsFlip {
-		return o.lastFlip
+	if o.lastVblank == 0 || now-o.lastVblank <= modeOf(o.mode).Interval() || o.unanchored || !o.lit || o.off || o.kms != kmsFlip {
+		return o.lastVblank
 	}
 	v, err := o.b.dev.CRTCSequence(o.crtc.id)
 	switch {
@@ -2241,10 +2242,10 @@ func (o *Output) vblank(now time.Duration) time.Duration {
 	case err != nil:
 		o.unanchored = true
 		o.b.report(fmt.Errorf("drm: %s extrapolates its vblanks from its last flip, reading the CRTC's last vblank failed: %w", o.Name(), err))
-	case v.Active && v.Time > o.lastFlip && v.Time <= now:
-		o.lastFlip = v.Time
+	case v.Active && v.Time > o.lastVblank && v.Time <= now:
+		o.lastVblank = v.Time
 	}
-	return o.lastFlip
+	return o.lastVblank
 }
 
 func (o *Output) dropRenderFence() error {
@@ -2428,6 +2429,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	}
 	o.flipping = false
 	o.lastFlip = time.Duration(e.Sec)*time.Second + time.Duration(e.Usec)*time.Microsecond
+	o.lastVblank = o.lastFlip
 	overlayFreed := o.overlayFlipped()
 	timing := o.timeFrame(o.lastFlip)
 	if c := o.cursor; c != nil && c.queued != nil {

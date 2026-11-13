@@ -90,3 +90,7 @@ func (o *Output) CapFrameRate(hz int) {
 func (o *Output) paceInterval() time.Duration {
 	return modeOf(o.mode).PacedInterval(o.frameCap, o.vrrSent)
 }
+
+func (o *Output) pacing(now time.Duration) backend.Pacing {
+	return backend.Pacing{Vblank: o.vblank(now), Shown: o.lastFlip, Refresh: modeOf(o.mode).Interval(), Paced: o.paceInterval(), Variable: o.vrrSent}
+}

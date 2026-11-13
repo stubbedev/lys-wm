@@ -181,30 +181,39 @@ func TestTheLatchDeadlineLeavesTheBudgetBeforeTheNextVblank(t *testing.T) {
 		{last: 0, now: 125 * ms, want: 125 * ms},
 	} {
 		var b RenderBudget
-		if got := b.Deadline(tc.last, tc.now, 16*ms); got != tc.want {
+		if got := b.Deadline(uncapped(tc.last, 16*ms), tc.now); got != tc.want {
 			t.Errorf("last %v, now %v: deadline %v, want %v", tc.last, tc.now, got, tc.want)
 		}
 	}
+}
+
+func uncapped(vblank, refresh time.Duration) Pacing {
+	return Pacing{Vblank: vblank, Refresh: refresh, Paced: refresh}
 }
 
 func TestACappedFrameNeverLatchesAtTheRefreshBeforeItsTurn(t *testing.T) {
 	const (
 		ms      = time.Millisecond
 		refresh = 8 * ms
-		paced   = 16 * ms
 		shown   = 100 * ms
 	)
+	var slow RenderBudget
+	for range renderSamples {
+		slow.Sample(12 * ms)
+	}
 	for _, tc := range []struct {
-		name                  string
-		deadline, paced, want time.Duration
+		name        string
+		budget      *RenderBudget
+		paced, want time.Duration
 	}{
-		{"a budget longer than a refresh", 103 * ms, paced, 108 * ms},
-		{"a deadline already in its turn", 112 * ms, paced, 112 * ms},
-		{"no cap", 103 * ms, refresh, 103 * ms},
+		{"a budget longer than a refresh", &slow, 2 * refresh, 108 * ms},
+		{"a cold budget", &RenderBudget{}, 2 * refresh, 108 * ms},
+		{"no cap", &RenderBudget{}, refresh, 104 * ms},
 	} {
-		got := HoldToCap(tc.deadline, shown, tc.paced, refresh)
+		p := Pacing{Vblank: shown, Shown: shown, Refresh: refresh, Paced: tc.paced}
+		got := tc.budget.Latch(p, shown+ms)
 		if got != tc.want {
-			t.Errorf("%s: held to %v, want %v", tc.name, got, tc.want)
+			t.Errorf("%s: latched at %v, want %v", tc.name, got, tc.want)
 		}
 		if at, _ := NextVblank(shown, got, refresh); at < shown+tc.paced {
 			t.Errorf("%s: a frame started at %v lands at %v, before its turn at %v", tc.name, got, at, shown+tc.paced)
@@ -212,13 +221,55 @@ func TestACappedFrameNeverLatchesAtTheRefreshBeforeItsTurn(t *testing.T) {
 	}
 }
 
+func TestACappedFrameAimsAtItsTurnFromTheFrameShownNotTheLatestVblank(t *testing.T) {
+	const (
+		ms      = time.Millisecond
+		refresh = 8 * ms
+		paced   = 2 * refresh
+		shown   = 100 * ms
+	)
+	for _, tc := range []struct {
+		name              string
+		vblank, now, want time.Duration
+		variable          bool
+	}{
+		{"before the refresh between", shown, shown + ms, shown + paced, false},
+		{"after the refresh between", shown + refresh, shown + refresh + ms, shown + paced, false},
+		{"with the vblanks drifted off the flip", shown + refresh + 30*time.Microsecond, shown + refresh + ms, shown + paced + 30*time.Microsecond, false},
+		{"past its turn", shown + 3*refresh, shown + 3*refresh + ms, shown + 4*refresh, false},
+		{"under VRR", shown, shown + ms, shown + paced + 3*ms, true},
+	} {
+		p := Pacing{Vblank: tc.vblank, Shown: shown, Refresh: refresh, Paced: paced, Variable: tc.variable}
+		if tc.variable {
+			p.Paced += 3 * ms
+		}
+		if got := p.Aim(tc.now); got != tc.want {
+			t.Errorf("%s: aimed at %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestACappedFrameAfterTheRefreshBetweenStartsAtOnce(t *testing.T) {
+	const (
+		ms      = time.Millisecond
+		refresh = 8 * ms
+		shown   = 100 * ms
+	)
+	var b RenderBudget
+	p := Pacing{Vblank: shown + refresh, Shown: shown, Refresh: refresh, Paced: 2 * refresh}
+	now := shown + refresh + ms
+	if got := b.Deadline(p, now); got > now {
+		t.Fatalf("a capped frame asked for one refresh after the last flip, with the CRTC past the refresh between, waits until %v, want to start at once at %v", got, now)
+	}
+}
+
 func TestAFrameWithNoTimeLeftWaitsForTheNextDeadline(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget
-	if got := b.Deadline(100*ms, 114*ms, 16*ms); got != 124*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 114*ms); got != 124*ms {
 		t.Fatalf("2 ms before the vblank the deadline is %v, want the next refresh's, 124 ms", got)
 	}
-	if got := b.Deadline(100*ms, 124*ms, 16*ms); got != 124*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 124*ms); got != 124*ms {
 		t.Fatalf("at the next refresh's deadline it is %v", got)
 	}
 }
@@ -226,7 +277,7 @@ func TestAFrameWithNoTimeLeftWaitsForTheNextDeadline(t *testing.T) {
 func TestAFrameWithAFastRendersWorthOfTimeLeftStillStarts(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget
-	if got := b.Deadline(100*ms, 112*ms, 16*ms); got != 108*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 112*ms); got != 108*ms {
 		t.Fatalf("4 ms before the vblank the deadline is %v, want the one already past", got)
 	}
 }
@@ -234,13 +285,13 @@ func TestAFrameWithAFastRendersWorthOfTimeLeftStillStarts(t *testing.T) {
 func TestADeferredFrameIsNotDeferredAgain(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget
-	if got := b.Deadline(100*ms, 114*ms, 16*ms); got != 124*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 114*ms); got != 124*ms {
 		t.Fatalf("the first deadline is %v", got)
 	}
-	if got := b.Deadline(100*ms, 131*ms, 16*ms); got > 131*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 131*ms); got > 131*ms {
 		t.Fatalf("woken 1 ms before the next vblank, a deferred frame waits until %v", got)
 	}
-	if got := b.Deadline(100*ms, 147*ms, 16*ms); got != 156*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 147*ms); got != 156*ms {
 		t.Fatalf("the frame after it is deferred again only as its own: %v", got)
 	}
 }
@@ -255,14 +306,14 @@ func TestWhatIsTooLateToStartFollowsTheTypicalRender(t *testing.T) {
 		}
 		b.Sample(cost)
 	}
-	if got := b.Deadline(100*ms, 110*ms, 16*ms); got != 117*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 110*ms); got != 117*ms {
 		t.Fatalf("6 ms before the vblank with 7 ms renders the deadline is %v, want the next refresh's", got)
 	}
 	var fast RenderBudget
 	for range renderSamples {
 		fast.Sample(ms)
 	}
-	if got := fast.Deadline(100*ms, 112*ms, 16*ms); got > 112*ms {
+	if got := fast.Deadline(uncapped(100*ms, 16*ms), 112*ms); got > 112*ms {
 		t.Fatalf("4 ms before the vblank with 1 ms renders the frame waits until %v", got)
 	}
 }
@@ -270,14 +321,14 @@ func TestWhatIsTooLateToStartFollowsTheTypicalRender(t *testing.T) {
 func TestALatchNeverDefersAndLeavesAFramesDeferralAlone(t *testing.T) {
 	const ms = time.Millisecond
 	var b RenderBudget
-	if got := b.Latch(100*ms, 115*ms, 16*ms); got != 108*ms {
+	if got := b.Latch(uncapped(100*ms, 16*ms), 115*ms); got != 108*ms {
 		t.Fatalf("1 ms before the vblank the latch is %v, want the one already past", got)
 	}
-	if got := b.Deadline(100*ms, 115*ms, 16*ms); got != 124*ms {
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 115*ms); got != 124*ms {
 		t.Fatalf("after a latch a frame's deadline is %v, want the next refresh's", got)
 	}
-	b.Latch(100*ms, 115*ms, 16*ms)
-	if got := b.Deadline(100*ms, 131*ms, 16*ms); got > 131*ms {
+	b.Latch(uncapped(100*ms, 16*ms), 115*ms)
+	if got := b.Deadline(uncapped(100*ms, 16*ms), 131*ms); got > 131*ms {
 		t.Fatalf("a latch between them made the deferred frame wait again, until %v", got)
 	}
 }
@@ -291,7 +342,7 @@ func TestTheLatchDeadlineDoesNotAllocate(t *testing.T) {
 	now := 100 * ms
 	if n := testing.AllocsPerRun(100, func() {
 		now += ms
-		b.Deadline(100*ms, now, 16*ms)
+		b.Deadline(uncapped(100*ms, 16*ms), now)
 	}); n != 0 {
 		t.Fatalf("a latch deadline allocated %v times", n)
 	}
@@ -456,12 +507,12 @@ func TestAHintedFrameLatchesEarlierInProportionToItsWork(t *testing.T) {
 		b.Sample(time.Millisecond)
 	}
 	last, now := time.Second, time.Second+time.Millisecond
-	calm := b.Latch(last, now, interval)
+	calm := b.Latch(uncapped(last, interval), now)
 	var woke []time.Duration
 	var f *FrameClock
 	clock := now
 	f = NewFrameClock(func(func() error) {}, func() bool { return true }, func() error { return nil }, &Latch{
-		Wait: func() time.Duration { return b.Deadline(last, clock, interval) - clock },
+		Wait: func() time.Duration { return b.Deadline(uncapped(last, interval), clock) - clock },
 		Wake: func(after time.Duration) error { woke = append(woke, after); return nil },
 	})
 	if err := f.Request(); err != nil {
@@ -472,7 +523,7 @@ func TestAHintedFrameLatchesEarlierInProportionToItsWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.Expect(2 << 20)
-	hinted := b.Latch(last, now, interval)
+	hinted := b.Latch(uncapped(last, interval), now)
 	if hinted >= calm {
 		t.Fatalf("a frame expected to paint 8 times the last one latches at %v, the calm one at %v", hinted, calm)
 	}
@@ -483,7 +534,7 @@ func TestAHintedFrameLatchesEarlierInProportionToItsWork(t *testing.T) {
 		t.Fatalf("the clock armed its wakes after %v, want the hinted one sooner", woke)
 	}
 	b.Started()
-	if got := b.Latch(last, now, interval); got != calm {
+	if got := b.Latch(uncapped(last, interval), now); got != calm {
 		t.Fatalf("after its frame started the hint still moves the latch: %v, want %v", got, calm)
 	}
 }

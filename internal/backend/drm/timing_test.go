@@ -252,7 +252,7 @@ func TestTheFirstFrameAfterIdleAimsAtTheCRTCsVblank(t *testing.T) {
 	if wait := o.planesWait(); wait != interval-time.Millisecond-backend.PlaneLead {
 		t.Fatalf("after idle the planes wait %v, want the plane lead before the CRTC's next vblank, %v", wait, interval-time.Millisecond-backend.PlaneLead)
 	}
-	if wait, want := o.frameWait(), o.budget.Latch(vblank, r.now(), interval)-r.now(); wait != want {
+	if wait, want := o.frameWait(), o.budget.Latch(backend.Pacing{Vblank: vblank, Refresh: interval, Paced: interval}, r.now())-r.now(); wait != want {
 		t.Fatalf("after idle the frame waits %v, want %v before the CRTC's next vblank", wait, want)
 	}
 	r.at(vblank + interval/2 + time.Millisecond)
@@ -296,8 +296,8 @@ func TestADriverWithoutAVblankSequenceExtrapolatesAndIsAskedOnce(t *testing.T) {
 	}
 	r.advance(10 * interval)
 	o.planesWait()
-	if r.dev.vblankReads != 1 || r.reports != nil || o.lastFlip != flip {
-		t.Fatalf("a driver without a vblank sequence was asked %d times, reports %v, last flip moved %v", r.dev.vblankReads, r.reports, o.lastFlip-flip)
+	if r.dev.vblankReads != 1 || r.reports != nil || o.lastVblank != flip {
+		t.Fatalf("a driver without a vblank sequence was asked %d times, reports %v, its vblank anchor moved %v", r.dev.vblankReads, r.reports, o.lastVblank-flip)
 	}
 }
 

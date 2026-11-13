@@ -25,6 +25,30 @@ func NextVblank(last, now, interval time.Duration) (at time.Duration, ticks uint
 	return last + time.Duration(ticks)*interval, ticks //nolint:gosec // a tick count fits a duration
 }
 
+type Pacing struct {
+	Vblank   time.Duration
+	Shown    time.Duration
+	Refresh  time.Duration
+	Paced    time.Duration
+	Variable bool
+}
+
+func (p Pacing) Anchored(now time.Duration) bool {
+	return p.Vblank != 0 && p.Vblank <= now
+}
+
+func (p Pacing) Aim(now time.Duration) time.Duration {
+	next, _ := NextVblank(p.Vblank, now, p.Refresh)
+	turn := p.Shown + p.Paced
+	switch {
+	case p.Shown == 0 || turn <= next:
+		return next
+	case p.Variable:
+		return turn
+	}
+	return next + (turn-next+p.Refresh/2)/p.Refresh*p.Refresh
+}
+
 type Backend interface {
 	Start(h Handler) error
 	Renderer() render.Renderer

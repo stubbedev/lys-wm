@@ -2257,10 +2257,10 @@ func TestTheLatchFollowsMeasuredRenderTimeAndGrowsAMarginAfterAMiss(t *testing.T
 	r := start(t)
 	o := r.b.Outputs()[0]
 	interval := modeOf(o.mode).Interval()
-	o.lastFlip = r.now()
+	o.lastFlip, o.lastVblank = r.now(), r.now()
 	half := func() time.Duration {
 		next, _ := backend.NextVblank(o.lastFlip, r.now(), interval)
-		return next - o.budget.Latch(o.lastFlip, r.now(), interval)
+		return next - o.budget.Latch(backend.Pacing{Vblank: o.lastFlip, Refresh: interval, Paced: interval}, r.now())
 	}
 	if got := half(); got != interval/2 {
 		t.Fatalf("an output with no measurements latches %v before the vblank, want half a refresh %v", got, interval/2)
@@ -2621,6 +2621,7 @@ func TestACursorMoveJustBeforeTheVblankStillCommits(t *testing.T) {
 	interval := modeOf(o.mode).Interval()
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
 	o.lastFlip = o.b.now() - interval + time.Millisecond
+	o.lastVblank = o.lastFlip
 	if o.planesWait() > 0 {
 		t.Fatalf("1 ms before the vblank a cursor commit would wait %v", o.planesWait())
 	}
@@ -2641,6 +2642,7 @@ func TestACursorMoveCommitsAheadOfAFrameDeferredPastTheVblank(t *testing.T) {
 	interval := modeOf(o.mode).Interval()
 	r.cursorCommit("the cursor's first commit", o, func() error { return r.setCursor(o, image.Pt(4, 6)) })
 	o.lastFlip = o.b.now() - interval + time.Millisecond
+	o.lastVblank = o.lastFlip
 	if err := o.ScheduleFrame(); err != nil {
 		t.Fatal(err)
 	}

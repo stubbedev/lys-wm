@@ -208,10 +208,10 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
 			now := backend.Now()
-			if o.vrr && o.frameCap > 0 && o.lastVblank != 0 {
-				return max(o.lastVblank+o.paceInterval()-now, 0)
+			if o.vrr && o.frameCap > 0 && o.lastShown != 0 {
+				return max(o.lastShown+o.paceInterval()-now, 0)
 			}
-			return backend.HoldToCap(o.budget.Deadline(o.lastVblank, now, o.paceInterval()), o.lastVblank, o.paceInterval(), o.state.Mode.Interval()) - now
+			return o.budget.Deadline(o.pacing(), now) - now
 		},
 		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
 	})
@@ -286,6 +286,7 @@ type Output struct {
 	empties        int
 	inFrame        bool
 	lastVblank     time.Duration
+	lastShown      time.Duration
 	nextVblank     time.Duration
 	seq            uint64
 	nextSeq        uint64
@@ -545,7 +546,7 @@ func (o *Output) runFrame() error {
 	o.frames++
 	o.budget.Started()
 	o.frameStart = backend.Now()
-	o.aimedAt, _ = backend.NextVblank(o.lastVblank, o.frameStart, o.paceInterval())
+	o.aimedAt = o.pacing().Aim(o.frameStart)
 	if err := o.backend.handler.Frame(o); err != nil {
 		return err
 	}
@@ -784,6 +785,10 @@ func (o *Output) paceInterval() time.Duration {
 	return o.state.Mode.PacedInterval(o.frameCap, o.vrr)
 }
 
+func (o *Output) pacing() backend.Pacing {
+	return backend.Pacing{Vblank: o.lastVblank, Shown: o.lastShown, Refresh: o.state.Mode.Interval(), Paced: o.paceInterval(), Variable: o.vrr}
+}
+
 func (o *Output) SetContentType(t wm.ContentType) {
 	o.contentType = t
 }
@@ -896,6 +901,7 @@ func (o *Output) vblank() error {
 	}
 	switch {
 	case o.presentPending:
+		o.lastShown = o.lastVblank
 		if err := o.present(); err != nil {
 			return err
 		}

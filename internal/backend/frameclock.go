@@ -122,33 +122,32 @@ func (b *RenderBudget) expectedBudget() time.Duration {
 	return time.Duration(b.perPixel*float64(b.expected)) + renderMargin
 }
 
-func (b *RenderBudget) Latch(last, now, interval time.Duration) time.Duration {
-	if last == 0 || last > now {
+func (b *RenderBudget) Latch(p Pacing, now time.Duration) time.Duration {
+	if !p.Anchored(now) {
 		return now
 	}
-	next, _ := NextVblank(last, now, interval)
-	return next - b.Budget(interval)
+	return b.latch(p, p.Aim(now))
 }
 
-func (b *RenderBudget) Deadline(last, now, interval time.Duration) time.Duration {
-	deadline := b.Latch(last, now, interval)
-	if now < deadline || last == 0 || last > now {
+func (b *RenderBudget) latch(p Pacing, at time.Duration) time.Duration {
+	return at - min(b.Budget(p.Paced), p.Refresh)
+}
+
+func (b *RenderBudget) Deadline(p Pacing, now time.Duration) time.Duration {
+	if !p.Anchored(now) {
+		return now
+	}
+	at := p.Aim(now)
+	deadline := b.latch(p, at)
+	if now < deadline {
 		return deadline
 	}
-	next, _ := NextVblank(last, now, interval)
-	if !b.deferred && next-now < b.leastToStart() {
+	if !b.deferred && at-now < b.leastToStart() {
 		b.deferred = true
-		return deadline + interval
+		return deadline + p.Refresh
 	}
 	b.deferred = false
 	return deadline
-}
-
-func HoldToCap(deadline, shown, paced, refresh time.Duration) time.Duration {
-	if paced <= refresh {
-		return deadline
-	}
-	return max(deadline, shown+paced-refresh)
 }
 
 func (b *RenderBudget) leastToStart() time.Duration {

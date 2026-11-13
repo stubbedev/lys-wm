@@ -99,3 +99,25 @@ func TestUnderVRRACapIsAMinimumFrameInterval(t *testing.T) {
 		t.Fatalf("under VRR uncapped a frame waits %v, want none", wait)
 	}
 }
+
+func TestACappedFrameAskedForAfterTheRefreshBetweenStillTakesItsTurn(t *testing.T) {
+	r := start(t)
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	r.dev.vblank = func(uint32) (kdrm.Vblank, error) {
+		return kdrm.Vblank{Time: o.lastFlip + (r.now()-o.lastFlip)/interval*interval, Active: true}, nil
+	}
+	o.CapFrameRate(30)
+	for range 4 {
+		flip := o.lastFlip
+		r.at(flip + interval + interval/4)
+		if aimed := r.pacedFrame(o); aimed != flip+2*interval {
+			t.Fatalf("a capped frame asked for after the refresh between aimed %v after the last flip, want its turn two refreshes on, %v", aimed-flip, 2*interval)
+		}
+	}
+	flip := o.lastFlip
+	r.at(flip + 2*interval + 100*time.Microsecond)
+	if wait := o.frameWait(); wait > 0 {
+		t.Fatalf("a capped frame woken just past its turn waits %v more, want it to start for the next vblank", wait)
+	}
+}

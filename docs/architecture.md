@@ -587,8 +587,12 @@ frame (`edid.ParseVRR` minimum refresh, else 24 Hz).
 While power-profiles-daemon reports `power-saver`, every output above
 `power_saver_frame_rate` presents on every k-th vblank, k the refresh over the
 cap rounded up (`backend.Mode.PacedInterval`); under VRR the cap is a minimum
-frame interval. Everything that aims at a vblank uses the paced interval; the
-cursor plane keeps the mode's own. `internal/powerprofile` follows
+frame interval. A frame's turn counts from the frame last shown, never from
+the latest vblank: it aims at the first vblank at least the paced interval after
+that flip (`backend.Pacing.Aim`), and its latch starts no earlier than the
+refresh before. The vblank anchor and the last flip are separate facts, so
+re-anchoring on the CRTC's vblank never moves a turn. Presentation feedback
+reports the paced interval; the cursor plane keeps the mode's own. `internal/powerprofile` follows
 `ActiveProfile` (`org.freedesktop.UPower.PowerProfiles`, then
 `net.hadess.PowerProfiles`) off the loop; no daemon means no cap.
 
