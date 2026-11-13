@@ -272,6 +272,19 @@ type watchedSwitches struct {
 	err           error
 }
 
+func waitForCPU(clock int32, status string, spent time.Duration) error {
+	return onOwnThread(func() error {
+		w, err := newCPUWatch(clock, status, spent)
+		if err != nil {
+			return err
+		}
+		if err := w.arm(true); err != nil {
+			return errors.Join(err, w.Close())
+		}
+		return errors.Join(w.wait(), w.arm(false), w.Close())
+	})
+}
+
 func countSwitchChanges(clock int32, status string, checks int) watchedSwitches {
 	return onOwnThread(func() (got watchedSwitches) {
 		w, err := newCPUWatch(clock, status, time.Millisecond)
@@ -317,7 +330,11 @@ func TestACPUWatchSeesAProcessThatNeverBlocks(t *testing.T) {
 		_ = spin.Wait()
 	})
 	pid := spin.Process.Pid
-	got := countSwitchChanges(processCPUClock(pid), fmt.Sprintf("/proc/%d/status", pid), 3)
+	clock, status := processCPUClock(pid), fmt.Sprintf("/proc/%d/status", pid)
+	if err := waitForCPU(clock, status, 50*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	got := countSwitchChanges(clock, status, 3)
 	if got.err != nil {
 		t.Fatal(got.err)
 	}
