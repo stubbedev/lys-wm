@@ -57,13 +57,13 @@ func bindDisplay(dir string, first int, remove func(string) error) (*sockets, []
 }
 
 func claimDisplay(n int, lock, path string, remove func(string) error) (*sockets, error) {
-	taken, err := takeLock(lock, remove)
+	taken, err := takeLock(lock, os.ReadFile, remove)
 	if err != nil || !taken {
 		return nil, err
 	}
 	if err := removeStale(path, remove); err != nil {
 		if released := remove(lock); released != nil {
-			return nil, fmt.Errorf("xwayland: release %s after %v: %w", lock, err, released)
+			return nil, fmt.Errorf("xwayland: release %s after %s: %w", lock, err.Error(), released)
 		}
 		return nil, err
 	}
@@ -97,42 +97,75 @@ func removeStale(path string, remove func(string) error) error {
 	}
 }
 
-func takeLock(lock string, remove func(string) error) (bool, error) {
+func takeLock(lock string, read func(string) ([]byte, error), remove func(string) error) (bool, error) {
 	for range 2 {
-		f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444) //nolint:gosec // other X servers read the lock to see the display is taken
+		err := createLock(lock)
 		if err == nil {
-			_, err = fmt.Fprintf(f, "%10d\n", os.Getpid())
-			if err = errors.Join(err, f.Close()); err != nil {
-				return false, errors.Join(fmt.Errorf("xwayland: write %s: %w", lock, err), os.Remove(lock))
-			}
 			return true, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
-			return false, fmt.Errorf("xwayland: create %s: %w", lock, err)
-		}
-		if live, err := held(lock); err != nil || live {
 			return false, err
 		}
-		if err := removeStale(lock, remove); err != nil {
+		switch state, err := lockHolder(lock, read); {
+		case err != nil:
 			return false, err
+		case state == lockLive:
+			return false, nil
+		case state == lockStale:
+			if err := removeStale(lock, remove); err != nil {
+				return false, err
+			}
 		}
 	}
 	return false, nil
 }
 
-func held(lock string) (bool, error) {
-	data, err := os.ReadFile(lock) //nolint:gosec // the lock path is built from the display number
-	if errors.Is(err, os.ErrPermission) {
-		return false, &foreignError{err: err}
-	}
+func createLock(lock string) error {
+	f, err := os.CreateTemp(filepath.Dir(lock), filepath.Base(lock)+"-*")
 	if err != nil {
-		return false, fmt.Errorf("xwayland: read %s: %w", lock, err)
+		return fmt.Errorf("xwayland: create a lock to link to %s: %w", lock, err)
+	}
+	tmp := f.Name()
+	_, err = fmt.Fprintf(f, "%10d\n", os.Getpid())
+	if err = errors.Join(err, f.Chmod(0o444), f.Close()); err != nil {
+		return errors.Join(fmt.Errorf("xwayland: write %s for %s: %w", tmp, lock, err), os.Remove(tmp))
+	}
+	linked := os.Link(tmp, lock)
+	if err := os.Remove(tmp); err != nil {
+		return errors.Join(fmt.Errorf("xwayland: remove %s after linking it to %s: %w", tmp, lock, err), linked)
+	}
+	if linked != nil {
+		return fmt.Errorf("xwayland: link %s: %w", lock, linked)
+	}
+	return nil
+}
+
+type lockState int
+
+const (
+	lockGone lockState = iota
+	lockStale
+	lockLive
+)
+
+func lockHolder(lock string, read func(string) ([]byte, error)) (lockState, error) {
+	data, err := read(lock)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return lockGone, nil
+	case errors.Is(err, os.ErrPermission):
+		return lockLive, &foreignError{err: err}
+	case err != nil:
+		return lockLive, fmt.Errorf("xwayland: read %s: %w", lock, err)
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || pid <= 0 {
-		return true, nil
+		return lockLive, nil
 	}
-	return !errors.Is(unix.Kill(pid, 0), unix.ESRCH), nil
+	if errors.Is(unix.Kill(pid, 0), unix.ESRCH) {
+		return lockStale, nil
+	}
+	return lockLive, nil
 }
 
 func (s *sockets) listen() error {

@@ -171,6 +171,89 @@ func TestDisplaysAllPassedOverSayWhy(t *testing.T) {
 	}
 }
 
+func vanishingRead(t *testing.T, comeBack bool) (func(string) ([]byte, error), *int) {
+	t.Helper()
+	reads := 0
+	return func(p string) ([]byte, error) {
+		reads++
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+		if comeBack {
+			if err := os.WriteFile(p, fmt.Appendf(nil, "%10d\n", os.Getpid()), 0o444); err != nil {
+				t.Fatal(err)
+			}
+			return nil, &os.PathError{Op: "open", Path: p, Err: unix.ENOENT}
+		}
+		return os.ReadFile(p)
+	}, &reads
+}
+
+func TestALockThatVanishesBeforeItIsReadIsTakenOnTheRetry(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	lock := writeLock(t, dir, 0, os.Getpid(), 0o444)
+	read, reads := vanishingRead(t, false)
+	taken, err := takeLock(lock, read, os.Remove)
+	if err != nil || !taken {
+		t.Fatalf("taken %v, %v, want the lock its owner just released", taken, err)
+	}
+	if *reads != 1 {
+		t.Fatalf("read the lock %d times, want once", *reads)
+	}
+	data, err := os.ReadFile(lock)
+	if err != nil || string(data) != fmt.Sprintf("%10d\n", os.Getpid()) {
+		t.Fatalf("lock %q, %v", data, err)
+	}
+}
+
+func TestALockThatKeepsVanishingIsPassedOverAfterTwoTries(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	lock := writeLock(t, dir, 0, os.Getpid(), 0o444)
+	read, reads := vanishingRead(t, true)
+	taken, err := takeLock(lock, read, os.Remove)
+	if err != nil || taken {
+		t.Fatalf("taken %v, %v, want the display passed over", taken, err)
+	}
+	if *reads != 2 {
+		t.Fatalf("read the lock %d times, want twice", *reads)
+	}
+}
+
+func TestDisplaysSkipLocksStillBeingWritten(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	for n, content := range []string{"", "     "} {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf(".X%d-lock", n)), []byte(content), 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, skipped, err := bindDisplay(dir, 0, os.Remove)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if s.n != 2 || len(skipped) != 0 {
+		t.Fatalf("took display :%d skipping %v, want :2 past the two locks still being written", s.n, skipped)
+	}
+	for n := range 2 {
+		if _, err := os.Stat(filepath.Join(dir, fmt.Sprintf(".X%d-lock", n))); err != nil {
+			t.Fatalf("the lock on :%d was taken from its owner: %v", n, err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".X2-lock-") {
+			t.Fatalf("%s outlived linking the lock", e.Name())
+		}
+	}
+}
+
 type noSurfaces struct{}
 
 func (noSurfaces) Committed(*surface.Surface) error { return nil }
