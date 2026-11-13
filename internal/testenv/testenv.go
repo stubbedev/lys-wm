@@ -4,14 +4,17 @@
 package testenv
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	gtext "github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/xcursor"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/render/vulkan"
@@ -37,6 +40,21 @@ func Require(t testing.TB, binary string) string {
 		missing(t, "%s is not on PATH", binary)
 	}
 	return path
+}
+
+func UdevRecord(t testing.TB, data, node string) {
+	t.Helper()
+	var st unix.Stat_t
+	if err := unix.Stat(node, &st); err != nil {
+		t.Fatalf("stat %s: %v", node, err)
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFCHR {
+		t.Fatalf("%s is not a character device", node)
+	}
+	record := filepath.Join(data, fmt.Sprintf("c%d:%d", unix.Major(st.Rdev), unix.Minor(st.Rdev)))
+	if _, err := os.Stat(record); err != nil {
+		missing(t, "udev has no record of %s (%v), so libinput declines it as never initialized; run where udevd keeps its database, or mount it into the container", node, err)
+	}
 }
 
 func GPU(t testing.TB) *gpu.Library {

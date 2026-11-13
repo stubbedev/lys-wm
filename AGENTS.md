@@ -15,7 +15,9 @@ nix build -L
 Every test runs in a container (`just docker <recipe>`) or a NixOS VM
 (`nix build .#checks...`), never against the desktop session on the host.
 The container gets KVM, the GPUs' render nodes and GPU drivers at
-`/run/opengl-driver` (the host's on NixOS, the flake's Mesa elsewhere), but no
+`/run/opengl-driver` (the host's on NixOS, the flake's Mesa elsewhere) and the
+host's udev database read-only (libinput declines a device udev has no record
+of, as the CI runner's udevd always has one), but no
 runtime dir, session bus or display socket, and no DRM card node except under
 `just docker hardware`, whose tests open the cards without master and never
 commit.

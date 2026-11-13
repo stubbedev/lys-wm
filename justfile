@@ -213,19 +213,22 @@ docker recipe="gates" memory="10g":
     if [[ "$recipe" == hardware ]]; then
         nodes+=(/dev/dri/card*)
     fi
-    gpu=()
+    host=()
     for node in "${nodes[@]}"; do
-        [[ -c "$node" ]] && gpu+=(--device "$node" --group-add "$(stat -c %g "$node")")
+        [[ -c "$node" ]] && host+=(--device "$node" --group-add "$(stat -c %g "$node")")
     done
     if [[ -e /run/opengl-driver ]]; then
-        gpu+=(-v /run/opengl-driver:/run/opengl-driver:ro)
+        host+=(-v /run/opengl-driver:/run/opengl-driver:ro)
     else
-        gpu+=(-v "$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#mesa^out):/run/opengl-driver:ro")
+        host+=(-v "$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#mesa^out):/run/opengl-driver:ro")
+    fi
+    if [[ -d /run/udev/data ]]; then
+        host+=(-v /run/udev/data:/run/udev/data:ro)
     fi
     if [[ -d /etc/egl/egl_external_platform.d ]]; then
-        gpu+=(-v "$(readlink -f /etc/egl/egl_external_platform.d):/etc/egl/egl_external_platform.d:ro")
+        host+=(-v "$(readlink -f /etc/egl/egl_external_platform.d):/etc/egl/egl_external_platform.d:ro")
     fi
-    docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${gpu[@]}" \
+    docker run --rm --init --user "$(id -u):$(id -g)" --device /dev/kvm "${host[@]}" \
         --memory {{quote(memory)}} --memory-swap {{quote(memory)}} --pids-limit 4096 --shm-size 1g \
         -v /nix/store:/nix/store:ro -v "$dir/env.sh:/env.sh:ro" -v "$dir/passwd:/etc/passwd:ro" -v "$dir/group:/etc/group:ro" -v "$PWD:/src" -v lys-wm-go:/go -w /src -e SSL_CERT_FILE="$certs" \
         debian:trixie-slim "$bash" -c 'source /env.sh && export HOME=/go/home GOMODCACHE=/go/mod GOCACHE=/go/cache TMPDIR=/tmp LYS_WM_CONTAINER=1 && unset XDG_RUNTIME_DIR WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS && mkdir -p "$HOME" && exec just "$1"' docker "$recipe"

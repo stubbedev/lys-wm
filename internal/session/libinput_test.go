@@ -102,6 +102,7 @@ func TestLibinputAsksTheOpenerForDevices(t *testing.T) {
 }
 
 func TestLibinputRejectsNonInputDevices(t *testing.T) {
+	testenv.UdevRecord(t, SystemRoots.UdevData, os.DevNull)
 	in := libinput(t, PlainOpener{})
 	if err := in.reader.call("add /dev/null", func() error { return in.reader.add(os.DevNull) }); !errors.Is(err, ErrDeclined) {
 		t.Fatalf("/dev/null as an input device: %v", err)
@@ -210,6 +211,7 @@ func (o *blockingOpener) ReleaseDevice(d Device) error {
 }
 
 func TestAnInputDeviceIsTakenOffTheLoop(t *testing.T) {
+	testenv.UdevRecord(t, SystemRoots.UdevData, os.DevNull)
 	opener := &blockingOpener{entered: make(chan struct{}), release: make(chan struct{}), released: make(chan Device, 1)}
 	in := libinput(t, opener)
 	in.AddLater("/dev/null")
