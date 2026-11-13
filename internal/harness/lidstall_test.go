@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,12 +71,12 @@ func TestWithTheLidClosedAnExternalOutputThatStopsTakingCommitsBringsThePanelBac
 func TestTheLidSuspendsALaptopWhoseExternalOutputStoppedTakingCommits(t *testing.T) {
 	t.Parallel()
 	got := &reports{}
-	suspends := 0
+	var suspends atomic.Int32
 	h := startedWithOutputs(t, func(c *compositor.Config) {
 		c.Report = got.report
 		c.Hooks.Lid = compositor.LidPolicy{
 			Suspend: func() error {
-				suspends++
+				suspends.Add(1)
 				return nil
 			},
 			OnBattery: func() (bool, error) { return true, nil },
@@ -86,17 +87,17 @@ func TestTheLidSuspendsALaptopWhoseExternalOutputStoppedTakingCommits(t *testing
 	})
 	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
-		if suspends != 0 {
-			t.Errorf("docked with the lid closed: %d suspends, want none", suspends)
+		if suspends.Load() != 0 {
+			t.Errorf("docked with the lid closed: %d suspends, want none", suspends.Load())
 		}
 		return nil
 	})
 	failCommitsOn(t, h, "DP-1", fmt.Errorf("commit: %w", unix.EBUSY))
-	h.Eventually("the suspend once the external output stalls", func(*headless.Backend, *compositor.Compositor) bool { return suspends > 0 })
+	h.Eventually("the suspend once the external output stalls", func(*headless.Backend, *compositor.Compositor) bool { return suspends.Load() > 0 })
 	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
-		if suspends != 1 {
-			t.Errorf("%d suspends, want one", suspends)
+		if suspends.Load() != 1 {
+			t.Errorf("%d suspends, want one", suspends.Load())
 		}
 		return nil
 	})

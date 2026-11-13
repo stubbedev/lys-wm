@@ -3,6 +3,7 @@ package harness
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/logind"
@@ -14,11 +15,12 @@ import (
 
 func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
 	t.Parallel()
-	suspends, battery := 0, true
+	var suspends atomic.Int32
+	battery := true
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Hooks.Lid = compositor.LidPolicy{
 			Suspend: func() error {
-				suspends++
+				suspends.Add(1)
 				return nil
 			},
 			OnBattery: func() (bool, error) { return battery, nil },
@@ -38,12 +40,12 @@ func TestTheLidSuspendsOnlyAnUndockedLaptopOnBattery(t *testing.T) {
 			return b.Switches().Toggle(backend.SwitchLid, closed)
 		})
 	}
-	expect := func(when string, want int) {
+	expect := func(when string, want int32) {
 		t.Helper()
 		lidSettled(h)
 		h.Do(func(*headless.Backend, *compositor.Compositor) error {
-			if suspends != want {
-				t.Errorf("%s: %d suspends, want %d", when, suspends, want)
+			if suspends.Load() != want {
+				t.Errorf("%s: %d suspends, want %d", when, suspends.Load(), want)
 			}
 			return nil
 		})
@@ -84,12 +86,12 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 	t.Parallel()
 	var r reports
 	refusal := errors.New("session: logind refused to suspend: " + logind.ErrOperationInProgress + ": logind Manager.Suspend(false) on " + string(logind.ManagerPath) + ": There's already a shutdown or sleep operation in progress")
-	suspends := 0
+	var suspends atomic.Int32
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report
 		c.Hooks.Lid = compositor.LidPolicy{
 			Suspend: func() error {
-				suspends++
+				suspends.Add(1)
 				return refusal
 			},
 			OnBattery: func() (bool, error) { return true, nil },
@@ -104,8 +106,8 @@ func TestARefusedSuspendIsReportedAndTheSessionGoesOn(t *testing.T) {
 	powerChanged(h)
 	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
-		if suspends != 2 {
-			t.Errorf("%d suspends, want one for the lid closing and one for the power change", suspends)
+		if suspends.Load() != 2 {
+			t.Errorf("%d suspends, want one for the lid closing and one for the power change", suspends.Load())
 		}
 		got := r.take()
 		if len(got) != 2 || !errors.Is(got[0], refusal) || !errors.Is(got[1], refusal) {
@@ -130,12 +132,12 @@ func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
 	t.Parallel()
 	var r reports
 	failure := errors.New("session: read the power supplies under /sys: read class/power_supply/AC/online: no such device")
-	suspends := 0
+	var suspends atomic.Int32
 	h := StartWith(t, func(c *compositor.Config) {
 		c.Report = r.report
 		c.Hooks.Lid = compositor.LidPolicy{
 			Suspend: func() error {
-				suspends++
+				suspends.Add(1)
 				return nil
 			},
 			OnBattery: func() (bool, error) { return false, failure },
@@ -150,8 +152,8 @@ func TestAPowerReadErrorIsReportedAndTheLidDoesNotSuspend(t *testing.T) {
 	powerChanged(h)
 	lidSettled(h)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
-		if suspends != 0 {
-			t.Errorf("%d suspends with the power state unknown, want none", suspends)
+		if suspends.Load() != 0 {
+			t.Errorf("%d suspends with the power state unknown, want none", suspends.Load())
 		}
 		got := r.take()
 		if len(got) != 2 || !errors.Is(got[0], failure) || !errors.Is(got[1], failure) {

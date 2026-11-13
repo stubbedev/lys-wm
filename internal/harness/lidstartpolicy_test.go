@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
@@ -15,7 +16,7 @@ func TestAStartWithTheLidClosedAppliesTheLidPolicy(t *testing.T) {
 		closed  bool
 		battery bool
 		outputs []string
-		want    int
+		want    int32
 	}{
 		{"closed, undocked, on battery", true, true, []string{"eDP-1"}, 1},
 		{"closed, undocked, on AC", true, false, []string{"eDP-1"}, 0},
@@ -24,7 +25,7 @@ func TestAStartWithTheLidClosedAppliesTheLidPolicy(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			suspends := 0
+			var suspends atomic.Int32
 			h := start(t, setup{
 				open: func(l *loop.Loop) (*headless.Backend, error) {
 					b := headless.New(l)
@@ -39,7 +40,7 @@ func TestAStartWithTheLidClosedAppliesTheLidPolicy(t *testing.T) {
 					cfg.LidClosedAtStart = c.closed
 					cfg.Hooks.Lid = compositor.LidPolicy{
 						Suspend: func() error {
-							suspends++
+							suspends.Add(1)
 							return nil
 						},
 						OnBattery: func() (bool, error) { return c.battery, nil },
@@ -48,8 +49,8 @@ func TestAStartWithTheLidClosedAppliesTheLidPolicy(t *testing.T) {
 			})
 			lidSettled(h)
 			h.Do(func(*headless.Backend, *compositor.Compositor) error {
-				if suspends != c.want {
-					t.Errorf("%d suspends after the start, want %d", suspends, c.want)
+				if suspends.Load() != c.want {
+					t.Errorf("%d suspends after the start, want %d", suspends.Load(), c.want)
 				}
 				return nil
 			})
