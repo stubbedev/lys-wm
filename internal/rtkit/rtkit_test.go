@@ -66,12 +66,13 @@ func open(t *testing.T, address string) *rtkit.Kit {
 	return kit
 }
 
-func TestTheRTTimeLimitKeepsTheHardLimitWithinRtkitsAndTheSoftAtHalf(t *testing.T) {
+func TestTheRTTimeLimitKeepsBothLimitsWithinRtkitsWithoutLoweringTheSoftOneFurther(t *testing.T) {
 	const unlimited = unix.RLIM_INFINITY
 	for _, tc := range []struct{ was, want unix.Rlimit }{
-		{unix.Rlimit{Cur: unlimited, Max: unlimited}, unix.Rlimit{Cur: 100000, Max: 200000}},
+		{unix.Rlimit{Cur: unlimited, Max: unlimited}, unix.Rlimit{Cur: 200000, Max: 200000}},
 		{unix.Rlimit{Cur: 50000, Max: unlimited}, unix.Rlimit{Cur: 50000, Max: 200000}},
-		{unix.Rlimit{Cur: 80000, Max: 80000}, unix.Rlimit{Cur: 40000, Max: 80000}},
+		{unix.Rlimit{Cur: 80000, Max: 80000}, unix.Rlimit{Cur: 80000, Max: 80000}},
+		{unix.Rlimit{Cur: unlimited, Max: 300000}, unix.Rlimit{Cur: 200000, Max: 200000}},
 		{unix.Rlimit{Cur: 100000, Max: 200000}, unix.Rlimit{Cur: 100000, Max: 200000}},
 	} {
 		if got := rtkit.RTTimeLimit(tc.was, rtkittest.RTTimeUSecMax); got != tc.want {
@@ -90,15 +91,15 @@ func TestARealtimeRequestLimitsRTTimeToWhatRtkitAllowsFirst(t *testing.T) {
 	if len(got) != 1 || got[0].Method != rtkittest.Realtime || got[0].TID != tid || got[0].Value != 1 {
 		t.Fatalf("rtkit saw %+v, want SCHED_RR 1 for thread %d", got, tid)
 	}
-	if got[0].RTTime.Max > rtkittest.RTTimeUSecMax || got[0].RTTime.Cur > got[0].RTTime.Max/2 {
-		t.Fatalf("rtkit was asked with RLIMIT_RTTIME %+v, want a hard limit within %d µs and a soft one at most half of it", got[0].RTTime, rtkittest.RTTimeUSecMax)
+	if got[0].RTTime.Max > rtkittest.RTTimeUSecMax || got[0].RTTime.Cur > got[0].RTTime.Max {
+		t.Fatalf("rtkit was asked with RLIMIT_RTTIME %+v, want a hard limit within %d µs and the soft one within it", got[0].RTTime, rtkittest.RTTimeUSecMax)
 	}
 	if now := rttime(t); now != got[0].RTTime {
 		t.Fatalf("a granted request left RLIMIT_RTTIME at %+v, not the %+v rtkit granted it under", now, got[0].RTTime)
 	}
 }
 
-func TestARefusedRealtimeRequestPutsTheSoftRTTimeBack(t *testing.T) {
+func TestARefusedRealtimeRequestLeavesRTTimeWithinRtkits(t *testing.T) {
 	address, f := serve(t)
 	was := rttime(t)
 	f.refuse(dbus.NewError("org.freedesktop.DBus.Error.AccessDenied", []any{"Operation not permitted"}))

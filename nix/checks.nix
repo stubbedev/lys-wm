@@ -101,13 +101,7 @@
                   print(machine.execute(f"ps -L -o tid=,cls=,rtprio= -p {compositor}; journalctl -b --no-pager -t lys-wm -t rtkit-daemon")[1])
                   raise
           realtime()
-          demoted, regained = "ran past rtkit's RLIMIT_RTTIME without blocking", "runs at SCHED_RR through rtkit again"
-          journal = machine.succeed("journalctl -b --no-pager -t lys-wm")
-          seen = {line: journal.count(line) for line in (demoted, regained)}
-          machine.succeed(f"kill -XCPU {compositor}")
-          for line, count in seen.items():
-              machine.wait_until_succeeds(f"test \"$(journalctl -b --no-pager -t lys-wm | grep -cF \"{line}\")\" -gt {count}", timeout=10)
-          realtime()
+          machine.succeed(f"ps -L -o cls=,rtprio= -p {compositor} | grep -Eq '^ *RR +2$'")
         '';
       };
       vm-screencast = screencast "wlr";

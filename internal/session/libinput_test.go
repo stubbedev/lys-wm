@@ -32,9 +32,11 @@ func libinput(t testing.TB, opener Opener) *Libinput {
 	return libinputReporting(t, opener, func(err error) { t.Errorf("reported: %v", err) })
 }
 
-func keepPriority() (restore func() error) { return func() error { return nil } }
+func keepPriority(func(string, func() error)) (restore func() error) {
+	return func() error { return nil }
+}
 
-func openLibinput(t testing.TB, opener Opener, report func(error), raise func() (restore func() error)) *Libinput {
+func openLibinput(t testing.TB, opener Opener, report func(error), raise RaisePriority) *Libinput {
 	t.Helper()
 	l, err := loop.New()
 	if err != nil {
@@ -281,7 +283,7 @@ func endsWithItsGoroutine(tid int) bool { return tid != unix.Getpid() }
 
 func TestTheInputReaderRaisesItsOwnThreadAndReleasesItBeforeTheThreadEnds(t *testing.T) {
 	var raised, released atomic.Int64
-	in := openLibinput(t, PlainOpener{}, func(err error) { t.Errorf("reported: %v", err) }, func() func() error {
+	in := openLibinput(t, PlainOpener{}, func(err error) { t.Errorf("reported: %v", err) }, func(func(string, func() error)) func() error {
 		raised.Store(int64(unix.Gettid()))
 		return func() error {
 			released.Store(int64(unix.Gettid()))

@@ -165,10 +165,21 @@ through rtkit. The reader raises its own thread before it opens libinput and
 drops the raise before the thread ends, so a loop burning the only CPU cannot
 starve it. Packages grant the limit through PAM
 (`packaging/limits.d/90-lys-wm.conf`), never a file capability, which would put
-libc in secure mode and hide driver environment variables. Under rtkit,
-`SIGXCPU` drops each thread rtkit raised to normal priority at its nice value
-for a backoff (1 s doubling to 1 min) before asking again; the signal names no
-thread, so both drop when either ran past `RLIMIT_RTTIME`.
+libc in secure mode and hide driver environment variables.
+
+A `SCHED_RR` thread under a finite hard `RLIMIT_RTTIME` (always so through
+rtkit, which demands one) gets a guard: a thread at `SCHED_RR` 2 waiting on a
+CPU-time timer of the watched thread. Every tenth of the hard limit the thread
+runs, the guard reads its voluntary context switches; when it ran half a tenth
+or more without one, the guard moves it to `SCHED_NORMAL` at its nice value,
+logs how long it ran, what it was doing and its goroutine's stack, and after a
+backoff (1 s doubling to 1 min) hands the thread a job to take `SCHED_RR` back
+itself and block once before the guard trusts it again, since the kernel only
+clears the thread's realtime run when it wakes at a realtime policy. The guard
+outranks the threads it watches, so no time-sharing load delays it; it does not
+rely on `SIGXCPU`, which the kernel answers by raising the soft limit a second
+for the whole process. rtkit's soft limit stays at its hard one. A thread whose
+guard cannot be raised does not stay realtime.
 
 ## Errors that end the session
 

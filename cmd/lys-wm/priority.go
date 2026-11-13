@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -13,8 +12,11 @@ import (
 )
 
 const (
-	loopRTPriority = 1
-	loopNice       = -10
+	loopRTPriority  = 1
+	guardRTPriority = loopRTPriority + 1
+	loopNice        = -10
+
+	rtChecksPerLimit = 10
 
 	rtRegainFirstWait = time.Second
 	rtRegainMostWait  = time.Minute
@@ -27,8 +29,30 @@ const (
 	inputThread      thread = "the input thread"
 )
 
-func (name thread) raise(systemBus string) (restore func() error) {
-	how, restore, err := name.raisePriority(systemBus)
+type handFunc func(what string, job func() error)
+
+type realtime func(tid int, priority uint32) error
+
+func schedRR(tid int, priority uint32) error {
+	rr := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_RR, Priority: priority, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
+	if err := unix.SchedSetAttr(tid, &rr, 0); err != nil {
+		return fmt.Errorf("SCHED_RR %d for thread %d: %w", priority, tid, err)
+	}
+	return nil
+}
+
+func throughRtkit(systemBus string) realtime {
+	return func(tid int, priority uint32) error {
+		kit, err := rtkit.Open(systemBus)
+		if err != nil {
+			return err
+		}
+		return errors.Join(kit.Realtime(tid, priority), kit.Close())
+	}
+}
+
+func (name thread) raise(systemBus string, hand handFunc) (restore func() error) {
+	how, restore, err := name.raisePriority(systemBus, hand)
 	if how != "" {
 		fmt.Fprintf(os.Stderr, "lys-wm: %s runs at %s\n", name, how)
 	}
@@ -38,7 +62,7 @@ func (name thread) raise(systemBus string) (restore func() error) {
 	return restore
 }
 
-func (name thread) raisePriority(systemBus string) (how string, restore func() error, err error) {
+func (name thread) raisePriority(systemBus string, hand handFunc) (how string, restore func() error, err error) {
 	tid := unix.Gettid()
 	was, err := threadSchedule(tid)
 	if err != nil {
@@ -50,26 +74,32 @@ func (name thread) raisePriority(systemBus string) (how string, restore func() e
 		}
 		return nil
 	}
-	rr := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_RR, Priority: loopRTPriority, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
-	rrErr := unix.SchedSetAttr(0, &rr, 0)
-	if rrErr == nil {
-		return "SCHED_RR", giveBack, nil
+	guardRaise := func(guard int) error {
+		direct := schedRR(guard, guardRTPriority)
+		if direct == nil {
+			return nil
+		}
+		if kitErr := throughRtkit(systemBus)(guard, guardRTPriority); kitErr != nil {
+			return errors.Join(direct, kitErr)
+		}
+		return nil
 	}
-	errs := []error{fmt.Errorf("SCHED_RR: %w", rrErr)}
-	kit, kitErr := rtkit.Open(systemBus)
-	if kitErr != nil {
-		errs = append(errs, kitErr)
-	} else {
-		defer func() { err = errors.Join(err, kit.Close()) }()
-		kitErr = kit.Realtime(tid, loopRTPriority)
-		if kitErr == nil {
-			stop := name.demoteOnRTTimeout(tid, regainThroughRtkit(systemBus, tid), rtRegainFirstWait)
-			return "SCHED_RR through rtkit", func() error {
+	var errs []error
+	for _, rt := range []struct {
+		how   string
+		raise realtime
+	}{
+		{"SCHED_RR", schedRR},
+		{"SCHED_RR through rtkit", throughRtkit(systemBus)},
+	} {
+		stop, err := name.realtime(tid, was, rt.raise, guardRaise, hand)
+		if err == nil {
+			return rt.how, func() error {
 				stop()
 				return giveBack()
 			}, nil
 		}
-		errs = append(errs, kitErr)
+		errs = append(errs, err)
 	}
 	nice := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_NORMAL, Nice: loopNice, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
 	niceErr := unix.SchedSetAttr(0, &nice, 0)
@@ -77,69 +107,37 @@ func (name thread) raisePriority(systemBus string) (how string, restore func() e
 		return fmt.Sprintf("nice %d", loopNice), giveBack, nil
 	}
 	errs = append(errs, fmt.Errorf("nice %d: %w", loopNice, niceErr))
-	if kit != nil {
-		kitErr = kit.HighPriority(tid, loopNice)
+	kit, kitErr := rtkit.Open(systemBus)
+	if kitErr == nil {
+		kitErr = errors.Join(kit.HighPriority(tid, loopNice), kit.Close())
 		if kitErr == nil {
 			return fmt.Sprintf("nice %d through rtkit", loopNice), giveBack, nil
 		}
-		errs = append(errs, kitErr)
 	}
+	errs = append(errs, kitErr)
 	return "", giveBack, fmt.Errorf("%s keeps its normal priority, as it needs an rtprio or nice limit (packaging/limits.d/90-lys-wm.conf), CAP_SYS_NICE or rtkit: %w", name, errors.Join(errs...))
 }
 
-func regainThroughRtkit(systemBus string, tid int) func() error {
-	return func() error {
-		kit, err := rtkit.Open(systemBus)
-		if err != nil {
-			return err
-		}
-		return errors.Join(kit.Realtime(tid, loopRTPriority), kit.Close())
+func (name thread) realtime(tid int, was unix.SchedAttr, raise realtime, guardRaise func(guard int) error, hand handFunc) (stop func(), err error) {
+	if err := raise(tid, loopRTPriority); err != nil {
+		return nil, err
 	}
+	var limit unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_RTTIME, &limit); err != nil {
+		return nil, errors.Join(fmt.Errorf("read RLIMIT_RTTIME: %w", err), setSchedule(tid, was))
+	}
+	if limit.Max == unix.RLIM_INFINITY {
+		return func() {}, nil
+	}
+	stop, err = startRTGuard(name, tid, rtBudget(limit.Max), func() error { return raise(tid, loopRTPriority) }, guardRaise, hand)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("%s may not run at SCHED_RR unguarded under a hard RLIMIT_RTTIME of %d µs: %w", name, limit.Max, err), setSchedule(tid, was))
+	}
+	return stop, nil
 }
 
-func (name thread) demoteOnRTTimeout(tid int, regain func() error, firstWait time.Duration) func() {
-	xcpu := make(chan os.Signal, 1)
-	done := make(chan struct{})
-	stopped := make(chan struct{})
-	signal.Notify(xcpu, unix.SIGXCPU)
-	go func() {
-		defer close(stopped)
-		wait := firstWait
-		for {
-			select {
-			case <-xcpu:
-			case <-done:
-				return
-			}
-			if err := setPolicyKeepingNice(tid, unix.SCHED_NORMAL); err != nil {
-				fmt.Fprintf(os.Stderr, "lys-wm: a realtime thread ran past rtkit's RLIMIT_RTTIME and %s could not leave SCHED_RR: %v\n", name, err)
-				return
-			}
-			fmt.Fprintf(os.Stderr, "lys-wm: a realtime thread ran past rtkit's RLIMIT_RTTIME without blocking, so %s runs at normal priority for %v\n", name, wait)
-			pause := time.NewTimer(wait)
-			select {
-			case <-pause.C:
-			case <-done:
-				pause.Stop()
-				return
-			}
-			select {
-			case <-xcpu:
-			default:
-			}
-			if err := regain(); err != nil {
-				fmt.Fprintf(os.Stderr, "lys-wm: %s keeps normal priority, as rtkit refused SCHED_RR again: %v\n", name, err)
-				return
-			}
-			fmt.Fprintf(os.Stderr, "lys-wm: %s runs at SCHED_RR through rtkit again\n", name)
-			wait = min(2*wait, rtRegainMostWait)
-		}
-	}()
-	return func() {
-		signal.Stop(xcpu)
-		close(done)
-		<-stopped
-	}
+func rtBudget(hardMicros uint64) time.Duration {
+	return time.Duration(hardMicros/rtChecksPerLimit) * time.Microsecond //nolint:gosec // a finite RLIMIT_RTTIME in µs over ten fits a Duration
 }
 
 func threadSchedule(tid int) (unix.SchedAttr, error) {

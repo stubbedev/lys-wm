@@ -276,7 +276,9 @@ func logged(li uintptr, priority int32, format *byte, args uintptr) {
 	}
 }
 
-func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, report func(error), raise func() (restore func() error)) (*Libinput, error) {
+type RaisePriority func(hand func(what string, job func() error)) (restore func() error)
+
+func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, report func(error), raise RaisePriority) (*Libinput, error) {
 	lib, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_LOCAL)
 	if err != nil {
 		return nil, fmt.Errorf("session: load libinput from %s (set %s to its path): %w", path, LibinputEnv, err)
@@ -299,10 +301,10 @@ func OpenLibinput(l *loop.Loop, path string, opener Opener, config InputConfig, 
 	return in, nil
 }
 
-func (r *inputReader) run(raise func() (restore func() error), opened chan<- error) {
+func (r *inputReader) run(raise RaisePriority, opened chan<- error) {
 	runtime.LockOSThread()
 	defer close(r.done)
-	restore := raise()
+	restore := raise(r.loop.Hand)
 	if err := r.open(); err != nil {
 		opened <- errors.Join(err, r.teardown(), r.loop.Close(), restore())
 		return

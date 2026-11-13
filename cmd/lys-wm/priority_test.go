@@ -4,12 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/sys/unix"
@@ -34,7 +32,7 @@ func TestTheCompositorThreadReadsBackThePriorityItTookAndGivesItBack(t *testing.
 			return o
 		}
 		var restore func() error
-		o.how, restore, o.err = compositorThread.raisePriority(noBus)
+		o.how, restore, o.err = compositorThread.raisePriority(noBus, dropJob)
 		raised, raisedErr := unix.SchedGetAttr(0, 0)
 		o.restored = restore()
 		after, afterErr := threadSchedule(tid)
@@ -116,70 +114,6 @@ func TestTheDemotionTestSkipsOnlyWhereTheThreadCannotBeDemoted(t *testing.T) {
 	}
 }
 
-func TestARealtimeTimeoutDemotesTheThreadThenAsksRtkitAgain(t *testing.T) {
-	type probe struct {
-		reason string
-		err    error
-	}
-	probed := make(chan probe, 1)
-	done := make(chan error, 1)
-	go func() {
-		runtime.LockOSThread()
-		start, err := unix.SchedGetAttr(0, 0)
-		if err != nil {
-			probed <- probe{err: err}
-			return
-		}
-		tid := unix.Gettid()
-		reason, err := demotionUnavailable(start.Policy, setPolicyKeepingNice(tid, unix.SCHED_BATCH))
-		probed <- probe{reason, err}
-		if reason != "" || err != nil {
-			return
-		}
-		asked := make(chan uint32, 2)
-		release := compositorThread.demoteOnRTTimeout(tid, func() error {
-			attr, err := unix.SchedGetAttr(tid, 0)
-			if err != nil {
-				return err
-			}
-			asked <- attr.Policy
-			return nil
-		}, time.Millisecond)
-		defer release()
-		for round := range 2 {
-			if err := setPolicyKeepingNice(tid, unix.SCHED_BATCH); err != nil {
-				done <- err
-				return
-			}
-			if err := unix.Kill(unix.Getpid(), unix.SIGXCPU); err != nil {
-				done <- err
-				return
-			}
-			select {
-			case policy := <-asked:
-				if policy != unix.SCHED_NORMAL {
-					done <- fmt.Errorf("round %d: rtkit was asked again while the thread ran at policy %d, want SCHED_NORMAL first", round, policy)
-					return
-				}
-			case <-time.After(10 * time.Second):
-				done <- fmt.Errorf("round %d: rtkit was not asked again within 10s of SIGXCPU", round)
-				return
-			}
-		}
-		done <- nil
-	}()
-	p := <-probed
-	if p.err != nil {
-		t.Fatal(p.err)
-	}
-	if p.reason != "" {
-		t.Skip(p.reason)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-}
-
 func onOwnThread[T any](job func() T) T {
 	out := make(chan T, 1)
 	go func() {
@@ -228,16 +162,19 @@ func withoutRTPrio(t *testing.T) {
 }
 
 type request struct {
-	tid    int
-	policy uint32
+	tid      int
+	priority int64
+	policy   uint32
 }
+
+func dropJob(string, func() error) {}
 
 func rtkitStandingInWithBatch(t *testing.T) (bus string, asked <-chan request) {
 	t.Helper()
 	requests := make(chan request, 16)
 	return rtkittest.Serve(t, func(req rtkittest.Request) *dbus.Error {
-		if req.Method != rtkittest.Realtime || req.Value != loopRTPriority {
-			return dbus.MakeFailedError(fmt.Errorf("the fake rtkit grants SCHED_RR %d only, not %+v", loopRTPriority, req))
+		if req.Method != rtkittest.Realtime || (req.Value != loopRTPriority && req.Value != guardRTPriority) {
+			return dbus.MakeFailedError(fmt.Errorf("the fake rtkit grants SCHED_RR %d and %d only, not %+v", loopRTPriority, guardRTPriority, req))
 		}
 		attr, err := unix.SchedGetAttr(req.TID, 0)
 		if err != nil {
@@ -246,7 +183,7 @@ func rtkitStandingInWithBatch(t *testing.T) (bus string, asked <-chan request) {
 		if err := setPolicyKeepingNice(req.TID, unix.SCHED_BATCH); err != nil {
 			return dbus.MakeFailedError(fmt.Errorf("stand SCHED_BATCH in for SCHED_RR: %w", err))
 		}
-		requests <- request{req.TID, attr.Policy}
+		requests <- request{req.TID, req.Value, attr.Policy}
 		return nil
 	}), requests
 }
@@ -267,9 +204,9 @@ func openInputThread(t *testing.T, bus string) (in *session.Libinput, tid int) {
 	}
 	t.Cleanup(func() { _ = l.Close() })
 	path := session.LibinputPath(os.Getenv)
-	in, err = session.OpenLibinput(l, path, noDevices{}, session.InputConfig{}, func(err error) { t.Errorf("reported: %v", err) }, func() func() error {
+	in, err = session.OpenLibinput(l, path, noDevices{}, session.InputConfig{}, func(err error) { t.Errorf("reported: %v", err) }, func(hand func(string, func() error)) func() error {
 		tid = unix.Gettid()
-		return inputThread.raise(bus)
+		return inputThread.raise(bus, hand)
 	})
 	testenv.Library(t, "libinput", path, err)
 	return in, tid
@@ -293,7 +230,7 @@ func TestTheInputThreadRunsAtTheCompositorThreadsPriority(t *testing.T) {
 		err error
 	}
 	compositor := onOwnThread(func() taken {
-		restore := compositorThread.raise(bus)
+		restore := compositorThread.raise(bus, dropJob)
 		s, err := threadSchedule(unix.Gettid())
 		return taken{s, errors.Join(err, restore())}
 	})
@@ -311,47 +248,35 @@ func TestTheInputThreadRunsAtTheCompositorThreadsPriority(t *testing.T) {
 	}
 }
 
-func TestTheInputThreadLeavesAndRegainsRealtimeOnAnRTTimeout(t *testing.T) {
+func TestTheInputThreadIsGuardedByAThreadAboveIt(t *testing.T) {
 	requireStandIn(t)
 	withoutRTPrio(t)
 	bus, asked := rtkitStandingInWithBatch(t)
-	guard := make(chan os.Signal, 1)
-	signal.Notify(guard, unix.SIGXCPU)
-	defer signal.Stop(guard)
 	in, tid := openInputThread(t, bus)
 	defer func() {
 		if err := in.Close(); err != nil {
 			t.Error(err)
 		}
 	}()
+	var watched, guard request
 	select {
-	case first := <-asked:
-		if first.tid != tid {
-			t.Fatalf("rtkit was asked for thread %d, not the input thread %d", first.tid, tid)
-		}
+	case watched = <-asked:
 	default:
-		got := scheduleOf(t, tid)
-		if got.Policy != unix.SCHED_RR {
+		if got := scheduleOf(t, tid); got.Policy != unix.SCHED_RR {
 			t.Fatalf("the input thread runs at %+v without having asked rtkit, want SCHED_RR", got)
 		}
-		t.Skip("the input thread took SCHED_RR without rtkit, so no RLIMIT_RTTIME applies")
-	}
-	if got := scheduleOf(t, tid).Policy; got != unix.SCHED_BATCH {
-		t.Fatalf("the input thread runs at policy %d after rtkit's grant, want the fake's SCHED_BATCH", got)
-	}
-	if err := unix.Kill(unix.Getpid(), unix.SIGXCPU); err != nil {
-		t.Fatal(err)
+		t.Skip("the input thread took SCHED_RR without rtkit")
 	}
 	select {
-	case again := <-asked:
-		if again.tid != tid || again.policy != unix.SCHED_NORMAL {
-			t.Fatalf("rtkit was asked again for thread %d at policy %d, want the input thread %d back at SCHED_NORMAL first", again.tid, again.policy, tid)
-		}
-	case <-time.After(testenv.HangLimit):
-		t.Fatalf("rtkit was not asked again for the input thread within %v of SIGXCPU", testenv.HangLimit)
+	case guard = <-asked:
+	default:
+		t.Fatal("rtkit raised the input thread, but nothing asked it to raise a guard")
 	}
-	if got := scheduleOf(t, tid).Policy; got != unix.SCHED_BATCH {
-		t.Fatalf("the input thread runs at policy %d after rtkit granted it again, want the fake's SCHED_BATCH", got)
+	if watched.tid != tid || watched.priority != loopRTPriority {
+		t.Fatalf("rtkit was first asked for %+v, want the input thread %d at %d", watched, tid, loopRTPriority)
+	}
+	if guard.tid == tid || guard.priority != guardRTPriority {
+		t.Fatalf("rtkit was then asked for %+v, want another thread at %d", guard, guardRTPriority)
 	}
 }
 
@@ -369,7 +294,7 @@ func TestARaiseThroughRtkitGivesTheThreadBackItsScheduling(t *testing.T) {
 		if got.before, beforeErr = threadSchedule(tid); beforeErr != nil {
 			return taken{err: beforeErr}
 		}
-		restore := compositorThread.raise(bus)
+		restore := compositorThread.raise(bus, dropJob)
 		got.raised, raisedErr = threadSchedule(tid)
 		restoreErr := restore()
 		got.after, afterErr = threadSchedule(tid)
