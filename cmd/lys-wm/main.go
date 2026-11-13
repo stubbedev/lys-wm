@@ -423,17 +423,20 @@ func printEffectiveConfig(path, runtime string, getenv func(string) string, out 
 	return enc.Encode(info)
 }
 
-func sessionVars(env [][2]string, getenv func(string) string) [][2]string {
-	out := slices.Clone(env)
-	for _, name := range []string{"PATH", "WAYLAND_DISPLAY", "DISPLAY", wmipc.SocketEnv} {
-		if slices.ContainsFunc(env, func(kv [2]string) bool { return kv[0] == name }) {
-			continue
-		}
-		if v := getenv(name); v != "" {
-			out = append(out, [2]string{name, v})
-		}
+func exports(wayland, socket, xDisplay string) systemd.Environment {
+	set := [][2]string{{"WAYLAND_DISPLAY", wayland}, {wmipc.SocketEnv, socket}}
+	if xDisplay == "" {
+		return systemd.Environment{Set: set, Unset: []string{"DISPLAY"}}
 	}
-	return out
+	return systemd.Environment{Set: append(set, [2]string{"DISPLAY", xDisplay})}
+}
+
+func sessionVars(config [][2]string, exported systemd.Environment, getenv func(string) string) systemd.Environment {
+	set := slices.Concat(config, exported.Set)
+	if path := getenv("PATH"); path != "" && !slices.ContainsFunc(set, func(kv [2]string) bool { return kv[0] == "PATH" }) {
+		set = append(set, [2]string{"PATH", path})
+	}
+	return systemd.Environment{Set: set, Unset: exported.Unset}
 }
 
 type reloader struct {
@@ -752,7 +755,6 @@ func run(args []string) (err error) {
 		}
 		defer leave(profiles.Close)
 	}
-	exports := [][2]string{{"WAYLAND_DISPLAY", display.Name()}, {wmipc.SocketEnv, socket}}
 	var xw *xwayland.Server
 	if first.xwayland {
 		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second}
@@ -776,15 +778,24 @@ func run(args []string) (err error) {
 				return err
 			}
 		}
-		exports = append(exports, [2]string{"DISPLAY", xw.Display()})
 	}
-	for _, kv := range exports {
+	xDisplay := ""
+	if xw != nil {
+		xDisplay = xw.Display()
+	}
+	exported := exports(display.Name(), socket, xDisplay)
+	for _, kv := range exported.Set {
 		if err := os.Setenv(kv[0], kv[1]); err != nil {
 			return fmt.Errorf("export %s: %w", kv[0], err)
 		}
 	}
+	for _, name := range exported.Unset {
+		if err := os.Unsetenv(name); err != nil {
+			return fmt.Errorf("unset %s: %w", name, err)
+		}
+	}
 	if *withSystemd {
-		sess, startErr := systemd.Start(os.Getenv("DBUS_SESSION_BUS_ADDRESS"), sessionVars(first.env, os.Getenv))
+		sess, startErr := systemd.Start(os.Getenv("DBUS_SESSION_BUS_ADDRESS"), sessionVars(first.env, exported, os.Getenv))
 		if startErr != nil {
 			cfg.Report(fmt.Errorf("start %s: %w", systemd.Target, startErr))
 		} else {
@@ -822,8 +833,8 @@ func run(args []string) (err error) {
 		}
 	}
 	listening := display.Name()
-	if xw != nil {
-		listening += " and X display " + xw.Display()
+	if xDisplay != "" {
+		listening += " and X display " + xDisplay
 	}
 	fmt.Fprintf(os.Stderr, "lys-wm: listening on %s with the %s backend\n", listening, kind)
 	rtdebug.SetGCPercent(gcPercent)

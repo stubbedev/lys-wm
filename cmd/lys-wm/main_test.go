@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/config"
 	"github.com/stubbedev/lys-wm/internal/ipc"
+	"github.com/stubbedev/lys-wm/internal/systemd"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
@@ -165,21 +166,42 @@ func TestTheConfigEnvChoosesTheCursor(t *testing.T) {
 	}
 }
 
+func TestExportsSetDisplayOnlyForARunningXwayland(t *testing.T) {
+	withX := exports("wayland-1", "/run/t.sock", ":2")
+	want := systemd.Environment{Set: [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}, {wmipc.SocketEnv, "/run/t.sock"}, {"DISPLAY", ":2"}}}
+	if !slices.Equal(withX.Set, want.Set) || len(withX.Unset) != 0 {
+		t.Fatalf("with Xwayland: %+v, want %+v", withX, want)
+	}
+	without := exports("wayland-1", "/run/t.sock", "")
+	want = systemd.Environment{Set: [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}, {wmipc.SocketEnv, "/run/t.sock"}}, Unset: []string{"DISPLAY"}}
+	if !slices.Equal(without.Set, want.Set) || !slices.Equal(without.Unset, want.Unset) {
+		t.Fatalf("without Xwayland: %+v, want %+v: an inherited DISPLAY is another X server's", without, want)
+	}
+}
+
 func TestSessionVars(t *testing.T) {
-	env := map[string]string{"PATH": "/nix/bin:/usr/bin", "WAYLAND_DISPLAY": "wayland-1", "LYS_WM_SOCKET": "/run/t.sock"}
-	got := sessionVars([][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}}, func(k string) string { return env[k] })
-	want := [][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}, {"PATH", "/nix/bin:/usr/bin"}, {"WAYLAND_DISPLAY", "wayland-1"}, {"LYS_WM_SOCKET", "/run/t.sock"}}
-	if !slices.Equal(got, want) {
-		t.Fatalf("%v, want %v", got, want)
+	env := map[string]string{"PATH": "/nix/bin:/usr/bin", "WAYLAND_DISPLAY": "stale", "DISPLAY": ":9"}
+	got := sessionVars([][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}}, exports("wayland-1", "/run/t.sock", ":2"), func(k string) string { return env[k] })
+	want := [][2]string{{"XDG_CURRENT_DESKTOP", "lys-wm"}, {"WAYLAND_DISPLAY", "wayland-1"}, {wmipc.SocketEnv, "/run/t.sock"}, {"DISPLAY", ":2"}, {"PATH", "/nix/bin:/usr/bin"}}
+	if !slices.Equal(got.Set, want) || len(got.Unset) != 0 {
+		t.Fatalf("%+v, want set %v and nothing unset", got, want)
+	}
+}
+
+func TestSessionVarsUnsetAnInheritedDisplayWithoutXwayland(t *testing.T) {
+	env := map[string]string{"PATH": "/usr/bin", "DISPLAY": ":9"}
+	got := sessionVars(nil, exports("wayland-1", "/run/t.sock", ""), func(k string) string { return env[k] })
+	if slices.ContainsFunc(got.Set, func(kv [2]string) bool { return kv[0] == "DISPLAY" }) || !slices.Equal(got.Unset, []string{"DISPLAY"}) {
+		t.Fatalf("%+v: the inherited DISPLAY :9 must be unset in the activation environment, not exported", got)
 	}
 }
 
 func TestSessionVarsLetTheConfigEnvWin(t *testing.T) {
-	env := map[string]string{"PATH": "/usr/bin", "WAYLAND_DISPLAY": "wayland-1"}
-	got := sessionVars([][2]string{{"PATH", "/opt/bin"}}, func(k string) string { return env[k] })
-	want := [][2]string{{"PATH", "/opt/bin"}, {"WAYLAND_DISPLAY", "wayland-1"}}
-	if !slices.Equal(got, want) {
-		t.Fatalf("%v, want %v: the config's PATH once, the process's dropped, unset DISPLAY left out", got, want)
+	env := map[string]string{"PATH": "/usr/bin"}
+	got := sessionVars([][2]string{{"PATH", "/opt/bin"}}, exports("wayland-1", "/run/t.sock", ""), func(k string) string { return env[k] })
+	want := [][2]string{{"PATH", "/opt/bin"}, {"WAYLAND_DISPLAY", "wayland-1"}, {wmipc.SocketEnv, "/run/t.sock"}}
+	if !slices.Equal(got.Set, want) {
+		t.Fatalf("%v, want %v: the config's PATH once, the process's dropped", got.Set, want)
 	}
 }
 

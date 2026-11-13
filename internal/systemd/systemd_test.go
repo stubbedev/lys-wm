@@ -113,7 +113,7 @@ func systemd(t *testing.T, address, fail string, prior map[string]string) *fakeM
 	return m
 }
 
-var env = [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}, {"XDG_CURRENT_DESKTOP", "lys-wm"}, {"LYS_WM_SOCKET", "/run/user/1000/lys-wm/wayland-1.sock"}}
+var env = Environment{Set: [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}, {"XDG_CURRENT_DESKTOP", "lys-wm"}, {"LYS_WM_SOCKET", "/run/user/1000/lys-wm/wayland-1.sock"}}}
 
 func TestSessionLifecycle(t *testing.T) {
 	address := dbustest.Start(t).Address
@@ -124,7 +124,7 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 	calls, got := m.state()
 	wantCalls := []string{
-		"SetEnvironment WAYLAND_DISPLAY=wayland-1 XDG_CURRENT_DESKTOP=lys-wm LYS_WM_SOCKET=/run/user/1000/lys-wm/wayland-1.sock",
+		"UnsetAndSetEnvironment  | WAYLAND_DISPLAY=wayland-1 XDG_CURRENT_DESKTOP=lys-wm LYS_WM_SOCKET=/run/user/1000/lys-wm/wayland-1.sock",
 		"StartUnit lys-wm-session.target replace",
 	}
 	if !slices.Equal(calls, wantCalls) || got["XDG_CURRENT_DESKTOP"] != "lys-wm" {
@@ -144,7 +144,7 @@ func TestAFailedStartLeavesNoEnvironment(t *testing.T) {
 	address := dbustest.Start(t).Address
 	prior := map[string]string{"KEEP": "1", "PATH": "/usr/bin"}
 	m := systemd(t, address, "StartUnit", maps.Clone(prior))
-	if _, err := Start(address, append(slices.Clone(env), [2]string{"PATH", "/nix/bin:/usr/bin"})); err == nil || !strings.Contains(err.Error(), "StartUnit") {
+	if _, err := Start(address, Environment{Set: append(slices.Clone(env.Set), [2]string{"PATH", "/nix/bin:/usr/bin"})}); err == nil || !strings.Contains(err.Error(), "StartUnit") {
 		t.Fatalf("a refused StartUnit: %v", err)
 	}
 	if _, got := m.state(); !maps.Equal(got, prior) {
@@ -162,7 +162,7 @@ func TestCloseRestoresWhatTheManagerHadBefore(t *testing.T) {
 	address := dbustest.Start(t).Address
 	prior := map[string]string{"KEEP": "1", "PATH": "/usr/bin", "XCURSOR_SIZE": "32"}
 	m := systemd(t, address, "", maps.Clone(prior))
-	s, err := Start(address, [][2]string{{"PATH", "/nix/bin:/usr/bin"}, {"XCURSOR_SIZE", "24"}, {"WAYLAND_DISPLAY", "wayland-1"}})
+	s, err := Start(address, Environment{Set: [][2]string{{"PATH", "/nix/bin:/usr/bin"}, {"XCURSOR_SIZE", "24"}, {"WAYLAND_DISPLAY", "wayland-1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,6 +175,26 @@ func TestCloseRestoresWhatTheManagerHadBefore(t *testing.T) {
 	}
 	if _, got := m.state(); !maps.Equal(got, prior) {
 		t.Fatalf("after close: env %v, want the prior %v with PATH and XCURSOR_SIZE restored, not unset", got, prior)
+	}
+}
+
+func TestUnsetNamesLeaveTheManagerWhileRunningAndComeBackOnClose(t *testing.T) {
+	address := dbustest.Start(t).Address
+	prior := map[string]string{"KEEP": "1", "DISPLAY": ":7"}
+	m := systemd(t, address, "", maps.Clone(prior))
+	s, err := Start(address, Environment{Set: [][2]string{{"WAYLAND_DISPLAY", "wayland-1"}}, Unset: []string{"DISPLAY", "XAUTHORITY"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	during := map[string]string{"KEEP": "1", "WAYLAND_DISPLAY": "wayland-1"}
+	if _, got := m.state(); !maps.Equal(got, during) {
+		t.Fatalf("while running: env %v, want %v without the inherited DISPLAY", got, during)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, got := m.state(); !maps.Equal(got, prior) {
+		t.Fatalf("after close: env %v, want the prior %v with DISPLAY restored", got, prior)
 	}
 }
 

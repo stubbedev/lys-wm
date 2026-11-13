@@ -55,7 +55,12 @@ func (s *Session) undo() error {
 	return call(s.manager(), manager+".UnsetAndSetEnvironment", s.absent, s.restore).Err
 }
 
-func Start(address string, env [][2]string) (*Session, error) {
+type Environment struct {
+	Set   [][2]string
+	Unset []string
+}
+
+func Start(address string, env Environment) (*Session, error) {
 	if address == "" {
 		return nil, errors.New("systemd: DBUS_SESSION_BUS_ADDRESS is not set")
 	}
@@ -68,9 +73,9 @@ func Start(address string, env [][2]string) (*Session, error) {
 	if err != nil {
 		return nil, errors.Join(err, conn.Close())
 	}
-	activation := make(map[string]string, len(env))
-	assignments := make([]string, len(env))
-	for i, kv := range env {
+	activation := make(map[string]string, len(env.Set)+len(env.Unset))
+	assignments := make([]string, len(env.Set))
+	for i, kv := range env.Set {
 		activation[kv[0]] = kv[1]
 		assignments[i] = kv[0] + "=" + kv[1]
 		if v, ok := prior[kv[0]]; ok {
@@ -79,11 +84,17 @@ func Start(address string, env [][2]string) (*Session, error) {
 			s.absent = append(s.absent, kv[0])
 		}
 	}
+	for _, name := range env.Unset {
+		activation[name] = ""
+		if v, ok := prior[name]; ok {
+			s.restore = append(s.restore, name+"="+v)
+		}
+	}
 	if err := errors.Join(
 		call(conn.BusObject(), "org.freedesktop.DBus.UpdateActivationEnvironment", activation).Err,
-		call(s.manager(), manager+".SetEnvironment", assignments).Err,
+		call(s.manager(), manager+".UnsetAndSetEnvironment", env.Unset, assignments).Err,
 	); err != nil {
-		return nil, errors.Join(err, conn.Close())
+		return nil, errors.Join(err, s.undo(), conn.Close())
 	}
 	if err := call(s.manager(), manager+".StartUnit", Target, "replace").Err; err != nil {
 		return nil, errors.Join(err, s.undo(), conn.Close())
