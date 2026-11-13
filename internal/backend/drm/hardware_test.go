@@ -140,13 +140,7 @@ func colorTransform(t *testing.T, o *Output) {
 }
 
 func TestStartOnEveryCardWithoutMaster(t *testing.T) {
-	cards, err := filepath.Glob("/dev/dri/card*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cards) == 0 {
-		t.Skip("no DRM card")
-	}
+	cards := cardNodes(t)
 	for _, card := range cards {
 		for _, vulkan := range []bool{false, true} {
 			name := filepath.Base(card) + "/gles"
@@ -212,11 +206,11 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 	}
 	paths := gpu.PathsFromEnv(os.Getenv)
 	if vulkan {
-		paths = unloadable
+		paths = withoutGL()
 	}
 	b, err := New(l, dev, Options{Paths: paths, Vendors: vendors, Report: func(err error) { t.Error(err) }, Vulkan: vulkan, Master: WithoutMaster})
 	if err != nil {
-		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
+		skipWithoutVulkan(t, card, err)
 	}
 	h := &added{}
 	if err := b.Start(h); err != nil {
@@ -246,13 +240,7 @@ func startWithoutMaster(t *testing.T, card string, vulkan bool) {
 }
 
 func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
-	cards, err := filepath.Glob("/dev/dri/card*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cards) == 0 {
-		t.Skip("no DRM card")
-	}
+	cards := cardNodes(t)
 	for _, card := range cards {
 		t.Run(filepath.Base(card), func(t *testing.T) {
 			dev, err := kdrm.Open(card)
@@ -325,22 +313,15 @@ func TestMesaAndKMSShareNoHandlesOnHardware(t *testing.T) {
 	}
 }
 
-func TestTenBitScanoutBuffersDrawOnEveryRenderNodeOnHardware(t *testing.T) {
-	nodes, err := filepath.Glob("/dev/dri/renderD*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nodes) == 0 {
-		t.Skip("no render node")
-	}
-	for _, node := range nodes {
+func TestTenBitScanoutBuffersDrawOnEveryCardOnHardware(t *testing.T) {
+	for _, node := range cardNodes(t) {
 		for _, stack := range gpuStacks {
-			t.Run(filepath.Base(node)+"/"+stack.name, func(t *testing.T) { tenBitOnRenderNode(t, node, stack.open) })
+			t.Run(filepath.Base(node)+"/"+stack.name, func(t *testing.T) { tenBitOnCard(t, node, stack.open) })
 		}
 	}
 }
 
-func tenBitOnRenderNode(t *testing.T, node string, open openStack) {
+func tenBitOnCard(t *testing.T, node string, open openStack) {
 	unpin := gpu.PinThread()
 	defer func() {
 		if err := unpin(); err != nil {

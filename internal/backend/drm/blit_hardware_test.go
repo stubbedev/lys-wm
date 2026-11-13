@@ -29,6 +29,26 @@ var gpuStacks = []struct {
 	open openStack
 }{{"gles", openGLES}, {"vulkan", openVulkan}}
 
+func cardNodes(t *testing.T) []string {
+	t.Helper()
+	cards, err := filepath.Glob("/dev/dri/card*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) == 0 {
+		t.Skip("no DRM card")
+	}
+	return cards
+}
+
+func skipWithoutVulkan(t *testing.T, card string, err error) {
+	t.Helper()
+	if errors.Is(err, ErrNoVulkan) {
+		t.Skipf("no Vulkan driver drives %s here (unset VK_DRIVER_FILES on a GPU machine): %v", card, err)
+	}
+	t.Fatalf("%s: %v", card, err)
+}
+
 func stackOn(t *testing.T, card string, open openStack) *gpuAllocator {
 	t.Helper()
 	dev, err := kdrm.Open(card)
@@ -38,7 +58,7 @@ func stackOn(t *testing.T, card string, open openStack) *gpuAllocator {
 	t.Cleanup(func() { _ = dev.Close() })
 	a, err := open(dev)
 	if err != nil {
-		t.Skipf("no EGL vendor or Vulkan driver drives this card here (unset __EGL_VENDOR_LIBRARY_DIRS and VK_DRIVER_FILES on a GPU machine): %v", err)
+		skipWithoutVulkan(t, card, err)
 	}
 	return a
 }
@@ -114,13 +134,7 @@ func TestABlitThroughAVulkanLinearCopyShowsTheFrameOnHardware(t *testing.T) {
 }
 
 func blitThroughACopy(t *testing.T, open openStack) {
-	cards, err := filepath.Glob("/dev/dri/card*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cards) == 0 {
-		t.Skip("no DRM card")
-	}
+	cards := cardNodes(t)
 	unpin := gpu.PinThread()
 	defer func() {
 		if err := unpin(); err != nil {
@@ -204,8 +218,8 @@ func localTarget(t *testing.T, local *gpuAllocator, size image.Point) render.Rea
 	return d.target
 }
 
-func TestABlitBetweenTwoStacksOnTheRenderNodeShowsTheFrameOnHardware(t *testing.T) {
-	const node = "/dev/dri/renderD128"
+func TestABlitBetweenTwoStacksOnOneCardShowsTheFrameOnHardware(t *testing.T) {
+	node := cardNodes(t)[0]
 	for _, p := range gpuStacks {
 		for _, l := range gpuStacks {
 			for _, native := range []bool{true, false} {

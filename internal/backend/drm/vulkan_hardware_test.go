@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -14,17 +15,14 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testenv"
 )
 
-var unloadable = gpu.Paths{EGL: "/nonexistent/libEGL.so.1", GLESv2: "/nonexistent/libGLESv2.so.2", GBM: "/nonexistent/libgbm.so.1"}
+func withoutGL() gpu.Paths {
+	paths := gpu.PathsFromEnv(os.Getenv)
+	paths.EGL, paths.GLESv2 = "/nonexistent/libEGL.so.1", "/nonexistent/libGLESv2.so.2"
+	return paths
+}
 
 func TestVulkanRendersIntoScanoutBuffersOnEveryCardOnHardware(t *testing.T) {
-	nodes, err := filepath.Glob("/dev/dri/card*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nodes) == 0 {
-		t.Skip("no card node")
-	}
-	for _, node := range nodes {
+	for _, node := range cardNodes(t) {
 		t.Run(filepath.Base(node), func(t *testing.T) {
 			dev, err := kdrm.Open(node)
 			if err != nil {
@@ -33,7 +31,7 @@ func TestVulkanRendersIntoScanoutBuffersOnEveryCardOnHardware(t *testing.T) {
 			defer dev.Close()
 			a, err := openVulkan(dev)
 			if err != nil {
-				t.Skipf("no Vulkan driver drives %s here (unset VK_DRIVER_FILES on a GPU machine): %v", node, err)
+				skipWithoutVulkan(t, node, err)
 			}
 			mods, err := a.renderable(scanoutFormat)
 			if err != nil {

@@ -429,12 +429,14 @@ foreign-toplevel activate all call it. Nothing else mutates WM state.
 | Renderer | Selected by | Notes |
 | --- | --- | --- |
 | GLES2 | default for nested; `-renderer gles` on drm | glvnd picks the vendor; GBM, device or surfaceless platform; one configless context per display, no surfaces. The drm path for a card without a Vulkan driver |
-| Vulkan | default for drm; `-renderer vulkan` elsewhere | Peer of GLES in every path. On drm it needs a Vulkan driver for the primary card: without one lys-wm stops at startup with `drm.ErrNoVulkan`, naming the card, `-renderer gles` and `LYS_WM_RENDERER=gles`, and never falls back to GLES by itself. lavapipe drives no DRM node, so vkms and virtio-gpu without venus run `-renderer gles` on llvmpipe, as the NixOS VM checks do (`nix/vm.nix`). On drm it exports scanout buffers itself and loads no GBM, EGL or GLES unless a secondary card has no Vulkan driver (`TestTheVulkanStackScansOutWithoutGBMOrEGLOnHardware`). Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
+| Vulkan | default for drm; `-renderer vulkan` elsewhere | Peer of GLES in every path. On drm it needs a Vulkan driver for the primary card: without one lys-wm stops at startup with `drm.ErrNoVulkan`, naming the card, `-renderer gles` and `LYS_WM_RENDERER=gles`, and never falls back to GLES by itself. lavapipe drives no DRM node, so vkms and virtio-gpu without venus run `-renderer gles` on llvmpipe, as the NixOS VM checks do (`nix/vm.nix`). On drm it takes its scanout buffers from GBM with `GBM_BO_USE_SCANOUT` and imports them to render, since xe refuses ADDFB2 for memory Mesa's Vulkan driver allocates (it binds it into its VM before the scanout flag can be set); it loads no EGL or GLES unless a secondary card has no Vulkan driver (`TestStartOnEveryCardWithoutMaster`, with those two libraries unloadable). Nested: renders into memory it exports, on the device the host's dmabuf feedback names. Headless: tries render nodes first |
 | Software | default for headless | Reference for every pixel test |
 
-Scanout memory is GBM's under GLES and exported by Vulkan under Vulkan
-(`gpuAllocator` over `gbmMemory` or `vulkanMemory`), in a modifier from the
-primary plane's `IN_FORMATS` the renderer also allocates and draws into. The
+Scanout memory is GBM's under both renderers (`gpuAllocator` over
+`gbmMemory`), in a modifier from the primary plane's `IN_FORMATS` the renderer
+also draws into. An allocator is vouched for only once its probe buffer has
+become a framebuffer on the card, so it is always opened on a card node, never
+a render node. The
 allocator picks among those; when the modeset's test commit refuses its pick,
 the next try drops that modifier, so the list falls down in the driver's order
 before the next format is tried, and the winner is reported. Every
