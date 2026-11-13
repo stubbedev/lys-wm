@@ -243,10 +243,10 @@ func rtkitStandingInWithBatch(t *testing.T) (bus string, asked <-chan request) {
 		if err != nil {
 			return dbus.MakeFailedError(fmt.Errorf("read the policy of thread %d: %w", req.TID, err))
 		}
-		requests <- request{req.TID, attr.Policy}
 		if err := setPolicyKeepingNice(req.TID, unix.SCHED_BATCH); err != nil {
 			return dbus.MakeFailedError(fmt.Errorf("stand SCHED_BATCH in for SCHED_RR: %w", err))
 		}
+		requests <- request{req.TID, attr.Policy}
 		return nil
 	}), requests
 }
