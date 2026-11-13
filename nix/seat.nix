@@ -34,7 +34,7 @@ in
         qemu.options = ["-vga none" "-device virtio-gpu-pci"];
       };
       environment = {
-        variables = env // {GBM_BACKENDS_PATH = "${pkgs.mesa}/lib/gbm";};
+        variables = env;
         systemPackages = [pkgs.bpftrace];
       };
     };

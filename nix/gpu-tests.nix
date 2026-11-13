@@ -51,7 +51,7 @@ in
         ExternalSizeMax = "6G";
       };
       environment = {
-        variables = env // {GBM_BACKENDS_PATH = "${pkgs.mesa}/lib/gbm";};
+        variables = env;
         systemPackages = import ./test-programs.nix {inherit pkgs lys-ui;};
       };
     };

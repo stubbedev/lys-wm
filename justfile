@@ -22,6 +22,10 @@ card_tests := "OnHardware|WithoutMaster|OnARenderNode"
 # that take DRM master on a seat, which only the vm-seat check runs.
 host_skip := card_tests + "|OnASeat"
 
+# The dev shell's driver pins (nix/test-env.nix): the recipes that measure the
+# real GPU unset them to load the drivers in /run/opengl-driver instead.
+shell_drivers := "__EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES GBM_BACKENDS_PATH"
+
 # The tests that need a real GPU, and the GLES harness tests, which the dev
 # shell otherwise runs on Mesa's llvmpipe.
 hardware_tests := "TestAlphaCut|TestABlurAlphaThreshold|TestACaptureRepaintsOnlyTheDamage|TestACommitThatChangesNothing|TestZoom|TestTheViewFollows|TestCapturesShowTheUnzoomed|TestScanoutStopsWhileZoomed|TestAFloatingWindowDraggedToAnEdge|TestATiledWindowDragged|TestThePreviewBlurs|TestGlass|TestTheRim|TestMica|TestAHiddenBlur|TestABlurBehindAnOpaque|TestAClosingWindowKeeps|" + card_tests + "|TestDMABUFClientsOnTheGPURenderers|TestImageCopyCaptureIntoDMABUFs|TestFullscreenDMABUFsScanOutDirectly|TestARoundedWindowThatFillsTheOutputIsComposited|TestAFullscreenDMABUFScansOutOverAWallpaperAndABar|TestAnARGBDMABUFScansOutOnlyWhenItsOpaqueRegionCoversIt|TestATenBitDMABUFScansOutUnconverted|TestDestroyingAReplacedBufferStillOnScreenSendsNoRelease|TestAnHDROutputScansOutOnlyWhatMatchesItsSignal|TestColorParity|TestAFullscreenSurfaceIsOfferedThePlaneFormats|TestEveryTextureFormatDrawsItsColour|TestTenBitShmBuffersShowTheirColour|TestScaledClientCursorsReachThePlaneWithoutASynchronousReadback|TestScreencopyIntoDMABUFsOnTheGPURenderers|TestAScreencopyIntoADMABUF|TestParityWithTheSoftwareRenderer|TestMaskEdgesMatchTheSoftwareRendererAcrossA4KOutput|TestReadKeepsTheStridePadding|TestReadRowsWritesOnlyThoseRows|TestAnAsyncReadSeesTheFrameItWasStartedAfter|TestNestedLysWMRendersWithVulkan|TestATranslucentWindowBlurs|TestXRayBlur|TestABlurRegion|TestARegionIsClipped|TestARuleOffTurnsBlur|TestADecorationBlurLeaves|TestXRayAppliesToBlur|TestASubsurfaceRegion|TestAnAlphaModifierFadesTheBlur|TestPopupsBlurByTheirRegion|TestAPopupsFirstFrame|TestDecorationBlurReachesPopups|TestBordersAndTabBars|TestRoundedWindowsAndBorders|TestATranslucentBorder|TestAFloatingWindowCasts|TestAGradientBorder|TestInactiveWindows|TestADimAround|TestAMovedWindow|TestWindowsPopIn|TestAWorkspaceSwitch|TestBorderColours|TestAGoo|TestAMorphing|TestAnElastic|TestAGenie|TestScreenShaders|TestAScreenShader|TestTheExampleShaders|TestTheLockScreenAndScreencopy|TestAShader|TestWindowedVideosGoToOverlayPlanes|TestScaledAndLetterboxedFullscreenDMABUFsScanOut|TestAnEGLHostImportsThoseBytes|TestVulkanCopiesLinearBytes|TestAVulkanStackLeavesNoDescriptor"
@@ -39,7 +43,7 @@ pace backend="headless" renderer="vulkan" rounds="10" args="":
         echo "pace: the {{backend}} backend renders on the GPU beside the session; run it as \`just docker pace\`, or with backend=drm from a text console" >&2
         exit 1
     fi
-    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    unset {{shell_drivers}}
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     go build -o "$dir/" ./cmd/lys-wm ./cmd/lys-wm-pace
@@ -60,7 +64,7 @@ hardware:
         echo "hardware: its tests open the DRM card nodes; run it as \`just docker hardware\`" >&2
         exit 1
     fi
-    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    unset {{shell_drivers}}
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     if ! LYS_WM_HEADLESS=1 go test -count=1 -timeout 5m -v -run '{{hardware_tests}}' ./internal/render/gles/ ./internal/render/vulkan/ ./internal/backend/drm/ ./internal/backend/nested/ ./internal/harness/ | tee "$dir/tests.log" | grep -E '^(--- |ok|FAIL)|_test.go'; then
@@ -121,7 +125,7 @@ stalls:
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "${LYS_WM_CONTAINER-}" == 1 ]]; then
-        unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+        unset {{shell_drivers}}
     fi
     LYS_WM_HEADLESS=1 go test -run '^$' -bench '^BenchmarkStall' -benchtime 200x ./internal/compositor/ ./internal/harness/
 
@@ -135,7 +139,7 @@ render-bench:
         echo "render-bench: it renders on the GPU; run it as \`just docker render-bench\`" >&2
         exit 1
     fi
-    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    unset {{shell_drivers}}
     LYS_WM_HEADLESS=1 go test -run '^$' -bench 'WindowsOnHardware' -benchtime 500x ./internal/render/gles/ ./internal/render/vulkan/
 
 # How many times the gates play each animation: enough for RSS growth to repeat
@@ -166,7 +170,7 @@ pace-baseline:
         echo "pace-baseline: it measures the GPU; run it as \`just docker pace-baseline\`" >&2
         exit 1
     fi
-    unset __EGL_VENDOR_LIBRARY_DIRS LIBGL_ALWAYS_SOFTWARE VK_DRIVER_FILES
+    unset {{shell_drivers}}
     just write-baselines
 
 # The same on the dev shell's software rasterisers, under gles/software and
