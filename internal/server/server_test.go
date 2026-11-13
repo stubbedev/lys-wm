@@ -82,7 +82,11 @@ func (h *harness) on(f func()) {
 	select {
 	case <-ran:
 	case <-h.stopped:
-		h.t.Fatalf("the loop stopped: %v", h.ran)
+		select {
+		case <-ran:
+		default:
+			h.t.Fatalf("the loop stopped before running the function: %v", h.ran)
+		}
 	}
 }
 
