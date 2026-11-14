@@ -174,3 +174,42 @@ func TestAWindowOnTwoOutputsIsPresentedByOneOfThem(t *testing.T) {
 		}
 	}
 }
+
+func TestTheRefreshClientsSeeStaysTheModesAcrossAFrameCapAndAdaptiveSync(t *testing.T) {
+	t.Parallel()
+	fast := small
+	fast.RefreshMHz = 85000
+	h := StartWith(t, func(cfg *compositor.Config) { cfg.PowerSaverRate = 60 }, fast)
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		b.EnableAdaptiveSync()
+		return nil
+	})
+	tr := tracePresentationsOn(t, h)
+	step := func(change func(o *headless.Output, c *compositor.Compositor) error) {
+		t.Helper()
+		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
+			return change(b.Outputs()[0], c)
+		})
+		tr.drawn()
+		tr.idle()
+	}
+	step(func(*headless.Output, *compositor.Compositor) error { return nil })
+	step(func(_ *headless.Output, c *compositor.Compositor) error {
+		c.SetPowerSaver(true)
+		return nil
+	})
+	step(func(o *headless.Output, _ *compositor.Compositor) error { return o.SetAdaptiveSync(true) })
+	step(func(o *headless.Output, _ *compositor.Compositor) error { return o.SetAdaptiveSync(false) })
+	step(func(_ *headless.Output, c *compositor.Compositor) error {
+		c.SetPowerSaver(false)
+		return nil
+	})
+	for i, e := range tr.events {
+		if time.Duration(e.refresh) != fast.Interval() {
+			t.Fatalf("presentation %d reported refresh %v, want the %v of the output's mode whatever its frame cap and adaptive sync", i, time.Duration(e.refresh), fast.Interval())
+		}
+		if i > 0 && (e.at <= tr.events[i-1].at || e.seq <= tr.events[i-1].seq) {
+			t.Fatalf("presentation %d at %v seq %d does not follow %v seq %d", i, e.at, e.seq, tr.events[i-1].at, tr.events[i-1].seq)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"slices"
+	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
@@ -576,6 +577,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	if !p.Idle {
 		sc.last = p
 	}
+	refresh := outputRefresh(b, p)
 	var errs error
 	for _, s := range c.shown[o] {
 		var frame error
@@ -587,11 +589,18 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		errs = errors.Join(errs, frame)
 		if c.presentsOn(s, o) {
 			c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
-			errs = errors.Join(errs, s.Presented(c.outputResources, p.Time, p.Refresh, p.Variable, p.Seq, sc.feedbackKind(s, kind, p.Idle)))
+			errs = errors.Join(errs, s.Presented(c.outputResources, p.Time, refresh, p.Variable, p.Seq, sc.feedbackKind(s, kind, p.Idle)))
 		}
 	}
 	if p.Idle {
 		return errors.Join(errs, c.heldFrame(o))
 	}
 	return errors.Join(errs, c.timing.Presented(), c.heldFrame(o))
+}
+
+func outputRefresh(b backend.Output, p backend.Presentation) time.Duration {
+	if p.Refresh <= 0 {
+		return 0
+	}
+	return b.State().Mode.Interval()
 }

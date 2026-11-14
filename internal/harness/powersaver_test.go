@@ -74,8 +74,8 @@ func TestPowerSaverHalvesTheFrameRateOfA120HzOutput(t *testing.T) {
 	if twice*2 < frames-2 {
 		t.Fatalf("%d of %d frames came two refreshes after the one before: a client drawing every frame should see 60 Hz", twice, frames-2)
 	}
-	if want := uint32(2 * fast.Interval()); shown[frames-1].refresh != want {
-		t.Fatalf("presentation feedback reports a refresh of %d ns, want %d", shown[frames-1].refresh, want)
+	if want := uint32(fast.Interval()); shown[frames-1].refresh != want {
+		t.Fatalf("under power saver presentation feedback reports a refresh of %d ns, want the mode's %d", shown[frames-1].refresh, want)
 	}
 	powerSaver(h, false)
 	shown = drawContinuously(t, pc, w, 6)
