@@ -212,10 +212,9 @@ func TestAVirtualOutputRendersOnlyWhileCaptured(t *testing.T) {
 	c.DispatchUntil("the window to map", w.Mapped)
 	h.dispatch("movetoworkspace 2")
 	h.awaitWindowOn(name)
-	pump(c, 2*hiddenFrame)
-	from := w.Frames
-	pump(c, hiddenWindow)
-	atTheHiddenRate(t, "the window on the uncaptured virtual output", w.Frames-from)
+	frames := func() int { return w.Frames }
+	awaitHiddenFrame(h, c, "the window on the uncaptured virtual output")
+	atTheHiddenRate(t, h, c, "the window on the uncaptured virtual output", frames)
 	if n := virtualFrames(h, name); n != 0 {
 		t.Fatalf("the uncaptured virtual output rendered %d frames while its window committed", n)
 	}
@@ -236,23 +235,17 @@ func TestAVirtualOutputRendersOnlyWhileCaptured(t *testing.T) {
 	if n := virtualFrames(h, name); n == 0 {
 		t.Fatal("a captured frame came without the virtual output rendering")
 	}
-	from = w.Frames
-	pump(c, hiddenWindow)
-	if got := w.Frames - from; got <= int(hiddenWindow/hiddenFrame)+3 {
-		t.Fatalf("the window on the captured output got %d frame callbacks in %v, want the output's refresh", got, hiddenWindow)
-	}
+	atTheRefreshRate(t, h, c, "the window on the captured output", frames)
 
 	if err := errors.Join(session.Destroy(), c.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}
-	pump(c, 2*hiddenFrame)
+	awaitHiddenFrame(h, c, "the window after the capture ended")
 	stopped := virtualFrames(h, name)
-	from = w.Frames
-	pump(c, hiddenWindow)
+	atTheHiddenRate(t, h, c, "the window after the capture ended", frames)
 	if n := virtualFrames(h, name); n != stopped {
 		t.Fatalf("the virtual output rendered %d frames after its capture ended", n-stopped)
 	}
-	atTheHiddenRate(t, "the window after the capture ended", w.Frames-from)
 }
 
 func TestAVirtualOutputStreamsIntoDMABUFs(t *testing.T) {

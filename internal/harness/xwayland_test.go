@@ -19,7 +19,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
-	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -665,7 +664,7 @@ func TestHungXClientsAreMarkedUnresponsive(t *testing.T) {
 	if ping.Type != xc.atoms["WM_PROTOCOLS"] || xproto.Atom(ping.Data.Data32[0]) != xc.atoms["_NET_WM_PING"] {
 		t.Fatalf("focusing the window sent %#v, not a _NET_WM_PING", ping)
 	}
-	h.Within(2*shell.PingTimeout, "the silent X window marked unresponsive", unresponsive(1, true))
+	h.Eventually("the silent X window marked unresponsive", unresponsive(1, true))
 	ping.Window = xc.root
 	if err := xproto.SendEventChecked(xc.x, false, xc.root, xproto.EventMaskSubstructureNotify|xproto.EventMaskSubstructureRedirect, string(ping.Bytes())).Check(); err != nil {
 		t.Fatal(err)

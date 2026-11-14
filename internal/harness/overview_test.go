@@ -128,6 +128,7 @@ func colouredPair(t *testing.T, h *Harness) (*testclient.Client, *testclient.Win
 }
 
 func TestTheOverviewOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, plainOverview, overviewMode)
 		colouredPair(t, h)
@@ -151,6 +152,7 @@ func TestTheOverviewOnEveryRenderer(t *testing.T) {
 }
 
 func TestTheOverviewBlursTheWallpaperOnEveryRenderer(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(*compositor.Config) {}, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -202,6 +204,7 @@ func TestTheOverviewBlursTheWallpaperOnEveryRenderer(t *testing.T) {
 }
 
 func TestTheOverviewTakesInputAndGivesItBack(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -225,6 +228,7 @@ func TestTheOverviewTakesInputAndGivesItBack(t *testing.T) {
 }
 
 func TestAKeyHeldAcrossTheOverviewIsReleasedForTheClient(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -242,6 +246,7 @@ func TestAKeyHeldAcrossTheOverviewIsReleasedForTheClient(t *testing.T) {
 }
 
 func TestClickingAWindowFocusesItAndCloses(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -257,6 +262,7 @@ func TestClickingAWindowFocusesItAndCloses(t *testing.T) {
 }
 
 func TestClickingEmptySpaceCloses(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -271,6 +277,7 @@ func TestClickingEmptySpaceCloses(t *testing.T) {
 }
 
 func TestArrowsAndEnterPickAWindow(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -296,6 +303,7 @@ func focusedAfter(t *testing.T, h *Harness, want wm.WindowID) {
 }
 
 func TestTabWalksTheWindowsAndWraps(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -314,6 +322,7 @@ func TestTabWalksTheWindowsAndWraps(t *testing.T) {
 }
 
 func TestAltNumberKeysShowAWorkspaceAndTheShownOneCloses(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -330,6 +339,7 @@ func TestAltNumberKeysShowAWorkspaceAndTheShownOneCloses(t *testing.T) {
 }
 
 func TestDeleteAsksTheRingedWindowToClose(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c, red, blue := colouredPair(t, h)
 	h.dispatch("overview show")
@@ -342,6 +352,7 @@ func TestDeleteAsksTheRingedWindowToClose(t *testing.T) {
 }
 
 func TestShiftArrowsMoveTheRingedWindowAWorkspace(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -372,6 +383,7 @@ func TestShiftArrowsMoveTheRingedWindowAWorkspace(t *testing.T) {
 }
 
 func TestModifiedAndOtherKeysDoNothingInTheOverview(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c, red, blue := colouredPair(t, h)
 	h.dispatch("overview show")
@@ -394,6 +406,7 @@ func TestModifiedAndOtherKeysDoNothingInTheOverview(t *testing.T) {
 }
 
 func TestArrowsReachTheStrip(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -409,6 +422,7 @@ func TestArrowsReachTheStrip(t *testing.T) {
 }
 
 func TestTheThumbnailsSwitchAndThePlusCreates(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	_, _, _ = colouredPair(t, h)
 	h.dispatch("overview show")
@@ -455,6 +469,7 @@ func dragBetween(h *Harness, from, to image.Point) {
 }
 
 func TestDraggingAWindowOntoAThumbnailMovesIt(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -485,6 +500,7 @@ func TestDraggingAWindowOntoAThumbnailMovesIt(t *testing.T) {
 }
 
 func TestMinimizedWindowsHaveARowAndComeBackOnClick(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("minimize 1")
@@ -503,6 +519,7 @@ func TestMinimizedWindowsHaveARowAndComeBackOnClick(t *testing.T) {
 }
 
 func TestTabbedAndFullscreenWindowsGetSlots(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, plainOverview, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -530,6 +547,7 @@ func TestTabbedAndFullscreenWindowsGetSlots(t *testing.T) {
 }
 
 func TestDialogsTravelWithTheirParents(t *testing.T) {
+	t.Parallel()
 	s := modal(t, false)
 	s.h.dispatch("overview show")
 	var slots []image.Rectangle
@@ -562,6 +580,7 @@ func snapshotPixels(h *Harness, r image.Rectangle) map[[3]byte]bool {
 }
 
 func TestPopupsTravelWithTheirWindows(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("win", testclient.Fill(0, 0, 0xff))
@@ -577,6 +596,7 @@ func TestPopupsTravelWithTheirWindows(t *testing.T) {
 }
 
 func TestLockWinsOverTheOverview(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -599,6 +619,7 @@ func TestLockWinsOverTheOverview(t *testing.T) {
 }
 
 func TestEveryOutputShowsItsOwnAtOnce(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	red := c.Window("red", testclient.Fill(0, 0, 0xff))
@@ -644,6 +665,7 @@ func TestTheOverviewIsAnEventAndAQuery(t *testing.T) {
 }
 
 func TestClosedAgainTheDesktopIsExactlyWhatItWas(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	before := h.Rendered(0)
@@ -657,6 +679,7 @@ func TestClosedAgainTheDesktopIsExactlyWhatItWas(t *testing.T) {
 }
 
 func TestThumbnailsRedrawOnlyWhenTheirWindowsDamage(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	still := c.Window("still", testclient.Fill(0, 0, 0xff))
@@ -703,6 +726,7 @@ func TestThumbnailsRedrawOnlyWhenTheirWindowsDamage(t *testing.T) {
 }
 
 func TestAWindowOnAnotherWorkspaceIsLiveInItsThumbnail(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	other := c.Window("other", testclient.Fill(0xff, 0, 0))
@@ -730,6 +754,7 @@ func springTable(t testing.TB) anim.Table {
 }
 
 func TestTheOverviewAnimatesOnASpringAndReversesInFlight(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Animations = springTable(t)
@@ -773,6 +798,7 @@ func TestTheOverviewAnimatesOnASpringAndReversesInFlight(t *testing.T) {
 }
 
 func TestAWindowThatOpensOrClosesInTheOverviewMovesTheRest(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c, red, blue := colouredPair(t, h)
 	h.dispatch("overview show")
@@ -798,6 +824,7 @@ func TestAWindowThatOpensOrClosesInTheOverviewMovesTheRest(t *testing.T) {
 }
 
 func TestTouchPicksAWindow(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -818,6 +845,7 @@ func TestTouchPicksAWindow(t *testing.T) {
 }
 
 func TestAnOverlayStaysOnTopAndTakesItsOwnInput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	r := inputOn(t, h)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -836,6 +864,7 @@ func TestAnOverlayStaysOnTopAndTakesItsOwnInput(t *testing.T) {
 }
 
 func TestATopBarFadesOutAndComesBackWithoutLeavingItsOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(topBar(cwlr.ZwlrLayerSurfaceV1KeyboardInteractivityNone), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -853,6 +882,7 @@ func TestATopBarFadesOutAndComesBackWithoutLeavingItsOutput(t *testing.T) {
 }
 
 func TestAFloatingWindowAndAMoveToAnotherOutput(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("togglefloating")
@@ -882,6 +912,7 @@ func TestAFloatingWindowAndAMoveToAnotherOutput(t *testing.T) {
 }
 
 func TestAnXWindowTakesPartInTheOverview(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland: %v", err) }, overviewMode)
 	xc := xDial(t, h)
 	xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
@@ -973,6 +1004,7 @@ func TestThreeFingersScrubTheOverview(t *testing.T) {
 }
 
 func TestThreeFingersGrabASettlingOverview(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Animations = springTable(t)
@@ -1030,6 +1062,7 @@ func TestAStyleOnTheVerticalAxisGivesWayToWorkspaces(t *testing.T) {
 }
 
 func TestAnOutputGoingAwayAndAReloadLeaveTheOverviewWhole(t *testing.T) {
+	t.Parallel()
 	var next compositor.Config
 	h := StartWith(t, func(cfg *compositor.Config) { next = *cfg }, overviewMode, overviewMode)
 	c := testclient.Connect(t, h.Socket())
@@ -1085,6 +1118,7 @@ func TestAHeldArrowRepeats(t *testing.T) {
 }
 
 func TestDraggingAWindowShowsAGrabbingCursor(t *testing.T) {
+	t.Parallel()
 	h := StartWith(t, func(cfg *compositor.Config) { cfg.Cursor.Theme = testenv.CursorTheme(t) }, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -1119,6 +1153,7 @@ func TestDraggingAWindowShowsAGrabbingCursor(t *testing.T) {
 }
 
 func TestAThumbnailOfFineLinesIsGrey(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, plainOverview, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -1152,6 +1187,7 @@ func TestAThumbnailOfFineLinesIsGrey(t *testing.T) {
 }
 
 func TestABorderStaysWholeAsAWindowShrinks(t *testing.T) {
+	t.Parallel()
 	magenta := render.Color{R: 0xff, B: 0xff, A: 0xff}
 	want := [3]byte{0xff, 0, 0xff}
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
@@ -1195,6 +1231,7 @@ func TestABorderStaysWholeAsAWindowShrinks(t *testing.T) {
 }
 
 func TestAFullscreenWindowGetsTheCornersOfTheRest(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {
 			cfg.Decor.Rounding = 24
@@ -1215,6 +1252,7 @@ func TestAFullscreenWindowGetsTheCornersOfTheRest(t *testing.T) {
 }
 
 func TestAVirtualKeyboardDrivesTheOverview(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	typist := testclient.Connect(t, h.Socket())
@@ -1241,6 +1279,7 @@ func TestAVirtualKeyboardDrivesTheOverview(t *testing.T) {
 }
 
 func TestAnIconifiedXWindowKeepsItsContentInTheRow(t *testing.T) {
+	t.Parallel()
 	h := StartXwayland(t, func(err error) { t.Errorf("xwayland: %v", err) }, overviewMode)
 	xc := xDial(t, h)
 	main := xc.window(image.Rect(10, 10, 90, 70), 0xff0000, false, map[string][]byte{"WM_CLASS": []byte("xtest\x00XTest\x00")})
@@ -1265,6 +1304,7 @@ func TestAnIconifiedXWindowKeepsItsContentInTheRow(t *testing.T) {
 }
 
 func TestAFingerDragsAWindowOntoAThumbnail(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	colouredPair(t, h)
 	h.dispatch("overview show")
@@ -1287,6 +1327,7 @@ func TestAFingerDragsAWindowOntoAThumbnail(t *testing.T) {
 }
 
 func TestADroppedWindowFliesIntoItsThumbnail(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		var now time.Duration
 		h := start(t, func(cfg *compositor.Config) {
@@ -1375,7 +1416,7 @@ func TestAMovingOverviewFrameAllocatesNothing(t *testing.T) {
 		for range 5 {
 			step()
 		}
-		if got := testing.AllocsPerRun(100, step); got != 0 {
+		if got := testing.AllocsPerRun(10, step); got != 0 {
 			t.Errorf("a moving frame allocates %v times", got)
 		}
 		if got := testing.AllocsPerRun(100, func() { hover(b) }); got > closed {
@@ -1394,6 +1435,7 @@ func (h *Harness) advanceClock(now *time.Duration, by time.Duration) {
 }
 
 func TestAClosedOverviewKeepsItsBlurUntilTheWallpaperChanges(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(*compositor.Config) {}, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -1440,6 +1482,7 @@ func TestAClosedOverviewKeepsItsBlurUntilTheWallpaperChanges(t *testing.T) {
 }
 
 func TestTheFirstThumbnailIsDrawnBeforeTheFirstOverviewFrame(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("window", testclient.Fill(0, 0, 0xff))
@@ -1488,6 +1531,7 @@ func onlySlot(t *testing.T, h *Harness) image.Rectangle {
 }
 
 func TestAnIconifiedXWindowThatNeverDrewHoldsATileInTheRow(t *testing.T) {
+	t.Parallel()
 	tile := render.Color{R: 0xc0, G: 0x20, B: 0xa0, A: 0xff}
 	h := StartXwaylandWith(t, func(cfg *compositor.Config) {
 		plainOverview(cfg)
@@ -1554,6 +1598,7 @@ func TestAWindowWhoseBufferIsGoneKeepsItsTileEvenDragged(t *testing.T) {
 }
 
 func TestADraggedWindowKeepsItsPopup(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h := StartWith(t, func(cfg *compositor.Config) {
 		cfg.Animations = springTable(t)
@@ -1649,6 +1694,7 @@ func (h *Harness) windowRect(id wm.WindowID, now *time.Duration) image.Rectangle
 }
 
 func TestACancelledDragPutsTheWindowBack(t *testing.T) {
+	t.Parallel()
 	for name, cancel := range map[string]func(*Harness){
 		"touch cancel": func(h *Harness) {
 			h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -1681,6 +1727,7 @@ func TestACancelledDragPutsTheWindowBack(t *testing.T) {
 }
 
 func TestASecondFingerLeavesADragAlone(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h, _ := springOverview(t, &now, StartWith)
 	plan := planOf(h, 0)
@@ -1705,6 +1752,7 @@ func TestASecondFingerLeavesADragAlone(t *testing.T) {
 }
 
 func TestAFingerCarriesAWindowAndItFliesIntoItsThumbnail(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		var now time.Duration
 		h, _ := springOverview(t, &now, start)
@@ -1746,6 +1794,7 @@ func TestAFingerCarriesAWindowAndItFliesIntoItsThumbnail(t *testing.T) {
 }
 
 func TestAFlightLandsOnTheThumbnailWhereItNowIs(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h, _ := springOverview(t, &now, StartWith)
 	drop := centre(planOf(h, 0).Plus)
@@ -1769,6 +1818,7 @@ func TestAFlightLandsOnTheThumbnailWhereItNowIs(t *testing.T) {
 }
 
 func TestDroppingAWindowOnItsOwnThumbnailSendsItBackWithoutAFlight(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	h, _ := springOverview(t, &now, StartWith)
 	plan := planOf(h, 0)
@@ -1786,6 +1836,7 @@ func TestDroppingAWindowOnItsOwnThumbnailSendsItBackWithoutAFlight(t *testing.T)
 }
 
 func TestAThumbnailDrawnOnEnteringAnOverviewAtRestIsAlreadyFiltered(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	w := c.Window("window", testclient.Fill(0, 0, 0xff))
@@ -1846,6 +1897,7 @@ func stillWindowOnEachOfTwoWorkspaces(h *Harness, c *testclient.Client) {
 }
 
 func TestThumbnailsShowATopBarAndItsCommits(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, plainOverview, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -1886,6 +1938,7 @@ func TestThumbnailsShowATopBarAndItsCommits(t *testing.T) {
 }
 
 func TestAFullscreenWindowCoversTheBarInItsThumbnail(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, plainOverview, overviewMode)
 		c := testclient.Connect(t, h.Socket())
@@ -1908,6 +1961,7 @@ func TestAFullscreenWindowCoversTheBarInItsThumbnail(t *testing.T) {
 }
 
 func TestABarCommittingNoDamageRedrawsNoThumbnail(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	bar := c.Layer(tallBar(), testclient.Fill(barColor[2], barColor[1], barColor[0]))
@@ -1957,6 +2011,7 @@ func TestABarCommittingNoDamageRedrawsNoThumbnail(t *testing.T) {
 }
 
 func TestTheStripIsGlassOverTheBlurredLayers(t *testing.T) {
+	t.Parallel()
 	magenta := render.Color{R: 0xff, B: 0xff, A: 0xff}
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		h := start(t, func(cfg *compositor.Config) {

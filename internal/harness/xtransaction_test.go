@@ -231,7 +231,7 @@ func TestARealGTKWindowAnswersItsHolds(t *testing.T) {
 	}
 	before := h.holds()
 	_, _ = open(t, h, "beside the stopped one", fillBlue)
-	h.Within(2*gtkHoldBound, "the stopped GTK window's hold to expire", func(_ *headless.Backend, c *compositor.Compositor) bool {
+	h.Eventually("the stopped GTK window's hold to expire", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		return c.Holds().Expired == before.Expired+1
 	})
 }

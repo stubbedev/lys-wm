@@ -5,7 +5,6 @@ import (
 	"image"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -115,11 +114,6 @@ func pumpFrames(h *Harness, c *testclient.Client, n uint64) {
 	h.t.Helper()
 	until := frames(h) + n
 	c.DispatchUntil("frames to pass", func() bool { return frames(h) >= until })
-}
-
-func pump(c *testclient.Client, d time.Duration) {
-	until := time.Now().Add(d)
-	c.DispatchUntil("the time to pass", func() bool { return time.Now().After(until) })
 }
 
 func tiledGlassRedraws(t *testing.T, live bool) uint64 {

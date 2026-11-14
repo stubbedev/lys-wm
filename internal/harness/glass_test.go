@@ -350,11 +350,8 @@ func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
 			return px[1] < 0x40 && px[2] > 0x40 && px[0] < 0x40
 		})
 		f0, r0 := framesAndBlurs(h)
-		pump(shell, 200*time.Millisecond)
+		pumpFrames(h, shell, 12)
 		f1, r1 := framesAndBlurs(h)
-		if f1 == f0 {
-			t.Fatal("the animated wallpaper presented no frame")
-		}
 		if r1-r0 > f1-f0 {
 			t.Errorf("%d blur redraws over %d frames behind two mica windows, want one a frame", r1-r0, f1-f0)
 		}

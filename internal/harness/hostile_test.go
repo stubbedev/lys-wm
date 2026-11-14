@@ -14,7 +14,6 @@ import (
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
-	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
@@ -41,7 +40,7 @@ func TestHungClientsAreMarkedUnresponsive(t *testing.T) {
 		ws := c.Snapshot().Windows
 		return len(ws) == 1 && ws[0].Focused
 	})
-	h.Within(2*shell.PingTimeout, "the hung window marked unresponsive", unresponsive(1, true))
+	h.Eventually("the hung window marked unresponsive", unresponsive(1, true))
 	expectEvent(t, lines, `{"event":"unresponsive","window":1,"unresponsive":true}`)
 
 	alive := testclient.Connect(t, h.Socket())

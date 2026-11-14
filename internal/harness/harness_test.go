@@ -28,6 +28,24 @@ func presented(i int) func(*headless.Backend, *compositor.Compositor) bool {
 	}
 }
 
+func TestTheHangLimitStopsOnlyADoTheLoopNeverStarted(t *testing.T) {
+	t.Parallel()
+	h := &Harness{t: t, done: make(chan error, 1)}
+	fired := func() <-chan time.Time {
+		hang := make(chan time.Time, 1)
+		hang <- time.Time{}
+		return hang
+	}
+	running := make(chan struct{})
+	close(running)
+	if err := h.awaitStart(running, fired()); err != nil {
+		t.Errorf("a Do the loop is running failed when the hang limit passed: %v", err)
+	}
+	if err := h.awaitStart(make(chan struct{}), fired()); err == nil {
+		t.Error("a Do the loop never started passed the hang limit")
+	}
+}
+
 func TestDesktopIsDrawnOnEveryOutput(t *testing.T) {
 	t.Parallel()
 	h := Start(t, small)

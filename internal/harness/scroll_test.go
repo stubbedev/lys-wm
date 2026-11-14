@@ -65,10 +65,8 @@ func TestAnOffScreenColumnGetsFramesAtTheHiddenRateAndScrollingConfiguresNothing
 	if s.windows[0].Size != s.windows[1].Size {
 		t.Fatalf("the columns are %v and %v, want equal widths", s.windows[0].Size, s.windows[1].Size)
 	}
-	pump(s.c, 200*time.Millisecond)
-	from := s.windows[0].Frames
-	pump(s.c, hiddenWindow)
-	atTheHiddenRate(t, "the column scrolled off", s.windows[0].Frames-from)
+	awaitHiddenFrame(h, s.c, "the column scrolled off")
+	atTheHiddenRate(t, h, s.c, "the column scrolled off", func() int { return s.windows[0].Frames })
 
 	before := s.configures()
 	h.ctl("center")

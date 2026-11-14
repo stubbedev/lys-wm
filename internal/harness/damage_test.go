@@ -239,20 +239,21 @@ func TestUndamagedFrameCallbacksArePacedByRefresh(t *testing.T) {
 	w := c.Window("idle", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	quiesce(t, h, c, w)
-	const span = 250 * time.Millisecond
-	callbacks := 0
-	for start := time.Now(); time.Since(start) < span; callbacks++ {
-		var done bool
-		if _, err := w.Surface.Frame(frameDone{&done}); err != nil {
+	var times frameTimes
+	for len(times) < 12 {
+		asked := len(times)
+		if _, err := w.Surface.Frame(&times); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.Surface.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		c.DispatchUntil("the frame callback", func() bool { return done })
+		c.DispatchUntil("the frame callback", func() bool { return len(times) > asked })
 	}
-	if limit := int(span/small.Interval()) + 2; callbacks > limit {
-		t.Fatalf("%d frame callbacks in %v without damage, want at most %d at %d mHz", callbacks, span, limit, small.RefreshMHz)
+	for i := 1; i < len(times); i++ {
+		if gap := time.Duration(times[i]-times[i-1]) * time.Millisecond; gap < small.Interval()-time.Millisecond {
+			t.Fatalf("frame callbacks without damage came %v apart by the compositor's clock, want a refresh of %v between them: %v", gap, small.Interval(), times)
+		}
 	}
 }
 

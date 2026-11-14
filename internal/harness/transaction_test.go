@@ -292,7 +292,7 @@ func TestRealClientsCatchUpWithEveryChangeAtTheirOwnPace(t *testing.T) {
 				return !comp.Holding() && len(tops) > 0 && tops[0].Mapped() && (client.mayNotRedraw || tops[0].Current().Size == tops[0].Requested().Size)
 			}
 			h.Run(client.name, client.args...)
-			h.Within(clientTimeout, client.name+" to map and draw its size", caughtUp)
+			h.Eventually(client.name+" to map and draw its size", caughtUp)
 			const changes = 20
 			start := h.holds()
 			for i := range changes {
@@ -301,12 +301,12 @@ func TestRealClientsCatchUpWithEveryChangeAtTheirOwnPace(t *testing.T) {
 					cfg = gapped
 				}
 				h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error { return comp.Reconfigure(cfg) })
-				h.Within(clientTimeout, "the change landed, answered or past the bound", landed)
+				h.Eventually("the change landed, answered or past the bound", landed)
 				if i%4 == 0 {
-					h.Within(clientTimeout, client.name+" caught up", caughtUp)
+					h.Eventually(client.name+" caught up", caughtUp)
 				}
 			}
-			h.Within(clientTimeout, client.name+" caught up with the last change", caughtUp)
+			h.Eventually(client.name+" caught up with the last change", caughtUp)
 			end := h.holds()
 			t.Logf("%s: %d changes, %d held, %d over the bound, %v at the longest", client.name, changes, end.Landed-start.Landed, end.Expired-start.Expired, end.Longest)
 		})

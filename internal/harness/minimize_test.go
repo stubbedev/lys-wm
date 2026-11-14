@@ -2,6 +2,7 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"slices"
 	"testing"
@@ -381,10 +382,7 @@ func TestAGenieDrawsItsWindowOnceUntilTheWindowChanges(t *testing.T) {
 		for _, d := range []time.Duration{2100, 2300, 2500} {
 			shown := frames(h)
 			at(h, d*time.Millisecond)
-			pump(c, 40*time.Millisecond)
-			if frames(h) == shown {
-				t.Fatalf("no frame ran at %d ms", d)
-			}
+			c.DispatchUntil(fmt.Sprintf("a frame at %d ms", d), func() bool { return frames(h) > shown })
 		}
 		if got := redraws() - before; got > 1 {
 			t.Fatalf("a window that did not change was drawn %d times for its genie", got)

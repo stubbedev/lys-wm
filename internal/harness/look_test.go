@@ -4,7 +4,6 @@ import (
 	"errors"
 	"image"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
@@ -33,6 +32,15 @@ func speedOf(h *Harness) render.Speed {
 	return s
 }
 
+func animating(h *Harness) bool {
+	var on bool
+	h.Do(func(_ *headless.Backend, c *compositor.Compositor) error {
+		on = c.Animating(c.Outputs()[0])
+		return nil
+	})
+	return on
+}
+
 func TestTheDefaultLookFitsTheRenderer(t *testing.T) {
 	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
@@ -45,7 +53,7 @@ func TestTheDefaultLookFitsTheRenderer(t *testing.T) {
 		gap, border := compositor.DefaultSettings().Gaps.Inner, compositor.DefaultDecor(compositor.DefaultAccent).BorderWidth
 		inset := 2 * (gap + border)
 		c.DispatchUntil("the window to fill its tile", func() bool { return w.Logical == image.Pt(size.X-inset, size.Y-inset) })
-		pump(c, 2*time.Second)
+		c.DispatchUntil("the opening animation to end", func() bool { return !animating(h) })
 		w.Stop()
 		h.Eventually("the window settled in the middle of its tile", showing(size.X/4, size.Y/4, white))
 		h.Eventually("the background in the outer gap", func(b *headless.Backend, _ *compositor.Compositor) bool {
@@ -125,7 +133,7 @@ func TestATabStripAndItsWindowAreOneRoundedShape(t *testing.T) {
 		c.DispatchUntil("the window below its strip", func() bool {
 			return second.Logical == image.Pt(size.X-2*(gap+border), size.Y-2*(gap+border)-decor.Tab.Height)
 		})
-		pump(c, 2*time.Second)
+		c.DispatchUntil("the opening animation to end", func() bool { return !animating(h) })
 		second.Stop()
 		first.Stop()
 		bg := func(shot [3]byte) bool { return shot != white }

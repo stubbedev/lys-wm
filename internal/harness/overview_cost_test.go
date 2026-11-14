@@ -14,6 +14,7 @@ import (
 )
 
 func TestAPiledOverviewClosingDoesNotDrawWhatIsCovered(t *testing.T) {
+	t.Parallel()
 	var now time.Duration
 	const screens, most = 6, 300
 	h := StartGLES(t, func(cfg *compositor.Config) {

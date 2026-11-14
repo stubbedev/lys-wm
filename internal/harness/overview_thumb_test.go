@@ -120,6 +120,7 @@ func (h *Harness) thumbCycle(now *time.Duration, change func()) thumbCycle {
 }
 
 func TestAThumbnailStaysFilteredAcrossItsWindowsUpdates(t *testing.T) {
+	t.Parallel()
 	onEachConfiguredRenderer(t, func(t *testing.T, start gpuStarter) {
 		var now time.Duration
 		h := start(t, func(cfg *compositor.Config) {

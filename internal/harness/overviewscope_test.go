@@ -155,6 +155,7 @@ func TestTypingFiltersTheOverviewAndBackSpaceRestoresIt(t *testing.T) {
 }
 
 func TestFilteringRedrawsNoThumbnailButACommitDoes(t *testing.T) {
+	t.Parallel()
 	h := Start(t, overviewMode)
 	c := testclient.Connect(t, h.Socket())
 	fire := appWindow(t, c, "Firefox", "firefox")

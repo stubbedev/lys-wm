@@ -319,8 +319,9 @@ func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error
 	if goroutineID() == h.loopG.Load() {
 		panic("harness: Do called on the compositor loop, from inside a Do or Eventually function; it would wait on the loop it runs on forever")
 	}
-	result := make(chan error, 1)
+	started, result := make(chan struct{}), make(chan error, 1)
 	if err := h.loop.Post(func() error {
+		close(started)
 		result <- f(h.backend, h.compositor)
 		return nil
 	}); err != nil {
@@ -328,27 +329,34 @@ func (h *Harness) Do(f func(b *headless.Backend, c *compositor.Compositor) error
 	}
 	hang := time.NewTimer(testenv.HangLimit)
 	defer hang.Stop()
+	if err := h.awaitStart(started, hang.C); err != nil {
+		h.t.Fatal(err)
+	}
+	if err := <-result; err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *Harness) awaitStart(started <-chan struct{}, hang <-chan time.Time) error {
 	select {
-	case err := <-result:
-		if err != nil {
-			h.t.Fatal(err)
-		}
-	case <-hang.C:
-		h.t.Fatalf("harness: the compositor loop did not finish a Do within %v", testenv.HangLimit)
+	case <-started:
+		return nil
+	default:
+	}
+	select {
+	case <-started:
+		return nil
+	case <-hang:
+		return fmt.Errorf("harness: the compositor loop did not start a Do within %v", testenv.HangLimit)
 	case err := <-h.done:
 		h.done <- err
-		h.t.Fatalf("harness: compositor loop ended: %v", err)
+		return fmt.Errorf("harness: compositor loop ended: %w", err)
 	}
 }
 
 func (h *Harness) Eventually(what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {
 	h.t.Helper()
-	h.Within(testenv.HangLimit, what, cond)
-}
-
-func (h *Harness) Within(d time.Duration, what string, cond func(b *headless.Backend, c *compositor.Compositor) bool) {
-	h.t.Helper()
-	deadline := time.Now().Add(d)
+	deadline := time.Now().Add(testenv.HangLimit)
 	for {
 		var ok bool
 		h.Do(func(b *headless.Backend, c *compositor.Compositor) error {
