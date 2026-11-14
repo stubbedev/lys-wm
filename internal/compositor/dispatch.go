@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
+	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 	"unsafe"
@@ -168,31 +171,74 @@ func (c *Compositor) spawnWith(command string, env []string, started func(pid in
 	})
 }
 
+const spinLeastProcs = 2
+
 func spinWithoutBlocking(d time.Duration) error {
-	if errno := spinThreadCPU(d.Nanoseconds()); errno != 0 {
-		return fmt.Errorf("compositor: debug spin %v: read this thread's CPU clock: %w", d, errno)
+	if procs := runtime.GOMAXPROCS(0); procs < spinLeastProcs {
+		return fmt.Errorf("compositor: debug spin %v: GOMAXPROCS is %d, and a spin holds its processor until it ends, so nothing else, a priority guard included, could run", d, procs)
 	}
-	return nil
+	return withoutGC(func() error {
+		start, now, errno := spinThreadCPU(d.Nanoseconds())
+		if errno == 0 {
+			errno = spinPreemptibly(start, now, d.Nanoseconds())
+		}
+		if errno != 0 {
+			return fmt.Errorf("compositor: debug spin %v: read this thread's CPU clock or scheduling policy: %w", d, errno)
+		}
+		return nil
+	})
+}
+
+func withoutGC(f func() error) error {
+	limit := debug.SetMemoryLimit(math.MaxInt64)
+	percent := debug.SetGCPercent(-1)
+	defer func() {
+		debug.SetGCPercent(percent)
+		debug.SetMemoryLimit(limit)
+	}()
+	return f()
 }
 
 //go:nosplit
-func spinThreadCPU(ns int64) syscall.Errno {
-	start, errno := threadCPUNanos()
+func spinThreadCPU(ns int64) (start, now int64, errno syscall.Errno) {
+	policy, errno := threadPolicy()
 	if errno != 0 {
-		return errno
+		return 0, 0, errno
 	}
-	for {
-		now, errno := threadCPUNanos()
-		if errno != 0 || now-start >= ns {
+	if start, errno = threadCPUNanos(); errno != 0 {
+		return 0, 0, errno
+	}
+	for still := policy; still == policy; {
+		if now, errno = threadCPUNanos(); errno != 0 || now-start >= ns {
+			return start, now, errno
+		}
+		if still, errno = threadPolicy(); errno != 0 {
+			return start, now, errno
+		}
+	}
+	return start, now, 0
+}
+
+func spinPreemptibly(start, now, ns int64) syscall.Errno {
+	var errno syscall.Errno
+	for now-start < ns {
+		if now, errno = threadCPUNanos(); errno != 0 {
 			return errno
 		}
 	}
+	return 0
+}
+
+//go:nosplit
+func threadPolicy() (uintptr, syscall.Errno) {
+	policy, _, errno := syscall.RawSyscall(unix.SYS_SCHED_GETSCHEDULER, 0, 0, 0)
+	return policy, errno
 }
 
 //go:nosplit
 func threadCPUNanos() (int64, syscall.Errno) {
 	var ts unix.Timespec
-	_, _, errno := syscall.Syscall(unix.SYS_CLOCK_GETTIME, unix.CLOCK_THREAD_CPUTIME_ID, uintptr(unsafe.Pointer(&ts)), 0) //nolint:gosec // the kernel writes ts during the call
+	_, _, errno := syscall.RawSyscall(unix.SYS_CLOCK_GETTIME, unix.CLOCK_THREAD_CPUTIME_ID, uintptr(unsafe.Pointer(&ts)), 0) //nolint:gosec // the kernel writes ts during the call
 	return ts.Sec*int64(time.Second) + ts.Nsec, errno
 }
 

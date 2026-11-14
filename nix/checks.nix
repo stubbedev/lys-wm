@@ -112,7 +112,7 @@
           machine.succeed("${run "lys-wmctl dispatch debug spin 500"}")
           try:
               machine.wait_until_succeeds(f"{demoted} | grep -c . | grep -qx 1", timeout=30)
-              machine.succeed("journalctl -b --no-pager -t lys-wm | grep -E 'internal/compositor\\.spinThreadCPU\\('")
+              machine.succeed("journalctl -b --no-pager -t lys-wm | grep -E 'internal/compositor\\.spinPreemptibly\\('")
               assert machine.succeed("pgrep -x lys-wm").split() == [compositor], "lys-wm did not survive a 500 ms realtime spin under rtkit's 200 ms RLIMIT_RTTIME"
               machine.wait_until_succeeds("journalctl -b --no-pager -t lys-wm | grep -q 'the compositor thread runs at SCHED_RR again'", timeout=30)
               machine.wait_until_succeeds(f"{threads} | grep -qx {raised}", timeout=30)
