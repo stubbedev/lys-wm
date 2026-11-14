@@ -258,13 +258,13 @@ func testAGenieCollapsesTowardTheNearestEdgeAndComesBack(t *testing.T, start gpu
 	})
 	at(h, 2*time.Second)
 	h.Eventually("nothing left", showing(80, 45, bg))
-	time.Sleep(100 * time.Millisecond)
+	h.Advance(100 * time.Millisecond)
 	var frames uint64
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		frames = b.Outputs()[0].Frames()
 		return nil
 	})
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if n := b.Outputs()[0].Frames(); n != frames {
 			t.Errorf("%d frames ran after the genie ended", n-frames)

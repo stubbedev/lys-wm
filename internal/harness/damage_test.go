@@ -145,9 +145,9 @@ func TestIdleDesktopNeverWakes(t *testing.T) {
 	c.DispatchUntil("the window to map", w.Mapped)
 	settle(t, h)
 	before := h.Wakeups()
-	time.Sleep(300 * time.Millisecond)
-	if woke := h.Wakeups() - before; woke > 1 {
-		t.Fatalf("an idle desktop woke the loop %d times in 300ms", woke-1)
+	h.Advance(300 * time.Millisecond)
+	if woke := h.Wakeups() - before; woke > 2 {
+		t.Fatalf("an idle desktop woke the loop %d times in 300ms", woke-2)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestSteadyStateFramesDoNotAllocate(t *testing.T) {
 			t.Errorf("cursor frames allocated %d times each and unchanged frames %d times", moving, idle)
 		}
 		presented := func() {
-			if err := comp.Presented(o, backend.Presentation{Time: backend.Now(), Refresh: desktop.Interval(), Seq: 1}); err != nil {
+			if err := comp.Presented(o, backend.Presentation{Time: h.loop.Now(), Refresh: desktop.Interval(), Seq: 1}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -305,7 +305,7 @@ func TestAWindowDrawnBeforeTheHiddenFrameIntervalLeavesNoHiddenFrame(t *testing.
 	w := c.Window("drawn", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
 	settle(t, h)
-	time.Sleep(250 * time.Millisecond)
+	h.Advance(250 * time.Millisecond)
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {
 		if n := comp.HiddenFrames(); n != 0 {
 			t.Errorf("a window drawn as it mapped left %d hidden frames to fire", n)

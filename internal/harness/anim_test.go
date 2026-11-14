@@ -83,7 +83,7 @@ func testAMovedWindowAnimatesOnTheFrameClock(t *testing.T, start gpuStarter) {
 		before = b.Outputs()[0].Frames()
 		return nil
 	})
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if after := b.Outputs()[0].Frames(); after != before {
 			t.Errorf("%d frames ran after the animation ended", after-before)
@@ -191,7 +191,7 @@ func testWindowsPopInAndOutWhileTheyFade(t *testing.T, start gpuStarter) {
 		before = b.Outputs()[0].Frames()
 		return nil
 	})
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if after := b.Outputs()[0].Frames(); after != before {
 			t.Errorf("%d frames ran after the close animation ended", after-before)
@@ -247,7 +247,7 @@ func testAWorkspaceSwitchSlidesBothWorkspaces(t *testing.T, start gpuStarter) {
 		before = x.Outputs()[0].Frames()
 		return nil
 	})
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.Do(func(x *headless.Backend, _ *compositor.Compositor) error {
 		if n := x.Outputs()[0].Frames(); n != before {
 			t.Errorf("%d frames ran after the switch ended", n-before)
@@ -719,7 +719,7 @@ func testAnElasticDragBendsTheWindowAndItSettlesFlat(t *testing.T, start gpuStar
 		before = b.Outputs()[0].Frames()
 		return nil
 	})
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		if n := b.Outputs()[0].Frames(); n != before {
 			t.Errorf("%d frames ran after the wobble settled", n-before)

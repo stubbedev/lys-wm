@@ -7,7 +7,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
@@ -76,8 +75,9 @@ func TestThePlanesOverlayLeavesAScannedOutWindowScannedOut(t *testing.T) {
 
 func TestADebugTraceRecordsARunningSession(t *testing.T) {
 	h := StartWith(t, func(cfg *compositor.Config) {
+		now := cfg.Clock
 		cfg.Hooks.OpenFrameTrace = func(path string) (*frametrace.Recorder, error) {
-			return frametrace.Create(path, frametrace.Header{Backend: "headless", Renderer: "soft"}, nil, frametrace.Clock{Now: backend.Now}, cfg.Report)
+			return frametrace.Create(path, frametrace.Header{Backend: "headless", Renderer: "soft"}, nil, frametrace.Clock{Now: now}, cfg.Report)
 		}
 	}, small)
 	c := testclient.Connect(t, h.Socket())

@@ -91,34 +91,38 @@ func inhibitableWindow(t *testing.T) (*Harness, *testclient.Client, *testclient.
 }
 
 func move(h *Harness) {
+	movedAt(h)
+}
+
+func movedAt(h *Harness) time.Duration {
+	h.t.Helper()
+	var at time.Duration
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
+		at = h.loop.Now()
 		return errors.Join(b.Pointer().Move(1, 0), b.Pointer().Frame())
 	})
+	return at
 }
 
 func TestIdleNotificationsFireAndResume(t *testing.T) {
 	t.Parallel()
 	const timeout = 60 * time.Millisecond
-	now := time.Hour
-	h := StartWith(t, func(cfg *compositor.Config) { cfg.Clock = func() time.Duration { return now } }, small)
-	advance := func(d time.Duration) {
-		h.Do(func(*headless.Backend, *compositor.Compositor) error {
-			now += d
-			return nil
-		})
-	}
+	h := Start(t, small)
+	h.Freeze()
+	advance := h.Advance
 	i := newIdler(t, h)
 	l := i.watch(timeout, false)
 	advance(timeout)
 	i.c.DispatchUntil("idled", func() bool { return slices.Equal(l.log, []string{"idled"}) })
 	move(h)
 	i.c.DispatchUntil("resumed", func() bool { return slices.Equal(l.log, []string{"idled", "resumed"}) })
+	var moved time.Duration
 	for range 10 {
 		advance(timeout / 3)
-		move(h)
+		moved = movedAt(h)
 	}
-	advance(timeout - time.Millisecond)
-	time.Sleep(2 * timeout)
+	h.Eventually("the pointer drawn and no frame owed", quiet)
+	advance(moved + timeout - time.Millisecond - h.Now())
 	if err := i.c.Display.Roundtrip(); err != nil {
 		t.Fatal(err)
 	}

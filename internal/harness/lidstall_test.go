@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -144,7 +143,8 @@ func TestAWindowOnAStalledOutputMovesToThePanelAndBackOnceTheOutputDisplaysForTh
 		h.Eventually("one probe frame taken on DP-1", func(b *headless.Backend, _ *compositor.Compositor) bool {
 			return b.Outputs()[external].Presents() > presents
 		})
-		for end := time.Now().Add(backend.SustainedFor + backend.SustainedFor/4); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		for range 10 {
+			h.Advance(backend.SustainedFor / 8)
 			var flapped string
 			h.Do(func(b *headless.Backend, comp *compositor.Compositor) error {
 				switch x, _ := windowNamed(comp, "form"); {

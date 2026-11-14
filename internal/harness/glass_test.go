@@ -273,7 +273,7 @@ func TestTheRimFollowsThePointerAndRedrawsOnlyItself(t *testing.T) {
 		if got := presents(h); got != before {
 			t.Errorf("a move that does not turn the light presented %d frames", got-before)
 		}
-		time.Sleep(100 * time.Millisecond)
+		h.Advance(100 * time.Millisecond)
 		if got := presents(h); got != before {
 			t.Errorf("%d frames presented with nothing moving", got-before)
 		}
@@ -358,7 +358,7 @@ func TestMicaTintsWithTheWallpaperAtOneBlurPerOutput(t *testing.T) {
 		wallpaper.Stop()
 		settle(t, h)
 		r0 = blurRedraws(h)
-		time.Sleep(100 * time.Millisecond)
+		h.Advance(100 * time.Millisecond)
 		if r1 = blurRedraws(h); r1 != r0 {
 			t.Errorf("%d blur redraws with nothing behind the mica moving", r1-r0)
 		}

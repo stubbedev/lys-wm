@@ -971,7 +971,7 @@ func TestThreeFingersScrubTheOverview(t *testing.T) {
 	if got := h.overviewProgress(); math.Abs(got-0.35) > 1e-3 {
 		t.Fatalf("back down 60 scrubs to %v", got)
 	}
-	time.Sleep(60 * time.Millisecond)
+	h.Advance(60 * time.Millisecond)
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureEnd(backend.Swipe, false) })
 	h.expectOverview(false)
 	r.expect("kb_enter win", "enter win 400,250", "frame")
@@ -982,7 +982,7 @@ func TestThreeFingersScrubTheOverview(t *testing.T) {
 	if got <= 1 || got > 1.13 {
 		t.Fatalf("a swipe past the end resists at %v", got)
 	}
-	time.Sleep(60 * time.Millisecond)
+	h.Advance(60 * time.Millisecond)
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureEnd(backend.Swipe, false) })
 	h.expectOverview(true)
 	if got := h.overviewProgress(); got != 1 {
@@ -992,7 +992,7 @@ func TestThreeFingersScrubTheOverview(t *testing.T) {
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureBegin(backend.Swipe, 3) })
 	h.swipeOverview(300)
 	h.expectOverview(true)
-	time.Sleep(60 * time.Millisecond)
+	h.Advance(60 * time.Millisecond)
 	h.gesture(func(_ *headless.Output, p *headless.Pointer) error { return p.GestureEnd(backend.Swipe, false) })
 	h.expectOverview(false)
 
@@ -1099,13 +1099,14 @@ func TestAHeldArrowRepeats(t *testing.T) {
 			leftmost = id
 		}
 	}
+	h.Freeze()
 	h.key(keyLeft, true)
 	h.key(keyUp, true)
-	time.Sleep(150 * time.Millisecond)
+	h.Advance(150 * time.Millisecond)
 	h.key(keyUp, false)
 	h.key(keyLeft, false)
 	h.key(keyLeft, true)
-	time.Sleep(150 * time.Millisecond)
+	h.Advance(150 * time.Millisecond)
 	h.key(keyLeft, false)
 	h.tap(keyEnter)
 	h.Do(func(_ *headless.Backend, comp *compositor.Compositor) error {

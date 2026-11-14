@@ -128,7 +128,7 @@ func TestKeybinds(t *testing.T) {
 	eventuallyLines(t, log, func(n int) bool { return n >= 4 })
 	h.key(keyL, false)
 	growsUntilMarker()
-	time.Sleep(100 * time.Millisecond)
+	h.Advance(100 * time.Millisecond)
 	if n := growsUntilMarker(); n != 0 {
 		t.Fatalf("a repeating bind fired %d times after its key was released", n)
 	}

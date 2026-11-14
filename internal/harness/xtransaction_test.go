@@ -92,7 +92,7 @@ func TestAnXWindowWithASyncCounterIsWaitedFor(t *testing.T) {
 	_, _ = open(t, h, "right", fillBlue)
 	h.Eventually("the change held", holding)
 	value := xc.syncRequest()
-	time.Sleep(50 * time.Millisecond)
+	h.Advance(50 * time.Millisecond)
 	if !h.compositorHolding() {
 		t.Fatal("the change landed before the client said it had drawn")
 	}

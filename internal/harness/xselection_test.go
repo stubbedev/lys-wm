@@ -232,6 +232,7 @@ type xowner struct {
 	text    []byte
 	refuse  bool
 	silent  bool
+	ignored chan struct{}
 	done    chan error
 }
 
@@ -260,6 +261,7 @@ func (o *xowner) serve() {
 			case o.atoms["UTF8_STRING"]:
 				if o.silent {
 					o.silent = false
+					close(o.ignored)
 					continue
 				}
 				if o.refuse {
@@ -295,6 +297,11 @@ func (o *xowner) serve() {
 
 func receive(t *testing.T, p *party, mime string) string {
 	t.Helper()
+	return askPaste(t, p, mime)()
+}
+
+func askPaste(t *testing.T, p *party, mime string) func() string {
+	t.Helper()
 	var fds [2]int
 	if err := unix.Pipe2(fds[:], unix.O_CLOEXEC); err != nil {
 		t.Fatal(err)
@@ -303,18 +310,21 @@ func receive(t *testing.T, p *party, mime string) string {
 		t.Fatal(err)
 	}
 	r := os.NewFile(uintptr(fds[0]), "paste")
-	defer r.Close()
+	t.Cleanup(func() { _ = r.Close() })
 	if err := errors.Join(p.cb.Selection.Data.Receive(mime, fds[1]), unix.Close(fds[1]), p.c.Display.Flush()); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.SetReadDeadline(time.Now().Add(clientTimeout)); err != nil {
-		t.Fatal(err)
+	return func() string {
+		t.Helper()
+		if err := r.SetReadDeadline(time.Now().Add(clientTimeout)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(got)
 	}
-	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(got)
 }
 
 func TestXSelectionsPasteIntoWayland(t *testing.T) {
@@ -432,7 +442,7 @@ func TestASilentXOwnerDoesNotHoldUpLaterPastes(t *testing.T) {
 	}, small)
 	xc := xDial(t, h)
 	xc.intern("CLIPBOARD", "TARGETS", "UTF8_STRING", "INCR")
-	o := &xowner{xclient: xc, text: []byte("second try"), silent: true, done: make(chan error, 1)}
+	o := &xowner{xclient: xc, text: []byte("second try"), silent: true, ignored: make(chan struct{}), done: make(chan error, 1)}
 	o.win = xc.window(image.Rect(0, 0, 40, 40), 0xffffff, false, nil)
 	h.Eventually("the X window focused", func(_ *headless.Backend, c *compositor.Compositor) bool {
 		ws := windowsOf(c)
@@ -448,12 +458,22 @@ func TestASilentXOwnerDoesNotHoldUpLaterPastes(t *testing.T) {
 	})
 	p := join(t, h, "paster")
 	p.seen(t, "the X selection offered", func() bool { return p.cb.Selection != nil })
-	start := time.Now()
-	if got := receive(t, p, "text/plain;charset=utf-8"); got != "" {
-		t.Fatalf("a paste nobody answered delivered %q", got)
+	h.Freeze()
+	read := askPaste(t, p, "text/plain;charset=utf-8")
+	select {
+	case <-o.ignored:
+	case <-time.After(clientTimeout):
+		t.Fatal("the paste never reached the X owner")
 	}
-	if waited := time.Since(start); waited < XTransferTimeout/2 {
-		t.Fatalf("the unanswered paste ended after %v, before the transfer timeout", waited)
+	mu.Lock()
+	early := slices.Clone(reported)
+	mu.Unlock()
+	if len(early) != 0 {
+		t.Fatalf("an unanswered paste reported %v before its transfer timeout passed", early)
+	}
+	h.Advance(XTransferTimeout)
+	if got := read(); got != "" {
+		t.Fatalf("a paste nobody answered delivered %q", got)
 	}
 	if got := receive(t, p, "text/plain;charset=utf-8"); got != "second try" {
 		t.Fatalf("the paste after a stalled one gave %q", got)

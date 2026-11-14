@@ -64,18 +64,20 @@ func TestAnInheritedFrameStaysUntilAClientDraws(t *testing.T) {
 func TestAnInheritedFrameGivesWayWhenNoClientDraws(t *testing.T) {
 	t.Parallel()
 	r := &reports{}
-	timeout := 50 * time.Millisecond
-	start := time.Now()
+	timeout := time.Hour
 	h := StartInherited(t, func(cfg *compositor.Config) {
 		cfg.InheritTimeout = timeout
 		cfg.Report = r.report
 	}, small)
+	h.Freeze()
+	h.Advance(timeout / 2)
+	if presents, inherited := takeover(h); presents != 0 || !inherited {
+		t.Fatalf("lys-wm presented %d frames over the inherited one halfway to the %v timeout (still inherited: %v)", presents, timeout, inherited)
+	}
+	h.Advance(timeout)
 	h.Eventually("the frame that replaces the inherited one", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		return b.Outputs()[0].Takeover() != nil
 	})
-	if waited := time.Since(start); waited < timeout {
-		t.Fatalf("lys-wm drew over the inherited frame after %v, before the %v timeout", waited, timeout)
-	}
 	var first [3]byte
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		first = pixel(b.Outputs()[0].Takeover(), 1, 1)
@@ -84,7 +86,7 @@ func TestAnInheritedFrameGivesWayWhenNoClientDraws(t *testing.T) {
 	if bg := compositor.Background; first != [3]byte{bg.R, bg.G, bg.B} {
 		t.Fatalf("the frame drawn after the timeout shows %v, not the background", first)
 	}
-	if got := r.take(); len(got) != 1 || !strings.Contains(got[0].Error(), "no client drew on HEADLESS-1 within 50ms") {
+	if got := r.take(); len(got) != 1 || !strings.Contains(got[0].Error(), "no client drew on HEADLESS-1 within "+timeout.String()) {
 		t.Fatalf("the timeout reported %q", got)
 	}
 }

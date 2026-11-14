@@ -59,6 +59,7 @@ func TestPresentationFeedback(t *testing.T) {
 	c.Bind(p)
 	w := c.Window("timed", quadrants)
 	c.DispatchUntil("the window to map", w.Mapped)
+	w.Stop()
 	if pe.clock != 1 {
 		t.Fatalf("clock id %d, want CLOCK_MONOTONIC", pe.clock)
 	}

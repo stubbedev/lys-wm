@@ -13,7 +13,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
-const testHDRHold = 300 * time.Millisecond
+const testHDRHold = time.Hour
 
 func hdrState(h *Harness) (on bool, commits uint64) {
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
@@ -88,7 +88,7 @@ func testHDRFullscreenSwitchesTheSignal(t *testing.T, start gpuStarter) {
 		h.dispatch("fullscreen")
 		c.Sync()
 	}
-	time.Sleep(testHDRHold * 2)
+	h.Advance(2 * testHDRHold)
 	settle(t, h)
 	if on, commits := hdrState(h); !on || commits != 1 {
 		t.Fatalf("10 fullscreen toggles within the hold left HDR %v after %d signal commits, want on after 1", on, commits)
@@ -96,6 +96,10 @@ func testHDRFullscreenSwitchesTheSignal(t *testing.T, start gpuStarter) {
 	h.dispatch("fullscreen")
 	other := c.Window("beside", quadrants)
 	c.DispatchUntil("a second window to map", other.Mapped)
+	if on, _ := hdrState(h); !on {
+		t.Fatal("leaving fullscreen dropped the HDR signal before its hold passed")
+	}
+	h.Advance(testHDRHold)
 	h.Eventually("the SDR signal once the hold passes", func(b *headless.Backend, _ *compositor.Compositor) bool {
 		return !b.Outputs()[0].State().HDR.Active
 	})

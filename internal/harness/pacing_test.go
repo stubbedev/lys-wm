@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	cct "github.com/stubbedev/lys-wm/internal/protocol/client/committiming"
@@ -145,7 +144,7 @@ func TestCommitTimingHoldsAnUpdateUntilItsTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	const delay = 300 * time.Millisecond
-	target := backend.Now() + delay
+	target := h.Now() + delay
 	timed := pc.update(t, w.Surface, pc.c.Buffer(w.Size, 0, testclient.Fill(0, 0xff, 0)), func() error { return timer.SetTimestamp(timestamp(target)) })
 	after := pc.update(t, w.Surface, pc.c.Buffer(w.Size, 1, testclient.Fill(0xff, 0, 0)))
 	pc.c.DispatchUntil("both updates answered", answered(timed, after))

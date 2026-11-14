@@ -128,7 +128,7 @@ func TestMoveToWorkspaceFollowRunsOneSwitch(t *testing.T) {
 		t.Fatalf("the followed window is %+v", w)
 	}
 	before := framesOn(h, 0)
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	if n := framesOn(h, 0); n != before {
 		t.Fatalf("%d frames ran after the switch ended", n-before)
 	}

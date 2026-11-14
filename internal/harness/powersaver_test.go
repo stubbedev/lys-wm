@@ -108,11 +108,12 @@ func TestPowerSaverSlidesAWorkspaceInHalfTheFrames(t *testing.T) {
 		before = b.Outputs()[0].Presents()
 		return nil
 	})
-	start := time.Now()
+	h.Freeze()
+	start := h.Now()
 	h.dispatch("workspace 2")
 	h.Eventually("the slide's first frame", func(b *headless.Backend, _ *compositor.Compositor) bool { return b.Outputs()[0].Presents() > before })
 	h.Eventually("the slide to end", func(_ *headless.Backend, c *compositor.Compositor) bool { return !c.Animating(c.Outputs()[0]) })
-	took := time.Since(start)
+	took := h.Now() - start
 	var presents uint64
 	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error {
 		presents = b.Outputs()[0].Presents() - before

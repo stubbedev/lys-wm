@@ -229,7 +229,7 @@ func testAShaderDoesNotDrawWhenNothingChanges(t *testing.T, start gpuStarter) {
 	h.Eventually("the shaded window", showing(50, 50, [3]byte{0, 0xff, 0xff}))
 	quiesce(t, h, c, w)
 	before := presentCount(h)
-	time.Sleep(150 * time.Millisecond)
+	h.Advance(150 * time.Millisecond)
 	if n := presentCount(h); n != before {
 		t.Errorf("%d frames presented over a still scene", n-before)
 	}

@@ -261,7 +261,7 @@ func TestRepeatingBindsWithRepeatOff(t *testing.T) {
 	h.key(keySuper, true)
 	h.key(keyL, true)
 	eventuallyLines(t, log, func(n int) bool { return n == 1 })
-	time.Sleep(time.Duration(seat.DefaultRepeatDelay+100) * time.Millisecond)
+	h.Advance(time.Duration(seat.DefaultRepeatDelay+100) * time.Millisecond)
 	h.key(keyL, false)
 	h.key(keySuper, false)
 	if n := lines(t, log); n != 1 {
@@ -349,7 +349,7 @@ func TestARepeatedReloadThatTurnsRepeatOffStopsIt(t *testing.T) {
 	h.key(keySuper, true)
 	h.key(keyQ, true)
 	h.Eventually("the repeat to reload", func(*headless.Backend, *compositor.Compositor) bool { return reloads >= 2 })
-	time.Sleep(200 * time.Millisecond)
+	h.Advance(200 * time.Millisecond)
 	h.key(keyQ, false)
 	h.key(keySuper, false)
 	h.Do(func(*headless.Backend, *compositor.Compositor) error {
