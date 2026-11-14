@@ -41,7 +41,7 @@ func (c *Compositor) SetPower(o *output.Output, on bool) error {
 		c.sceneOf(o).invalidate()
 		err = c.schedule(o)
 	} else {
-		err = errors.Join(c.fifo.Latched(nil), c.confirmLock())
+		err = errors.Join(c.fifo.Latched(nil), c.confirmLock(), c.throttleDark(o))
 	}
 	return errors.Join(err, c.power.Changed(o))
 }

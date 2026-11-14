@@ -93,12 +93,27 @@ func (c *Compositor) drawnNow(o *output.Output, shown []*surface.Surface) error 
 	return c.hidden.timer.Disarm()
 }
 
+func (c *Compositor) throttleUndrawn(s *surface.Surface) error {
+	if c.drawnAnywhere(s) {
+		return nil
+	}
+	return c.throttleFrames(s)
+}
+
 func (c *Compositor) throttleLeft(o *output.Output, was []*surface.Surface) error {
 	var errs error
 	for _, s := range was {
-		if !slices.Contains(c.shown[o], s) && !c.drawnAnywhere(s) {
-			errs = errors.Join(errs, c.throttleFrames(s))
+		if !slices.Contains(c.shown[o], s) {
+			errs = errors.Join(errs, c.throttleUndrawn(s))
 		}
+	}
+	return errs
+}
+
+func (c *Compositor) throttleDark(o *output.Output) error {
+	var errs error
+	for _, s := range c.shown[o] {
+		errs = errors.Join(errs, c.throttleUndrawn(s))
 	}
 	return errs
 }

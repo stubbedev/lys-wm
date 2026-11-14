@@ -114,10 +114,7 @@ func (c *Compositor) Committed(s *surface.Surface) error {
 			err = errors.Join(err, e)
 		}
 	}
-	if !c.drawnAnywhere(s) {
-		err = errors.Join(err, c.throttleFrames(s))
-	}
-	return err
+	return errors.Join(err, c.throttleUndrawn(s))
 }
 
 type placedRole interface {
