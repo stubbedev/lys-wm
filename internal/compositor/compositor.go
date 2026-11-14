@@ -791,12 +791,10 @@ func (c *Compositor) explicitSync(l *loop.Loop, display *server.Display) error {
 	if err != nil {
 		return err
 	}
-	timelines, err := dev.Cap(drm.CapSyncobjTimeline)
-	if err != nil || timelines == 0 {
-		return errors.Join(err, dev.Close())
-	}
-	display.OnClose(dev.Close)
 	c.syncobj, err = syncobj.New(display, l, dev, r, c)
+	if errors.Is(err, syncobj.ErrNoTimelines) {
+		return nil
+	}
 	return err
 }
 

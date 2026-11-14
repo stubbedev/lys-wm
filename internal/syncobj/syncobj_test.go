@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +30,13 @@ import (
 
 func device(t *testing.T) *drm.Device {
 	t.Helper()
+	d := ownDevice(t)
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func ownDevice(t *testing.T) *drm.Device {
+	t.Helper()
 	nodes, err := filepath.Glob("/dev/dri/renderD*")
 	if err != nil || len(nodes) == 0 {
 		t.Skip("no DRM render node")
@@ -37,8 +45,8 @@ func device(t *testing.T) *drm.Device {
 	if err != nil {
 		t.Skip(err)
 	}
-	t.Cleanup(func() { _ = d.Close() })
 	if v, err := d.Cap(drm.CapSyncobjTimeline); err != nil || v == 0 {
+		_ = d.Close()
 		t.Skipf("%s has no timeline syncobjs: %v", nodes[0], err)
 	}
 	return d
@@ -134,10 +142,22 @@ func (r *recorder) count() int {
 	return r.commits
 }
 
+type closings struct {
+	*drm.Device
+	closed atomic.Int32
+}
+
+func (c *closings) Close() error {
+	c.closed.Add(1)
+	return c.Device.Close()
+}
+
 type env struct {
 	t       *testing.T
 	l       *loop.Loop
 	dev     *drm.Device
+	kernel  *closings
+	display *server.Display
 	rec     *recorder
 	scr     *screen
 	c       *wlclient.Display
@@ -173,7 +193,7 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{t: t, l: l, dev: dev, rec: &recorder{}, scr: &screen{}}
+	e := &env{t: t, l: l, dev: dev, kernel: &closings{Device: ownDevice(t)}, display: d, rec: &recorder{}, scr: &screen{}}
 	if _, err := surface.New(d, e.rec); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +201,7 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.manager, err = New(d, l, dev, fencer{dev}, e.scr); err != nil {
+	if e.manager, err = New(d, l, e.kernel, fencer{dev}, e.scr); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -615,7 +635,7 @@ func TestAReleasePointSignalsEvenIfItsGPUFenceCannotBeHad(t *testing.T) {
 	}
 }
 
-type withheldFences struct{ *drm.Device }
+type withheldFences struct{ Device }
 
 func (withheldFences) ImportSyncFile(drm.Syncobj, uint64, int) error { return nil }
 
@@ -653,7 +673,7 @@ func (e *env) arm(dev Device, f Fencer) {
 
 func TestASweepNamesAReleasePointOwedUntilTheKernelReachesIt(t *testing.T) {
 	e := setup(t)
-	e.arm(withheldFences{e.dev}, pendingGPU{})
+	e.arm(withheldFences{e.kernel}, pendingGPU{})
 	acquire, atl := e.timeline()
 	release, rtl := e.timeline()
 	s, ss := e.surface()
@@ -700,5 +720,44 @@ func TestASweepFindsNoReleasePointOwedOnceItsGPUFenceSignalled(t *testing.T) {
 	}
 	if got := e.sweepAll(); got.busy || len(got.releases) != 0 {
 		t.Fatalf("a sweep found %v owed, busy %v, after their fences signalled", got.releases, got.busy)
+	}
+}
+
+func (e *env) on(f func() error) {
+	e.t.Helper()
+	done := make(chan error, 1)
+	if err := e.l.Post(func() error {
+		done <- f()
+		return nil
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestReleasePointsOwedWhenTheDisplayClosesSignalBeforeTheDeviceCloses(t *testing.T) {
+	e := setup(t)
+	acquire, atl := e.timeline()
+	release, rtl := e.timeline()
+	s, ss := e.surface()
+	e.scr.hold = true
+	e.show(s, ss, acquire, atl, rtl, 1)
+	e.show(s, ss, acquire, atl, rtl, 2)
+	e.waitFor("the replaced buffer handed to the screen", func() bool { return e.scr.holding() == 1 })
+	e.on(e.display.Close)
+	if n := e.scr.holding(); n != 2 {
+		t.Fatalf("the screen holds %d buffers once the display closed, want the replaced one and the one its surface showed", n)
+	}
+	if n := e.kernel.closed.Load(); n != 0 {
+		t.Fatalf("the device closed %d times while the screen still held two release points", n)
+	}
+	e.on(e.scr.leave)
+	if !e.signaledAt(release, 2) {
+		t.Fatal("the release points the screen let go of after the display closed never signalled")
+	}
+	if n := e.kernel.closed.Load(); n != 1 {
+		t.Fatalf("the device closed %d times once its last timeline went, want once", n)
 	}
 }

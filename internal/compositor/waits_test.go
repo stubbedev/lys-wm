@@ -359,6 +359,13 @@ func (f finishedGPU) SyncFile() (int, error) {
 
 func renderNode(t *testing.T) *drm.Device {
 	t.Helper()
+	d := openRenderNode(t)
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func openRenderNode(t *testing.T) *drm.Device {
+	t.Helper()
 	nodes, err := filepath.Glob("/dev/dri/renderD*")
 	if err != nil || len(nodes) == 0 {
 		t.Skip("no DRM render node")
@@ -367,8 +374,8 @@ func renderNode(t *testing.T) *drm.Device {
 	if err != nil {
 		t.Skip(err)
 	}
-	t.Cleanup(func() { _ = d.Close() })
 	if v, err := d.Cap(drm.CapSyncobjTimeline); err != nil || v == 0 {
+		_ = d.Close()
 		t.Skipf("%s has no timeline syncobjs: %v", nodes[0], err)
 	}
 	return d
@@ -387,10 +394,11 @@ type explicitRig struct {
 func setupExplicit(t *testing.T, kernel func(*drm.Device) syncobj.Device, fencer func(*drm.Device) syncobj.Fencer) *explicitRig {
 	t.Helper()
 	dev := renderNode(t)
+	own := kernel(openRenderNode(t))
 	w := setupWaits(t)
 	w.on(func() {
 		var err error
-		w.comp.syncobj, err = syncobj.New(w.comp.display, w.loop, kernel(dev), fencer(dev), w.comp)
+		w.comp.syncobj, err = syncobj.New(w.comp.display, w.loop, own, fencer(dev), w.comp)
 		must(t, err)
 	})
 	w.roundtrip()

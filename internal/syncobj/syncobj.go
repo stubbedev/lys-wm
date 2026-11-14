@@ -23,6 +23,8 @@ import (
 
 const version = 1
 
+var ErrNoTimelines = errors.New("syncobj: the device has no timeline syncobjs")
+
 type Fencer interface {
 	SyncFile() (int, error)
 }
@@ -41,6 +43,7 @@ type Device interface {
 	Query(s drm.Syncobj) (uint64, error)
 	EventFD(s drm.Syncobj, point uint64, eventfd int, available bool) error
 	ImportSyncFile(s drm.Syncobj, point uint64, syncFile int) error
+	Close() error
 }
 
 type Manager struct {
@@ -52,6 +55,8 @@ type Manager struct {
 	owed     []Release
 	eventFDs uint64
 	sweeps   uint64
+	refs     int
+	closed   bool
 }
 
 func (m *Manager) Sweep(acquireWaiting func(s *surface.Surface, acquire, sweeps uint64), releaseOwed func(r Release, sweeps uint64)) (bool, error) {
@@ -84,16 +89,41 @@ func (m *Manager) Sweep(acquireWaiting func(s *surface.Surface, acquire, sweeps 
 func New(d *server.Display, l *loop.Loop, dev Device, f Fencer, screen Screen) (*Manager, error) {
 	timelines, err := dev.Cap(drm.CapSyncobjTimeline)
 	if err != nil {
-		return nil, fmt.Errorf("syncobj: %w", err)
+		return nil, errors.Join(fmt.Errorf("syncobj: %w", err), dev.Close())
 	}
 	if timelines == 0 {
-		return nil, fmt.Errorf("syncobj: %s has no timeline syncobjs", dev.Path())
+		return nil, errors.Join(fmt.Errorf("%w: %s", ErrNoTimelines, dev.Path()), dev.Close())
 	}
-	m := &Manager{loop: l, dev: dev, fencer: f, screen: screen, surfaces: map[*surface.Surface]*syncSurface{}}
+	m := &Manager{loop: l, dev: dev, fencer: f, screen: screen, surfaces: map[*surface.Surface]*syncSurface{}, refs: 1}
 	if _, err := d.AddGlobal(sls.WpLinuxDrmSyncobjManagerV1Interface, version, m.bind); err != nil {
-		return nil, err
+		return nil, errors.Join(err, dev.Close())
 	}
+	d.OnClose(m.Close)
 	return m, nil
+}
+
+func (m *Manager) Close() error {
+	if m.closed {
+		return nil
+	}
+	m.closed = true
+	errs := make([]error, 0, len(m.owed)+1)
+	for _, r := range m.owed {
+		errs = append(errs, r.p.drop())
+	}
+	clear(m.owed)
+	m.owed = nil
+	return errors.Join(append(errs, m.unref())...)
+}
+
+func (m *Manager) unref() error {
+	if m.refs--; m.refs > 0 {
+		return nil
+	}
+	if err := m.dev.Close(); err != nil {
+		return fmt.Errorf("syncobj: close %s: %w", m.dev.Path(), err)
+	}
+	return nil
 }
 
 func (m *Manager) bind(c *server.Client, id wire.ObjectID, v uint32) error {
@@ -116,7 +146,7 @@ func (t *timeline) unref() error {
 	if t.refs--; t.refs > 0 {
 		return nil
 	}
-	return t.m.dev.DestroySyncobj(t.handle)
+	return errors.Join(t.m.dev.DestroySyncobj(t.handle), t.m.unref())
 }
 
 type point struct {
@@ -215,6 +245,9 @@ func (r Release) reached() (bool, error) {
 }
 
 func (m *Manager) owe(s *surface.Surface, l latch, how arming, err error) error {
+	if m.closed {
+		return errors.Join(err, l.release.drop())
+	}
 	m.owed = append(m.owed, Release{p: l.release, surface: s, buffer: l.buffer, arming: how, born: m.sweeps})
 	return errors.Join(err, m.screen.Awaiting())
 }
@@ -229,6 +262,9 @@ func (requests) Destroy(*sls.WpLinuxDrmSyncobjManagerV1) error {
 }
 
 func (r requests) ImportTimeline(obj *sls.WpLinuxDrmSyncobjManagerV1, res *sls.WpLinuxDrmSyncobjTimelineV1, fd int) (sls.WpLinuxDrmSyncobjTimelineV1Handler, error) {
+	if r.m.closed {
+		return nil, errors.Join(fmt.Errorf("syncobj: import a timeline for timeline@%d after %s was let go", res.Base().ID(), r.m.dev.Path()), unix.Close(fd))
+	}
 	handle, err := r.m.dev.ImportSyncobj(fd)
 	if closeErr := unix.Close(fd); closeErr != nil && err == nil {
 		return nil, errors.Join(closeErr, r.m.dev.DestroySyncobj(handle))
@@ -236,6 +272,7 @@ func (r requests) ImportTimeline(obj *sls.WpLinuxDrmSyncobjManagerV1, res *sls.W
 	if err != nil {
 		return nil, obj.ProtocolError(sls.WpLinuxDrmSyncobjManagerV1ErrorInvalidTimeline, "not a syncobj: %v", err)
 	}
+	r.m.refs++
 	t := &timeline{m: r.m, handle: handle, refs: 1}
 	server.OnDestroy(res, t.unref)
 	return &timelineRequests{t: t}, nil
