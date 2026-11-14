@@ -47,12 +47,18 @@ type Renderer struct {
 	targets  map[*Target]struct{}
 	linears  map[*linearCopy]struct{}
 	shaders  map[*screenShader]struct{}
+	drawn    map[drawState]struct{}
+	warmed   map[uint64]struct{}
+	effects  render.Effects
+
+	effectSource *TextureTarget
 }
 
 func newRenderer(d *lgpu.Device, node uint64) *Renderer {
 	return &Renderer{
 		d: d, node: node,
 		textures: map[*texture]struct{}{}, targets: map[*Target]struct{}{}, linears: map[*linearCopy]struct{}{}, shaders: map[*screenShader]struct{}{},
+		drawn: map[drawState]struct{}{}, warmed: map[uint64]struct{}{},
 	}
 }
 
@@ -114,6 +120,9 @@ func (r *Renderer) Recover() error {
 	}
 	r.waits += r.d.BlockingWaits()
 	r.submits += r.d.Submissions()
+	clear(r.drawn)
+	clear(r.warmed)
+	gpu.Compiling()
 	r.d.Close()
 	d, err := r.open()
 	if err != nil {
@@ -186,7 +195,8 @@ func (r *Renderer) DeviceName() string {
 }
 
 func (r *Renderer) Close() error {
-	errs := make([]error, 0, len(r.targets)+len(r.linears))
+	errs := make([]error, 0, len(r.targets)+len(r.linears)+1)
+	errs = append(errs, r.destroyEffects())
 	for t := range r.targets {
 		errs = append(errs, t.closeDmabuf())
 	}
@@ -508,6 +518,9 @@ func (r *Renderer) NewExportedTarget(size image.Point, format fourcc.Format, mod
 	}
 	target := &Target{r: r, t: t, kind: exportedTarget, size: size}
 	r.targets[target] = struct{}{}
+	if err := r.warm(target); err != nil {
+		return nil, nil, errors.Join(err, target.Destroy(), shared.Close())
+	}
 	return target, shared, nil
 }
 
@@ -605,7 +618,14 @@ func (r *Renderer) NewLinearCopyTarget(size image.Point, format fourcc.Format) (
 }
 
 func (r *Renderer) ImportTarget(b gpu.DMABUF) (render.ReadTarget, error) {
-	return r.buildTarget(&Target{r: r, kind: importedTarget, size: b.Size, dmabuf: b})
+	t, err := r.buildTarget(&Target{r: r, kind: importedTarget, size: b.Size, dmabuf: b})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.warm(t); err != nil {
+		return nil, errors.Join(err, t.Destroy())
+	}
+	return t, nil
 }
 
 func sitingOf(s gpu.Siting) lgpu.Siting {
@@ -734,9 +754,12 @@ func (r *Renderer) Finish() error {
 }
 
 type pass struct {
-	r   *Renderer
-	p   *lgpu.Pass
-	err error
+	r       *Renderer
+	p       *lgpu.Pass
+	target  *Target
+	colored bool
+	cut     bool
+	err     error
 }
 
 func (r *Renderer) target(target render.Target) (*Target, error) {
@@ -755,6 +778,10 @@ func (r *Renderer) target(target render.Target) (*Target, error) {
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
 	r.counts.Passes++
+	return r.begin(target, damage)
+}
+
+func (r *Renderer) begin(target render.Target, damage render.Region) (render.Pass, error) {
 	t, err := r.target(target)
 	if err != nil {
 		return nil, err
@@ -768,11 +795,12 @@ func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pas
 	if r.lost != nil {
 		return render.LostPass{}, nil
 	}
+	r.compiling(drawState{target: t.key(), op: opTarget})
 	p, err := r.d.Begin(t.t, damage)
 	if err != nil {
 		return nil, r.note(err)
 	}
-	r.idle = pass{r: r, p: p}
+	r.idle = pass{r: r, p: p, target: t}
 	r.pass = &r.idle
 	return r.pass, nil
 }
@@ -782,6 +810,7 @@ func rgba(c render.Color) color.RGBA {
 }
 
 func (p *pass) SetColor(t *render.ColorTransform) {
+	p.colored = t != nil
 	p.p.SetColor(t)
 }
 
@@ -791,10 +820,12 @@ func (p *pass) SetCut(t render.Texture, c render.AlphaCut) {
 		p.fail(fmt.Errorf("vulkan: a cut over a texture of another renderer (%T)", t))
 		return
 	}
+	p.cut = true
 	p.p.SetCut(tex.t, c)
 }
 
 func (p *pass) ClearCut() {
+	p.cut = false
 	p.p.ClearCut()
 }
 
@@ -804,10 +835,16 @@ func (p *pass) Clear(c render.Color) {
 }
 
 func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
+	if !r.Empty() {
+		p.note(opFill, c.A == 0xff && m == (render.Mask{}), nil)
+	}
 	p.p.FillRect(r, rgba(c), m)
 }
 
 func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
+	if !r.Empty() {
+		p.note(opGoo, false, nil)
+	}
 	p.p.FillGoo(r, rgba(c), g)
 }
 
@@ -820,6 +857,9 @@ func (p *pass) Kawase(t render.Texture, dst image.Rectangle, offset float32, up 
 		return
 	case p.err != nil:
 		return
+	}
+	if !dst.Empty() {
+		p.note(opKawase, false, tex)
 	}
 	p.p.Kawase(tex.t, dst, offset, up)
 }
@@ -837,6 +877,9 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 		p.fail(err)
 		return
 	}
+	if !r.Empty() {
+		p.note(opGradient, false, nil)
+	}
 	p.p.FillGradient(r, lgpu.Gradient{Stops: tex.t, From: g.From, To: g.To, Alpha: g.Alpha}, m)
 }
 
@@ -852,6 +895,9 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	if err := render.CheckDraw(tex.Size(), src, transform, alpha, m); err != nil {
 		p.fail(err)
 		return
+	}
+	if !dst.Empty() && alpha != 0 {
+		p.note(opTexture, alpha == 1 && m == (render.Mask{}), tex)
 	}
 	p.p.DrawTexture(tex.t, src, dst, lgpu.Transform(transform), alpha, m)
 }
@@ -890,11 +936,17 @@ func (s *screenShader) Prepare(target render.Target) error {
 	if s.r.lost != nil {
 		return nil
 	}
+	s.r.compiling(drawState{op: opShader, target: t.key(), shader: s})
 	return s.r.note(s.s.Prepare(t.t))
 }
 
 func (s *screenShader) Destroy() error {
 	delete(s.r.shaders, s)
+	for d := range s.r.drawn {
+		if d.shader == s {
+			delete(s.r.drawn, d)
+		}
+	}
 	if s.s == nil {
 		return nil
 	}
@@ -914,6 +966,9 @@ func (p *pass) DrawScreenShader(s render.ScreenShader, t render.Texture, dst ima
 	case p.err != nil:
 		return
 	}
+	if !dst.Empty() {
+		p.r.compiling(drawState{op: opShader, target: p.target.key(), shader: sh})
+	}
 	p.p.DrawFragmentShader(sh.s, tex.t, dst, [4]float32{seconds, float32(dst.Dx()), float32(dst.Dy())})
 }
 
@@ -929,6 +984,9 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 	if err := render.CheckGlass(tex.Size(), src, alpha, m, g); err != nil {
 		p.fail(err)
 		return
+	}
+	if !dst.Empty() && alpha != 0 {
+		p.note(opGlass, false, tex)
 	}
 	p.p.DrawGlass(tex.t, src, dst, alpha, m, g)
 }

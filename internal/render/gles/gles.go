@@ -110,6 +110,8 @@ func rectUniform(r image.Rectangle) [4]float32 {
 
 type program struct {
 	id                 uint32
+	serial             uint64
+	cutting            bool
 	corner             int32
 	size, color, alpha uniform
 	quad               uniform
@@ -130,8 +132,10 @@ func (r *Renderer) newProgram(id uint32) program {
 	at := func(name string) uniform {
 		return uniform{loc: r.gl.GetUniformLocation(id, name)}
 	}
+	r.programIDs++
 	return program{
 		id:         id,
+		serial:     r.programIDs,
 		corner:     r.gl.GetAttribLocation(id, "corner"),
 		size:       at("size"),
 		quad:       at("quad"),
@@ -177,6 +181,10 @@ type Renderer struct {
 	external     program
 	colored      coloredPrograms
 	cuts         map[cutVariant]*program
+	effects      render.Effects
+	warmed       map[fourcc.Format]struct{}
+	drawn        map[drawState]struct{}
+	programIDs   uint64
 	modifiers    map[fourcc.Format][]gpu.ModifierSupport
 	vbo          uint32
 	pass         pass
@@ -247,6 +255,9 @@ func (r *Renderer) Recover() error {
 		*p.prog = program{}
 	}
 	clear(r.cuts)
+	clear(r.warmed)
+	clear(r.drawn)
+	r.pass.last = drawState{}
 	r.vbo, r.unpack, r.ringCap, r.ringAt = 0, 0, 0, 0
 	var errs []error
 	for t := range r.textures {
@@ -262,6 +273,7 @@ func (r *Renderer) Recover() error {
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("gles: import the dmabufs again after a GPU reset: %w", err)
 	}
+	gpu.Compiling()
 	if err := r.enter(); err != nil {
 		return err
 	}
@@ -275,7 +287,15 @@ func (r *Renderer) Recover() error {
 	for s := range r.shaders {
 		errs = append(errs, s.link())
 	}
-	return errors.Join(append(errs, r.leave("gles: rebuild after a GPU reset"))...)
+	if err := errors.Join(append(errs, r.leave("gles: rebuild after a GPU reset"))...); err != nil {
+		return err
+	}
+	for f := range r.framebuffers {
+		if err := r.warm(f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Renderer) reimport(img **gpu.Image, b gpu.DMABUF) error {
@@ -304,33 +324,44 @@ func New(d *gpu.Display) (*Renderer, error) {
 	r := &Renderer{
 		d: d, gl: d.GL(), modifiers: map[fourcc.Format][]gpu.ModifierSupport{},
 		textures: map[*texture]struct{}{}, framebuffers: map[*Framebuffer]struct{}{}, shaders: map[*screenShader]struct{}{},
-		cuts: map[cutVariant]*program{},
+		cuts: map[cutVariant]*program{}, warmed: map[fourcc.Format]struct{}{}, drawn: map[drawState]struct{}{},
 	}
 	r.pass.owner = r
-	if err := r.enter(); err != nil {
+	gpu.Compiling()
+	if err := r.start(); err != nil {
 		return nil, err
 	}
-	if err := errors.Join(r.setup(), r.leave("gles: set up")); err != nil {
-		return nil, errors.Join(err, r.Close())
-	}
 	return r, nil
+}
+
+func (r *Renderer) start() error {
+	if err := r.enter(); err != nil {
+		return err
+	}
+	if err := errors.Join(r.setup(), r.leave("gles: set up")); err != nil {
+		return errors.Join(err, r.Close())
+	}
+	if err := r.makeEffects(); err != nil {
+		return errors.Join(err, r.Close())
+	}
+	return nil
 }
 
 type shader struct {
 	prog      *program
 	fragment  string
 	extension string
-	lazy      bool
+	colored   bool
 }
 
 func (r *Renderer) programs() [13]shader {
 	return [13]shader{
-		{prog: &r.glass, fragment: glassShader, lazy: true},
-		{prog: &r.colored.glass, fragment: glassColorShader, lazy: true},
-		{prog: &r.colored.rgba, fragment: rgbaColorShader, lazy: true},
-		{prog: &r.colored.rgbx, fragment: rgbxColorShader, lazy: true},
-		{prog: &r.colored.gradient, fragment: gradientColorShader, lazy: true},
-		{prog: &r.colored.external, fragment: externalColorShader, extension: "GL_OES_EGL_image_external", lazy: true},
+		{prog: &r.glass, fragment: glassShader},
+		{prog: &r.colored.glass, fragment: glassColorShader, colored: true},
+		{prog: &r.colored.rgba, fragment: rgbaColorShader, colored: true},
+		{prog: &r.colored.rgbx, fragment: rgbxColorShader, colored: true},
+		{prog: &r.colored.gradient, fragment: gradientColorShader, colored: true},
+		{prog: &r.colored.external, fragment: externalColorShader, extension: "GL_OES_EGL_image_external", colored: true},
 		{prog: &r.solid, fragment: solidShader},
 		{prog: &r.rgba, fragment: rgbaShader},
 		{prog: &r.rgbx, fragment: rgbxShader},
@@ -353,12 +384,15 @@ func (r *Renderer) setup() error {
 		return fmt.Errorf("gles: %s has %d-bit highp floats in fragment shaders, fewer than float32's %d", r.name, bits, float32Mantissa)
 	}
 	for _, p := range r.programs() {
-		if p.lazy || p.extension != "" && !slices.Contains(exts, p.extension) {
+		if p.extension != "" && !slices.Contains(exts, p.extension) {
 			continue
 		}
 		if err := r.link(p); err != nil {
 			return err
 		}
+	}
+	if err := r.linkCuts(r.external.id != 0); err != nil {
+		return err
 	}
 	r.gl.GenBuffers(1, &r.vbo)
 	r.gl.BindBuffer(gpu.ArrayBuffer, r.vbo)
@@ -379,8 +413,9 @@ func (r *Renderer) link(p shader) error {
 	if err != nil {
 		return err
 	}
+	r.counts.Programs++
 	*p.prog = r.newProgram(id)
-	if p.lazy {
+	if p.colored {
 		for i := range p.prog.cp {
 			p.prog.cp[i] = r.gl.GetUniformLocation(id, "cp["+strconv.Itoa(i)+"]")
 		}
@@ -395,8 +430,9 @@ func (r *Renderer) Close() error {
 		return nil
 	}
 	r.closed = true
+	destroyErr := r.destroyEffects()
 	if err := r.enter(); err != nil {
-		return err
+		return errors.Join(destroyErr, err)
 	}
 	r.gl.UseProgram(0)
 	for _, p := range r.programs() {
@@ -411,7 +447,7 @@ func (r *Renderer) Close() error {
 	clear(r.cuts)
 	r.gl.DeleteBuffers(1, &r.unpack)
 	r.gl.DeleteBuffers(1, &r.vbo)
-	err := errors.Join(r.gl.Check("gles: close"), r.d.Release())
+	err := errors.Join(destroyErr, r.gl.Check("gles: close"), r.d.Release())
 	runtime.UnlockOSThread()
 	return err
 }
@@ -764,6 +800,16 @@ type Framebuffer struct {
 	texture  *texture
 }
 
+func (f *Framebuffer) format() fourcc.Format {
+	switch {
+	case f.imported:
+		return f.dmabuf.Format
+	case f.float:
+		return fourcc.ABGR16161616F
+	}
+	return fourcc.ABGR8888
+}
+
 func (f *Framebuffer) make() error {
 	gl := f.r.gl
 	f.pbo = 0
@@ -900,7 +946,13 @@ func (r *Renderer) ImportFramebuffer(b gpu.DMABUF) (*Framebuffer, error) {
 		f.img = img
 		r.counts.Imports++
 	}
-	return r.buildFramebuffer(f)
+	if _, err := r.buildFramebuffer(f); err != nil {
+		return nil, err
+	}
+	if err := r.warm(f); err != nil {
+		return nil, errors.Join(err, f.Destroy())
+	}
+	return f, nil
 }
 
 func (f *Framebuffer) Size() image.Point {
@@ -961,6 +1013,9 @@ func (f *Framebuffer) Destroy() error {
 
 type pass struct {
 	blending bool
+	warming  bool
+	sampled  sampling
+	last     drawState
 	owner    *Renderer
 	active   bool
 	fb       *Framebuffer
@@ -976,10 +1031,19 @@ type pass struct {
 
 func (r *Renderer) Begin(target render.Target, damage render.Region) (render.Pass, error) {
 	r.counts.Passes++
-	fb, ok := target.(*Framebuffer)
-	if tt, isTT := target.(*TextureTarget); isTT {
-		fb, ok = tt.Framebuffer, true
+	return r.begin(target, damage)
+}
+
+func framebufferOf(target render.Target) (*Framebuffer, bool) {
+	if tt, ok := target.(*TextureTarget); ok {
+		return tt.Framebuffer, true
 	}
+	fb, ok := target.(*Framebuffer)
+	return fb, ok
+}
+
+func (r *Renderer) begin(target render.Target, damage render.Region) (render.Pass, error) {
+	fb, ok := framebufferOf(target)
 	switch {
 	case !ok:
 		return nil, fmt.Errorf("gles: cannot render into %T", target)
@@ -1027,7 +1091,7 @@ func (p *pass) End() error {
 	gl.Disable(gpu.Blend)
 	gl.BindFramebuffer(gpu.Framebuffer, 0)
 	p.owner.unflushed = true
-	p.active, p.fb = false, nil
+	p.active, p.fb, p.warming = false, nil, false
 	return errors.Join(p.err, p.owner.leave("gles: render pass"))
 }
 
@@ -1045,6 +1109,9 @@ func (p *pass) setBlending(on bool) {
 }
 
 func (p *pass) culled(r image.Rectangle) bool {
+	if p.warming {
+		return false
+	}
 	for _, d := range p.damage.Rects() {
 		if d.Overlaps(r) {
 			return false
@@ -1109,6 +1176,12 @@ func (p *pass) setUV(m uvMap) {
 func (p *pass) draw(dst image.Rectangle) {
 	gl := p.owner.gl
 	p.prog.quad.set4(gl, [4]float32{float32(dst.Min.X), float32(dst.Min.Y), float32(dst.Dx()), float32(dst.Dy())})
+	p.noteState()
+	if p.warming {
+		gl.Scissor(0, 0, 0, 0)
+		gl.DrawArrays(gpu.TriangleStrip, 0, 4)
+		return
+	}
 	for _, d := range p.damage.Rects() {
 		clip := dst.Intersect(d)
 		if clip.Empty() {
@@ -1127,6 +1200,9 @@ func (p *pass) Clear(c render.Color) {
 		return
 	case !c.Premultiplied():
 		p.fail(fmt.Errorf("gles: color %+v is not premultiplied", c))
+		return
+	}
+	if p.warming {
 		return
 	}
 	gl := p.owner.gl
@@ -1167,6 +1243,7 @@ func (p *pass) FillRect(r image.Rectangle, c render.Color, m render.Mask) {
 	p.setMask(prog, m)
 	p.bindCut(prog)
 	prog.color.set4(p.owner.gl, p.fillColor(c))
+	p.sampled = sampling{}
 	p.draw(r)
 }
 
@@ -1194,6 +1271,7 @@ func (p *pass) FillGoo(r image.Rectangle, c render.Color, g render.Goo) {
 	prog.merge.set4(gl, rectUniform(g.B.Rect))
 	prog.radii.set4(gl, [4]float32{g.A.Radius, g.B.Radius, g.Smooth, 0})
 	prog.color.set4(gl, p.fillColor(c))
+	p.sampled = sampling{}
 	p.draw(r)
 }
 
@@ -1241,6 +1319,7 @@ func (p *pass) bindLinear(tex *texture) {
 		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
+	p.sampled = tex.sampling()
 }
 
 func (p *pass) drawWhole(dst image.Rectangle) {
@@ -1273,10 +1352,7 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 	if p.culled(r) {
 		return
 	}
-	prog := p.textureProgram(&p.owner.gradient, shader{prog: &p.owner.colored.gradient, fragment: gradientColorShader, lazy: true})
-	if prog == nil {
-		return
-	}
+	prog := p.textureProgram(&p.owner.gradient, &p.owner.colored.gradient)
 	gl := p.owner.gl
 	p.use(prog)
 	p.setTransform(prog)
@@ -1290,6 +1366,7 @@ func (p *pass) FillGradient(r image.Rectangle, g render.Gradient, m render.Mask)
 		gl.TexParameteri(tex.target, gpu.TextureMinFilter, gpu.Linear)
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
+	p.sampled = tex.sampling()
 	p.draw(r)
 }
 
@@ -1318,12 +1395,12 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 	if alpha == 0 || p.culled(dst) {
 		return
 	}
-	prog := p.textureProgram(&p.owner.rgba, shader{prog: &p.owner.colored.rgba, fragment: rgbaColorShader, lazy: true})
+	prog := p.textureProgram(&p.owner.rgba, &p.owner.colored.rgba)
 	switch {
 	case tex.target == gpu.TextureExternalOES:
-		prog = p.textureProgram(&p.owner.external, shader{prog: &p.owner.colored.external, fragment: externalColorShader, lazy: true})
+		prog = p.textureProgram(&p.owner.external, &p.owner.colored.external)
 	case tex.opaque:
-		prog = p.textureProgram(&p.owner.rgbx, shader{prog: &p.owner.colored.rgbx, fragment: rgbxColorShader, lazy: true})
+		prog = p.textureProgram(&p.owner.rgbx, &p.owner.colored.rgbx)
 	}
 	if p.cut != nil {
 		switch {
@@ -1357,6 +1434,7 @@ func (p *pass) DrawTexture(t render.Texture, src render.FRect, dst image.Rectang
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, filter)
 	}
 	p.setUV(textureMap(tex.size, src, transform))
+	p.sampled = tex.sampling()
 	p.draw(dst)
 }
 
@@ -1376,18 +1454,11 @@ func (p *pass) fillColor(c render.Color) [4]float32 {
 	return p.color.Apply(v)
 }
 
-func (p *pass) textureProgram(plain *program, colored shader) *program {
+func (p *pass) textureProgram(plain, colored *program) *program {
 	if p.color == nil {
 		return plain
 	}
-	if colored.prog.id == 0 {
-		if err := p.owner.link(colored); err != nil {
-			p.fail(err)
-			return nil
-		}
-		p.prog = nil
-	}
-	return colored.prog
+	return colored
 }
 
 func (p *pass) setTransform(prog *program) {
@@ -1426,17 +1497,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 	if alpha == 0 || p.culled(dst) {
 		return
 	}
-	s := shader{prog: &p.owner.glass, fragment: glassShader, lazy: true}
-	if p.color != nil {
-		s = shader{prog: &p.owner.colored.glass, fragment: glassColorShader, lazy: true}
-	}
-	if s.prog.id == 0 {
-		if err := p.owner.link(s); err != nil {
-			p.fail(fmt.Errorf("gles: the glass shader: %w", err))
-			return
-		}
-	}
-	prog := s.prog
+	prog := p.textureProgram(&p.owner.glass, &p.owner.colored.glass)
 	if p.cut != nil {
 		if prog = p.cutProgram(cutGlass); prog == nil {
 			return
@@ -1461,6 +1522,7 @@ func (p *pass) DrawGlass(t render.Texture, src render.FRect, dst image.Rectangle
 		gl.TexParameteri(tex.target, gpu.TextureMagFilter, gpu.Linear)
 	}
 	p.setUV(textureMap(tex.size, src, render.Normal))
+	p.sampled = tex.sampling()
 	p.draw(dst)
 }
 

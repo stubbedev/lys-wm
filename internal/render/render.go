@@ -382,6 +382,8 @@ type Counts struct {
 	Clears      uint64
 	Imports     uint64
 	ResetChecks uint64
+	Programs    uint64
+	ColdDraws   uint64
 }
 
 type Renderer interface {

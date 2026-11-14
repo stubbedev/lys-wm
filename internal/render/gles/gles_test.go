@@ -455,3 +455,49 @@ func TestAlphaCutOverDMABUFOnHardware(t *testing.T) {
 	g, node := hardware(t)
 	rendertest.AlphaCutOverDMABUF(t, g, node, framebuffer(t, g, rendertest.CutTargetSize()))
 }
+
+func newOnAPinnedThread(t *testing.T) (*gles.Renderer, uint64) {
+	t.Helper()
+	d, err := testenv.GPU(t).Surfaceless()
+	if err != nil {
+		t.Skipf("no surfaceless display: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	var r *gles.Renderer
+	compiles, err := rendertest.CompilesOnAPinnedThread(func() error {
+		var newErr error
+		r, newErr = gles.New(d)
+		return newErr
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return r, compiles
+}
+
+func TestEveryProgramIsLinkedAtStartAndEveryCompileLeavesRealtimeFirst(t *testing.T) {
+	r, compiles := newOnAPinnedThread(t)
+	linked := r.Counts().Programs
+	if compiles != 1 || linked == 0 {
+		t.Fatalf("a new renderer left realtime %d times and linked %d programs, want once and some", compiles, linked)
+	}
+	rendertest.CompilesLeaveRealtimeOncePerDrawState(t, r, framebuffer(t, r, image.Pt(4, 4)), framebuffer(t, r, image.Pt(8, 8)))
+	if got := r.Counts().Programs; got != linked+1 {
+		t.Fatalf("%d programs after every effect and a screen shader were drawn, want the %d linked at the start and the screen shader's", got, linked)
+	}
+}
+
+func TestAWarmedTargetFormatDrawsOrdinaryFramesWithoutLeavingRealtime(t *testing.T) {
+	r, _ := newOnAPinnedThread(t)
+	fb := framebuffer(t, r, image.Pt(4, 4))
+	rendertest.WarmedTargetDrawsOrdinaryFramesWithoutLeavingRealtime(t, r, fb, func() error { return gles.WarmInto(r, fb) })
+}

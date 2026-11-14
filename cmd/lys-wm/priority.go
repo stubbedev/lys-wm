@@ -51,22 +51,24 @@ func throughRtkit(systemBus string) realtime {
 	}
 }
 
-func (name thread) raise(systemBus string, hand handFunc) (restore func() error) {
-	how, restore, err := name.raisePriority(systemBus, hand)
+func (name thread) raise(systemBus string, hand handFunc) (restore func() error, yield func()) {
+	how, restore, yield, err := name.raisePriority(systemBus, hand)
 	if how != "" {
 		fmt.Fprintf(os.Stderr, "lys-wm: %s runs at %s\n", name, how)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lys-wm: %v\n", err)
 	}
-	return restore
+	return restore, yield
 }
 
-func (name thread) raisePriority(systemBus string, hand handFunc) (how string, restore func() error, err error) {
+func stayRealtime() {}
+
+func (name thread) raisePriority(systemBus string, hand handFunc) (how string, restore func() error, yield func(), err error) {
 	tid := unix.Gettid()
 	was, err := threadSchedule(tid)
 	if err != nil {
-		return "", func() error { return nil }, fmt.Errorf("%s keeps its priority: %w", name, err)
+		return "", func() error { return nil }, stayRealtime, fmt.Errorf("%s keeps its priority: %w", name, err)
 	}
 	giveBack := func() error {
 		if err := setSchedule(tid, was); err != nil {
@@ -92,48 +94,48 @@ func (name thread) raisePriority(systemBus string, hand handFunc) (how string, r
 		{"SCHED_RR", schedRR},
 		{"SCHED_RR through rtkit", throughRtkit(systemBus)},
 	} {
-		stop, err := name.realtime(tid, was, rt.raise, guardRaise, hand)
+		stop, yield, err := name.realtime(tid, was, rt.raise, guardRaise, hand)
 		if err == nil {
 			return rt.how, func() error {
 				stop()
 				return giveBack()
-			}, nil
+			}, yield, nil
 		}
 		errs = append(errs, err)
 	}
 	nice := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_NORMAL, Nice: loopNice, Flags: unix.SCHED_FLAG_RESET_ON_FORK}
 	niceErr := unix.SchedSetAttr(0, &nice, 0)
 	if niceErr == nil {
-		return fmt.Sprintf("nice %d", loopNice), giveBack, nil
+		return fmt.Sprintf("nice %d", loopNice), giveBack, stayRealtime, nil
 	}
 	errs = append(errs, fmt.Errorf("nice %d: %w", loopNice, niceErr))
 	kit, kitErr := rtkit.Open(systemBus)
 	if kitErr == nil {
 		kitErr = errors.Join(kit.HighPriority(tid, loopNice), kit.Close())
 		if kitErr == nil {
-			return fmt.Sprintf("nice %d through rtkit", loopNice), giveBack, nil
+			return fmt.Sprintf("nice %d through rtkit", loopNice), giveBack, stayRealtime, nil
 		}
 	}
 	errs = append(errs, kitErr)
-	return "", giveBack, fmt.Errorf("%s keeps its normal priority, as it needs an rtprio or nice limit (packaging/limits.d/90-lys-wm.conf), CAP_SYS_NICE or rtkit: %w", name, errors.Join(errs...))
+	return "", giveBack, stayRealtime, fmt.Errorf("%s keeps its normal priority, as it needs an rtprio or nice limit (packaging/limits.d/90-lys-wm.conf), CAP_SYS_NICE or rtkit: %w", name, errors.Join(errs...))
 }
 
-func (name thread) realtime(tid int, was unix.SchedAttr, raise realtime, guardRaise func(guard int) error, hand handFunc) (stop func(), err error) {
+func (name thread) realtime(tid int, was unix.SchedAttr, raise realtime, guardRaise func(guard int) error, hand handFunc) (stop func(), yield func(), err error) {
 	if err := raise(tid, loopRTPriority); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var limit unix.Rlimit
 	if err := unix.Getrlimit(unix.RLIMIT_RTTIME, &limit); err != nil {
-		return nil, errors.Join(fmt.Errorf("read RLIMIT_RTTIME: %w", err), setSchedule(tid, was))
+		return nil, nil, errors.Join(fmt.Errorf("read RLIMIT_RTTIME: %w", err), setSchedule(tid, was))
 	}
 	if limit.Max == unix.RLIM_INFINITY {
-		return func() {}, nil
+		return func() {}, stayRealtime, nil
 	}
-	stop, err = startRTGuard(name, tid, rtBudget(limit.Max), func() error { return raise(tid, loopRTPriority) }, guardRaise, hand)
+	stop, yield, err = startRTGuard(name, tid, rtBudget(limit.Max), func() error { return raise(tid, loopRTPriority) }, guardRaise, hand)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("%s may not run at SCHED_RR unguarded under a hard RLIMIT_RTTIME of %d µs: %w", name, limit.Max, err), setSchedule(tid, was))
+		return nil, nil, errors.Join(fmt.Errorf("%s may not run at SCHED_RR unguarded under a hard RLIMIT_RTTIME of %d µs: %w", name, limit.Max, err), setSchedule(tid, was))
 	}
-	return stop, nil
+	return stop, yield, nil
 }
 
 func rtBudget(hardMicros uint64) time.Duration {

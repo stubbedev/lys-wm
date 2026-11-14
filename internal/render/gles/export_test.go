@@ -6,3 +6,5 @@ func DrawnOps(r *Renderer) uint64 { return r.drawnOps }
 
 func OpaqueRuns(r *Renderer) uint64 { return r.opaqueRuns }
 func Robust(r *Renderer) bool       { return r.robust }
+
+func WarmInto(r *Renderer, f *Framebuffer) error { return r.warmInto(f) }

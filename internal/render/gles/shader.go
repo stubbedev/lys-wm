@@ -22,6 +22,7 @@ func (s *screenShader) link() error {
 	if err != nil {
 		return fmt.Errorf("gles: %w", err)
 	}
+	s.r.counts.Programs++
 	s.prog = s.r.newProgram(id)
 	gl.UseProgram(id)
 	gl.Uniform1i(gl.GetUniformLocation(id, "tex"), 0)
@@ -34,17 +35,26 @@ func (r *Renderer) NewScreenShader(p *shaderlang.Program) (render.ScreenShader, 
 		r.shaders[s] = struct{}{}
 		return s, nil
 	}
-	if err := r.enter(); err != nil {
+	gpu.Compiling()
+	if err := s.make(); err != nil {
 		return nil, err
 	}
-	if err := s.link(); err != nil {
-		return nil, errors.Join(err, r.leave("gles: a screen shader"))
+	return s, nil
+}
+
+func (s *screenShader) make() error {
+	r := s.r
+	if err := r.enter(); err != nil {
+		return err
 	}
-	if err := r.leave("gles: a screen shader"); err != nil {
-		return nil, errors.Join(err, s.Destroy())
+	if err := s.link(); err != nil {
+		return errors.Join(err, r.leave("gles: a screen shader"))
 	}
 	r.shaders[s] = struct{}{}
-	return s, nil
+	if err := r.leave("gles: a screen shader"); err != nil {
+		return errors.Join(err, s.Destroy())
+	}
+	return nil
 }
 
 func (*screenShader) Prepare(render.Target) error { return nil }
@@ -54,6 +64,7 @@ func (s *screenShader) Destroy() error {
 		return nil
 	}
 	delete(s.r.shaders, s)
+	s.r.forget(s.prog.serial)
 	if s.r.lost != nil || s.prog.id == 0 {
 		s.prog.id = 0
 		return nil

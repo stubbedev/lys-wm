@@ -179,7 +179,8 @@ func openNative(l *loop.Loop, getenv func(string) string, opts nativeOptions, re
 		}
 	}
 	if n.input, err = session.OpenLibinput(l, session.LibinputPath(getenv), n.logind, opts.input, report, func(hand func(string, func() error)) func() error {
-		return inputThread.raise(session.SystemBus(getenv), hand)
+		restore, _ := inputThread.raise(session.SystemBus(getenv), hand)
+		return restore
 	}); err != nil {
 		return nil, err
 	}

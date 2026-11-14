@@ -1,6 +1,7 @@
 package vulkan_test
 
 import (
+	"fmt"
 	"image"
 	"path/filepath"
 	"strings"
@@ -280,4 +281,21 @@ func TestAlphaCuts(t *testing.T) {
 func TestAlphaCutOverDMABUFOnHardware(t *testing.T) {
 	r, node := hardware(t)
 	rendertest.AlphaCutOverDMABUF(t, r, node, target(t, r, rendertest.CutTargetSize()))
+}
+
+func TestEveryCompileLeavesRealtimeFirst(t *testing.T) {
+	r := testenv.Vulkan(t)
+	rendertest.CompilesLeaveRealtimeOncePerDrawState(t, r, target(t, r, image.Pt(4, 4)), target(t, r, image.Pt(8, 8)))
+}
+
+func TestAWarmedTargetFormatDrawsOrdinaryFramesWithoutLeavingRealtime(t *testing.T) {
+	r := testenv.Vulkan(t)
+	tt := target(t, r, image.Pt(4, 4))
+	rendertest.WarmedTargetDrawsOrdinaryFramesWithoutLeavingRealtime(t, r, tt, func() error {
+		vt, ok := tt.(*vulkan.Target)
+		if !ok {
+			return fmt.Errorf("a %T target", tt)
+		}
+		return vulkan.Warm(r, vt)
+	})
 }

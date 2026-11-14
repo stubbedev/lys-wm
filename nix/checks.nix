@@ -104,11 +104,14 @@
           machine.succeed(f"ps -L -o cls=,rtprio= -p {compositor} | grep -Eq '^ *RR +2$'")
           demoted = "journalctl -b --no-pager -t lys-wm | grep -E 'the compositor thread ran [^ ]+ at SCHED_RR without blocking, past the 20ms its guard allows under RLIMIT_RTTIME'"
           ordinary = machine.execute(demoted)[1]
+          if ordinary:
+              print(machine.execute("journalctl -b --no-pager -t lys-wm -t rtkit-daemon")[1])
+          assert not ordinary, f"the compositor thread was demoted while it drew ordinary frames: {ordinary}"
           threads = f"ps -L -o cls=,rtprio= -p {compositor} | grep -Ec '^ *RR +1$'"
           raised = machine.succeed(threads).strip()
           machine.succeed("${run "lys-wmctl dispatch debug spin 500"}")
           try:
-              machine.wait_until_succeeds(f"{demoted} | grep -c . | grep -qx {len(ordinary.splitlines()) + 1}", timeout=30)
+              machine.wait_until_succeeds(f"{demoted} | grep -c . | grep -qx 1", timeout=30)
               machine.succeed("journalctl -b --no-pager -t lys-wm | grep -E 'internal/compositor\\.spinThreadCPU\\('")
               assert machine.succeed("pgrep -x lys-wm").split() == [compositor], "lys-wm did not survive a 500 ms realtime spin under rtkit's 200 ms RLIMIT_RTTIME"
               machine.wait_until_succeeds("journalctl -b --no-pager -t lys-wm | grep -q 'the compositor thread runs at SCHED_RR again'", timeout=30)
@@ -116,7 +119,6 @@
           except Exception:
               print(machine.execute(f"ps -L -o tid=,cls=,rtprio= -p {compositor}; journalctl -b --no-pager -t lys-wm -t rtkit-daemon")[1])
               raise
-          print(f"demotions before the spin: {ordinary or 'none'}")
         '';
       };
       vm-screencast = screencast "wlr";

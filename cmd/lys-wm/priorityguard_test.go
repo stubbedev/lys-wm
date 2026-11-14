@@ -401,7 +401,7 @@ func TestAThreadRaisedThroughRtkitThatNeverBlocksIsDemotedAndRegainsRealtimeItse
 	ended := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
-		how, restore, err := compositorThread.raisePriority(bus, hand)
+		how, restore, _, err := compositorThread.raisePriority(bus, hand)
 		if err != nil || how != "SCHED_RR through rtkit" {
 			up <- spinner{skip: how, err: errors.Join(err, restore())}
 			return
@@ -452,5 +452,30 @@ func TestAThreadRaisedThroughRtkitThatNeverBlocksIsDemotedAndRegainsRealtimeItse
 	close(quit)
 	if err := <-ended; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestACompileLeavesSCHED_RROnceAndTheThreadRetakesItQuietlyFromItsLoop(t *testing.T) {
+	s := &scriptedThread{t: t, pauses: 100}
+	g := started(t, s)
+	g.yield()
+	g.yield()
+	s.run(10*scriptedBudget, false)
+	if !g.step() {
+		t.Fatal("the guard stopped watching a compiling thread")
+	}
+	if want := []string{"demote", "arm false", "hand"}; !slices.Equal(s.events, want) {
+		t.Fatalf("two compiles and a long run in one turn of the loop did %q, want %q", s.events, want)
+	}
+	s.events = s.events[:0]
+	s.regainHanded()
+	if want := []string{"raise", "arm true"}; !slices.Equal(s.events, want) {
+		t.Fatalf("the retake did %q, want %q and nothing said", s.events, want)
+	}
+	s.events = s.events[:0]
+	s.run(scriptedBudget, false)
+	g.step()
+	if !slices.Contains(s.events, "demote") {
+		t.Fatalf("a budget without blocking after the retake did %q, want the guard watching again", s.events)
 	}
 }

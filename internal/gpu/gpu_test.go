@@ -413,3 +413,38 @@ func TestLeavingOnAPinnedThreadTakesNoLookupAfterTheFirst(t *testing.T) {
 		t.Fatalf("%d lookups in 100 leaves on the pinned thread", got)
 	}
 }
+
+func TestCompilingCallsOnlyTheHookItsOwnPinnedThreadSet(t *testing.T) {
+	if err := gpu.CompileThrough(func() {}); err == nil {
+		t.Fatal("CompileThrough on a goroutine that pinned nothing succeeded")
+	}
+	type counts struct{ own, other, afterUnpin int }
+	done := make(chan counts, 1)
+	failed := make(chan error, 1)
+	go func() {
+		var got counts
+		unpin := gpu.PinThread()
+		err := gpu.CompileThrough(func() { got.own++ })
+		gpu.Compiling()
+		gpu.Compiling()
+		elsewhere := make(chan struct{})
+		go func() {
+			gpu.Compiling()
+			close(elsewhere)
+		}()
+		<-elsewhere
+		got.other = got.own - 2
+		err = errors.Join(err, unpin())
+		before := got.own
+		gpu.Compiling()
+		got.afterUnpin = got.own - before
+		failed <- err
+		done <- got
+	}()
+	if err := <-failed; err != nil {
+		t.Fatal(err)
+	}
+	if got := <-done; got != (counts{own: 2}) {
+		t.Fatalf("hook calls %+v, want two from the pinned goroutine and none from another or after unpinning", got)
+	}
+}

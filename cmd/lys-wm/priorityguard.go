@@ -147,7 +147,28 @@ func (g *rtGuard) step() bool {
 	return true
 }
 
+func (g *rtGuard) yield() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.state != guardWatching {
+		return
+	}
+	if err := g.ops.demote(); err != nil {
+		g.ops.say(fmt.Sprintf("%s compiles at SCHED_RR, as it could not leave it: %v", g.name, err))
+		return
+	}
+	g.state = guardOff
+	if err := g.ops.arm(false); err != nil {
+		g.ops.say(err.Error())
+	}
+	g.ops.hand("regaining SCHED_RR for "+string(g.name)+" after a compile", func() error { return g.retake(false) })
+}
+
 func (g *rtGuard) regain() error {
+	return g.retake(true)
+}
+
+func (g *rtGuard) retake(say bool) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.state != guardOff {
@@ -161,11 +182,13 @@ func (g *rtGuard) regain() error {
 		g.ops.say(errors.Join(fmt.Errorf("%s keeps normal priority, as its guard could not watch it again: %w", g.name, err), g.ops.demote()).Error())
 		return nil
 	}
-	g.ops.say(fmt.Sprintf("%s runs at SCHED_RR again", g.name))
+	if say {
+		g.ops.say(fmt.Sprintf("%s runs at SCHED_RR again", g.name))
+	}
 	return nil
 }
 
-func startRTGuard(name thread, tid int, budget time.Duration, raise func() error, guardRaise func(guard int) error, hand handFunc) (stop func(), err error) {
+func startRTGuard(name thread, tid int, budget time.Duration, raise func() error, guardRaise func(guard int) error, hand handFunc) (stop func(), yield func(), err error) {
 	header := goroutineHeader()
 	g := &rtGuard{name: name, budget: budget, wait: rtRegainFirstWait}
 	ready := make(chan error, 1)
@@ -223,7 +246,7 @@ func startRTGuard(name thread, tid int, budget time.Duration, raise func() error
 	}()
 	if err := <-ready; err != nil {
 		<-done
-		return nil, err
+		return nil, nil, err
 	}
 	stop = func() {
 		g.stop()
@@ -240,9 +263,9 @@ func startRTGuard(name thread, tid int, budget time.Duration, raise func() error
 	}
 	if err := g.start(); err != nil {
 		stop()
-		return nil, err
+		return nil, nil, err
 	}
-	return stop, nil
+	return stop, g.yield, nil
 }
 
 func (g *rtGuard) blindLocked() error {

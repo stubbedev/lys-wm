@@ -34,7 +34,7 @@ func TestTheCompositorThreadReadsBackThePriorityItTookAndGivesItBack(t *testing.
 			return o
 		}
 		var restore func() error
-		o.how, restore, o.err = compositorThread.raisePriority(noBus, dropJob)
+		o.how, restore, _, o.err = compositorThread.raisePriority(noBus, dropJob)
 		raised, raisedErr := unix.SchedGetAttr(0, 0)
 		o.restored = restore()
 		after, afterErr := threadSchedule(tid)
@@ -208,7 +208,8 @@ func openInputThread(t *testing.T, bus string) (in *session.Libinput, tid int) {
 	path := session.LibinputPath(os.Getenv)
 	in, err = session.OpenLibinput(l, path, noDevices{}, session.InputConfig{}, func(err error) { t.Errorf("reported: %v", err) }, func(hand func(string, func() error)) func() error {
 		tid = unix.Gettid()
-		return inputThread.raise(bus, hand)
+		restore, _ := inputThread.raise(bus, hand)
+		return restore
 	})
 	testenv.Library(t, "libinput", path, err)
 	return in, tid
@@ -232,7 +233,7 @@ func TestTheInputThreadRunsAtTheCompositorThreadsPriority(t *testing.T) {
 		err error
 	}
 	compositor := onOwnThread(func() taken {
-		restore := compositorThread.raise(bus, dropJob)
+		restore, _ := compositorThread.raise(bus, dropJob)
 		s, err := threadSchedule(unix.Gettid())
 		return taken{s, errors.Join(err, restore())}
 	})
@@ -296,7 +297,7 @@ func TestARaiseThroughRtkitGivesTheThreadBackItsScheduling(t *testing.T) {
 		if got.before, beforeErr = threadSchedule(tid); beforeErr != nil {
 			return taken{err: beforeErr}
 		}
-		restore := compositorThread.raise(bus, dropJob)
+		restore, _ := compositorThread.raise(bus, dropJob)
 		got.raised, raisedErr = threadSchedule(tid)
 		restoreErr := restore()
 		got.after, afterErr = threadSchedule(tid)
@@ -396,7 +397,7 @@ func TestADirectRealtimeGrantUnderAnInheritedFiniteRTTimeIsGuardedAndKeepsTheLim
 	got := onOwnThread(func() (got taken) {
 		got.tid = unix.Gettid()
 		var restore func() error
-		got.how, restore, got.err = compositorThread.raisePriority(bus, dropJob)
+		got.how, restore, _, got.err = compositorThread.raisePriority(bus, dropJob)
 		var raisedErr, guardsErr error
 		got.raised, raisedErr = threadSchedule(got.tid)
 		got.guards, guardsErr = realtimeThreads(guardRTPriority)

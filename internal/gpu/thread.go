@@ -1,6 +1,7 @@
 package gpu
 
 import (
+	"errors"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -11,8 +12,9 @@ import (
 func currentG() uintptr
 
 type pinnedThread struct {
-	g       atomic.Uintptr
-	current atomic.Pointer[Display]
+	g         atomic.Uintptr
+	current   atomic.Pointer[Display]
+	compiling func()
 }
 
 var pinned = struct {
@@ -46,6 +48,28 @@ func PinThread() (unpin func() error) {
 			return nil
 		}
 		return d.Release()
+	}
+}
+
+func pinnedHere() *pinnedThread {
+	g := currentG()
+	pinned.Lock()
+	defer pinned.Unlock()
+	return pinned.threads[g]
+}
+
+func CompileThrough(leaveRealtime func()) error {
+	t := pinnedHere()
+	if t == nil {
+		return errors.New("gpu: CompileThrough on a goroutine that pinned no thread")
+	}
+	t.compiling = leaveRealtime
+	return nil
+}
+
+func Compiling() {
+	if t := pinnedHere(); t != nil && t.compiling != nil {
+		t.compiling()
 	}
 }
 

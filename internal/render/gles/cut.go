@@ -74,19 +74,34 @@ func (p *pass) ClearCut() {
 	p.cut = nil
 }
 
+func (r *Renderer) linkCuts(external bool) error {
+	for kind := range cutGlass + 1 {
+		for _, colored := range []bool{false, true} {
+			for _, ext := range []bool{false, true} {
+				v := cutVariant{kind: kind, colored: colored, external: ext}
+				if colored && kind == cutSolid || ext && !external {
+					continue
+				}
+				prog := &program{}
+				if err := r.link(shader{prog: prog, fragment: v.fragment(), colored: colored}); err != nil {
+					return fmt.Errorf("gles: the cut shader %+v: %w", v, err)
+				}
+				prog.cutting = true
+				r.gl.Uniform1i(r.gl.GetUniformLocation(prog.id, "cutTex"), 1)
+				r.cuts[v] = prog
+			}
+		}
+	}
+	return nil
+}
+
 func (p *pass) cutProgram(kind cutKind) *program {
 	v := cutVariant{kind: kind, colored: p.color != nil && kind != cutSolid, external: p.cut.target == gpu.TextureExternalOES}
-	if prog, ok := p.owner.cuts[v]; ok {
-		return prog
-	}
-	prog := &program{}
-	if err := p.owner.link(shader{prog: prog, fragment: v.fragment(), lazy: true}); err != nil {
-		p.fail(fmt.Errorf("gles: the cut shader %+v: %w", v, err))
+	prog, ok := p.owner.cuts[v]
+	if !ok {
+		p.fail(fmt.Errorf("gles: no cut shader %+v on %s", v, p.owner.name))
 		return nil
 	}
-	p.owner.gl.Uniform1i(p.owner.gl.GetUniformLocation(prog.id, "cutTex"), 1)
-	p.owner.cuts[v] = prog
-	p.prog = nil
 	return prog
 }
 

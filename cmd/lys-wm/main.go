@@ -840,7 +840,10 @@ func run(args []string) (err error) {
 	rtdebug.SetGCPercent(gcPercent)
 	rtdebug.SetMemoryLimit(softMemoryLimit)
 	unpin := gpu.PinThread()
-	restore := compositorThread.raise(session.SystemBus(os.Getenv), l.Hand)
+	restore, yield := compositorThread.raise(session.SystemBus(os.Getenv), l.Hand)
+	if err := gpu.CompileThrough(yield); err != nil {
+		return errors.Join(err, restore(), unpin())
+	}
 	ran := l.Run()
 	if errors.Is(ran, nested.ErrClosed) {
 		ran = nil

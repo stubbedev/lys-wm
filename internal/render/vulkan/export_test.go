@@ -20,3 +20,5 @@ func KeptPlanes(r *Renderer) []gpu.Plane {
 	}
 	return planes
 }
+
+func Warm(r *Renderer, t *Target) error { return r.warm(t) }
