@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
@@ -101,6 +103,8 @@ func (c *Compositor) perform(e wm.Effect, trigger binds.Trigger) error {
 		return nil
 	case wm.DebugProtocolDumpAction:
 		return c.dumpProtocol(e.Path)
+	case wm.DebugSpinAction:
+		return spinWithoutBlocking(e.For)
 	case wm.CastTargetAction:
 		return c.castTargetAction(e)
 	case wm.ReloadAction:
@@ -162,6 +166,34 @@ func (c *Compositor) spawnWith(command string, env []string, started func(pid in
 		}
 		c.loop.Hand("a failed exec", func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil })
 	})
+}
+
+func spinWithoutBlocking(d time.Duration) error {
+	if errno := spinThreadCPU(d.Nanoseconds()); errno != 0 {
+		return fmt.Errorf("compositor: debug spin %v: read this thread's CPU clock: %w", d, errno)
+	}
+	return nil
+}
+
+//go:nosplit
+func spinThreadCPU(ns int64) syscall.Errno {
+	start, errno := threadCPUNanos()
+	if errno != 0 {
+		return errno
+	}
+	for {
+		now, errno := threadCPUNanos()
+		if errno != 0 || now-start >= ns {
+			return errno
+		}
+	}
+}
+
+//go:nosplit
+func threadCPUNanos() (int64, syscall.Errno) {
+	var ts unix.Timespec
+	_, _, errno := syscall.Syscall(unix.SYS_CLOCK_GETTIME, unix.CLOCK_THREAD_CPUTIME_ID, uintptr(unsafe.Pointer(&ts)), 0) //nolint:gosec // the kernel writes ts during the call
+	return ts.Sec*int64(time.Second) + ts.Nsec, errno
 }
 
 func (c *Compositor) WaitForExecs() {

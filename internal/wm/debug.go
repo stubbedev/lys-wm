@@ -2,7 +2,9 @@ package wm
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type DebugOverlay uint8
@@ -49,14 +51,20 @@ type (
 	DebugProtocolDumpAction struct {
 		Path string
 	}
+	DebugSpinAction struct {
+		For time.Duration
+	}
 )
+
+const debugSpinMostMillis = 10000
 
 func (DebugOverlayAction) isEffect()      {}
 func (DebugRecordAction) isEffect()       {}
 func (DebugProtocolAction) isEffect()     {}
 func (DebugProtocolDumpAction) isEffect() {}
+func (DebugSpinAction) isEffect()         {}
 
-const debugTargets = "damage, opaque, planes, protocol, trace, profile or heap"
+const debugTargets = "damage, opaque, planes, protocol, spin, trace, profile or heap"
 
 func (a DebugOverlayAction) String() string {
 	return "debug " + a.Overlay.String() + " " + a.Mode.String()
@@ -96,9 +104,31 @@ func (a DebugProtocolDumpAction) apply(s State, _ Settings) (State, []Effect, er
 	return emit(s, a)
 }
 
+func (a DebugSpinAction) String() string {
+	return "debug spin " + strconv.FormatInt(a.For.Milliseconds(), 10)
+}
+
+func (a DebugSpinAction) apply(s State, _ Settings) (State, []Effect, error) {
+	return emit(s, a)
+}
+
+func parseDebugSpin(spec ActionSpec, args []string) (Action, error) {
+	if len(args) != 1 {
+		return nil, badArgs(spec, "spin takes the milliseconds to spin and nothing more, not %q", strings.Join(args, " "))
+	}
+	ms, err := strconv.ParseUint(args[0], 10, 16)
+	if err != nil || ms == 0 || ms > debugSpinMostMillis {
+		return nil, badArgs(spec, "spin's %q is not milliseconds from 1 to %d", args[0], debugSpinMostMillis)
+	}
+	return DebugSpinAction{For: time.Duration(ms) * time.Millisecond}, nil
+}
+
 func parseDebug(spec ActionSpec, args []string, rest string) (Action, error) {
 	if len(args) == 0 {
 		return nil, badArgs(spec, "needs "+debugTargets)
+	}
+	if args[0] == "spin" {
+		return parseDebugSpin(spec, args[1:])
 	}
 	if args[0] == "protocol" {
 		return parseDebugProtocol(spec, args[1:], strings.TrimSpace(strings.TrimPrefix(rest, args[0])))

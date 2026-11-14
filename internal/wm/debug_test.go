@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
@@ -19,6 +20,8 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 		DebugProtocolAction{Mode: SwitchOn},
 		DebugProtocolAction{Mode: SwitchOff},
 		DebugProtocolDumpAction{Path: "/tmp/a wire.log"},
+		DebugSpinAction{For: 500 * time.Millisecond},
+		DebugSpinAction{For: 10 * time.Second},
 	} {
 		got, err := ParseAction(a.String())
 		if err != nil || got != a {
@@ -43,6 +46,12 @@ func TestDebugActionsRoundTripAndRefuseBadArguments(t *testing.T) {
 		"debug protocol dump":       `the file "" is not an absolute path`,
 		"debug protocol dump a.log": `the file "a.log" is not an absolute path`,
 		"debug protocol loud":       `"loud" is not toggle, on or off`,
+		"debug spin":                `spin takes the milliseconds to spin and nothing more, not ""`,
+		"debug spin 5 ms":           `spin takes the milliseconds to spin and nothing more, not "5 ms"`,
+		"debug spin 0":              `spin's "0" is not milliseconds from 1 to 10000`,
+		"debug spin 10001":          `spin's "10001" is not milliseconds from 1 to 10000`,
+		"debug spin -3":             `spin's "-3" is not milliseconds from 1 to 10000`,
+		"debug spin soon":           `spin's "soon" is not milliseconds from 1 to 10000`,
 	} {
 		if _, err := ParseAction(text); !errors.Is(err, ErrBadAction) || !strings.Contains(err.Error(), want) {
 			t.Errorf("ParseAction(%q) = %v, want %q", text, err, want)

@@ -233,6 +233,7 @@ lys-wmctl dispatch debug heap /tmp/heap.pprof
 lys-wmctl dispatch debug protocol on    # keep each client's recent Wayland messages in memory
 lys-wmctl dispatch debug protocol dump /tmp/wire.log
 lys-wmctl dispatch debug protocol off   # drop them
+lys-wmctl dispatch debug spin 500       # run the compositor thread 500 ms without blocking
 ```
 
 - Overlays take `on`, `off` or `toggle` (default). They are drawn after the
@@ -246,6 +247,11 @@ lys-wmctl dispatch debug protocol off   # drop them
   bytes of its arguments; anything longer shows as `<truncated>`. Recording
   costs nothing while off, and a client that disconnects takes its record with
   it, as does an [upgrade](./guide/upgrade).
+- `debug spin` keeps the compositor thread busy for that many milliseconds of
+  its CPU time, 1 to 10000, without blocking and without a point where Go could
+  preempt it, the way a long call into a driver would. Under a finite
+  `RLIMIT_RTTIME` its realtime guard moves it to normal priority and logs the
+  demotion with the thread's stack; see [Threading](./architecture#threading).
 - `debug protocol dump` writes every connected client's record, oldest first,
   in the `WAYLAND_DEBUG` format. Each line is tagged `{pid/connection}`, since
   one process can hold several connections with their own object IDs, and its
