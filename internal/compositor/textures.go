@@ -377,7 +377,7 @@ func (c *Compositor) Destroyed(s *surface.Surface) error {
 	for o, shown := range c.shown {
 		c.shown[o] = slices.DeleteFunc(shown, func(x *surface.Surface) bool { return x == s })
 	}
-	c.entered = slices.DeleteFunc(c.entered, func(e *entered) bool { return e.s == s })
+	c.entered.forget(s)
 	maps.DeleteFunc(c.filled, func(_ *output.Output, f filling) bool { return f.surface == s })
 	return nil
 }

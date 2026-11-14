@@ -287,10 +287,8 @@ func (c *Compositor) OutputDescription(o *output.Output) *colorspace.Description
 }
 
 func (c *Compositor) PreferredDescription(s *surface.Surface) *colorspace.Description {
-	for _, e := range c.entered {
-		if e.s == s && len(e.outputs) > 0 {
-			return c.OutputDescription(e.outputs[0])
-		}
+	if e := c.entered.lookup(s); e != nil && len(e.outputs) > 0 {
+		return c.OutputDescription(e.outputs[0])
 	}
 	if len(c.outputs) > 0 {
 		return c.OutputDescription(c.outputs[0])

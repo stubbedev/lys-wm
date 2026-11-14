@@ -475,7 +475,7 @@ func (c *Compositor) disable(o *output.Output) error {
 	delete(c.peeks, o)
 	errs = append(errs, c.endInherited(o), c.dropLabels(o), c.overviewOutputGone(o), c.switcherOutputGone(o), c.dropClosingOn(o), c.dropLockSnapshotOn(o), c.power.Removed(o), c.gamma.Removed(o))
 	c.ctm.Removed(o)
-	for _, e := range c.entered {
+	for _, e := range c.entered.list {
 		if slices.Contains(e.outputs, o) {
 			errs = append(errs, e.s.Leave(o.Resources(e.s.Client())))
 			e.outputs = slices.DeleteFunc(e.outputs, func(x *output.Output) bool { return x == o })

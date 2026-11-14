@@ -325,7 +325,7 @@ type Compositor struct {
 	focusGrab          *focusGrab
 	shown              map[*output.Output][]*surface.Surface
 	footprints         map[*surface.Surface]footprint
-	entered            []*entered
+	entered            enteredSurfaces
 	cursor             point
 	touches            map[int32]touchAt
 	virtualTouchBlocks int
@@ -442,11 +442,6 @@ type Compositor struct {
 	parked             bool
 	adopting           *adoption
 	noticeDismissed    bool
-}
-
-type entered struct {
-	s       *surface.Surface
-	outputs []*output.Output
 }
 
 func validate(cfg Config) (binds.Map, error) {

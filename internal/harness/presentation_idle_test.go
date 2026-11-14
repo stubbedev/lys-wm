@@ -24,15 +24,24 @@ type presentationTrace struct {
 
 func tracePresentations(t *testing.T) *presentationTrace {
 	t.Helper()
-	h := Start(t, small)
+	return tracePresentationsOn(t, Start(t, small))
+}
+
+func tracePresentationsOn(t *testing.T, h *Harness) *presentationTrace {
+	t.Helper()
 	c := testclient.Connect(t, h.Socket())
+	w := c.Window("timed", quadrants)
+	c.DispatchUntil("the window to map", w.Mapped)
+	return traceWindow(t, h, c, w)
+}
+
+func traceWindow(t *testing.T, h *Harness, c *testclient.Client, w *testclient.Window) *presentationTrace {
+	t.Helper()
 	p, err := cpt.NewWpPresentation(c.Display, 2, &presentationEvents{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.Bind(p)
-	w := c.Window("timed", quadrants)
-	c.DispatchUntil("the window to map", w.Mapped)
 	w.Stop()
 	return &presentationTrace{t: t, h: h, c: c, w: w, p: p}
 }
@@ -74,7 +83,11 @@ func (tr *presentationTrace) idle() {
 
 func (tr *presentationTrace) check() {
 	tr.t.Helper()
-	period := small.Interval()
+	tr.checkOn(small.Interval())
+}
+
+func (tr *presentationTrace) checkOn(period time.Duration) {
+	tr.t.Helper()
 	idle := 0
 	for i, e := range tr.events {
 		if time.Duration(e.refresh) != period {
@@ -135,4 +148,29 @@ func TestPresentationsStayInOrderAcrossPowerAndLock(t *testing.T) {
 	tr.idle()
 	tr.drawn()
 	tr.check()
+}
+
+func TestAWindowOnTwoOutputsIsPresentedByOneOfThem(t *testing.T) {
+	t.Parallel()
+	fast := small
+	fast.RefreshMHz = 85000
+	h := StartWith(t, withBinds(t, bindSpec{chord: "SUPER + mouse:272", action: "movewindow"}), small, fast)
+	c := testclient.Connect(t, h.Socket())
+	w := straddling(t, h, c)
+	quietOutputs(t, h, c, w)
+	tr := traceWindow(t, h, c, w)
+	for range 6 {
+		tr.drawn()
+		tr.idle()
+	}
+	period := time.Duration(tr.events[0].refresh)
+	if period != small.Interval() && period != fast.Interval() {
+		t.Fatalf("the first presentation reported refresh %v, the period of neither output", period)
+	}
+	tr.checkOn(period)
+	for i, e := range tr.events {
+		if e.synced != 1 {
+			t.Fatalf("presentation %d named %d outputs, want the one whose refresh it reports", i, e.synced)
+		}
+	}
 }

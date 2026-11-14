@@ -530,22 +530,11 @@ func (c *Compositor) drawSurfaces(pass *frame, o *output.Output, s *surface.Surf
 	return shown
 }
 
-func (c *Compositor) enteredOf(s *surface.Surface) *entered {
-	for _, e := range c.entered {
-		if e.s == s {
-			return e
-		}
-	}
-	e := &entered{s: s}
-	c.entered = append(c.entered, e)
-	return e
-}
-
 func (c *Compositor) updateEntered(o *output.Output) error {
 	var errs []error
 	shown := c.shown[o]
 	for _, s := range shown {
-		e := c.enteredOf(s)
+		e := c.entered.get(s)
 		if slices.Contains(e.outputs, o) {
 			continue
 		}
@@ -555,7 +544,7 @@ func (c *Compositor) updateEntered(o *output.Output) error {
 			errs = append(errs, c.colorManager.PreferredChanged(s))
 		}
 	}
-	for _, e := range c.entered {
+	for _, e := range c.entered.list {
 		if slices.Contains(e.outputs, o) && !slices.Contains(shown, e.s) {
 			e.outputs = slices.DeleteFunc(e.outputs, func(x *output.Output) bool { return x == o })
 			errs = append(errs, e.s.Leave(o.Resources(e.s.Client())), e.s.SetPreferredScale(uint32(maxScale(e.outputs))))
@@ -589,14 +578,17 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 	}
 	var errs error
 	for _, s := range c.shown[o] {
-		c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
 		var frame error
 		if sc.culled[s] {
 			frame = c.throttleFrames(s)
 		} else {
 			frame = s.FrameDone(wire.Millis(p.Time))
 		}
-		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, p.Refresh, p.Variable, p.Seq, sc.feedbackKind(s, kind, p.Idle)))
+		errs = errors.Join(errs, frame)
+		if c.presentsOn(s, o) {
+			c.outputResources = o.AppendResources(c.outputResources[:0], s.Client())
+			errs = errors.Join(errs, s.Presented(c.outputResources, p.Time, p.Refresh, p.Variable, p.Seq, sc.feedbackKind(s, kind, p.Idle)))
+		}
 	}
 	if p.Idle {
 		return errors.Join(errs, c.heldFrame(o))
