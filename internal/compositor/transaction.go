@@ -161,7 +161,7 @@ func (c *Compositor) freeArranger() *wm.Arranger {
 
 func (c *Compositor) begin(x *wm.Arranger, awaited []*window) error {
 	t := &c.txnStore
-	t.goal, t.source, t.members, t.began = x.Arrangement, x, t.members[:0], backend.Now()
+	t.goal, t.source, t.members, t.began = x.Arrangement, x, t.members[:0], c.clock()
 	var err error
 	for _, w := range awaited {
 		m := c.await(w)
@@ -214,7 +214,7 @@ func (m *member) unthrottle() error {
 	if m.unshown == nil {
 		return nil
 	}
-	return m.surface.FrameDoneUndrawn(wire.Millis(backend.Now()))
+	return m.surface.FrameDoneUndrawn(wire.Millis(m.c.clock()))
 }
 
 func (c *Compositor) landIfComplete() error {
@@ -255,7 +255,7 @@ func (c *Compositor) landInFlight() error {
 func (c *Compositor) land(expired bool) error {
 	t := c.txn
 	c.txn = nil
-	c.holds.note(backend.Now()-t.began, expired)
+	c.holds.note(c.clock()-t.began, expired)
 	var err error
 	if c.interaction == nil {
 		err = c.holdTimer.Disarm()

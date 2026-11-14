@@ -61,7 +61,6 @@ type Loop struct {
 	stopped  bool
 	closed   bool
 	wakeups  int
-	epoch    time.Time
 	manual   *Manual
 	timers   []*Timer
 	due      []*Timer
@@ -83,7 +82,7 @@ func New() (*Loop, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loop: epoll_create1: %w", err)
 	}
-	l := &Loop{epfd: epfd, sources: map[token]*source{}, watched: map[int]token{}, events: make([]unix.EpollEvent, 64), epoch: time.Now()}
+	l := &Loop{epfd: epfd, sources: map[token]*source{}, watched: map[int]token{}, events: make([]unix.EpollEvent, 64)}
 	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
 	if err != nil {
 		_ = unix.Close(epfd)
@@ -99,9 +98,11 @@ func New() (*Loop, error) {
 }
 
 type Manual struct {
-	loop *Loop
-	now  time.Duration
-	dry  func()
+	loop   *Loop
+	now    time.Duration
+	follow func() time.Duration
+	dry    func()
+	block  time.Duration
 }
 
 func NewManual(start time.Duration) (*Loop, *Manual, error) {
@@ -114,7 +115,15 @@ func NewManual(start time.Duration) (*Loop, *Manual, error) {
 }
 
 func (m *Manual) Now() time.Duration {
+	if m.follow != nil {
+		m.now = max(m.now, m.follow())
+	}
 	return m.now
+}
+
+func (m *Manual) Follow(source func() time.Duration) {
+	m.Now()
+	m.follow = source
 }
 
 func (m *Manual) Set(now time.Duration) {
@@ -122,25 +131,37 @@ func (m *Manual) Set(now time.Duration) {
 }
 
 func (m *Manual) NextTimer() (time.Duration, bool) {
-	return m.loop.nextDeadline()
+	return m.loop.nextDeadline(anyTimer)
+}
+
+func (m *Manual) NextFrame() (time.Duration, bool) {
+	return m.loop.nextDeadline(func(t *Timer) bool { return t.frame })
 }
 
 func (m *Manual) WhenDry(f func()) {
 	m.dry = f
 }
 
-func (l *Loop) elapsed() time.Duration {
+func (m *Manual) WaitAtMost(d time.Duration) {
+	m.block = max(d, 0)
+}
+
+func (l *Loop) Virtual() bool {
+	return l.manual != nil
+}
+
+func (l *Loop) Now() time.Duration {
 	if l.manual != nil {
-		return l.manual.now
+		return l.manual.Now()
 	}
-	return time.Since(l.epoch)
+	return Monotonic()
 }
 
 func (l *Loop) deadline(d time.Duration) time.Duration {
 	if l.manual != nil {
-		return l.manual.now + max(d, 0)
+		return l.manual.Now() + max(d, 0)
 	}
-	return time.Since(l.epoch) + max(d, 1)
+	return Monotonic() + max(d, 1)
 }
 
 func (l *Loop) add(fd int, owned bool, events Events, handler func(Events) error) (token, error) {
@@ -231,6 +252,7 @@ type Timer struct {
 	at      time.Duration
 	seq     uint64
 	armed   bool
+	frame   bool
 	removed bool
 }
 
@@ -244,12 +266,20 @@ func (l *Loop) AddTimer(handler func() error) (*Timer, error) {
 }
 
 func (t *Timer) Arm(d time.Duration) error {
+	return t.arm(d, false)
+}
+
+func (t *Timer) ArmFrame(d time.Duration) error {
+	return t.arm(d, true)
+}
+
+func (t *Timer) arm(d time.Duration, frame bool) error {
 	if t.removed {
 		return ErrClosed
 	}
 	l := t.loop
 	l.seq++
-	t.at, t.seq, t.armed = l.deadline(d), l.seq, true
+	t.at, t.seq, t.armed, t.frame = l.deadline(d), l.seq, true, frame
 	return nil
 }
 
@@ -273,11 +303,15 @@ func (t *Timer) Remove() error {
 	return nil
 }
 
-func (l *Loop) nextDeadline() (time.Duration, bool) {
+func anyTimer(*Timer) bool {
+	return true
+}
+
+func (l *Loop) nextDeadline(of func(*Timer) bool) (time.Duration, bool) {
 	var next time.Duration
 	found := false
 	for _, t := range l.timers {
-		if t.armed && (!found || t.at < next) {
+		if t.armed && of(t) && (!found || t.at < next) {
 			next, found = t.at, true
 		}
 	}
@@ -285,7 +319,7 @@ func (l *Loop) nextDeadline() (time.Duration, bool) {
 }
 
 func (l *Loop) fireTimers() (bool, error) {
-	now := l.elapsed()
+	now := l.Now()
 	l.due = l.due[:0]
 	for _, t := range l.timers {
 		if t.armed && t.at <= now {
@@ -464,8 +498,8 @@ func (l *Loop) Run() error {
 		return ErrClosed
 	}
 	l.stopped = false
-	woke := l.elapsed()
-	defer func() { l.busy += l.elapsed() - woke }()
+	woke := Monotonic()
+	defer func() { l.busy += Monotonic() - woke }()
 	for !l.stopped {
 		if err := l.flushBeforeIdle(); err != nil {
 			return err
@@ -481,9 +515,9 @@ func (l *Loop) Run() error {
 		if l.stopped {
 			break
 		}
-		l.busy += l.elapsed() - woke
+		l.busy += Monotonic() - woke
 		n, err := l.poll()
-		woke = l.elapsed()
+		woke = Monotonic()
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
@@ -512,8 +546,8 @@ func (l *Loop) poll() (int, error) {
 	block := time.Duration(-1)
 	if len(l.idle) > 0 {
 		block = 0
-	} else if at, ok := l.nextDeadline(); ok {
-		block = max(at-time.Since(l.epoch), 0)
+	} else if at, ok := l.nextDeadline(anyTimer); ok {
+		block = max(at-Monotonic(), 0)
 	}
 	return l.wait(block)
 }
@@ -522,8 +556,8 @@ func (l *Loop) runnable() bool {
 	if len(l.idle) > 0 {
 		return true
 	}
-	at, ok := l.nextDeadline()
-	return ok && at <= l.manual.now
+	at, ok := l.nextDeadline(anyTimer)
+	return ok && at <= l.manual.Now()
 }
 
 func (l *Loop) pollManual() (int, error) {
@@ -531,13 +565,14 @@ func (l *Loop) pollManual() (int, error) {
 	if n != 0 || err != nil || l.runnable() {
 		return n, err
 	}
+	l.manual.block = -1
 	if l.manual.dry != nil {
 		l.manual.dry()
 	}
 	if l.stopped || l.runnable() {
 		return 0, nil
 	}
-	return l.wait(-1)
+	return l.wait(l.manual.block)
 }
 
 func (l *Loop) dispatch() error {

@@ -91,7 +91,7 @@ func (ic *inputCapture) Apply(cmd ipc.CaptureCommand) error {
 		activation := c.capturing.activation
 		err := c.endCapture()
 		if cmd.At != nil {
-			err = errors.Join(err, c.moveCursor(backend.Now(), c.clampToOutputs(point{cmd.At.X, cmd.At.Y})), c.seat.PointerFrame())
+			err = errors.Join(err, c.moveCursor(c.clock(), c.clampToOutputs(point{cmd.At.X, cmd.At.Y})), c.seat.PointerFrame())
 		}
 		ic.send(ipc.CaptureDeactivatedEvent{Activation: activation, At: capturePoint(c.cursor)})
 		return err

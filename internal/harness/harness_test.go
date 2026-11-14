@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/golden"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cxdg "github.com/stubbedev/lys-wm/internal/protocol/client/xdgshell"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
@@ -370,4 +371,71 @@ func primary(o *headless.Output) *soft.Buffer {
 		panic(fmt.Sprintf("harness: primary plane of %s: %v", o.Name(), err))
 	}
 	return b
+}
+
+func (h *Harness) ticks(every time.Duration) func() []time.Duration {
+	h.t.Helper()
+	var fired []time.Duration
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		var tick *loop.Timer
+		tick, err := h.loop.AddTimer(func() error {
+			fired = append(fired, h.loop.Now())
+			return tick.Arm(every)
+		})
+		if err != nil {
+			return err
+		}
+		return tick.Arm(every)
+	})
+	return func() []time.Duration {
+		var got []time.Duration
+		h.Do(func(*headless.Backend, *compositor.Compositor) error {
+			got = slices.Clone(fired)
+			return nil
+		})
+		return got
+	}
+}
+
+func quiet(b *headless.Backend, _ *compositor.Compositor) bool {
+	return !slices.ContainsFunc(b.Outputs(), (*headless.Output).FrameOwed)
+}
+
+func TestAFrozenHarnessClockMovesOnlyByAdvanceAndFrames(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	h.Freeze()
+	h.Eventually("no frame owed", quiet)
+	start := h.Now()
+	fired := h.ticks(time.Hour)
+	if now := h.Now(); now != start {
+		t.Fatalf("a frozen clock went from %v to %v with nothing to show", start, now)
+	}
+	h.Advance(3*time.Hour + time.Minute)
+	if got, want := fired(), []time.Duration{start + time.Hour, start + 2*time.Hour, start + 3*time.Hour}; !slices.Equal(got, want) {
+		t.Fatalf("advancing three hours fired an hourly timer at %v, want %v", got, want)
+	}
+	if now := h.Now(); now != start+3*time.Hour+time.Minute {
+		t.Fatalf("advancing %v from %v left the clock at %v", 3*time.Hour+time.Minute, start, now)
+	}
+	h.Do(func(b *headless.Backend, _ *compositor.Compositor) error { return b.Outputs()[0].ScheduleFrame() })
+	h.Eventually("the frame presented and none owed", quiet)
+	if got := len(fired()); got != 3 {
+		t.Fatalf("stepping to a frame fired the hourly timer %d times, want still 3", got)
+	}
+}
+
+func TestAnAdvanceFiresTimersAtTheirOwnDeadlinesWhileTheClockFollowsTheWall(t *testing.T) {
+	t.Parallel()
+	h := Start(t, small)
+	start := h.Now()
+	fired := h.ticks(time.Hour)
+	h.Advance(2*time.Hour + time.Minute)
+	got := fired()
+	if len(got) != 2 || got[0] < start+time.Hour || got[1]-got[0] != time.Hour {
+		t.Fatalf("advancing two hours from %v fired an hourly timer at %v, want twice an hour apart", start, got)
+	}
+	if now := h.Now(); now < start+2*time.Hour+time.Minute {
+		t.Fatalf("advancing %v from %v left the clock at %v", 2*time.Hour+time.Minute, start, now)
+	}
 }

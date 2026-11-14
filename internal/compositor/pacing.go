@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/committiming"
 	"github.com/stubbedev/lys-wm/internal/contenttype"
 	"github.com/stubbedev/lys-wm/internal/fifo"
@@ -20,7 +19,7 @@ func (c *Compositor) addPacing(l *loop.Loop, display *server.Display) error {
 	if c.fifo, err = fifo.New(display, c.drawnAnywhere, c.armHidden); err != nil {
 		return err
 	}
-	if c.timing, err = committiming.New(display, l, committiming.Clock{Now: backend.Now, NextFlip: c.nextFlip}); err != nil {
+	if c.timing, err = committiming.New(display, l, c.nextFlip); err != nil {
 		return err
 	}
 	if c.tearingHints, err = tearingcontrol.New(display); err != nil {

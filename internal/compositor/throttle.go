@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/surface"
@@ -73,7 +72,7 @@ func (c *Compositor) armHidden() error {
 		return nil
 	}
 	c.hidden.armed = true
-	return c.hidden.timer.Arm(c.hidden.every)
+	return c.hidden.timer.ArmFrame(c.hidden.every)
 }
 
 func (c *Compositor) drawnNow(o *output.Output, shown []*surface.Surface) error {
@@ -121,7 +120,7 @@ func (c *Compositor) throttleDark(o *output.Output) error {
 func (c *Compositor) hiddenFrame() error {
 	c.hidden.armed = false
 	c.hidden.fired++
-	ms := wire.Millis(backend.Now())
+	ms := wire.Millis(c.clock())
 	var errs error
 	for s := range c.hidden.waiting {
 		delete(c.hidden.waiting, s)

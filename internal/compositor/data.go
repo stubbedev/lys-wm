@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -81,10 +80,10 @@ func (c *Compositor) CanDrag(origin *surface.Surface, serial uint32) bool {
 func (c *Compositor) DragStarted(d *data.Drag) error {
 	if id, ok := c.seat.TouchBySerial(d.Origin(), d.Serial()); ok {
 		c.drag = &dragging{d, touchInput{id}}
-		return errors.Join(c.dragMotion(backend.Now()), c.scheduleAll())
+		return errors.Join(c.dragMotion(c.clock()), c.scheduleAll())
 	}
 	c.drag = &dragging{d, pointerInput{}}
-	return errors.Join(c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame(), c.dragMotion(backend.Now()), c.scheduleAll())
+	return errors.Join(c.seat.SetPointerFocus(nil, 0, 0), c.seat.PointerFrame(), c.dragMotion(c.clock()), c.scheduleAll())
 }
 
 func (c *Compositor) DragEnded(d *data.Drag) error {

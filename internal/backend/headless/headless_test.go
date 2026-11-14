@@ -209,7 +209,7 @@ func TestFramesRequestedBetweenVblanksMakeTheNextOne(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		renderedAt = append(renderedAt, backend.Now())
+		renderedAt = append(renderedAt, l.Now())
 		if err := errors.Join(p.End(), out.Present(nil), client.Arm(2*time.Millisecond)); err != nil {
 			t.Fatal(err)
 		}
@@ -544,7 +544,7 @@ func TestAFrameStillRenderingAtItsVblankEarnsItsBudgetBeforeTheNextFrameTakesIts
 			b.renderer = fencedFrames{b.renderer}
 			interval := o.state.Mode.Interval()
 			gpu := 12 * time.Millisecond
-			now := backend.Now()
+			now := b.loop.Now()
 			start := now - gpu
 			b.fenceTime = func(int) (time.Duration, bool, error) { return 0, false, nil }
 			o.fakeFence(t)
@@ -555,7 +555,7 @@ func TestAFrameStillRenderingAtItsVblankEarnsItsBudgetBeforeTheNextFrameTakesIts
 			if tc.signalled {
 				b.fenceTime = func(int) (time.Duration, bool, error) { return start + gpu, true, nil }
 			}
-			o.frameStart = backend.Now()
+			o.frameStart = b.loop.Now()
 			o.fenceFrame()
 			if got := o.budget.Budget(interval); got < gpu {
 				t.Fatalf("a %v frame left a budget of %v", gpu, got)
@@ -581,9 +581,9 @@ func TestARendererWithoutFencesClaimsNoBudget(t *testing.T) {
 	b.renderer = noFences{b.renderer}
 	interval := o.state.Mode.Interval()
 	for range 40 {
-		o.frameStart = backend.Now() - time.Millisecond
+		o.frameStart = b.loop.Now() - time.Millisecond
 		o.fenceFrame()
-		if err := o.timeFrame(backend.Now(), true); err != nil {
+		if err := o.timeFrame(b.loop.Now(), true); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/stubbedev/lys-wm/internal/anim"
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/output"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
@@ -183,5 +182,5 @@ func (c *Compositor) enterTile(w *window) error {
 		return nil
 	}
 	r := w.rect
-	return c.moveCursor(backend.Now(), point{X: float64(r.Min.X) + float64(fx*float64(r.Dx())), Y: float64(r.Min.Y) + float64(fy*float64(r.Dy()))})
+	return c.moveCursor(c.clock(), point{X: float64(r.Min.X) + float64(fx*float64(r.Dx())), Y: float64(r.Min.Y) + float64(fy*float64(r.Dy()))})
 }

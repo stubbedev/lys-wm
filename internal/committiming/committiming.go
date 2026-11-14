@@ -20,25 +20,20 @@ import (
 
 const version = 1
 
-type Clock struct {
-	Now      func() time.Duration
-	NextFlip func(*surface.Surface) (time.Duration, bool)
-}
-
 type Manager struct {
-	loop    *loop.Loop
-	clock   Clock
-	timers  []*timer
-	waiting []*timer
-	armedAt time.Duration
+	loop     *loop.Loop
+	nextFlip func(*surface.Surface) (time.Duration, bool)
+	timers   []*timer
+	waiting  []*timer
+	armedAt  time.Duration
 }
 
 func (m *Manager) LastArmed() time.Duration {
 	return m.armedAt
 }
 
-func New(d *server.Display, l *loop.Loop, clock Clock) (*Manager, error) {
-	m := &Manager{loop: l, clock: clock}
+func New(d *server.Display, l *loop.Loop, nextFlip func(*surface.Surface) (time.Duration, bool)) (*Manager, error) {
+	m := &Manager{loop: l, nextFlip: nextFlip}
 	if _, err := d.AddGlobal(sct.WpCommitTimingManagerV1Interface, version, m.bind); err != nil {
 		return nil, err
 	}
@@ -172,10 +167,10 @@ func (t *timer) SetTimestamp(obj *sct.WpCommitTimerV1, secHi, secLo, nsec uint32
 }
 
 func (t *timer) due(at time.Duration) bool {
-	if t.m.clock.Now() >= at {
+	if t.m.loop.Now() >= at {
 		return true
 	}
-	next, ok := t.m.clock.NextFlip(t.s)
+	next, ok := t.m.nextFlip(t.s)
 	return ok && next >= at
 }
 
@@ -192,7 +187,7 @@ func (t *timer) commit(u *surface.Update) error {
 }
 
 func (t *timer) arm() error {
-	now := t.m.clock.Now()
+	now := t.m.loop.Now()
 	var next time.Duration
 	for _, c := range t.targets {
 		if c.at > now && (next == 0 || c.at < next) {
@@ -207,7 +202,7 @@ func (t *timer) arm() error {
 		return t.clock.Disarm()
 	}
 	t.m.armedAt = next
-	return t.clock.Arm(next - now)
+	return t.clock.ArmFrame(next - now)
 }
 
 func (t *timer) fire() error {

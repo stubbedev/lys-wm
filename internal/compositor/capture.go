@@ -9,7 +9,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/fourcc"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/dmabuf"
 	"github.com/stubbedev/lys-wm/internal/gpu"
 	"github.com/stubbedev/lys-wm/internal/output"
@@ -272,7 +271,7 @@ func (c *Compositor) cancelCapture(k *capture) {
 }
 
 func (c *Compositor) runCapture(k *capture) error {
-	at := backend.Now()
+	at := c.clock()
 	var err error
 	if k.painted != nil {
 		err = k.painted()

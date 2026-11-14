@@ -204,16 +204,17 @@ func (b *Backend) AddNamedOutput(name string, modes ...backend.Mode) (*Output, e
 		ctm:         backend.Identity,
 		inherited:   b.inherit,
 		renderFence: -1,
+		untimed:     b.loop.Virtual(),
 	}
 	o.clock = backend.NewFrameClock(b.loop.Idle, o.frameReady, o.runFrame, &backend.Latch{
 		Wait: func() time.Duration {
-			now := backend.Now()
+			now := b.loop.Now()
 			if o.vrr && o.frameCap > 0 && o.lastShown != 0 {
 				return max(o.lastShown+o.paceInterval()-now, 0)
 			}
 			return o.budget.Deadline(o.pacing(), now) - now
 		},
-		Wake: func(after time.Duration) error { return o.latch.Arm(after) },
+		Wake: func(after time.Duration) error { return o.latch.ArmFrame(after) },
 	})
 	if err := o.resize(current.Size); err != nil {
 		return nil, err
@@ -545,7 +546,7 @@ func (o *Output) frameReady() bool {
 func (o *Output) runFrame() error {
 	o.frames++
 	o.budget.Started()
-	o.frameStart = backend.Now()
+	o.frameStart = o.backend.loop.Now()
 	o.aimedAt = o.pacing().Aim(o.frameStart)
 	if err := o.backend.handler.Frame(o); err != nil {
 		return err
@@ -636,7 +637,7 @@ func (o *Output) fenceFrame() {
 	f, ok := o.backend.renderer.(frameFencer)
 	switch {
 	case !ok:
-		o.budget.Sample(backend.Now() - o.frameStart)
+		o.budget.Sample(o.backend.loop.Now() - o.frameStart)
 		return
 	case o.untimed:
 		return
@@ -644,7 +645,7 @@ func (o *Output) fenceFrame() {
 		o.noTiming(errors.New("the renderer has no native fences"))
 		return
 	}
-	o.settleFence(backend.Now())
+	o.settleFence(o.backend.loop.Now())
 	if err := o.dropFence(); err != nil {
 		o.backend.report(fmt.Errorf("headless: close the render fence of %s: %w", o.name, err))
 	}
@@ -656,7 +657,7 @@ func (o *Output) fenceFrame() {
 	case err != nil:
 		o.noTiming(err)
 	case fd < 0:
-		o.budget.Sample(backend.Now() - o.frameStart)
+		o.budget.Sample(o.backend.loop.Now() - o.frameStart)
 	default:
 		o.renderFence, o.fenceStart = fd, o.frameStart
 	}
@@ -814,14 +815,14 @@ func (o *Output) Stalled() bool {
 }
 
 func (o *Output) commitFailed(err error) {
-	if stall := o.commits.Failed(o.name, now(), err); stall != nil {
+	if stall := o.commits.Failed(o.name, o.backend.loop.Now(), err); stall != nil {
 		o.backend.report(fmt.Errorf("headless: %w", stall))
 		o.backend.loop.Idle(o.stallChanged)
 	}
 }
 
 func (o *Output) commitTook() {
-	if recovery := o.commits.Took(o.name, now()); recovery != nil {
+	if recovery := o.commits.Took(o.name, o.backend.loop.Now()); recovery != nil {
 		o.backend.report(fmt.Errorf("headless: %w", recovery))
 		o.backend.loop.Idle(o.stallChanged)
 	}
@@ -879,10 +880,10 @@ func (o *Output) arm() error {
 	if o.armed {
 		return nil
 	}
-	now := backend.Now()
+	now := o.backend.loop.Now()
 	at, ticks := backend.NextVblank(o.lastVblank, now, o.state.Mode.Interval())
 	o.nextVblank, o.nextSeq = at, o.seq+ticks
-	if err := o.timer.Arm(o.nextVblank - now); err != nil {
+	if err := o.timer.ArmFrame(o.nextVblank - now); err != nil {
 		return fmt.Errorf("headless: arm frame timer for %s: %w", o.name, err)
 	}
 	o.armed = true
@@ -955,8 +956,8 @@ func (b *Backend) emit(d backend.Device, e backend.Event) error {
 	return b.handler.Input(d, e)
 }
 
-func now() time.Duration {
-	return backend.Now()
+func (d *device) now() time.Duration {
+	return d.backend.loop.Now()
 }
 
 type Keyboard struct {
@@ -988,7 +989,7 @@ func (b *Backend) PlugKeyboard(name string) (*Keyboard, error) {
 }
 
 func (k *Keyboard) Key(code uint32, pressed bool) error {
-	return k.backend.emit(k, backend.Key{Time: now(), Code: code, Pressed: pressed})
+	return k.backend.emit(k, backend.Key{Time: k.now(), Code: code, Pressed: pressed})
 }
 
 type Pointer struct {
@@ -1002,31 +1003,31 @@ func (b *Backend) Pointer() *Pointer {
 }
 
 func (p *Pointer) Move(dx, dy float64) error {
-	return p.backend.emit(p, &backend.PointerMotion{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
+	return p.backend.emit(p, &backend.PointerMotion{Time: p.now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy})
 }
 
 func (p *Pointer) MoveTo(o backend.Output, x, y float64) error {
-	return p.backend.emit(p, backend.PointerMotionAbsolute{Time: now(), Output: o, X: x, Y: y})
+	return p.backend.emit(p, backend.PointerMotionAbsolute{Time: p.now(), Output: o, X: x, Y: y})
 }
 
 func (p *Pointer) Button(button uint32, pressed bool) error {
-	return p.backend.emit(p, backend.PointerButton{Time: now(), Button: button, Pressed: pressed})
+	return p.backend.emit(p, backend.PointerButton{Time: p.now(), Button: button, Pressed: pressed})
 }
 
 func (p *Pointer) Axis(orientation backend.Orientation, source backend.AxisSource, value float64, value120 int32) error {
-	return p.backend.emit(p, backend.PointerAxis{Time: now(), Orientation: orientation, Source: source, Value: value, Value120: value120})
+	return p.backend.emit(p, backend.PointerAxis{Time: p.now(), Orientation: orientation, Source: source, Value: value, Value120: value120})
 }
 
 func (p *Pointer) Frame() error {
-	return p.backend.emit(p, &backend.PointerFrame{Time: now()})
+	return p.backend.emit(p, &backend.PointerFrame{Time: p.now()})
 }
 
 func (p *Pointer) GestureBegin(g backend.Gesture, fingers uint32) error {
-	return p.backend.emit(p, backend.GestureBegin{Time: now(), Gesture: g, Fingers: fingers})
+	return p.backend.emit(p, backend.GestureBegin{Time: p.now(), Gesture: g, Fingers: fingers})
 }
 
 func (p *Pointer) Swipe(dx, dy float64) error {
-	p.swipe = backend.SwipeUpdate{Time: now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy}
+	p.swipe = backend.SwipeUpdate{Time: p.now(), DX: dx, DY: dy, UnaccelDX: dx, UnaccelDY: dy}
 	return p.backend.emit(p, &p.swipe)
 }
 
@@ -1036,12 +1037,12 @@ func (p *Pointer) SwipeAt(at time.Duration, dx, dy float64) error {
 }
 
 func (p *Pointer) Pinch(dx, dy, scale, rotation float64) error {
-	p.pinch = backend.PinchUpdate{Time: now(), DX: dx, DY: dy, Scale: scale, Rotation: rotation}
+	p.pinch = backend.PinchUpdate{Time: p.now(), DX: dx, DY: dy, Scale: scale, Rotation: rotation}
 	return p.backend.emit(p, &p.pinch)
 }
 
 func (p *Pointer) GestureEnd(g backend.Gesture, cancelled bool) error {
-	return p.backend.emit(p, backend.GestureEnd{Time: now(), Gesture: g, Cancelled: cancelled})
+	return p.backend.emit(p, backend.GestureEnd{Time: p.now(), Gesture: g, Cancelled: cancelled})
 }
 
 func (p *Pointer) GestureEndAt(at time.Duration, g backend.Gesture, cancelled bool) error {
@@ -1055,7 +1056,7 @@ func (b *Backend) Switches() *Switches {
 }
 
 func (s *Switches) Toggle(kind backend.SwitchKind, on bool) error {
-	return s.backend.emit(s, backend.Switch{Time: now(), Kind: kind, On: on})
+	return s.backend.emit(s, backend.Switch{Time: s.now(), Kind: kind, On: on})
 }
 
 type Touch struct{ device }
@@ -1065,11 +1066,11 @@ func (b *Backend) Touch() *Touch {
 }
 
 func (t *Touch) Down(id int32, o backend.Output, x, y float64) error {
-	return t.backend.emit(t, backend.TouchDown{Time: now(), ID: id, Output: o, X: x, Y: y})
+	return t.backend.emit(t, backend.TouchDown{Time: t.now(), ID: id, Output: o, X: x, Y: y})
 }
 
 func (t *Touch) Motion(id int32, x, y float64) error {
-	return t.backend.emit(t, backend.TouchMotion{Time: now(), ID: id, X: x, Y: y})
+	return t.backend.emit(t, backend.TouchMotion{Time: t.now(), ID: id, X: x, Y: y})
 }
 
 func (t *Touch) DownAt(at time.Duration, id int32, o backend.Output, x, y float64) error {
@@ -1085,13 +1086,13 @@ func (t *Touch) UpAt(at time.Duration, id int32) error {
 }
 
 func (t *Touch) Up(id int32) error {
-	return t.backend.emit(t, backend.TouchUp{Time: now(), ID: id})
+	return t.backend.emit(t, backend.TouchUp{Time: t.now(), ID: id})
 }
 
 func (t *Touch) Cancel(id int32) error {
-	return t.backend.emit(t, backend.TouchCancel{Time: now(), ID: id})
+	return t.backend.emit(t, backend.TouchCancel{Time: t.now(), ID: id})
 }
 
 func (t *Touch) Frame() error {
-	return t.backend.emit(t, backend.TouchFrame{Time: now()})
+	return t.backend.emit(t, backend.TouchFrame{Time: t.now()})
 }

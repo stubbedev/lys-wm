@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,11 @@ type Harness struct {
 	t          testing.TB
 	RuntimeDir string
 	loop       *loop.Loop
+	clock      *loop.Manual
+	frozen     bool
+	skew       time.Duration
+	goal       time.Duration
+	advances   []advance
 	display    *server.Display
 	backend    *headless.Backend
 	compositor *compositor.Compositor
@@ -47,6 +53,11 @@ type Harness struct {
 	done       chan error
 	loopG      atomic.Uint64
 	clients    []*Client
+}
+
+type advance struct {
+	to      time.Duration
+	reached chan struct{}
 }
 
 type setup struct {
@@ -202,9 +213,15 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	h := &Harness{t: t, RuntimeDir: dir, trace: &syncBuffer{}, xlog: &syncBuffer{}, done: make(chan error, 1)}
 	t.Cleanup(h.stop)
 	var err error
-	if h.loop, err = loop.New(); err != nil {
+	if h.loop, h.clock, err = loop.NewManual(loop.Monotonic()); err != nil {
 		t.Fatalf("harness: %v", err)
 	}
+	h.clock.Follow(h.wall)
+	h.clock.WhenDry(h.dry)
+	h.loop.BeforeWait(func() error {
+		h.tick()
+		return nil
+	})
 	opts := server.Options{RuntimeDir: dir, Report: func(err error) { t.Errorf("server reported: %v", err) }}
 	if s.traced {
 		opts.Trace = h.trace
@@ -223,6 +240,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Report = func(err error) { t.Errorf("compositor reported: %v", err) }
 	cfg.Decor.BorderWidth = 0
+	cfg.Clock = h.loop.Now
 	s.configure(&cfg)
 	if h.compositor, err = compositor.New(h.loop, h.display, h.backend, cfg); err != nil {
 		t.Fatalf("harness: %v", err)
@@ -300,6 +318,97 @@ func (h *Harness) stop() {
 			h.t.Logf("Xwayland output:\n%s", log)
 		}
 	}
+}
+
+func (h *Harness) wall() time.Duration {
+	return loop.Monotonic() + h.skew
+}
+
+func (h *Harness) tick() {
+	now := h.clock.Now()
+	if h.goal <= now {
+		h.release()
+		return
+	}
+	if next, ok := h.clock.NextTimer(); ok && next <= h.goal {
+		h.clock.Set(max(next, now))
+		return
+	}
+	h.clock.Set(h.goal)
+	h.skew = max(h.skew, h.goal-loop.Monotonic())
+	h.release()
+}
+
+func (h *Harness) dry() {
+	for {
+		h.tick()
+		next, ok := h.clock.NextTimer()
+		if ok && next <= h.clock.Now() {
+			return
+		}
+		if !h.frozen {
+			if ok {
+				h.clock.WaitAtMost(next - h.clock.Now())
+			}
+			return
+		}
+		frame, ok := h.clock.NextFrame()
+		if !ok {
+			return
+		}
+		h.goal = max(h.goal, frame)
+	}
+}
+
+func (h *Harness) Freeze() {
+	h.t.Helper()
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		h.frozen = true
+		h.clock.Follow(nil)
+		return nil
+	})
+}
+
+func (h *Harness) release() {
+	now := h.clock.Now()
+	h.advances = slices.DeleteFunc(h.advances, func(a advance) bool {
+		if a.to > now {
+			return false
+		}
+		close(a.reached)
+		return true
+	})
+}
+
+func (h *Harness) Advance(d time.Duration) {
+	h.t.Helper()
+	reached := make(chan struct{})
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		to := h.clock.Now() + d
+		h.goal = max(h.goal, to)
+		h.advances = append(h.advances, advance{to: to, reached: reached})
+		return nil
+	})
+	hang := time.NewTimer(testenv.HangLimit)
+	defer hang.Stop()
+	select {
+	case <-reached:
+	case <-hang.C:
+		h.t.Fatalf("harness: the compositor loop did not run %v of its clock within %v", d, testenv.HangLimit)
+	case err := <-h.done:
+		h.done <- err
+		h.t.Fatalf("harness: compositor loop ended before running %v of its clock: %v", d, err)
+	}
+}
+
+func (h *Harness) Now() time.Duration {
+	h.t.Helper()
+	var now time.Duration
+	h.Do(func(*headless.Backend, *compositor.Compositor) error {
+		now = h.loop.Now()
+		return nil
+	})
+	return now
 }
 
 func (h *Harness) Ended() error {

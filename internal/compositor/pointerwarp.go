@@ -3,7 +3,6 @@ package compositor
 import (
 	"image"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	spw "github.com/stubbedev/lys-wm/internal/protocol/server/pointerwarp"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -40,5 +39,5 @@ func (w pointerWarp) WarpPointer(_ *spw.WpPointerWarpV1, wl *sw.WlSurface, _ *sw
 	if !c.seat.PointerEntered(w.cl, serial) || !inside || !shown {
 		return nil
 	}
-	return c.moveCursor(backend.Now(), org.global(local))
+	return c.moveCursor(c.clock(), org.global(local))
 }

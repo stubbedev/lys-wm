@@ -7,7 +7,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	spc "github.com/stubbedev/lys-wm/internal/protocol/server/pointerconstraints"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	"github.com/stubbedev/lys-wm/internal/region"
@@ -337,5 +336,5 @@ func (c *Compositor) confineCursor() error {
 		return nil
 	}
 	c.cursor = next
-	return c.pointerMoved(backend.Now())
+	return c.pointerMoved(c.clock())
 }

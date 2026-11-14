@@ -637,7 +637,7 @@ func (c *Compositor) refreshPointer() error {
 		return nil
 	}
 	if c.pointerDrag() {
-		return c.dragMotion(backend.Now())
+		return c.dragMotion(c.clock())
 	}
 	if c.seat.PointerGrabbed() {
 		return nil
@@ -650,7 +650,7 @@ func (c *Compositor) refreshPointer() error {
 	case c.constraint != nil && c.constraint.locks():
 		return nil
 	}
-	return c.seat.RebasePointer(backend.Now(), local.X, local.Y)
+	return c.seat.RebasePointer(c.clock(), local.X, local.Y)
 }
 
 func hitPopups(popups []placedPopup, p point) (*surface.Surface, point) {

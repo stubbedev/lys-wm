@@ -6,7 +6,6 @@ import (
 	"image"
 	"slices"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/data"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxdg "github.com/stubbedev/lys-wm/internal/protocol/server/xdgshell"
@@ -89,7 +88,7 @@ func (td *toplevelDrag) Attach(obj *sxtd.XdgToplevelDragV1, res *sxdg.XdgTopleve
 	if !td.dragging() {
 		return nil
 	}
-	return td.c.dragMotion(backend.Now())
+	return td.c.dragMotion(td.c.clock())
 }
 
 func (c *Compositor) activeToplevelDrag() *toplevelDrag {

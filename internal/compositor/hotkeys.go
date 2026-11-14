@@ -4,7 +4,6 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	sw "github.com/stubbedev/lys-wm/internal/protocol/server/wayland"
 	sxh "github.com/stubbedev/lys-wm/internal/protocol/server/xxhotkey"
@@ -262,7 +261,7 @@ func (c *Compositor) hotkeysFor(t binds.Trigger, tap bool, mods uint32) []*hotke
 
 func (k *hotkey) send(released bool) error {
 	serial := k.c.seat.ActivationSerial(k.owner.cl)
-	at := wire.Millis(backend.Now())
+	at := wire.Millis(k.c.clock())
 	if released {
 		return k.res.SendReleased(serial, at)
 	}

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/binds"
 	shgs "github.com/stubbedev/lys-wm/internal/protocol/server/hyprlandglobalshortcuts"
 	"github.com/stubbedev/lys-wm/internal/server"
@@ -24,8 +24,8 @@ type globalShortcut struct {
 
 func (*globalShortcut) Destroy(*shgs.HyprlandGlobalShortcutV1) error { return nil }
 
-func (g *globalShortcut) send(pressed bool) error {
-	now := wire.TimespecOf(backend.Now())
+func (g *globalShortcut) send(pressed bool, at time.Duration) error {
+	now := wire.TimespecOf(at)
 	if pressed {
 		return g.res.SendPressed(now.SecHi, now.SecLo, now.Nsec)
 	}
@@ -79,22 +79,24 @@ func (c *Compositor) pressShortcut(s wm.GlobalAction, trigger binds.Trigger) err
 	if g == nil {
 		return fmt.Errorf("no application registered the global shortcut %s:%s", s.AppID, s.ID)
 	}
-	err := g.send(true)
+	now := c.clock()
+	err := g.send(true, now)
 	switch trigger.(type) {
 	case binds.Key, binds.Button:
 		c.heldShortcuts = append(c.heldShortcuts, heldShortcut{trigger: trigger, shortcut: g})
 		return err
 	}
-	return errors.Join(err, g.send(false))
+	return errors.Join(err, g.send(false, now))
 }
 
 func (c *Compositor) releaseShortcuts(t binds.Trigger) error {
 	var errs []error
+	now := c.clock()
 	c.heldShortcuts = slices.DeleteFunc(c.heldShortcuts, func(h heldShortcut) bool {
 		if h.trigger != t {
 			return false
 		}
-		errs = append(errs, h.shortcut.send(false))
+		errs = append(errs, h.shortcut.send(false, now))
 		return true
 	})
 	return errors.Join(errs...)
