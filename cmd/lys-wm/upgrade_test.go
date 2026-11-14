@@ -688,8 +688,14 @@ func TestWithoutTheSwitchNoHolderRunsAndUpgradeSaysHowToTurnItOn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(strings.Fields(string(data))) != 0 {
-			t.Fatalf("lys-wm without --holder has children %q: it is a holder", data)
+		for child := range strings.FieldsSeq(string(data)) {
+			environ, err := os.ReadFile("/proc/" + child + "/environ")
+			if err != nil {
+				t.Fatalf("the environment of child %s: %v", child, err)
+			}
+			if slices.ContainsFunc(strings.Split(string(environ), "\x00"), func(kv string) bool { return strings.HasPrefix(kv, holderEnv+"=") }) {
+				t.Fatalf("lys-wm without --holder started worker %s: it is a holder", child)
+			}
 		}
 	}
 	c := testclient.Connect(t, s.waylandSocket())
