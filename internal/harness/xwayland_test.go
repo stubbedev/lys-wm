@@ -19,6 +19,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/backend/headless"
 	"github.com/stubbedev/lys-wm/internal/compositor"
 	"github.com/stubbedev/lys-wm/internal/ipc"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -68,8 +69,8 @@ func TestXwaylandStartsOnTheFirstXClientAndAfterACrash(t *testing.T) {
 	})
 	select {
 	case err := <-reports:
-		if !strings.Contains(err.Error(), "signal: killed") {
-			t.Fatalf("reported %v", err)
+		if exit, ok := errors.AsType[*spawn.ExitError](err); !ok || !exit.Status.Signaled() || exit.Status.Signal() != syscall.SIGKILL {
+			t.Fatalf("reported %v, want Xwayland killed by SIGKILL", err)
 		}
 	case <-time.After(clientTimeout):
 		t.Fatal("the crash was not reported")

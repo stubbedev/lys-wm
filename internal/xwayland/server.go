@@ -318,6 +318,18 @@ func (s *Server) kill(p *process) error {
 	return nil
 }
 
+func (s *Server) killFor(p *process, cause error) error {
+	err := p.child.Signal(syscall.SIGKILL)
+	switch {
+	case err == nil:
+		p.failed = cause
+		return nil
+	case errors.Is(err, os.ErrProcessDone):
+		return nil
+	}
+	return fmt.Errorf("xwayland: kill pid %d, as %w: %w", p.child.Pid, cause, err)
+}
+
 func (s *Server) exited(p *process, status error) error {
 	if s.proc != p {
 		return nil
@@ -345,8 +357,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 			if s.proc != p {
 				return nil
 			}
-			p.failed = err
-			return s.kill(p)
+			return s.killFor(p, err)
 		})
 		return
 	}
@@ -393,8 +404,7 @@ func (s *Server) manage(p *process, conn net.Conn) {
 		if s.proc != p || s.closed {
 			return nil
 		}
-		p.failed = errors.New("its X connection ended")
-		return s.kill(p)
+		return s.killFor(p, errors.New("its X connection ended"))
 	})
 }
 

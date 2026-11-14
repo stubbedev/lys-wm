@@ -302,7 +302,14 @@ func (p *Process) Signal(sig syscall.Signal) error {
 	if p.pidfd < 0 {
 		return os.ErrProcessDone
 	}
-	err := unix.PidfdSendSignal(p.pidfd, sig, nil, 0)
+	exited, err := p.exitedLocked()
+	if err != nil {
+		return err
+	}
+	if exited {
+		return os.ErrProcessDone
+	}
+	err = unix.PidfdSendSignal(p.pidfd, sig, nil, 0)
 	if errors.Is(err, unix.ESRCH) {
 		return os.ErrProcessDone
 	}
@@ -310,6 +317,20 @@ func (p *Process) Signal(sig syscall.Signal) error {
 		return fmt.Errorf("spawn: send %s to pid %d: %w", unix.SignalName(sig), p.Pid, err)
 	}
 	return nil
+}
+
+func (p *Process) exitedLocked() (bool, error) {
+	fds := []unix.PollFd{{Fd: int32(p.pidfd), Events: unix.POLLIN}} //nolint:gosec // fds fit an int32
+	for {
+		n, err := unix.Poll(fds, 0)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("spawn: poll the pidfd of pid %d: %w", p.Pid, err)
+		}
+		return n > 0, nil
+	}
 }
 
 func (s *Spawner) Close() error {

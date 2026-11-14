@@ -290,3 +290,18 @@ func TestTheSpawnerAndTheChildrenThatAskedForADeathSignalEndWithTheirParent(t *t
 	waitExit(t, pidfds[0], "the spawner of the killed parent")
 	waitExit(t, pidfds[1], "the child that asked for SIGTERM when its spawner dies")
 }
+
+func TestASignalToAChildThatHasExitedButIsNotWaitedForSaysItIsDone(t *testing.T) {
+	s := started(t)
+	p, err := s.Spawn(Command{Path: os.Args[0], Args: []string{os.Args[0], "-test.run=^$"}, Env: os.Environ()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitExit(t, p.pidfd, "the child that runs no tests")
+	if err := p.Signal(syscall.SIGKILL); !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("a signal to an exited child returned %v, want os.ErrProcessDone", err)
+	}
+	if err := p.Wait(); err != nil {
+		t.Fatalf("the child that was not killed ended with %v", err)
+	}
+}
