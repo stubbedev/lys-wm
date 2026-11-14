@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -216,11 +215,10 @@ func (s *Server) Sockets(t *handover.FDs) SocketState {
 }
 
 func Adopt(l *loop.Loop, d *server.Display, opts Options, st SocketState, t *handover.FDs) (*Server, error) {
-	binary, err := exec.LookPath(opts.Binary)
+	opts, err := opts.resolved()
 	if err != nil {
-		return nil, fmt.Errorf("xwayland: find %s (set %s to its path): %w", opts.Binary, Env, err)
+		return nil, err
 	}
-	opts.Binary = binary
 	socks := &sockets{n: st.N, lockPath: st.LockPath, path: st.Path}
 	for i, n := range st.FDs {
 		if socks.fds[i], err = t.Get(n); err != nil {

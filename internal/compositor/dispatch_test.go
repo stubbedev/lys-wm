@@ -1,15 +1,24 @@
 package compositor
 
 import (
+	"errors"
+	"io"
 	"math"
+	"os"
+	"os/exec"
 	"runtime"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 )
 
 type spun struct {
@@ -139,5 +148,86 @@ func TestADebugSpinRefusesToHoldTheOnlyProcessor(t *testing.T) {
 	t.Cleanup(func() { runtime.GOMAXPROCS(was) })
 	if err := spinWithoutBlocking(time.Hour); err == nil {
 		t.Fatal("a spin started with GOMAXPROCS 1, where it would starve every other goroutine")
+	}
+}
+
+func execRig(t *testing.T, spawner *spawn.Spawner, stdout *os.File) (*Compositor, *[]error) {
+	t.Helper()
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	reports := &[]error{}
+	c := &Compositor{loop: l, execOutput: ExecOutput{Stdout: stdout, Stderr: os.Stderr}, lookPath: exec.LookPath, report: func(err error) {
+		*reports = append(*reports, err)
+		l.Stop()
+	}}
+	c.hooks.Spawner = spawner
+	return c, reports
+}
+
+func runUntilStopped(t *testing.T, c *Compositor) {
+	t.Helper()
+	hang, err := c.loop.AddTimer(func() error { return errors.New("the exec neither started nor failed") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hang.Remove()
+	if err := hang.Arm(30 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.loop.Run(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnExecStartsFromTheSpawner(t *testing.T) {
+	spawner, err := spawn.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := spawner.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	c, reports := execRig(t, spawner, w)
+	pid := 0
+	c.spawnWith(`echo "$PPID"`, nil, func(started int) {
+		pid = started
+		c.loop.Stop()
+	})
+	runUntilStopped(t, c)
+	w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.WaitForExecs()
+	if len(*reports) != 0 || pid == 0 {
+		t.Fatalf("the exec reported %v and started pid %d", *reports, pid)
+	}
+	parent, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		t.Fatalf("the exec printed %q: %v", out, err)
+	}
+	if parent == os.Getpid() {
+		t.Fatalf("the exec is a child of the compositor's process %d, not of its spawner", parent)
+	}
+}
+
+func TestAnExecWithoutASpawnerFailsInsteadOfForking(t *testing.T) {
+	c, reports := execRig(t, nil, os.Stdout)
+	c.spawnWith("true", nil, func(pid int) { t.Errorf("an exec without a spawner started pid %d", pid) })
+	runUntilStopped(t, c)
+	c.WaitForExecs()
+	if len(*reports) != 1 || !strings.Contains((*reports)[0].Error(), "spawner") {
+		t.Fatalf("an exec without a spawner reported %v, want one error naming the missing spawner", *reports)
 	}
 }

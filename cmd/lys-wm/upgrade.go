@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/session"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/xwayland"
 )
 
@@ -66,27 +66,26 @@ type upgrader struct {
 	path    string
 	runtime string
 	holder  *session.Holder
+	spawner *spawn.Spawner
 	opened  opened
 	held    []*os.File
 	running bool
 	dropX11 bool
 }
 
-func preflight(binary, configPath, runtime string) (preflightInfo, error) {
+func preflight(spawner *spawn.Spawner, binary, configPath, runtime string) (preflightInfo, error) {
 	var out, errOut bytes.Buffer
-	args := []string{"--handover-info", "--config", configPath}
+	args := []string{binary, "--handover-info", "--config", configPath}
 	if runtime != "" {
 		args = append(args, "--runtime", runtime)
 	}
-	cmd := exec.Command(binary, args...) //nolint:gosec // the paths are the ones the running lys-wm reads
-	cmd.Stdout, cmd.Stderr = &out, &errOut
-	timer := time.AfterFunc(preflightLimit, func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-	})
+	p, err := spawner.Spawn(spawn.Command{Path: binary, Args: args, Env: os.Environ(), Stdout: &out, Stderr: &errOut})
+	if err != nil {
+		return preflightInfo{}, fmt.Errorf("%s does not answer as a lys-wm that can take over: %w", binary, err)
+	}
+	timer := time.AfterFunc(preflightLimit, func() { _ = p.Signal(syscall.SIGKILL) })
 	defer timer.Stop()
-	if err := cmd.Run(); err != nil {
+	if err := p.Wait(); err != nil {
 		return preflightInfo{}, fmt.Errorf("%s does not answer as a lys-wm that can take over: %w: %s", binary, err, strings.TrimSpace(errOut.String()))
 	}
 	var info preflightInfo
@@ -146,7 +145,7 @@ func (u *upgrader) start(binary string, dropX11 bool, conn *os.File, done func(i
 		done(ipc.UpgradeResult{}, err)
 	}
 	go func() {
-		info, err := preflight(binary, u.path, u.runtime)
+		info, err := preflight(u.spawner, binary, u.path, u.runtime)
 		u.loop.Hand("the upgrade preflight of "+binary, func() error {
 			if err == nil {
 				err = u.refusal(binary, info)

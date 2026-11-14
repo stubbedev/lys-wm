@@ -1,6 +1,7 @@
 package xwayland
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ import (
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	cxs "github.com/stubbedev/lys-wm/internal/protocol/client/xwaylandshell"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wire"
@@ -475,7 +478,11 @@ func TestAnXwaylandThatCannotStartIsTriedAgainNextTime(t *testing.T) {
 	}
 	defer d.Close()
 	var reports []error
-	s, err := Listen(l, d, Options{Binary: binary, Dir: dir, Log: io.Discard, Report: func(err error) { reports = append(reports, err) }, Listener: quietListener{}, TransferTimeout: time.Second})
+	report := func(err error) {
+		reports = append(reports, err)
+		l.Stop()
+	}
+	s, err := Listen(l, d, Options{Binary: binary, Dir: dir, Log: io.Discard, Report: report, Listener: quietListener{}, TransferTimeout: time.Second, Spawner: startSpawner(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,23 +496,109 @@ func TestAnXwaylandThatCannotStartIsTriedAgainNextTime(t *testing.T) {
 		if err := unix.Connect(fd, &unix.SockaddrUnix{Name: sock}); err != nil {
 			t.Fatal(err)
 		}
-		stop, err := l.AddTimer(func() error {
-			l.Stop()
-			return nil
-		})
+		hang, err := l.AddTimer(func() error { return fmt.Errorf("attempt %d was never reported", attempt) })
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := errors.Join(stop.Arm(50 * time.Millisecond)); err != nil {
+		if err := hang.Arm(30 * time.Second); err != nil {
 			t.Fatal(err)
 		}
 		if err := l.Run(); err != nil {
 			t.Fatalf("attempt %d: the loop ended with %v", attempt, err)
 		}
-		_ = stop.Remove()
+		_ = hang.Remove()
 		_ = unix.Close(fd)
 		if len(reports) != attempt {
 			t.Fatalf("attempt %d: reports %v", attempt, reports)
 		}
+	}
+}
+
+func startSpawner(t *testing.T) *spawn.Spawner {
+	t.Helper()
+	s, err := spawn.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return s
+}
+
+func TestXwaylandIsNotStartedWithoutASpawner(t *testing.T) {
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	d, err := server.New(l, server.Options{RuntimeDir: testenv.SocketDir(t), Report: func(err error) { t.Error(err) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	s, err := Listen(l, d, Options{Binary: os.Args[0], Dir: testenv.SocketDir(t), Log: io.Discard, Report: func(err error) { t.Error(err) }, Listener: quietListener{}, TransferTimeout: time.Second})
+	if err == nil {
+		_ = s.Close()
+		t.Fatal("Xwayland listened without a spawner to start it from")
+	}
+}
+
+func TestXwaylandStartsFromTheSpawnerWithItsLogAndItsExit(t *testing.T) {
+	dir := testenv.SocketDir(t)
+	l, err := loop.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	d, err := server.New(l, server.Options{RuntimeDir: testenv.SocketDir(t), Report: func(err error) { t.Error(err) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	var reports []error
+	var log bytes.Buffer
+	opts := Options{
+		Binary: os.Args[0], Dir: dir, Env: append(os.Environ(), fakeXwaylandEnv+"=1"), Log: &log, Listener: quietListener{}, TransferTimeout: time.Second, Spawner: startSpawner(t),
+		Report: func(err error) {
+			reports = append(reports, err)
+			l.Stop()
+		},
+	}
+	s, err := Listen(l, d, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	if err := unix.Connect(fd, &unix.SockaddrUnix{Name: filepath.Join(dir, ".X11-unix", "X"+strings.TrimPrefix(s.Display(), ":"))}); err != nil {
+		t.Fatal(err)
+	}
+	hang, err := l.AddTimer(func() error { return errors.New("the fake Xwayland's exit was not reported") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hang.Remove()
+	if err := hang.Arm(30 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if len(reports) != 1 || !strings.Contains(reports[0].Error(), "exit status "+strconv.Itoa(fakeXwaylandStatus)) {
+		t.Fatalf("reports %v, want the fake Xwayland's exit status %d", reports, fakeXwaylandStatus)
+	}
+	ppid, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(log.String(), fakeXwaylandSays)))
+	if err != nil {
+		t.Fatalf("the fake Xwayland logged %q: %v (reports %v)", log.String(), err, reports)
+	}
+	if ppid == os.Getpid() {
+		t.Fatalf("Xwayland is a child of this process, %d, not of the spawner", ppid)
 	}
 }

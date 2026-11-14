@@ -102,6 +102,14 @@
                   raise
           realtime()
           machine.succeed(f"ps -L -o cls=,rtprio= -p {compositor} | grep -Eq '^ *RR +2$'")
+          [spawner] = machine.succeed("pgrep -x lys-wm-spawner").split()
+          assert machine.succeed(f"ps -o ppid= -p {spawner}").strip() == compositor, "the spawner is not lys-wm's child"
+          machine.succeed(f"grep -E '^Max realtime timeout +unlimited +unlimited ' /proc/{spawner}/limits")
+          machine.succeed("${run "lys-wmctl dispatch exec sleep 4242"}")
+          [client] = machine.wait_until_succeeds("pgrep -f '^sleep 4242$'", timeout=30).split()
+          limits = machine.succeed(f"grep -E '^Max realtime timeout ' /proc/{client}/limits")
+          assert limits.split()[3:5] == ["unlimited", "unlimited"], f"a client lys-wm spawned under its lowered RLIMIT_RTTIME got {limits!r}, not the unlimited one lys-wm started with"
+          machine.succeed(f"kill {client}")
           demoted = "journalctl -b --no-pager -t lys-wm | grep -E 'the compositor thread ran [^ ]+ at SCHED_RR without blocking, past the 20ms its guard allows under RLIMIT_RTTIME'"
           ordinary = machine.execute(demoted)[1]
           if ordinary:

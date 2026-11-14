@@ -1,12 +1,10 @@
 package compositor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
 	"syscall"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/stubbedev/lys-wm/internal/binds"
 	"github.com/stubbedev/lys-wm/internal/loop"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/wm"
 )
 
@@ -160,11 +159,10 @@ func (c *Compositor) spawn(command string, target launchTarget) error {
 func (c *Compositor) spawnWith(command string, env []string, started func(pid int)) {
 	output := c.execOutput
 	c.execs.Run(func() {
-		cmd, err := c.startCommand(command, env, output)
+		p, err := c.startCommand(command, env, output)
 		if err == nil {
-			pid := cmd.Process.Pid
-			go c.reap(command, cmd)
-			c.loop.Hand("a started exec", func() error { started(pid); return nil })
+			go c.reap(command, p)
+			c.loop.Hand("a started exec", func() error { started(p.Pid); return nil })
 			return
 		}
 		c.loop.Hand("a failed exec", func() error { c.report(fmt.Errorf("compositor: %w", err)); return nil })
@@ -246,23 +244,23 @@ func (c *Compositor) WaitForExecs() {
 	c.execs.Wait()
 }
 
-func (c *Compositor) startCommand(command string, env []string, output ExecOutput) (*exec.Cmd, error) {
+func (c *Compositor) startCommand(command string, env []string, output ExecOutput) (*spawn.Process, error) {
 	sh, err := c.lookPath("sh")
 	if err != nil {
 		return nil, fmt.Errorf("exec %q: %w", command, err)
 	}
-	cmd := exec.CommandContext(context.Background(), sh, "-c", command) //nolint:gosec // binds and lys-wmctl dispatch run the user's own commands
-	cmd.Env = env
-	cmd.Stdout, cmd.Stderr = output.Stdout, output.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	if c.hooks.Spawner == nil {
+		return nil, fmt.Errorf("exec %q: this compositor was started without a spawner", command)
+	}
+	p, err := c.hooks.Spawner.Spawn(spawn.Command{Path: sh, Args: []string{sh, "-c", command}, Env: env, Stdout: output.Stdout, Stderr: output.Stderr, Setsid: true})
+	if err != nil {
 		return nil, fmt.Errorf("exec %q: %w", command, err)
 	}
-	return cmd, nil
+	return p, nil
 }
 
-func (c *Compositor) reap(command string, cmd *exec.Cmd) {
-	exited := exitError(command, cmd.Wait())
+func (c *Compositor) reap(command string, p *spawn.Process) {
+	exited := exitError(command, p.Wait())
 	if exited == nil {
 		return
 	}
@@ -275,17 +273,17 @@ func (c *Compositor) reap(command string, cmd *exec.Cmd) {
 }
 
 func exitError(command string, err error) error {
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) {
+	exit, ok := errors.AsType[*spawn.ExitError](err)
+	if !ok {
 		if err != nil {
 			return fmt.Errorf("compositor: wait for %q: %w", command, err)
 		}
 		return nil
 	}
-	if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
-		return fmt.Errorf("compositor: %q was killed by signal %s", command, unix.SignalName(ws.Signal()))
+	if exit.Status.Signaled() {
+		return fmt.Errorf("compositor: %q was killed by signal %s", command, unix.SignalName(exit.Status.Signal()))
 	}
-	return fmt.Errorf("compositor: %q exited with status %d", command, exit.ExitCode())
+	return fmt.Errorf("compositor: %q exited with status %d", command, exit.Status.ExitStatus())
 }
 
 func (c *Compositor) ReloadConfig() {

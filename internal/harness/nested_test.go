@@ -22,6 +22,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/seat"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -72,8 +73,13 @@ func startNestedOn(t *testing.T, host *Harness, renderer nested.Renderer, config
 		t.Fatal(err)
 	}
 	n.display = display.Name()
+	spawner, err := spawn.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Report = func(err error) { t.Errorf("nested lys-wm reported: %v", err) }
+	cfg.Hooks.Spawner = spawner
 	configure(&cfg)
 	if n.comp, err = compositor.New(n.loop, display, b, cfg); err != nil {
 		t.Fatal(err)
@@ -87,7 +93,7 @@ func startNestedOn(t *testing.T, host *Harness, renderer nested.Renderer, config
 		if err := <-done; err != nil && !errors.Is(err, nested.ErrClosed) {
 			t.Error(err)
 		}
-		if err := errors.Join(n.comp.Close(), display.Close(), b.Close(), n.loop.Close()); err != nil {
+		if err := errors.Join(n.comp.Close(), spawner.Close(), display.Close(), b.Close(), n.loop.Close()); err != nil {
 			t.Error(err)
 		}
 	})

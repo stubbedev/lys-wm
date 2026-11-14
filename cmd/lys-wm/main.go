@@ -41,6 +41,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/server"
 	"github.com/stubbedev/lys-wm/internal/session"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/systemd"
 	"github.com/stubbedev/lys-wm/internal/wlclient"
 	"github.com/stubbedev/lys-wm/internal/wm"
@@ -604,6 +605,11 @@ func run(args []string) (err error) {
 	if *handoverInfo {
 		return printHandoverInfo(*path, *runtime, os.Getenv, os.Stdout)
 	}
+	spawner, err := spawn.Start()
+	if err != nil {
+		return err
+	}
+	defer leave(spawner.Close)
 	stopProfile, err := startCPUProfile(*cpuProfile)
 	if err != nil {
 		return err
@@ -649,6 +655,7 @@ func run(args []string) (err error) {
 	cfg.Cursor = s.cursor
 	cfg.Hooks.Reload = s.reload
 	cfg.Hooks.ParseProp = config.ParseProp
+	cfg.Hooks.Spawner = spawner
 	for _, kv := range first.env {
 		if err := os.Setenv(kv[0], kv[1]); err != nil {
 			return fmt.Errorf("set %s from the config: %w", kv[0], err)
@@ -757,7 +764,7 @@ func run(args []string) (err error) {
 	}
 	var xw *xwayland.Server
 	if first.xwayland {
-		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second}
+		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: "/tmp", Env: os.Environ(), Log: os.Stderr, Report: cfg.Report, Listener: s.comp, TransferTimeout: 30 * time.Second, Spawner: spawner}
 		if incoming != nil && incoming.state.X != nil {
 			if xw, err = xwayland.Adopt(l, display, opts, *incoming.state.X, incoming.fds); err != nil {
 				return fmt.Errorf("%w (or turn it off with xwayland.enabled: false)", err)
@@ -815,7 +822,7 @@ func run(args []string) (err error) {
 		accents.Close()
 		return nil
 	})
-	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xw, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, opened: b}
+	u := &upgrader{loop: l, comp: s.comp, display: display, srv: srv, xw: xw, args: slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--handover-fd" || a == strconv.Itoa(*handoverFD) }), path: s.path, runtime: *runtime, holder: hold, spawner: spawner, opened: b}
 	srv.OnUpgrade(u.start)
 	if incoming == nil {
 		for _, command := range first.autostart {

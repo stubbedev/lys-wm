@@ -29,6 +29,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/testenv"
 	"github.com/stubbedev/lys-wm/internal/xwayland"
 )
@@ -49,6 +50,7 @@ type Harness struct {
 	ipcPath    string
 	trace      *syncBuffer
 	xwayland   *xwayland.Server
+	spawner    *spawn.Spawner
 	xlog       *syncBuffer
 	done       chan error
 	loopG      atomic.Uint64
@@ -237,8 +239,12 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 			t.Fatalf("harness: %v", err)
 		}
 	}
+	if h.spawner, err = spawn.Start(); err != nil {
+		t.Fatalf("harness: %v", err)
+	}
 	cfg := compositor.PlainConfig(testenv.Keymap(t), testenv.Font(t))
 	cfg.Report = func(err error) { t.Errorf("compositor reported: %v", err) }
+	cfg.Hooks.Spawner = h.spawner
 	cfg.Decor.BorderWidth = 0
 	cfg.Clock = h.loop.Now
 	s.configure(&cfg)
@@ -256,7 +262,7 @@ func start(t testing.TB, s setup, modes ...backend.Mode) *Harness {
 	h.compositor.OnIPCEvents(h.ipc)
 	h.auditIPC()
 	if s.xwayland != nil {
-		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, FirstDisplay: xwaylandDisplay(), Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout}
+		opts := xwayland.Options{Binary: xwayland.Path(os.Getenv), Dir: dir, FirstDisplay: xwaylandDisplay(), Env: os.Environ(), Log: h.xlog, Report: s.xwayland, Listener: h.compositor, TransferTimeout: XTransferTimeout, Spawner: h.spawner}
 		if h.xwayland, err = xwayland.Listen(h.loop, h.display, opts); err != nil {
 			t.Fatalf("harness: %v", err)
 		}
@@ -299,6 +305,9 @@ func (h *Harness) stop() {
 	}
 	if h.compositor != nil {
 		errs = append(errs, h.compositor.Close())
+	}
+	if h.spawner != nil {
+		errs = append(errs, h.spawner.Close())
 	}
 	if h.display != nil {
 		errs = append(errs, h.display.Close())

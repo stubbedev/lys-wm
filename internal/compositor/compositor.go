@@ -53,6 +53,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/shell"
 	"github.com/stubbedev/lys-wm/internal/shm"
 	"github.com/stubbedev/lys-wm/internal/singlepixel"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/surface"
 	"github.com/stubbedev/lys-wm/internal/syncobj"
 	"github.com/stubbedev/lys-wm/internal/tabletinput"
@@ -117,6 +118,7 @@ type Hooks struct {
 	SwitchVT       func(vt uint32) error
 	OpenFrameTrace func(path string) (*frametrace.Recorder, error)
 	Lid            LidPolicy
+	Spawner        *spawn.Spawner
 }
 
 type LidPolicy struct {

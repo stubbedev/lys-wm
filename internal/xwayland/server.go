@@ -24,6 +24,7 @@ import (
 	"github.com/stubbedev/lys-wm/internal/data"
 	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/server"
+	"github.com/stubbedev/lys-wm/internal/spawn"
 	"github.com/stubbedev/lys-wm/internal/surface"
 )
 
@@ -47,6 +48,7 @@ type Options struct {
 	Listener        Listener
 	FirstDisplay    int
 	TransferTimeout time.Duration
+	Spawner         *spawn.Spawner
 }
 
 type Server struct {
@@ -61,7 +63,7 @@ type Server struct {
 }
 
 type process struct {
-	cmd    *exec.Cmd
+	child  *spawn.Process
 	client *server.Client
 	wm     *wm
 	notify int
@@ -71,15 +73,23 @@ type process struct {
 	failed error
 }
 
-func Listen(l *loop.Loop, d *server.Display, opts Options) (*Server, error) {
-	if opts.Listener == nil || opts.Report == nil || opts.TransferTimeout <= 0 {
-		return nil, errors.New("xwayland: Options.Listener, Options.Report and Options.TransferTimeout are required")
+func (o Options) resolved() (Options, error) {
+	if o.Listener == nil || o.Report == nil || o.TransferTimeout <= 0 || o.Spawner == nil {
+		return Options{}, errors.New("xwayland: Options.Listener, Options.Report, Options.TransferTimeout and Options.Spawner are required")
 	}
-	binary, err := exec.LookPath(opts.Binary)
+	binary, err := exec.LookPath(o.Binary)
 	if err != nil {
-		return nil, fmt.Errorf("xwayland: find %s (set %s to its path): %w", opts.Binary, Env, err)
+		return Options{}, fmt.Errorf("xwayland: find %s (set %s to its path): %w", o.Binary, Env, err)
 	}
-	opts.Binary = binary
+	o.Binary = binary
+	return o, nil
+}
+
+func Listen(l *loop.Loop, d *server.Display, opts Options) (*Server, error) {
+	opts, err := opts.resolved()
+	if err != nil {
+		return nil, err
+	}
 	socks, skipped, err := bindDisplay(opts.Dir, opts.FirstDisplay, os.Remove)
 	if err != nil {
 		return nil, err
@@ -105,7 +115,7 @@ func (s *Server) Pid() int {
 	if s.proc == nil {
 		return 0
 	}
-	return s.proc.cmd.Process.Pid
+	return s.proc.child.Pid
 }
 
 func (s *Server) Running() bool {
@@ -211,20 +221,23 @@ func (s *Server) start() error {
 		}
 		theirs = append(theirs, listen[i])
 	}
-	child := []int{listen[0], listen[1], notify[1], wm[1], wayland[1]}
-	files := make([]*os.File, len(child))
-	for i, fd := range child {
+	fds := []int{listen[0], listen[1], notify[1], wm[1], wayland[1]}
+	files := make([]*os.File, len(fds))
+	for i, fd := range fds {
 		files[i] = os.NewFile(uintptr(fd), "xwayland")
 	}
-	cmd := exec.Command(s.opts.Binary, s.Display(), "-rootless", "-core", "-listenfd", "3", "-listenfd", "4", "-displayfd", "5", "-wm", "6") //nolint:gosec // the binary comes from the build or LYS_WM_XWAYLAND
-	cmd.ExtraFiles = files
-	cmd.Env = append(slices.DeleteFunc(slices.Clone(s.opts.Env), func(kv string) bool {
-		name, _, _ := strings.Cut(kv, "=")
-		return name == "WAYLAND_DISPLAY" || name == "WAYLAND_SOCKET" || name == "DISPLAY"
-	}), "WAYLAND_SOCKET=7")
-	cmd.Stdout, cmd.Stderr = s.opts.Log, s.opts.Log
-	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}
-	err = cmd.Start()
+	child, err := s.opts.Spawner.Spawn(spawn.Command{
+		Path: s.opts.Binary,
+		Args: []string{s.opts.Binary, s.Display(), "-rootless", "-core", "-listenfd", "3", "-listenfd", "4", "-displayfd", "5", "-wm", "6"},
+		Env: append(slices.DeleteFunc(slices.Clone(s.opts.Env), func(kv string) bool {
+			name, _, _ := strings.Cut(kv, "=")
+			return name == "WAYLAND_DISPLAY" || name == "WAYLAND_SOCKET" || name == "DISPLAY"
+		}), "WAYLAND_SOCKET=7"),
+		Stdout:      s.opts.Log,
+		Stderr:      s.opts.Log,
+		ExtraFiles:  files,
+		DeathSignal: syscall.SIGTERM,
+	})
 	for _, f := range files {
 		_ = f.Close()
 	}
@@ -232,10 +245,10 @@ func (s *Server) start() error {
 	if err != nil {
 		return fail(err)
 	}
-	p := &process{cmd: cmd, notify: notify[0]}
+	p := &process{child: child, notify: notify[0]}
 	s.proc = p
 	go func() {
-		err := cmd.Wait()
+		err := child.Wait()
 		s.loop.Hand("the exit of Xwayland", func() error { return s.exited(p, err) })
 	}()
 	wmFile := os.NewFile(uintptr(wm[0]), "xwayland-wm")
@@ -299,8 +312,8 @@ func (p *process) release() error {
 }
 
 func (s *Server) kill(p *process) error {
-	if err := p.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return fmt.Errorf("xwayland: kill pid %d: %w", p.cmd.Process.Pid, err)
+	if err := p.child.Signal(syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("xwayland: kill pid %d: %w", p.child.Pid, err)
 	}
 	return nil
 }
