@@ -174,7 +174,7 @@ func PlainConfig(keymap *xkb.Keymap, font *gtext.Typeface) Config {
 		HiddenFrame:    DefaultHiddenFrame,
 		PowerSaverRate: DefaultPowerSaverRate,
 		HDRHold:        DefaultHDRHold,
-		Clock:          backend.Now,
+		Clock:          loop.Monotonic,
 		Gestures:       DefaultGestures(),
 		HotCorners:     DefaultHotCorners(),
 		Overview:       DefaultOverviewStyle(),

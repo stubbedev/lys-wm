@@ -557,7 +557,7 @@ func openFrameTrace(path string, kind backendKind, renderer rendererKind, b back
 	}
 	h := frametrace.Header{Backend: kind.String(), Renderer: renderer.String(), Device: named.DeviceName(), Software: render.SoftwareDevice(named.DeviceName()), Vsync: kind == drmBackend}
 	sync, _ := r.(frametrace.Sync)
-	return frametrace.Create(path, h, sync, frametrace.Clock{Now: backend.Now, Signal: kdrm.SyncFileSignalTime}, report)
+	return frametrace.Create(path, h, sync, frametrace.Clock{Now: loop.Monotonic, Signal: kdrm.SyncFileSignalTime}, report)
 }
 
 func run(args []string) (err error) {

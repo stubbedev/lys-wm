@@ -223,7 +223,7 @@ func (o *Output) arm() error {
 	if o.armed {
 		return nil
 	}
-	now := backend.Now()
+	now := loop.Monotonic()
 	at, ticks := backend.NextVblank(o.lastVblank, now, o.state.Mode.Interval())
 	o.nextVblank, o.nextSeq = at, o.seq+ticks
 	if err := o.timer.Arm(at - now); err != nil {

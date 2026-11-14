@@ -22,9 +22,9 @@ import (
 
 	"github.com/stubbedev/lys-lib/wmipc"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/frametrace"
 	"github.com/stubbedev/lys-wm/internal/ipc"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/testclient"
 )
 
@@ -339,7 +339,7 @@ func drive(o options, c *compositor, run string, out io.Writer) (marks []mark, g
 			err = f.err
 		}
 	}()
-	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, runtime: filepath.Join(run, "runtime.yaml"), now: backend.Now, swipes: c.swipes, rss: func() int64 { return rssKiB(c.cmd.Process.Pid) }}
+	s := &session{client: testclient.Connect(t, filepath.Join(run, c.display)), ipc: c.socket, runtime: filepath.Join(run, "runtime.yaml"), now: loop.Monotonic, swipes: c.swipes, rss: func() int64 { return rssKiB(c.cmd.Process.Pid) }}
 	for i := range scenarios {
 		sc := &scenarios[i]
 		if len(o.only) > 0 && !slices.Contains(o.only, sc.name) {

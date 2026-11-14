@@ -19,8 +19,8 @@ import (
 	lgpu "github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-wm/internal/backend"
 	"github.com/stubbedev/lys-wm/internal/gpu"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	"github.com/stubbedev/lys-wm/internal/render"
 	"github.com/stubbedev/lys-wm/internal/render/soft"
 	"github.com/stubbedev/lys-wm/internal/shader"
@@ -945,7 +945,7 @@ func FrameFencesReportTheGPUFinishing(t *testing.T, g GPU) {
 		t.Fatal(err)
 	}
 	defer check(t, fb.Destroy)
-	start := backend.Now()
+	start := loop.Monotonic()
 	Paint(t, g, fb, render.Region{{Max: Size}}, func(p render.Pass) {
 		p.FillRect(image.Rectangle{Max: Size}, render.Color{G: 0xff, A: 0xff}, render.Mask{})
 	})
@@ -964,8 +964,8 @@ func FrameFencesReportTheGPUFinishing(t *testing.T, g GPU) {
 	if err != nil || !ok {
 		t.Fatalf("a signalled frame fence: %v, %v", ok, err)
 	}
-	if done < start || done > backend.Now() {
-		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, backend.Now())
+	if done < start || done > loop.Monotonic() {
+		t.Fatalf("the fence signalled at %v, outside the frame's %v..%v", done, start, loop.Monotonic())
 	}
 	t.Logf("the GPU finished the frame %v after it started", done-start)
 }

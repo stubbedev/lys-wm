@@ -513,7 +513,7 @@ func (o *Output) Present(damage render.Region) error {
 
 func (o *Output) frameDone() error {
 	o.callbackPending = false
-	p := backend.Presentation{Time: backend.Now(), Seq: o.seq, Idle: !o.presentPending}
+	p := backend.Presentation{Time: loop.Monotonic(), Seq: o.seq, Idle: !o.presentPending}
 	if o.presentPending {
 		o.presentPending = false
 		o.seq++

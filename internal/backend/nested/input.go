@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-wm/internal/backend"
+	"github.com/stubbedev/lys-wm/internal/loop"
 	cw "github.com/stubbedev/lys-wm/internal/protocol/client/wayland"
 	"github.com/stubbedev/lys-wm/internal/wire"
 )
@@ -117,7 +118,7 @@ func (k keyboardEvents) Key(_ *cw.WlKeyboard, _, _, key uint32, state cw.WlKeybo
 	default:
 		return nil
 	}
-	return k.backend.emit(k.Keyboard, backend.Key{Time: backend.Now(), Code: key, Pressed: state == cw.WlKeyboardKeyStatePressed})
+	return k.backend.emit(k.Keyboard, backend.Key{Time: loop.Monotonic(), Code: key, Pressed: state == cw.WlKeyboardKeyStatePressed})
 }
 
 func (k keyboardEvents) Enter(*cw.WlKeyboard, uint32, *cw.WlSurface, []byte) error {
@@ -128,7 +129,7 @@ func (k keyboardEvents) Leave(*cw.WlKeyboard, uint32, *cw.WlSurface) error {
 	var errs []error
 	for _, key := range slices.Sorted(maps.Keys(k.pressed)) {
 		delete(k.pressed, key)
-		errs = append(errs, k.backend.emit(k.Keyboard, backend.Key{Time: backend.Now(), Code: key}))
+		errs = append(errs, k.backend.emit(k.Keyboard, backend.Key{Time: loop.Monotonic(), Code: key}))
 	}
 	return errors.Join(errs...)
 }
@@ -188,7 +189,7 @@ func (p pointerEvents) motion(x, y wire.Fixed) error {
 	if o == nil || o.size.X == 0 || o.size.Y == 0 {
 		return nil
 	}
-	return p.backend.emit(p.Pointer, backend.PointerMotionAbsolute{Time: backend.Now(), Output: o, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
+	return p.backend.emit(p.Pointer, backend.PointerMotionAbsolute{Time: loop.Monotonic(), Output: o, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
 }
 
 func (p pointerEvents) Enter(wl *cw.WlPointer, serial uint32, surface *cw.WlSurface, x, y wire.Fixed) error {
@@ -209,7 +210,7 @@ func (p pointerEvents) Motion(_ *cw.WlPointer, _ uint32, x, y wire.Fixed) error 
 }
 
 func (p pointerEvents) Button(_ *cw.WlPointer, _, _, button uint32, state cw.WlPointerButtonState) error {
-	return p.backend.emit(p.Pointer, backend.PointerButton{Time: backend.Now(), Button: button, Pressed: state == cw.WlPointerButtonStatePressed})
+	return p.backend.emit(p.Pointer, backend.PointerButton{Time: loop.Monotonic(), Button: button, Pressed: state == cw.WlPointerButtonStatePressed})
 }
 
 func (p pointerEvents) Axis(_ *cw.WlPointer, _ uint32, axis cw.WlPointerAxis, value wire.Fixed) error {
@@ -219,12 +220,12 @@ func (p pointerEvents) Axis(_ *cw.WlPointer, _ uint32, axis cw.WlPointerAxis, va
 	}
 	v120 := p.value120[axis]
 	delete(p.value120, axis)
-	return p.backend.emit(p.Pointer, backend.PointerAxis{Time: backend.Now(), Orientation: orientation, Source: p.source, Value: value.Float(), Value120: v120})
+	return p.backend.emit(p.Pointer, backend.PointerAxis{Time: loop.Monotonic(), Orientation: orientation, Source: p.source, Value: value.Float(), Value120: v120})
 }
 
 func (p pointerEvents) Frame(*cw.WlPointer) error {
 	p.source = backend.Wheel
-	return p.backend.emit(p.Pointer, &backend.PointerFrame{Time: backend.Now()})
+	return p.backend.emit(p.Pointer, &backend.PointerFrame{Time: loop.Monotonic()})
 }
 
 func (p pointerEvents) AxisSource(_ *cw.WlPointer, source cw.WlPointerAxisSource) error {
@@ -271,7 +272,7 @@ func (t touchEvents) Down(_ *cw.WlTouch, _, _ uint32, surface *cw.WlSurface, id 
 		return nil
 	}
 	t.outputs[id] = o
-	return t.backend.emit(t.Touch, backend.TouchDown{Time: backend.Now(), ID: id, Output: o, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
+	return t.backend.emit(t.Touch, backend.TouchDown{Time: loop.Monotonic(), ID: id, Output: o, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
 }
 
 func (t touchEvents) Up(_ *cw.WlTouch, _, _ uint32, id int32) error {
@@ -279,7 +280,7 @@ func (t touchEvents) Up(_ *cw.WlTouch, _, _ uint32, id int32) error {
 		return nil
 	}
 	delete(t.outputs, id)
-	return t.backend.emit(t.Touch, backend.TouchUp{Time: backend.Now(), ID: id})
+	return t.backend.emit(t.Touch, backend.TouchUp{Time: loop.Monotonic(), ID: id})
 }
 
 func (t touchEvents) Motion(_ *cw.WlTouch, _ uint32, id int32, x, y wire.Fixed) error {
@@ -287,18 +288,18 @@ func (t touchEvents) Motion(_ *cw.WlTouch, _ uint32, id int32, x, y wire.Fixed) 
 	if !ok {
 		return nil
 	}
-	return t.backend.emit(t.Touch, backend.TouchMotion{Time: backend.Now(), ID: id, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
+	return t.backend.emit(t.Touch, backend.TouchMotion{Time: loop.Monotonic(), ID: id, X: x.Float() / float64(o.size.X), Y: y.Float() / float64(o.size.Y)})
 }
 
 func (t touchEvents) Frame(*cw.WlTouch) error {
-	return t.backend.emit(t.Touch, backend.TouchFrame{Time: backend.Now()})
+	return t.backend.emit(t.Touch, backend.TouchFrame{Time: loop.Monotonic()})
 }
 
 func (t touchEvents) Cancel(*cw.WlTouch) error {
 	var errs []error
 	for _, id := range slices.Sorted(maps.Keys(t.outputs)) {
 		delete(t.outputs, id)
-		errs = append(errs, t.backend.emit(t.Touch, backend.TouchCancel{Time: backend.Now(), ID: id}))
+		errs = append(errs, t.backend.emit(t.Touch, backend.TouchCancel{Time: loop.Monotonic(), ID: id}))
 	}
 	return errors.Join(errs...)
 }

@@ -21,14 +21,6 @@ func TestMode(t *testing.T) {
 	}
 }
 
-func TestNowIsMonotonic(t *testing.T) {
-	a := Now()
-	b := Now()
-	if a <= 0 || b < a {
-		t.Fatalf("Now went %v then %v", a, b)
-	}
-}
-
 func TestCapability(t *testing.T) {
 	c := Keyboard | Touch
 	if !c.Has(Keyboard) || !c.Has(Touch) || c.Has(Pointer) || !c.Has(Keyboard|Touch) {
