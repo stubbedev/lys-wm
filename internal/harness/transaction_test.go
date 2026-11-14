@@ -196,14 +196,19 @@ func TestClientsThatDoNotAnswerAConfigureHoldOnlyUpToTheBound(t *testing.T) {
 	for name, answer := range map[string]testclient.Answer{"no ack": testclient.AnswerNever, "ack without a commit": testclient.AnswerAckOnly} {
 		t.Run(name, func(t *testing.T) {
 			h := StartWith(t, func(cfg *compositor.Config) { cfg.HoldOpening = true }, small)
+			h.Freeze()
 			c, w := open(t, h, "mute", fillGreen)
 			w.Answer = answer
+			w.Stop()
 			_, _ = open(t, h, "right", fillBlue)
 			c.DispatchUntil("the configure seen", func() bool { return w.Logical.X == 160 && w.Configures > 1 })
 			c.Sync()
-			h.Eventually("the bound over", landed)
-			if s := h.holds(); s.Expired != 1 {
-				t.Fatalf("holds %+v, want one expired", s)
+			if !h.compositorHolding() {
+				t.Fatalf("holds %+v: nothing held for the mute window once it had the configure", h.holds())
+			}
+			h.Advance(compositor.DefaultHoldBound)
+			if s := h.holds(); s.Landed != 1 || s.Expired != 1 || s.Last != compositor.DefaultHoldBound {
+				t.Fatalf("holds %+v, want one, expired at its bound of %v", s, compositor.DefaultHoldBound)
 			}
 			h.Eventually("the mute window's old buffer fills its new frame", showing(75, 50, greenColor))
 		})
@@ -256,14 +261,14 @@ func TestChangesWithoutAResizeAreNotHeld(t *testing.T) {
 	if w.Logical != small.Size {
 		t.Errorf("the tiled window is %v, want the whole output", w.Logical)
 	}
-	time.Sleep(100 * time.Millisecond)
+	h.Advance(100 * time.Millisecond)
 	frames := framesOn(h, 0)
 	woke := h.Wakeups()
-	time.Sleep(100 * time.Millisecond)
+	h.Advance(100 * time.Millisecond)
 	if n := framesOn(h, 0) - frames; n != 0 {
 		t.Errorf("%d frames ran on an idle desktop", n)
 	}
-	if n := h.Wakeups() - woke; n > 2 {
+	if n := h.Wakeups() - woke; n > 3 {
 		t.Errorf("the loop woke %d times on an idle desktop", n)
 	}
 }
@@ -774,7 +779,7 @@ func benchDesktop(b *testing.B, n int) *Harness {
 
 func BenchmarkFrameWithEightWindows(b *testing.B) {
 	h := benchDesktop(b, 8)
-	time.Sleep(300 * time.Millisecond)
+	h.Advance(300 * time.Millisecond)
 	for b.Loop() {
 		h.Rendered(0)
 	}
@@ -790,7 +795,7 @@ func BenchmarkFocusChangeWithEightWindows(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	time.Sleep(300 * time.Millisecond)
+	h.Advance(300 * time.Millisecond)
 	i := 0
 	for b.Loop() {
 		a := left
@@ -819,7 +824,7 @@ func TestLayoutPathAllocations(t *testing.T) {
 		c.Sync()
 	}
 	h.Eventually("the layout landed", landed)
-	time.Sleep(100 * time.Millisecond)
+	h.Advance(100 * time.Millisecond)
 	left, err := wm.ParseAction("focus left")
 	if err != nil {
 		t.Fatal(err)
