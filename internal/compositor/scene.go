@@ -577,11 +577,8 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		c.adopting.shown[o] = true
 	}
 	sc := c.sceneOf(o)
-	kind, refresh, seq := spt.WpPresentationFeedbackKindVsync, p.Refresh, p.Seq
-	switch {
-	case p.Idle:
-		kind, refresh, seq = 0, 0, sc.last.Seq
-	case p.Torn:
+	kind := spt.WpPresentationFeedbackKindVsync
+	if p.Idle || p.Torn {
 		kind = 0
 	}
 	if p.Hardware {
@@ -599,7 +596,7 @@ func (c *Compositor) Presented(b backend.Output, p backend.Presentation) error {
 		} else {
 			frame = s.FrameDone(wire.Millis(p.Time))
 		}
-		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, refresh, p.Variable, seq, sc.feedbackKind(s, kind, p.Idle)))
+		errs = errors.Join(errs, frame, s.Presented(c.outputResources, p.Time, p.Refresh, p.Variable, p.Seq, sc.feedbackKind(s, kind, p.Idle)))
 	}
 	if p.Idle {
 		return errors.Join(errs, c.heldFrame(o))

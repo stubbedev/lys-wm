@@ -1020,6 +1020,7 @@ type Output struct {
 	frameDue      time.Duration
 	empties       int
 	idleAt        time.Duration
+	idleSeq       uint64
 	budget        backend.RenderBudget
 	tested        map[planeKey]bool
 	frameStart    time.Duration
@@ -1030,6 +1031,7 @@ type Output struct {
 	untimed       bool
 	lastFlip      time.Duration
 	lastVblank    time.Duration
+	vblankSeq     uint32
 	unanchored    bool
 	presented     uint64
 	color         colorBlobs
@@ -1658,15 +1660,23 @@ func (o *Output) emptyFrame() error {
 	if err := o.pacer.Arm(at - now); err != nil {
 		return fmt.Errorf("drm: pace the frames of %s: %w", o.Name(), err)
 	}
-	o.idleAt = at
+	o.idleAt, o.idleSeq = at, o.seqAt(at)
 	return nil
+}
+
+func (o *Output) seqAt(at time.Duration) uint64 {
+	if o.vblankSeq == 0 || o.vrrSent || at <= o.lastVblank {
+		return uint64(o.vblankSeq)
+	}
+	interval := modeOf(o.mode).Interval()
+	return uint64(o.vblankSeq + uint32((at-o.lastVblank+interval/2)/interval)) //nolint:gosec // the vblank counter wraps at 32 bits, as the kernel's flip events report it
 }
 
 func (o *Output) paceElapsed() error {
 	o.empties = 0
 	var err error
 	if o.queued == nil && o.enabled && !o.off {
-		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: o.paceInterval(), Idle: true})
+		err = o.b.handler.Presented(o, backend.Presentation{Time: o.idleAt, Refresh: o.paceInterval(), Seq: o.idleSeq, Idle: true})
 	}
 	return errors.Join(err, o.clock.Kick(), o.flushPlanes())
 }
@@ -2244,6 +2254,9 @@ func (o *Output) vblank(now time.Duration) time.Duration {
 		o.b.report(fmt.Errorf("drm: %s extrapolates its vblanks from its last flip, reading the CRTC's last vblank failed: %w", o.Name(), err))
 	case v.Active && v.Time > o.lastVblank && v.Time <= now:
 		o.lastVblank = v.Time
+		if o.vblankSeq != 0 {
+			o.vblankSeq = uint32(v.Sequence) //nolint:gosec // the vblank counter wraps at 32 bits, as the kernel's flip events report it
+		}
 	}
 	return o.lastVblank
 }
@@ -2429,7 +2442,7 @@ func (o *Output) flipped(e kdrm.FlipEvent) error {
 	}
 	o.flipping = false
 	o.lastFlip = time.Duration(e.Sec)*time.Second + time.Duration(e.Usec)*time.Microsecond
-	o.lastVblank = o.lastFlip
+	o.lastVblank, o.vblankSeq = o.lastFlip, e.Sequence
 	overlayFreed := o.overlayFlipped()
 	timing := o.timeFrame(o.lastFlip)
 	if c := o.cursor; c != nil && c.queued != nil {

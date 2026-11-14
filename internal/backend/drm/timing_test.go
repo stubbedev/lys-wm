@@ -322,3 +322,49 @@ func TestAPoweredOnCRTCIsNotAskedForItsVblankBeforeItsModeset(t *testing.T) {
 		t.Fatalf("a CRTC powered on but not yet modeset was asked for its vblank %d times, reports %v, unanchored %v", r.dev.vblankReads, r.reports, o.unanchored)
 	}
 }
+
+func (r *rig) idlePresentation(o *Output) backend.Presentation {
+	r.t.Helper()
+	r.rec.idle = true
+	frames := r.frames()
+	if err := o.ScheduleFrame(); err != nil {
+		r.t.Fatal(err)
+	}
+	r.until("the empty frame", func() bool { return r.frames() > frames })
+	r.at(o.idleAt)
+	presents := len(r.rec.presents)
+	if err := o.paceElapsed(); err != nil {
+		r.t.Fatal(err)
+	}
+	got := r.rec.presents[presents:]
+	if len(got) != 1 || !got[0].Idle {
+		r.t.Fatalf("the empty frame's refresh presented %+v, want one idle presentation", got)
+	}
+	return got[0]
+}
+
+func TestAnIdleRefreshIsPresentedAtItsVblanksSequenceAndTheRefreshPeriod(t *testing.T) {
+	r := start(t)
+	o := r.flipFirstFrame()
+	interval := modeOf(o.mode).Interval()
+	vblank := r.idleUntilTheCRTCDrifts(o)
+	p := r.idlePresentation(o)
+	if want := (backend.Presentation{Time: vblank + interval, Refresh: interval, Seq: 1002, Idle: true}); p != want {
+		t.Fatalf("an idle refresh a refresh after the CRTC's vblank 1001 presented %+v, want %+v", p, want)
+	}
+}
+
+func TestAnIdleRefreshAfterAFlipWithoutASequenceHasNone(t *testing.T) {
+	r := start(t)
+	o := r.b.Outputs()[0]
+	if err := o.ScheduleFrame(); err != nil {
+		t.Fatal(err)
+	}
+	r.committedSince("the first frame", o, 0)
+	r.dev.flip(t, 10, 0)
+	r.until("the first frame's flip", func() bool { return !o.flipping })
+	r.idleUntilTheCRTCDrifts(o)
+	if p := r.idlePresentation(o); p.Seq != 0 || p.Refresh != modeOf(o.mode).Interval() {
+		t.Fatalf("an idle refresh after a flip at sequence 0 presented %+v, want sequence 0 like the flip's and the refresh period", p)
+	}
+}
