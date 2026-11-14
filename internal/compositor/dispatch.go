@@ -199,6 +199,19 @@ func withoutGC(f func() error) error {
 
 //go:nosplit
 func spinThreadCPU(ns int64) (start, now int64, errno syscall.Errno) {
+	was, errno := blockSignals()
+	if errno != 0 {
+		return 0, 0, errno
+	}
+	start, now, errno = spinUnsignalled(ns)
+	if restored := setSignalMask(was); errno == 0 {
+		errno = restored
+	}
+	return start, now, errno
+}
+
+//go:nosplit
+func spinUnsignalled(ns int64) (start, now int64, errno syscall.Errno) {
 	policy, errno := threadPolicy()
 	if errno != 0 {
 		return 0, 0, errno
@@ -225,6 +238,21 @@ func spinPreemptibly(start, now, ns int64) syscall.Errno {
 		}
 	}
 	return 0
+}
+
+const signalSetBytes = 8
+
+//go:nosplit
+func blockSignals() (was uint64, errno syscall.Errno) {
+	all := ^uint64(0)
+	_, _, errno = syscall.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_SETMASK, uintptr(unsafe.Pointer(&all)), uintptr(unsafe.Pointer(&was)), signalSetBytes, 0, 0) //nolint:gosec // the kernel reads all and writes was during the call
+	return was, errno
+}
+
+//go:nosplit
+func setSignalMask(mask uint64) syscall.Errno {
+	_, _, errno := syscall.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_SETMASK, uintptr(unsafe.Pointer(&mask)), 0, signalSetBytes, 0, 0) //nolint:gosec // the kernel reads mask during the call
+	return errno
 }
 
 //go:nosplit

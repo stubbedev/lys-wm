@@ -24,11 +24,31 @@ import (
 type spun struct {
 	cpu      time.Duration
 	switches int64
+	faults   int64
 	err      error
 }
 
 //go:nosplit
 func measuredSpin(ns int64, before, after *unix.Rusage) (start, now int64, errno syscall.Errno) {
+	was, errno := blockSignals()
+	if errno != 0 {
+		return 0, 0, errno
+	}
+	start, now, errno = measuredUnsignalled(ns, before, after)
+	if restored := setSignalMask(was); errno == 0 {
+		errno = restored
+	}
+	return start, now, errno
+}
+
+//go:nosplit
+func measuredUnsignalled(ns int64, before, after *unix.Rusage) (start, now int64, errno syscall.Errno) {
+	if _, _, errno = syscall.RawSyscall(unix.SYS_GETRUSAGE, unix.RUSAGE_THREAD, uintptr(unsafe.Pointer(after)), 0); errno != 0 {
+		return 0, 0, errno
+	}
+	if _, _, errno = spinThreadCPU(0); errno != 0 {
+		return 0, 0, errno
+	}
 	if _, _, errno = syscall.RawSyscall(unix.SYS_GETRUSAGE, unix.RUSAGE_THREAD, uintptr(unsafe.Pointer(before)), 0); errno != 0 {
 		return 0, 0, errno
 	}
@@ -52,6 +72,7 @@ func spinOnOwnThread(d time.Duration) spun {
 		out <- spun{
 			cpu:      time.Duration(after.Utime.Nano() + after.Stime.Nano() - before.Utime.Nano() - before.Stime.Nano()),
 			switches: after.Nvcsw - before.Nvcsw,
+			faults:   after.Minflt + after.Majflt - before.Minflt - before.Majflt,
 		}
 	}()
 	return <-out
@@ -79,11 +100,22 @@ func TestADebugSpinRunsItsCPUTimeOnTheThreadWithoutBlocking(t *testing.T) {
 			}
 		}
 	}()
-	got := spinOnOwnThread(d)
+	const windows = 20
+	var got spun
+	faulted := make([]int64, 0, windows)
+	for range windows {
+		if got = spinOnOwnThread(d); got.err != nil || got.faults == 0 {
+			break
+		}
+		faulted = append(faulted, got.faults)
+	}
 	close(stop)
 	<-collected
 	if got.err != nil {
 		t.Fatal(got.err)
+	}
+	if got.faults != 0 {
+		t.Fatalf("all %d spins took page faults (%v), each a kernel entry that may sleep, so none shows whether the spin itself blocks", windows, faulted)
 	}
 	if got.cpu < d {
 		t.Fatalf("the spin used %v of the thread's CPU, want at least %v", got.cpu, d)
@@ -109,15 +141,88 @@ func TestADebugSpinTurnsPreemptibleOnceItsThreadLeavesItsSchedulingPolicy(t *tes
 		out <- result{time.Duration(now - start), errno}
 	}()
 	tid := <-tids
-	if err := unix.SchedSetAttr(tid, &unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_BATCH}, 0); err != nil {
-		t.Fatalf("move the spinning thread %d to SCHED_BATCH: %v", tid, err)
-	}
+	toBatch(t, tid)
 	got := <-out
 	if got.errno != 0 {
 		t.Fatal(got.errno)
 	}
 	if got.ran >= most {
 		t.Fatalf("the spin ran its whole %v unpreemptibly after its thread moved to SCHED_BATCH", most)
+	}
+}
+
+func toBatch(t *testing.T, tid int) {
+	t.Helper()
+	prio, err := unix.Getpriority(unix.PRIO_PROCESS, tid)
+	if err != nil {
+		t.Fatalf("read the nice value of the spinning thread %d: %v", tid, err)
+	}
+	batch := unix.SchedAttr{Size: unix.SizeofSchedAttr, Policy: unix.SCHED_BATCH, Nice: int32(20 - prio)}
+	if err := unix.SchedSetAttr(tid, &batch, 0); err != nil {
+		t.Fatalf("move the spinning thread %d to SCHED_BATCH at its nice %d: %v", tid, batch.Nice, err)
+	}
+}
+
+func blockedSignals(t *testing.T, tid int) uint64 {
+	t.Helper()
+	status, err := os.ReadFile("/proc/self/task/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.SplitSeq(string(status), "\n") {
+		if hex, ok := strings.CutPrefix(line, "SigBlk:"); ok {
+			mask, err := strconv.ParseUint(strings.TrimSpace(hex), 16, 64)
+			if err != nil {
+				t.Fatalf("SigBlk %q: %v", hex, err)
+			}
+			return mask
+		}
+	}
+	t.Fatalf("no SigBlk in the status of thread %d", tid)
+	return 0
+}
+
+func TestADebugSpinTakesNoSignalsAndGivesItsThreadItsSignalMaskBack(t *testing.T) {
+	atLeastTwoProcs(t)
+	const most = time.Minute
+	unblockable := uint64(1)<<(unix.SIGKILL-1) | uint64(1)<<(unix.SIGSTOP-1)
+	tids := make(chan int)
+	type result struct {
+		before, after unix.Sigset_t
+		errno         syscall.Errno
+		err           error
+	}
+	out := make(chan result, 1)
+	go func() {
+		runtime.LockOSThread()
+		var r result
+		if r.err = unix.PthreadSigmask(unix.SIG_BLOCK, nil, &r.before); r.err != nil {
+			close(tids)
+			out <- r
+			return
+		}
+		tids <- unix.Gettid()
+		_, _, r.errno = spinThreadCPU(most.Nanoseconds())
+		r.err = unix.PthreadSigmask(unix.SIG_BLOCK, nil, &r.after)
+		out <- r
+	}()
+	tid, ok := <-tids
+	if !ok {
+		t.Fatal((<-out).err)
+	}
+	for deadline := time.Now().Add(30 * time.Second); blockedSignals(t, tid) != ^unblockable; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the spinning thread %d blocks signals %#x, want every one it can", tid, blockedSignals(t, tid))
+		}
+		runtime.Gosched()
+	}
+	toBatch(t, tid)
+	got := <-out
+	if got.err != nil || got.errno != 0 {
+		t.Fatal(got.err, got.errno)
+	}
+	if got.after != got.before {
+		t.Fatalf("the spin left its thread blocking %#x, not the %#x it blocked before", got.after.Val[0], got.before.Val[0])
 	}
 }
 
