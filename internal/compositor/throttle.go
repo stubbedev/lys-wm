@@ -136,18 +136,19 @@ func (c *Compositor) HiddenFrames() uint64 {
 }
 
 func (c *Compositor) captured(w *window, at time.Duration) error {
-	errs := c.capturedTree(w.top.Surface(), at)
+	o := c.captureOutput(w)
+	errs := c.capturedTree(o, w.top.Surface(), at)
 	for _, pp := range c.popups(w) {
-		errs = errors.Join(errs, c.capturedTree(pp.popup.Surface(), at))
+		errs = errors.Join(errs, c.capturedTree(o, pp.popup.Surface(), at))
 	}
 	return errs
 }
 
-func (c *Compositor) capturedTree(root *surface.Surface, at time.Duration) error {
+func (c *Compositor) capturedTree(o *output.Output, root *surface.Surface, at time.Duration) error {
 	var errs error
 	for member := range root.Stack() {
 		if member != root {
-			errs = errors.Join(errs, c.capturedTree(member, at))
+			errs = errors.Join(errs, c.capturedTree(o, member, at))
 			continue
 		}
 		if c.drawnAnywhere(member) {
@@ -155,7 +156,8 @@ func (c *Compositor) capturedTree(root *surface.Surface, at time.Duration) error
 		}
 		delete(c.hidden.waiting, member)
 		member.Latch()
-		errs = errors.Join(errs, member.FrameDone(wire.Millis(at)), member.Presented(nil, at, 0, false, 0, 0))
+		outputs, refresh, seq := c.presentationAt(o, member, at)
+		errs = errors.Join(errs, member.FrameDone(wire.Millis(at)), member.Presented(outputs, at, refresh, false, seq, 0))
 	}
 	return errs
 }
