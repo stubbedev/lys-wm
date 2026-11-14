@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -309,5 +311,124 @@ func TestARaiseThroughRtkitGivesTheThreadBackItsScheduling(t *testing.T) {
 	}
 	if got.after != got.before {
 		t.Fatalf("the thread was given back %+v, not the %+v it ran at before", got.after, got.before)
+	}
+}
+
+const finiteRTTimeChild = "LYS_WM_TEST_FINITE_RTTIME"
+
+func inChildWithFiniteRTTime(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv(finiteRTTimeChild) != "" {
+		limit := unix.Rlimit{Cur: rtkittest.RTTimeUSecMax, Max: rtkittest.RTTimeUSecMax}
+		if err := unix.Setrlimit(unix.RLIMIT_RTTIME, &limit); err != nil {
+			t.Fatalf("lower RLIMIT_RTTIME to %+v as a parent under rtkit would hand it down: %v", limit, err)
+		}
+		return true
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$", "-test.count=1", "-test.v")
+	cmd.Env = append(os.Environ(), finiteRTTimeChild+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the child under a finite RLIMIT_RTTIME: %v\n%s", err, out)
+	}
+	if _, reason, skipped := strings.Cut(string(out), "--- SKIP: "+t.Name()); skipped {
+		t.Skip(strings.TrimSpace(reason))
+	}
+	if !strings.Contains(string(out), "--- PASS: "+t.Name()) {
+		t.Fatalf("the child under a finite RLIMIT_RTTIME did not run %s:\n%s", t.Name(), out)
+	}
+	return false
+}
+
+func withRTPrioOne(t *testing.T) {
+	t.Helper()
+	var was unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_RTPRIO, &was); err != nil {
+		t.Fatalf("read RLIMIT_RTPRIO: %v", err)
+	}
+	if was.Max < loopRTPriority {
+		t.Skipf("RLIMIT_RTPRIO allows %d, so no thread here takes SCHED_RR %d by itself", was.Max, loopRTPriority)
+	}
+	if err := unix.Setrlimit(unix.RLIMIT_RTPRIO, &unix.Rlimit{Cur: loopRTPriority, Max: was.Max}); err != nil {
+		t.Fatalf("set the soft RLIMIT_RTPRIO to %d: %v", loopRTPriority, err)
+	}
+}
+
+func realtimeThreads(priority uint32) ([]int, error) {
+	tasks, err := os.ReadDir("/proc/self/task")
+	if err != nil {
+		return nil, err
+	}
+	var found []int
+	for _, task := range tasks {
+		tid, err := strconv.Atoi(task.Name())
+		if err != nil {
+			return nil, fmt.Errorf("task %q: %w", task.Name(), err)
+		}
+		attr, err := unix.SchedGetAttr(tid, 0)
+		if errors.Is(err, unix.ESRCH) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read the policy of thread %d: %w", tid, err)
+		}
+		if attr.Policy == unix.SCHED_RR && attr.Priority == priority {
+			found = append(found, tid)
+		}
+	}
+	return found, nil
+}
+
+func TestADirectRealtimeGrantUnderAnInheritedFiniteRTTimeIsGuardedAndKeepsTheLimit(t *testing.T) {
+	if !inChildWithFiniteRTTime(t) {
+		return
+	}
+	requireStandIn(t)
+	withRTPrioOne(t)
+	bus, asked := rtkitStandingInWithBatch(t)
+	type taken struct {
+		tid    int
+		how    string
+		raised unix.SchedAttr
+		guards []int
+		err    error
+	}
+	got := onOwnThread(func() (got taken) {
+		got.tid = unix.Gettid()
+		var restore func() error
+		got.how, restore, got.err = compositorThread.raisePriority(bus, dropJob)
+		var raisedErr, guardsErr error
+		got.raised, raisedErr = threadSchedule(got.tid)
+		got.guards, guardsErr = realtimeThreads(guardRTPriority)
+		got.err = errors.Join(got.err, raisedErr, guardsErr, restore())
+		return got
+	})
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.how != "SCHED_RR" || got.raised.Policy != unix.SCHED_RR {
+		t.Fatalf("the thread took %q and ran at %+v, want SCHED_RR taken directly", got.how, got.raised)
+	}
+	select {
+	case guard := <-asked:
+		if guard.tid == got.tid || guard.priority != guardRTPriority {
+			t.Fatalf("rtkit was asked for %+v, want a guard of thread %d at %d", guard, got.tid, guardRTPriority)
+		}
+	default:
+		if len(got.guards) != 1 || got.guards[0] == got.tid {
+			t.Fatalf("thread %d took SCHED_RR directly under a finite RLIMIT_RTTIME, but rtkit was not asked for a guard and the threads at SCHED_RR %d are %v", got.tid, guardRTPriority, got.guards)
+		}
+	}
+	select {
+	case again := <-asked:
+		t.Fatalf("rtkit was asked again for %+v", again)
+	default:
+	}
+	var limit unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_RTTIME, &limit); err != nil {
+		t.Fatal(err)
+	}
+	if want := (unix.Rlimit{Cur: rtkittest.RTTimeUSecMax, Max: rtkittest.RTTimeUSecMax}); limit != want {
+		t.Fatalf("RLIMIT_RTTIME is %+v after the raise, want the inherited %+v", limit, want)
 	}
 }
